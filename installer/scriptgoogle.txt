@@ -1,0 +1,483 @@
+function doPost(e) {
+  try {
+    var req = JSON.parse(e.postData.contents);
+    var action = req.action;
+
+    // ==========================================
+    // 1. CREATE CLIENT FOLDER
+    // ==========================================
+   if (action === 'create_folder') {
+      // 1. Safety check!
+      if (!req.rootFolderId) {
+        throw new Error("Missing rootFolderId in request payload.");
+      }
+      if (!req.folderName) {
+        throw new Error("Missing folderName in request payload.");
+      }
+
+      // 2. Try to get the parent root folder
+      var parentFolder;
+      try {
+        parentFolder = DriveApp.getFolderById(req.rootFolderId);
+      } catch (e) {
+        throw new Error("Could not find root folder. Provided ID: " + req.rootFolderId);
+      }
+
+      // 3. 🔥 THE FIX: Check if the folder already exists!
+      var existingFolders = parentFolder.getFoldersByName(req.folderName);
+      
+      if (existingFolders.hasNext()) {
+        // The folder already exists. Grab it and return its ID.
+        var existingFolder = existingFolders.next();
+        return createResponse({ 
+            status: 'success', 
+            folderId: existingFolder.getId(),
+            message: 'Existing folder found and returned.'
+        });
+      }
+
+      // 4. If it does NOT exist, create a brand new one
+      var newFolder = parentFolder.createFolder(req.folderName);
+      
+      return createResponse({ 
+          status: 'success', 
+          folderId: newFolder.getId(),
+          message: 'New folder created.'
+      });
+    }
+
+    // ==========================================
+    // 2. UPLOAD BACKUP
+    // ==========================================
+    else if (action === 'upload_backup') {
+      var folder = DriveApp.getFolderById(req.folderId);
+      var fileData = Utilities.base64Decode(req.base64);
+      var blob = Utilities.newBlob(fileData, req.mimeType, req.filename);
+      var file = folder.createFile(blob);
+
+      return createResponse({ status: 'success', fileId: file.getId() });
+    }
+
+    // ==========================================
+    // 3. CLEAN OLD BACKUPS (Keeps latest 3)
+    // ==========================================
+else if (action === 'clean_old_backups') {
+      var folder = DriveApp.getFolderById(req.folderId);
+      var files = folder.getFiles();
+      var fileList = [];
+      
+      while (files.hasNext()) {
+        var f = files.next();
+        var fileName = f.getName();
+        
+        // 🔥 THE FIX: Only process files that start with "backup_"
+        // This makes it 100% blind to config.enc, config.json, or anything else!
+        if (fileName.indexOf('backup_') === 0) {
+          fileList.push({ 
+            id: f.getId(), 
+            date: f.getDateCreated().getTime(), 
+            file: f 
+          });
+        }
+      }
+      
+      // Sort newest to oldest
+      fileList.sort(function(a, b) { return b.date - a.date; });
+      
+      // Keep the top 3, trash the rest
+      if (fileList.length > 3) {
+        for (var i = 3; i < fileList.length; i++) {
+          fileList[i].file.setTrashed(true); // Moves to trash
+        }
+      }
+      return createResponse({ status: 'success', message: 'Old backups cleaned' });
+    }
+
+
+
+  // ==========================================
+    // 4. UPSERT CLIENT (Google Sheets)
+    // ==========================================
+  else if (action === 'upsert_client') {
+      var ss = SpreadsheetApp.openById(req.sheetId);
+      var sheet = ss.getSheetByName('Clients');
+      
+      var headers = req.headers;
+      var newRow = req.newRow;
+      
+      // Auto-calculate expiry date (+30 days) if it is missing
+      if (!newRow[7] || newRow[7] === "") {
+        var createdDate = newRow[6] ? new Date(newRow[6]) : new Date();
+        var expiryDate = new Date(createdDate.getTime() + (30 * 24 * 60 * 60 * 1000));
+        newRow[7] = expiryDate.toISOString();
+      }
+
+      // FIX 1: Safely handle Sheet Creation if it doesn't exist at all
+      if (!sheet) {
+        sheet = ss.insertSheet('Clients');
+        sheet.appendRow(headers);
+        sheet.appendRow(newRow);
+        return createResponse({ status: 'success' });
+      }
+
+      var data = sheet.getDataRange().getValues();
+
+      // FIX 1 (Continued): Handle if the sheet exists but is completely empty 
+      // (Google Sheets returns [[""]] for empty sheets)
+      if (data.length === 1 && data[0][0] === "") {
+        sheet.clear(); // Clear the phantom empty cell
+        sheet.appendRow(headers);
+        sheet.appendRow(newRow);
+        return createResponse({ status: 'success' });
+      }
+
+      // Update headers if the array length changed
+      var isHeaderValid = headers.length === data[0].length && headers.every(function(h, i) { return data[0][i] === h; });
+      if (!isHeaderValid) {
+        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      }
+      
+      // FIX 2: Prevent duplicates by matching Outlet Code (Index 1) or Outlet ID (Index 2)
+      var targetOutletCode = newRow[1];
+      var targetOutletId = newRow[2];
+      var rowIndex = -1;
+      
+      for (var r = 1; r < data.length; r++) {
+        // If the Outlet Code OR the Outlet ID match, we know it's the same store!
+        if (data[r][1] == targetOutletCode || data[r][2] == targetOutletId) { 
+          rowIndex = r + 1; // +1 because sheet rows are 1-indexed
+          break; 
+        }
+      }
+      
+      if (rowIndex === -1) {
+        sheet.appendRow(newRow); // Insert brand new client
+      } else {
+        // UPDATE EXISTING CLIENT
+        var existingRow = data[rowIndex - 1]; 
+        
+        // Protect core cloud fields from being accidentally overwritten by local terminal syncs
+        newRow[0] = existingRow[0] || newRow[0]; // Keep existing client_id
+        newRow[1] = existingRow[1] || newRow[1]; // Keep existing outlet_code
+        newRow[2] = existingRow[2] || newRow[2]; // Keep existing outlet_id
+        newRow[4] = existingRow[4] || newRow[4]; // Keep existing db_name
+        newRow[6] = existingRow[6] || newRow[6]; // Keep original created_at date
+        newRow[7] = existingRow[7] || newRow[7]; // Keep existing expiry_date
+        newRow[8] = existingRow[8] || newRow[8]; // Keep existing status
+
+        // Protect new identity fields: 
+        if ((!newRow[10] || newRow[10] === "") && existingRow.length > 10) newRow[10] = existingRow[10]; // contact_email
+        if ((!newRow[11] || newRow[11] === "") && existingRow.length > 11) newRow[11] = existingRow[11]; // contact_phone
+        if ((!newRow[12] || newRow[12] === "") && existingRow.length > 12) newRow[12] = existingRow[12]; // tax_id
+        if ((!newRow[13] || newRow[13] === "") && existingRow.length > 13) newRow[13] = existingRow[13]; // pin
+        
+        var updateRange = sheet.getRange(rowIndex, 1, 1, newRow.length);
+        updateRange.setValues([newRow]); 
+      }
+      
+      return createResponse({ status: 'success' });
+    }
+    // ==========================================
+    // 5. CHECK LICENSE STATUS
+    // ==========================================
+   else if (action === 'check_license') {
+      var outletCode = String(req.outletCode);
+      var ss = SpreadsheetApp.openById(req.sheetId);
+      var sheet = ss.getSheetByName('Clients');
+      
+      if (!sheet) throw new Error("Clients sheet not found");
+      
+      var data = sheet.getDataRange().getValues();
+      
+      // Loop through to find the outlet
+      for (var r = 1; r < data.length; r++) {
+        if (String(data[r][1]) === outletCode) {
+          return createResponse({
+            status: 'success',
+            license_status: String(data[r][8]).toUpperCase(), // Assuming Column I is Status (ACTIVE/INACTIVE)
+            expiry_date: data[r][7] // Assuming Column J is Expiry Date
+          });
+        }
+      }
+      
+      throw new Error("License not found for outlet: " + outletCode);
+    }
+
+else if (action === 'check_update') {
+      var ss = SpreadsheetApp.openById(req.sheetId);
+      var sheet = ss.getSheetByName('Update');
+      
+      // Auto-create the sheet and 4 columns if it doesn't exist!
+      if (!sheet) {
+        sheet = ss.insertSheet('Update');
+        sheet.appendRow(['Version', 'Download URL', 'Changelog', 'Release Date']);
+        
+        // Get today's date formatted as YYYY-MM-DD
+        var today = new Date().toISOString().split('T')[0];
+        sheet.appendRow(['1.0.0', 'https://example.com/installer.exe', '- Initial Release', today]);
+        sheet.getRange("A1:D1").setFontWeight("bold");
+      }
+      
+      // Find the very last row in the sheet (assumes you add new versions to the bottom)
+      var lastRow = sheet.getLastRow();
+      
+      // Safety check: if the sheet is empty except for headers
+      if (lastRow < 2) {
+        return createResponse({
+          status: 'success',
+          latest_version: '1.0.0',
+          download_url: '',
+          changelog: '',
+          release_date: ''
+        });
+      }
+      
+      // Get the data from the LAST row, spanning 4 columns
+      var data = sheet.getRange(lastRow, 1, 1, 4).getValues()[0];
+      
+      // Format the date securely 
+      var rawDate = data[3];
+      var formattedDate = '';
+      if (rawDate instanceof Date) {
+        formattedDate = rawDate.toISOString().split('T')[0];
+      } else {
+        formattedDate = String(rawDate || '');
+      }
+      
+      return createResponse({
+        status: 'success',
+        latest_version: String(data[0] || '1.0.0'),
+        download_url: String(data[1] || ''),
+        changelog: String(data[2] || 'Bug fixes and performance improvements.'),
+        release_date: formattedDate 
+      });
+    }
+// ==========================================
+    // 6. DOWNLOAD LATEST BACKUP (Auto-find)
+    // ==========================================
+else if (action === 'download_latest_backup') {
+      try {
+        if (!req.folderId) {
+          return createResponse({ 
+            status: 'error', 
+            message: 'Missing folderId parameter in the request payload.' 
+          });
+        }
+
+        var folder = DriveApp.getFolderById(req.folderId);
+        var files = folder.getFiles();
+        
+        var latestFile = null;
+        var latestTime = 0;
+
+        // Iterate through all files to locate the most recently created payload
+        while (files.hasNext()) {
+          var currentFile = files.next();
+          
+          // Optional: If you keep config files in the same folder, you can filter by name
+          // if (currentFile.getName().indexOf('backup') === -1) continue;
+
+          var fileTime = currentFile.getDateCreated().getTime();
+          if (fileTime > latestTime) {
+            latestTime = fileTime;
+            latestFile = currentFile;
+          }
+        }
+
+        if (!latestFile) {
+          return createResponse({ 
+            status: 'error', 
+            message: 'No backup files found in the specified cloud directory.' 
+          });
+        }
+
+        var blob = latestFile.getBlob();
+        var base64 = Utilities.base64Encode(blob.getBytes());
+        
+        return createResponse({ 
+          status: 'success', 
+          base64: base64, 
+          filename: latestFile.getName(),
+          message: 'Successfully located and encoded backup: ' + latestFile.getName()
+        });
+
+      } catch (error) {
+        // This catches Drive permission errors, invalid folder IDs, or memory limit crashes 
+        // (e.g., if a file is larger than Google's 50MB base64 conversion limit)
+        return createResponse({ 
+          status: 'error', 
+          message: 'Cloud extraction failed: ' + error.message 
+        });
+      }
+    }
+
+    // ==========================================
+    // 8. UPLOAD CONFIG (Overwrites old version)
+    // ==========================================
+    else if (action === 'upload_config') {
+      var folder = DriveApp.getFolderById(req.folderId);
+      
+      // 1. Find and delete the old config file if it exists
+      var existingFiles = folder.getFilesByName(req.filename);
+      while (existingFiles.hasNext()) {
+        existingFiles.next().setTrashed(true);
+      }
+
+      // 2. Save the brand new one
+      var fileData = Utilities.base64Decode(req.base64);
+      var blob = Utilities.newBlob(fileData, req.mimeType, req.filename);
+      var file = folder.createFile(blob);
+
+      return createResponse({ status: 'success', fileId: file.getId(), filename: req.filename });
+    }
+    else if (action === 'download_config') {
+      var folder = DriveApp.getFolderById(req.folderId);
+      // Look specifically for the config file by name
+      var files = folder.getFilesByName(req.filename); 
+      
+      if (!files.hasNext()) {
+        throw new Error("Config file not found in this client's folder.");
+      }
+
+      var file = files.next();
+      var blob = file.getBlob();
+      var base64 = Utilities.base64Encode(blob.getBytes());
+      
+      return createResponse({ 
+        status: 'success', 
+        base64: base64, 
+        filename: file.getName() 
+      });
+    }
+    // ==========================================
+    // 5. DOWNLOAD BACKUP
+    // ==========================================
+    else if (action === 'download_backup') {
+      var file = DriveApp.getFileById(req.fileId);
+      var blob = file.getBlob();
+      var base64 = Utilities.base64Encode(blob.getBytes());
+      
+      return createResponse({ status: 'success', base64: base64, filename: file.getName() });
+    }// ==========================================
+    // 9. VERIFY OUTLET AND GET RECOVERY DATA
+    // ==========================================
+else if (action === 'verify_and_get_client') {
+      var outletCode = String(req.outletCode);
+      
+      // 1. Find the client's folder in Google Drive by name
+      var parentFolder = DriveApp.getFolderById(req.rootFolderId);
+      var folders = parentFolder.getFoldersByName(outletCode);
+      var folderId = null;
+      
+      if (folders.hasNext()) {
+        folderId = folders.next().getId();
+      } else {
+        throw new Error("No cloud backup folder found for outlet: " + outletCode);
+      }
+
+      // 2. Verify the client exists in the Google Sheet database
+      var ss = SpreadsheetApp.openById(req.sheetId);
+      var sheet = ss.getSheetByName('Clients');
+      if (!sheet) throw new Error("Clients sheet not found");
+      
+      var data = sheet.getDataRange().getValues();
+      var clientData = null;
+
+      // Loop through rows to find the matching outlet_code (Column B / Index 1)
+      for (var r = 1; r < data.length; r++) {
+        if (String(data[r][1]) === outletCode) {
+          clientData = {
+            client_id: data[r][0],
+            outlet_code: data[r][1],
+            outlet_id: data[r][2],
+            property_name: data[r][3],
+            db_name: data[r][4],
+            status: data[r][8],
+            // NEW FIELDS FOR NODE.JS VERIFICATION:
+            contact_email: data[r][10] || "",
+            contact_phone: data[r][11] || "",
+            tax_id: data[r][12] || "",
+            recovery_pin_hash: data[r][13] || "" 
+          };
+          break;
+        }
+      }
+
+      if (!clientData) {
+        throw new Error("Outlet code found in Drive, but not registered in Database.");
+      }
+
+      if (clientData.status !== "ACTIVE") {
+        throw new Error("This license is currently INACTIVE. Cannot restore.");
+      }
+
+      return createResponse({ 
+        status: 'success', 
+        folderId: folderId, 
+        client: clientData 
+      });
+    }
+
+    // ==========================================
+    // 10. RECOVER OUTLET ID BY EMAIL OR PHONE
+    // ==========================================
+else if (action === 'lookup_outlet_by_contact') {
+      var contactQuery = String(req.contact).toLowerCase().trim();
+      
+      if (!contactQuery) {
+        throw new Error("Email or Phone number is required for lookup.");
+      }
+
+      var ss = SpreadsheetApp.openById(req.sheetId);
+      var sheet = ss.getSheetByName('Clients');
+      if (!sheet) throw new Error("Clients sheet not found");
+      
+      var data = sheet.getDataRange().getValues();
+      var matches = [];
+
+      // Loop through ALL rows to find EVERY matching Email (Index 10) or Phone (Index 11)
+      for (var r = 1; r < data.length; r++) {
+        var sheetEmail = String(data[r][10] || "").toLowerCase().trim();
+        var sheetPhone = String(data[r][11] || "").toLowerCase().trim();
+
+        if (sheetEmail === contactQuery || sheetPhone === contactQuery) {
+          
+          if (data[r][8] !== "ACTIVE") continue; // Skip inactive accounts
+          
+          // Push every matched outlet into our array
+          matches.push({
+            outlet_code: data[r][1],
+            property_name: data[r][3],
+            contact_email: data[r][10],
+            contact_phone: data[r][11]
+          });
+        }
+      }
+
+      if (matches.length === 0) {
+        throw new Error("No active outlet found matching this email or phone number.");
+      }
+
+      // Return the ARRAY of all matched outlets to Node.js
+      return createResponse({ 
+        status: 'success', 
+        outlets: matches 
+      });
+    }
+    
+
+    else {
+      throw new Error("Unknown action: " + action);
+    }
+
+  } catch (error) {
+    return createResponse({ status: 'error', message: error.toString() });
+  }
+}
+
+
+
+// Helper to format responses
+function createResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
