@@ -36,6 +36,24 @@ http://127.0.0.1:3000
 - `Docs/` - documentation files
 - `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/` - platform targets
 
+## Screenshots
+
+### Dashboard
+
+![Retail Inventory Dashboard](./assets/Screenshot%202026-05-07%20171632.png)
+
+### Sales Screen
+
+![Sales screen](./assets/Screenshot%202026-05-07%20171711.png)
+
+### Stock Balance Report
+
+![Stock balance report](./assets/Screenshot%202026-05-07%20171814.png)
+
+### Finance and Reports
+
+![Finance and reports screen](./assets/Screenshot%202026-05-07%20171846.png)
+
 ## Contributing
 
 Please update the relevant guide when setup, runtime behavior, or APIs change.
