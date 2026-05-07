@@ -1,0 +1,18 @@
+[
+  {
+    "client_id": "f2f85b99-4ff9-46c8-af97-b8a82c219d84",
+    "folderId": "1rM9AY2JpQsmGpY_ZJOQyz3b_NIQ2yyv_",
+    "outlet_code": "OUTLET202604212159",
+    "outlet_id": 1,
+    "property_name": "REATILSHOP",
+    "machine_id": "Masakali",
+    "db_name": "POSINVRETAIL",
+    "created_at": "2026-04-30T08:38:41.949Z",
+    "status": "ACTIVE",
+    "expiry_date": "",
+    "contact_email": "studentsdav6@gmail.com",
+    "contact_phone": "",
+    "tax_id": "",
+    "pin": "$2b$10$SacVjKK0y6VS8u9sMLZzAuqGoqqGbCe3jV69semomQWMSFJcJuxK."
+  }
+]

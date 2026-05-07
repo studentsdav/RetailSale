@@ -1,0 +1,238 @@
+import 'billing_charge_model.dart';
+import 'sale_item_model.dart';
+import 'sale_scheme_model.dart';
+import 'tax_breakdown_model.dart';
+
+class SaleOrder {
+  final String saleNo;
+  final DateTime saleDate;
+  final String status;
+  final String orderType;
+  final String billingCountry;
+  final String billingTaxMode;
+  final String billFormat;
+  final String? customerName;
+  final String? customerPhone;
+  final double amountPaid;
+  final double changeAmount;
+  final double balanceDue;
+  final String? customerAddress;
+  final String? customerGstin;
+  final String paymentMode;
+  final String? paymentReference;
+  final double subTotal;
+  final double totalQty;
+  final double taxPercent;
+  final int? schemeId;
+  final String? schemeName;
+  final String? schemeUsageMode;
+  final double schemeDiscount;
+  final String? manualDiscountType;
+  final double manualDiscountValue;
+  final double manualDiscountAmount;
+  final double taxableAmount;
+  final double cgstAmount;
+  final double sgstAmount;
+  final double igstAmount;
+  final double totalTax;
+  final List<TaxBreakdown> taxBreakup;
+  final List<BillingCharge> charges;
+  final double chargeTotal;
+  final double chargeTaxTotal;
+  final double totalDiscount;
+  final double roundOffAmount;
+  final double netAmount;
+  final String? voucherCode;
+  final String? voucherLabel;
+  final String? voucherFooterMessage;
+  final int loyaltyPointsEarned;
+  final int loyaltyPointsRedeemed;
+  final double loyaltyDiscountAmount;
+  final String? notes;
+  final String? modificationNote;
+  final bool affectStock;
+  final List<SaleScheme> selectedSchemes;
+  final List<SaleItem> items;
+  final bool itemsPreSplit;
+
+  SaleOrder({
+    required this.saleNo,
+    required this.saleDate,
+    required this.status,
+    this.modificationNote,
+    required this.orderType,
+    required this.billingCountry,
+    required this.billingTaxMode,
+    required this.billFormat,
+    this.customerName,
+    this.customerPhone,
+    required this.amountPaid,
+    required this.changeAmount,
+    required this.balanceDue,
+    this.customerAddress,
+    this.customerGstin,
+    required this.paymentMode,
+    this.paymentReference,
+    required this.subTotal,
+    required this.totalQty,
+    required this.taxPercent,
+    this.schemeId,
+    this.schemeName,
+    this.schemeUsageMode,
+    required this.schemeDiscount,
+    this.manualDiscountType,
+    required this.manualDiscountValue,
+    required this.manualDiscountAmount,
+    required this.taxableAmount,
+    required this.cgstAmount,
+    required this.sgstAmount,
+    required this.igstAmount,
+    required this.totalTax,
+    required this.taxBreakup,
+    required this.charges,
+    required this.chargeTotal,
+    required this.chargeTaxTotal,
+    required this.totalDiscount,
+    required this.roundOffAmount,
+    required this.netAmount,
+    this.voucherCode,
+    this.voucherLabel,
+    this.voucherFooterMessage,
+    this.loyaltyPointsEarned = 0,
+    this.loyaltyPointsRedeemed = 0,
+    this.loyaltyDiscountAmount = 0,
+    this.notes,
+    required this.items,
+    this.selectedSchemes = const [],
+    this.affectStock = true,
+    this.itemsPreSplit = false,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'header': {
+        'sale_no': saleNo,
+        'sale_date': saleDate.toIso8601String(),
+        'status': status,
+        'order_type': orderType,
+        'billing_country': billingCountry,
+        'billing_tax_mode': billingTaxMode,
+        'bill_format': billFormat,
+        'customer_name': customerName,
+        'customer_phone': customerPhone,
+        'customer_address': customerAddress,
+        'customer_gstin': customerGstin,
+        'payment_mode': paymentMode,
+        'payment_reference': paymentReference,
+        'sub_total': subTotal,
+        'total_qty': totalQty,
+        'tax_percent': taxPercent,
+        'scheme_id': schemeId,
+        'amount_paid': amountPaid,
+        'change_amount': changeAmount,
+        'balance_due': balanceDue,
+        'scheme_name': schemeName,
+        'scheme_usage_mode': schemeUsageMode,
+        'scheme_discount': schemeDiscount,
+        'manual_discount_type': manualDiscountType,
+        'manual_discount_value': manualDiscountValue,
+        'manual_discount_amount': manualDiscountAmount,
+        'taxable_amount': taxableAmount,
+        'cgst_amount': cgstAmount,
+        'sgst_amount': sgstAmount,
+        'igst_amount': igstAmount,
+        'total_tax': totalTax,
+        'tax_breakup': taxBreakup.map((entry) => entry.toJson()).toList(),
+        'charges': charges.map((entry) => entry.toJson()).toList(),
+        'charge_total': chargeTotal,
+        'charge_tax_total': chargeTaxTotal,
+        'total_discount': totalDiscount,
+        'round_off_amount': roundOffAmount,
+        'net_amount': netAmount,
+        'voucher_code': voucherCode,
+        'voucher_label': voucherLabel,
+        'loyalty_points_earned': loyaltyPointsEarned,
+        'loyalty_points_redeemed': loyaltyPointsRedeemed,
+        'loyalty_discount_amount': loyaltyDiscountAmount,
+        'notes': notes,
+        'modification_note': modificationNote,
+        'affect_stock': affectStock,
+        'selected_schemes': selectedSchemes.map((scheme) => scheme.toJson()).toList(),
+        'items_pre_split': itemsPreSplit,
+      },
+      'items': items.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  factory SaleOrder.fromJson(Map<String, dynamic> json) {
+    double parseNum(dynamic value) =>
+        double.tryParse(value?.toString() ?? '') ?? 0;
+
+    return SaleOrder(
+      saleNo: json['sale_no']?.toString() ?? '',
+      saleDate: (DateTime.tryParse(json['sale_date']?.toString() ?? '') ??
+              DateTime.now())
+          .toLocal(),
+      status: json['status']?.toString() ?? 'COMPLETED',
+      orderType: json['order_type']?.toString() ?? 'B2C',
+      billingCountry: json['billing_country']?.toString() ?? 'India',
+      billingTaxMode: json['billing_tax_mode']?.toString() ?? 'CGST_SGST',
+      billFormat: json['bill_format']?.toString() ?? 'A4',
+      customerName: json['customer_name']?.toString(),
+      customerPhone: json['customer_phone']?.toString(),
+      customerAddress: json['customer_address']?.toString(),
+      customerGstin: json['customer_gstin']?.toString(),
+      paymentMode: json['payment_mode']?.toString() ?? 'CASH',
+      paymentReference: json['payment_reference']?.toString(),
+      amountPaid: parseNum(json['amount_paid']),
+      changeAmount: parseNum(json['change_amount']),
+      balanceDue: parseNum(json['balance_due']),
+      subTotal: parseNum(json['sub_total']),
+      totalQty: parseNum(json['total_qty']),
+      taxPercent: parseNum(json['tax_percent']),
+      schemeId: json['scheme_id'],
+      schemeName: json['scheme_name']?.toString(),
+      schemeUsageMode: json['scheme_usage_mode']?.toString(),
+      schemeDiscount: parseNum(json['scheme_discount']),
+      manualDiscountType: json['manual_discount_type']?.toString(),
+      manualDiscountValue: parseNum(json['manual_discount_value']),
+      manualDiscountAmount: parseNum(json['manual_discount_amount']),
+      taxableAmount: parseNum(json['taxable_amount']),
+      cgstAmount: parseNum(json['cgst_amount']),
+      sgstAmount: parseNum(json['sgst_amount']),
+      igstAmount: parseNum(json['igst_amount']),
+      totalTax: parseNum(json['total_tax']),
+      taxBreakup: (json['tax_breakup'] as List? ?? const [])
+          .map((entry) =>
+              TaxBreakdown.fromJson(Map<String, dynamic>.from(entry)))
+          .toList(),
+      charges: (json['charges'] as List? ?? const [])
+          .map((entry) =>
+              BillingCharge.fromJson(Map<String, dynamic>.from(entry)))
+          .toList(),
+      chargeTotal: parseNum(json['charge_total']),
+      chargeTaxTotal: parseNum(json['charge_tax_total']),
+      totalDiscount: parseNum(json['total_discount']),
+      roundOffAmount: parseNum(json['round_off_amount']),
+      netAmount: parseNum(json['net_amount']),
+      voucherCode: json['voucher_code']?.toString(),
+      voucherLabel: json['voucher_label']?.toString(),
+      voucherFooterMessage: null,
+      loyaltyPointsEarned:
+          int.tryParse((json['loyalty_points_earned'] ?? 0).toString()) ?? 0,
+      loyaltyPointsRedeemed:
+          int.tryParse((json['loyalty_points_redeemed'] ?? 0).toString()) ?? 0,
+      loyaltyDiscountAmount: parseNum(json['loyalty_discount_amount']),
+      notes: json['notes']?.toString(),
+      modificationNote: json['modification_note']?.toString(),
+      affectStock: json['affect_stock'] ?? true,
+      selectedSchemes: (json['selected_schemes'] as List? ?? const [])
+          .map((entry) => SaleScheme.fromJson(Map<String, dynamic>.from(entry)))
+          .toList(),
+      itemsPreSplit: json['items_pre_split'] == true,
+      items: (json['items'] as List? ?? const [])
+          .map((entry) => SaleItem.fromJson(Map<String, dynamic>.from(entry)))
+          .toList(),
+    );
+  }
+}

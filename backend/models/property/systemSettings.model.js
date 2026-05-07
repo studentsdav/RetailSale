@@ -1,0 +1,89 @@
+module.exports = (sequelize, DataTypes) => {
+    return sequelize.define('system_settings', {
+        outlet_id: {
+            type: DataTypes.INTEGER,
+            allowNull: false
+        },
+
+        auto_reorder: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+
+        is_cloud_enabled: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+
+        allow_negative_stock: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+
+        damage_approval_required: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+
+        enable_audit_log: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+
+        auto_print_on_save: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+
+        enable_item_images_in_sales: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+
+        print_mode: {
+            type: DataTypes.STRING(30),
+            defaultValue: 'PRINT_DIALOG'
+        },
+
+        default_printer_name: {
+            type: DataTypes.STRING(255),
+            defaultValue: ''
+        },
+
+        default_printer_url: {
+            type: DataTypes.STRING(500),
+            defaultValue: ''
+        },
+
+        billing_country: {
+            type: DataTypes.STRING(80),
+            defaultValue: 'India'
+        },
+
+        billing_tax_mode: {
+            type: DataTypes.STRING(30),
+            defaultValue: 'CGST_SGST'
+        },
+
+        bill_format: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'A4'
+        },
+
+        default_charges: {
+            type: DataTypes.JSONB,
+            defaultValue: []
+        },
+
+        voucher_rules: {
+            type: DataTypes.JSONB,
+            defaultValue: []
+        }
+    }, {
+        tableName: 'system_settings',
+        timestamps: true,
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
+        indexes: [{ unique: true, fields: ['outlet_id'] }]
+    });
+};
