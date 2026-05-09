@@ -38,3 +38,21 @@ Default backend URL:
 http://127.0.0.1:3000
 ```
 
+## Owner/Admin Recovery and Data Safety
+
+For username recovery, outlet recovery, forgot password, latest sync, and backup/data protection process:
+
+- [Owner-Recovery-Sync-Data-Protection-Guide](./Owner-Recovery-Sync-Data-Protection-Guide.md)
+
+## Settings Guide
+
+For complete setup of outlet, property, numbering, printing, billing, and system preferences:
+
+- [Settings-Guide](./Settings-Guide.md)
+
+## Config and Sync Files Guide
+
+For `server_config.json`, `sync_status.json`, `client.json`, and `backup_status.json`:
+
+- [Config-And-Sync-Files-Guide](./Config-And-Sync-Files-Guide.md)
+

@@ -92,6 +92,7 @@ Daily checks:
 2. Review stock in/out trend.
 3. Review supplier payment/unpaid values.
 4. Review notification bell for pending actions.
+5. Check **Damage Summary** for loss patterns.
 
 ## 6. Step-by-Step Core Workflows
 
@@ -298,6 +299,20 @@ Common settings:
 5. Save.
 6. Login again using new password.
 
+### Logout Steps
+
+1. Open left menu.
+2. Click **Logout**.
+3. Confirm logout if prompted.
+4. Verify login screen appears before leaving shared terminal.
+
+### Check for Updates
+
+1. Open left menu.
+2. Click **Check for Updates**.
+3. Wait for version check result.
+4. If update is available, follow installer prompt/policy from admin.
+
 ## 11. Backup, Sync, and Recovery
 
 System includes backup/recovery utilities.
@@ -389,6 +404,15 @@ Use recovery only with admin approval.
 - Reports: `Reports`
 - Settings: `Settings`
 - Help: `Settings > Help & Support`
+- Change Password: `System > Change Password`
+- Logout: `System > Logout`
+- Check for Updates: `System > Check for Updates`
+
+## 17. Feature Coverage Checklist
+
+To verify sidebar menu coverage against documentation:
+
+- [Feature-Coverage-Checklist](./Feature-Coverage-Checklist.md)
 
 ## 16. Support Information
 

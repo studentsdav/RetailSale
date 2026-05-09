@@ -62,3 +62,9 @@ flutter run
 - Update docs when setup or behavior changes
 - Avoid committing local secrets or machine-specific files
 
+## Windows Installer Packaging
+
+For full Windows `.exe` packaging (backend binary + inventory installer + bootstrap installer), use:
+
+- [Windows-Installer-Developer-Guide](./Windows-Installer-Developer-Guide.md)
+
