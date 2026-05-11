@@ -41,14 +41,14 @@ class _IssueScreenState extends State<IssueScreen> {
   List<Item> _filteredBrands = [];
   final itemCtrl = ItemController();
   final propertyCtrl = PropertyInfoController();
+
   // ================= ITEM ENTRY =================
   final _code = TextEditingController();
   final _unit = TextEditingController(text: 'PCS');
   final _qty = TextEditingController();
   final _rate = TextEditingController();
   final _tax = TextEditingController();
-  final _qtyNode = FocusNode();
-  final _rateNode = FocusNode();
+
   int? _editIndex;
   final List<IssueItem> _items = [];
   final issueTypes = ['Internal', 'Guest', 'Damage'];
@@ -61,13 +61,65 @@ class _IssueScreenState extends State<IssueScreen> {
   final FocusNode _tableFocusNode = FocusNode();
   int? _selectedRowIndex;
 
+  // NEW: Double-Submit protection
+  bool _isSaving = false;
+
+  // NEW: ================= FOCUS NODES =================
+  final FocusNode _deptFocus = FocusNode();
+  final FocusNode _issueTypeFocus = FocusNode();
+  final FocusNode _dateFocus = FocusNode();
+  final FocusNode _reqFocus = FocusNode();
+
+  final FocusNode _itemCodeFocus = FocusNode();
+  final FocusNode _itemNameFocus = FocusNode();
+  final FocusNode _brandFocus = FocusNode();
+  final FocusNode _qtyNode = FocusNode();
+  final FocusNode _rateNode = FocusNode();
+  final FocusNode _taxNode = FocusNode();
+  final FocusNode _addBtnFocus = FocusNode();
+  final FocusNode _saveBtnFocus = FocusNode();
+
   // ================= TOTALS =================
   double get totalAmount => _items.fold(0, (s, e) => s + e.amount);
   double get totalGST =>
       _items.fold(0, (s, e) => s + ((e.qty * e.rate) * (e.tax / 100)));
-
   double get netAmount => totalAmount + totalGST;
-  void _saveItem() {
+
+  @override
+  void initState() {
+    super.initState();
+    ctrl.loadInitialData();
+    itemCtrl.load();
+    _loadNextGrn();
+    _loadRequests();
+    _loadPropertyInfo();
+
+    // NEW: Auto-focus the first field when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _deptFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    // NEW: Dispose all nodes
+    _deptFocus.dispose();
+    _issueTypeFocus.dispose();
+    _dateFocus.dispose();
+    _reqFocus.dispose();
+    _itemCodeFocus.dispose();
+    _itemNameFocus.dispose();
+    _brandFocus.dispose();
+    _qtyNode.dispose();
+    _rateNode.dispose();
+    _taxNode.dispose();
+    _addBtnFocus.dispose();
+    _saveBtnFocus.dispose();
+    _tableFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveItem() async {
     if (_selectedItem == null || _qty.text.isEmpty) return;
 
     final qty = double.tryParse(_qty.text) ?? 0;
@@ -101,11 +153,6 @@ class _IssueScreenState extends State<IssueScreen> {
       return;
     }
 
-    // if (_selectedRequestId != null) {
-    //   _showMessage("Items loaded from request. Edit from list.");
-    //   return;
-    // }
-
     final item = IssueItem(
       itemId: _selectedItem!.id,
       itemCode: _selectedItem!.itemCode,
@@ -126,9 +173,36 @@ class _IssueScreenState extends State<IssueScreen> {
         _items[_editIndex!] = item;
         _editIndex = null;
       }
-
-      _clearItem();
     });
+
+    // NEW: "Add More" Loop logic
+    final addMore = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text("Item Added"),
+        content: const Text("Do you want to add more items?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("No"),
+          ),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Yes, Add More"),
+          ),
+        ],
+      ),
+    );
+
+    if (addMore == true) {
+      _clearItem();
+      _itemCodeFocus.requestFocus(); // Back to start of loop
+    } else {
+      _clearItem();
+      _saveBtnFocus.requestFocus(); // Straight to save button
+    }
   }
 
   Future<void> _editItem(int i) async {
@@ -153,6 +227,8 @@ class _IssueScreenState extends State<IssueScreen> {
       _remainingStock = stock - r.qty;
       _availableStock = stock;
     });
+
+    _itemNameFocus.requestFocus(); // Focus item name
   }
 
   void _deleteItem(int i) {
@@ -192,31 +268,22 @@ class _IssueScreenState extends State<IssueScreen> {
     _loadRequests();
   }
 
-  @override
-  void dispose() {
-    _qtyNode.dispose();
-    _rateNode.dispose();
-    _tableFocusNode.dispose();
-    super.dispose();
-  }
-
   KeyEventResult _onTableKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (_items.isEmpty) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
     final current = _selectedRowIndex ?? 0;
-
     if (key == LogicalKeyboardKey.arrowDown) {
       setState(() {
-        _selectedRowIndex = ((current + 1).clamp(0, _items.length - 1)) as int;
+        _selectedRowIndex = ((current + 1).clamp(0, _items.length - 1));
       });
       return KeyEventResult.handled;
     }
 
     if (key == LogicalKeyboardKey.arrowUp) {
       setState(() {
-        _selectedRowIndex = ((current - 1).clamp(0, _items.length - 1)) as int;
+        _selectedRowIndex = ((current - 1).clamp(0, _items.length - 1));
       });
       return KeyEventResult.handled;
     }
@@ -236,16 +303,6 @@ class _IssueScreenState extends State<IssueScreen> {
     return KeyEventResult.ignored;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    ctrl.loadInitialData();
-    itemCtrl.load();
-    _loadNextGrn();
-    _loadRequests();
-    _loadPropertyInfo();
-  }
-
   Future<void> _loadPropertyInfo() async {
     await propertyCtrl.load();
   }
@@ -260,7 +317,6 @@ class _IssueScreenState extends State<IssueScreen> {
     try {
       final res = await ApiClient.get(
           "/api/inventory/issue/next-issue-no/?date=${_date.toIso8601String()}");
-
       if (res['success']) {
         _indentNo.text = res['data']['number'];
       }
@@ -291,18 +347,21 @@ class _IssueScreenState extends State<IssueScreen> {
                 if (ctrl.loading) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _headerCard(),
-                      const SizedBox(height: 12),
-                      _itemEntryCard(),
-                      const SizedBox(height: 12),
-                      Expanded(child: _tableCard()),
-                      const SizedBox(height: 12),
-                      _footerCard(),
-                    ],
+                return FocusTraversalGroup(
+                  policy: OrderedTraversalPolicy(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        _headerCard(),
+                        const SizedBox(height: 12),
+                        _itemEntryCard(),
+                        const SizedBox(height: 12),
+                        Expanded(child: _tableCard()),
+                        const SizedBox(height: 12),
+                        _footerCard(),
+                      ],
+                    ),
                   ),
                 );
               })),
@@ -317,28 +376,37 @@ class _IssueScreenState extends State<IssueScreen> {
         spacing: 16,
         runSpacing: 16,
         children: [
-          DropdownButtonFormField<StockLocationdata>(
-            initialValue: _selectedDepartment,
-            items: ctrl.departments.map((dept) {
-              return DropdownMenuItem(
-                value: dept,
-                child: Text(dept.locationName),
-              );
-            }).toList(),
-            onChanged: (dept) {
-              setState(() {
-                _selectedDepartment = dept;
-              });
-            },
-            decoration: const InputDecoration(labelText: 'Department'),
+          SizedBox(
+            width: 260,
+            child: DropdownButtonFormField<StockLocationdata>(
+              focusNode: _deptFocus, // UPDATED
+              initialValue: _selectedDepartment,
+              items: ctrl.departments.map((dept) {
+                return DropdownMenuItem(
+                  value: dept,
+                  child: Text(dept.locationName),
+                );
+              }).toList(),
+              onChanged: (dept) {
+                setState(() {
+                  _selectedDepartment = dept;
+                });
+                _issueTypeFocus.requestFocus(); // Chaining
+              },
+              decoration: const InputDecoration(labelText: 'Department'),
+            ),
           ),
-          _field(_indentNo, 'Stock Out No'),
-          _dropdown('Stock Out Type', issueTypes, _issueType,
-              (v) => setState(() => _issueType = v)),
+          _field(_indentNo, 'Stock Out No', readOnly: true),
+          _dropdown('Stock Out Type', issueTypes, _issueType, (v) {
+            setState(() => _issueType = v);
+            _dateFocus.requestFocus(); // Chaining
+          }, focusNode: _issueTypeFocus // UPDATED
+              ),
           _dateField(),
           SizedBox(
             width: 260,
             child: DropdownButtonFormField<int>(
+              focusNode: _reqFocus, // UPDATED
               initialValue: _selectedRequestId,
               items: requestList.map<DropdownMenuItem<int>>((req) {
                 return DropdownMenuItem(
@@ -348,7 +416,6 @@ class _IssueScreenState extends State<IssueScreen> {
               }).toList(),
               onChanged: (v) async {
                 final request = await requestCtrl.getById(v!);
-
                 setState(() {
                   _selectedRequestId = v;
 
@@ -357,17 +424,6 @@ class _IssueScreenState extends State<IssueScreen> {
                   );
 
                   _items.clear();
-
-                  // for (var reqItem in request['items']) {
-                  //   final issuedQty = _items
-                  //       .where((e) => e.itemId == reqItem['item_id'])
-                  //       .fold(0, (sum, e) => sum + e.qty);
-
-                  //   if (issuedQty > reqItem['qty']) {
-                  //     _showMessage("Cannot issue more than requested qty");
-                  //     return;
-                  //   }
-                  // }
 
                   for (var i in request['items']) {
                     if ((i['line_status'] ?? 'CLOSED').toString() != 'OPEN') {
@@ -388,10 +444,11 @@ class _IssueScreenState extends State<IssueScreen> {
                     );
                   }
                 });
-
                 _selectedRequestId == null
                     ? (dept) => setState(() => _selectedDepartment = dept)
                     : null;
+
+                _itemCodeFocus.requestFocus(); // Move to Item Code
               },
               decoration: const InputDecoration(labelText: 'Open Request'),
             ),
@@ -411,111 +468,136 @@ class _IssueScreenState extends State<IssueScreen> {
         children: [
           SizedBox(
             width: 200,
-            child: TextField(
-              controller: _code,
-              readOnly: true,
-              decoration: const InputDecoration(labelText: 'Item Code'),
+            child: Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                  _itemNameFocus.requestFocus();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: TextField(
+                focusNode: _itemCodeFocus,
+                controller: _code,
+                readOnly: true,
+                decoration: const InputDecoration(labelText: 'Item Code'),
+              ),
             ),
           ),
           SizedBox(
             width: 260,
-            child: Shortcuts(
-              shortcuts: const {
-                SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+            child: Focus(
+              focusNode: _itemNameFocus,
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent) {
+                  // Backwards navigation
+                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                    _itemCodeFocus.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  // Open dropdown on Enter/Down
+                  if (event.logicalKey == LogicalKeyboardKey.enter ||
+                      event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                      event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                    _itemNameDropdownKey.currentState?.openDropDownSearch();
+                    return KeyEventResult.handled;
+                  }
+                  // Swallow up arrow
+                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                    return KeyEventResult.handled;
+                  }
+                }
+                return KeyEventResult.ignored;
               },
-              child: Actions(
-                actions: {
-                  ActivateIntent: CallbackAction<ActivateIntent>(
-                    onInvoke: (_) {
-                      _itemNameDropdownKey.currentState?.openDropDownSearch();
-                      return null;
-                    },
-                  ),
-                },
-                child: DropdownSearch<String>(
-                  key: _itemNameDropdownKey,
-                  selectedItem: _selectedItemName,
-                  items: (filter, infiniteScrollProps) =>
-                      itemCtrl.list.map((e) => e.itemName).toSet().toList(),
-                  popupProps: const PopupProps.menu(
-                    showSearchBox: true,
-                    searchFieldProps: TextFieldProps(
-                      decoration: InputDecoration(
-                        hintText: "Search item...",
-                      ),
-                    ),
-                  ),
-                  decoratorProps: const DropDownDecoratorProps(
+              child: DropdownSearch<String>(
+                key: _itemNameDropdownKey,
+                selectedItem: _selectedItemName,
+                items: (filter, infiniteScrollProps) =>
+                    itemCtrl.list.map((e) => e.itemName).toSet().toList(),
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  searchFieldProps: TextFieldProps(
                     decoration: InputDecoration(
-                      labelText: "Item Name",
+                      hintText: "Search item...",
                     ),
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedItemName = value;
-
-                      _filteredBrands = itemCtrl.list
-                          .where((e) => e.itemName == value)
-                          .toList();
-
-                      _selectedBrandItemId = null;
-
-                      _code.clear();
-                      _rate.clear();
-                      _qty.clear();
-                    });
-                  },
                 ),
+                decoratorProps: const DropDownDecoratorProps(
+                  decoration: InputDecoration(
+                    labelText: "Item Name",
+                  ),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedItemName = value;
+                    _filteredBrands = itemCtrl.list
+                        .where((e) => e.itemName == value)
+                        .toList();
+                    _selectedBrandItemId = null;
+                    _code.clear();
+                    _rate.clear();
+                    _qty.clear();
+                  });
+                  _brandFocus.requestFocus(); // Forward Chaining
+                },
               ),
             ),
           ),
           SizedBox(
             width: 220,
-            child: DropdownButtonFormField<int>(
-              initialValue: _selectedBrandItemId,
-              items: _filteredBrands
-                  .map((e) => DropdownMenuItem(
-                        value: e.id,
-                        child: Text(e.brand),
-                      ))
-                  .toList(),
-              onChanged: (v) async {
-                final selected = _filteredBrands.firstWhere((e) => e.id == v);
-
-                setState(() {
-                  _selectedBrandItemId = v;
-
-                  _code.text = selected.itemCode;
-                  _unit.text = selected.unit;
-                  _rate.text = selected.rate.toString();
-                  _selectedItem = selected;
-                });
-                final stock = await ctrl.getAvailableStock(selected.itemCode);
-
-                setState(() {
-                  _availableStock = stock;
-                  _remainingStock = stock;
-                });
-                FocusScope.of(context).requestFocus(_qtyNode);
+            child: Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                  _itemNameFocus.requestFocus();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
               },
-              decoration: const InputDecoration(labelText: 'Brand'),
+              child: DropdownButtonFormField<int>(
+                focusNode: _brandFocus,
+                initialValue: _selectedBrandItemId,
+                items: _filteredBrands
+                    .map((e) => DropdownMenuItem(
+                          value: e.id,
+                          child: Text(e.brand),
+                        ))
+                    .toList(),
+                onChanged: (v) async {
+                  final selected = _filteredBrands.firstWhere((e) => e.id == v);
+
+                  setState(() {
+                    _selectedBrandItemId = v;
+
+                    _code.text = selected.itemCode;
+                    _unit.text = selected.unit;
+                    _rate.text = selected.rate.toString();
+                    _selectedItem = selected;
+                  });
+                  final stock = await ctrl.getAvailableStock(selected.itemCode);
+
+                  setState(() {
+                    _availableStock = stock;
+                    _remainingStock = stock;
+                  });
+                  _qtyNode.requestFocus(); // Forward chaining
+                },
+                decoration: const InputDecoration(labelText: 'Brand'),
+              ),
             ),
           ),
-          _field(_unit, 'Unit'),
-          _qtyField(
-            focusNode: _qtyNode,
-            textInputAction: TextInputAction.next,
-            onSubmitted: (_) => FocusScope.of(context).requestFocus(_rateNode),
-          ),
-          _number(
-            _rate,
-            'Rate',
-            focusNode: _rateNode,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _saveItem(),
-          ),
-          _number(_tax, 'Tax %'),
+          _field(_unit, 'Unit', readOnly: true, width: 100),
+          _qtyField(),
+          _number(_rate, 'Rate',
+              focusNode: _rateNode,
+              prevNode: _qtyNode,
+              onSubmit: () => _taxNode.requestFocus()),
+          _number(_tax, 'Tax %',
+              focusNode: _taxNode,
+              prevNode: _rateNode,
+              onSubmit: () => _addBtnFocus.requestFocus()),
           SizedBox(
             width: 260,
             child: Column(
@@ -537,6 +619,7 @@ class _IssueScreenState extends State<IssueScreen> {
             ),
           ),
           FilledButton.icon(
+            focusNode: _addBtnFocus,
             icon: const Icon(Icons.add),
             label: Text(_editIndex == null ? 'Add Item' : 'Update Item'),
             onPressed: _saveItem,
@@ -546,57 +629,62 @@ class _IssueScreenState extends State<IssueScreen> {
     );
   }
 
-  Widget _qtyField({
-    FocusNode? focusNode,
-    TextInputAction? textInputAction,
-    ValueChanged<String>? onSubmitted,
-  }) {
+  // UPDATED: Wrapped in Focus for ArrowUp backwards navigation
+  Widget _qtyField() {
     return SizedBox(
       width: 140,
-      child: TextField(
-        focusNode: focusNode,
-        controller: _qty,
-        keyboardType: TextInputType.number,
-        textInputAction: textInputAction,
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(
-            RegExp(r'^\d*\.?\d{0,2}'),
-          ),
-        ],
-        decoration: const InputDecoration(labelText: 'Stock Out Qty'),
-        onChanged: (val) {
-          if (val.isEmpty) {
-            setState(() => _remainingStock = _availableStock);
-            return;
+      child: Focus(
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            _brandFocus.requestFocus();
+            return KeyEventResult.handled;
           }
-
-          final enteredQty = double.tryParse(val) ?? 0;
-
-          if (enteredQty < 0) {
-            _qty.clear();
-            return;
-          }
-
-          if (enteredQty > _availableStock) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Qty exceeds available stock'),
-              ),
-            );
-
-            _qty.text = _availableStock.toString();
-            _qty.selection = TextSelection.fromPosition(
-              TextPosition(offset: _qty.text.length),
-            );
-
-            setState(() => _remainingStock = 0);
-          } else {
-            setState(() {
-              _remainingStock = _availableStock - enteredQty;
-            });
-          }
+          return KeyEventResult.ignored;
         },
-        onSubmitted: onSubmitted,
+        child: TextField(
+          focusNode: _qtyNode,
+          controller: _qty,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.next,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(
+              RegExp(r'^\d*\.?\d{0,2}'),
+            ),
+          ],
+          decoration: const InputDecoration(labelText: 'Stock Out Qty'),
+          onSubmitted: (_) => _rateNode.requestFocus(),
+          onChanged: (val) {
+            if (val.isEmpty) {
+              setState(() => _remainingStock = _availableStock);
+              return;
+            }
+
+            final enteredQty = double.tryParse(val) ?? 0;
+
+            if (enteredQty < 0) {
+              _qty.clear();
+              return;
+            }
+
+            if (enteredQty > _availableStock) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Qty exceeds available stock'),
+                ),
+              );
+              _qty.text = _availableStock.toString();
+              _qty.selection = TextSelection.fromPosition(
+                TextPosition(offset: _qty.text.length),
+              );
+              setState(() => _remainingStock = 0);
+            } else {
+              setState(() {
+                _remainingStock = _availableStock - enteredQty;
+              });
+            }
+          },
+        ),
       ),
     );
   }
@@ -622,74 +710,74 @@ class _IssueScreenState extends State<IssueScreen> {
                     DataColumn(label: Text('S.No')),
                     DataColumn(label: Text('Item')),
                     DataColumn(label: Text('Unit')),
-                  DataColumn(label: Text('Qty')),
-                  DataColumn(label: Text('Rate')),
-                  DataColumn(label: Text('Amount')),
-                  DataColumn(label: Text('Code')),
-                  DataColumn(label: Text('Status')),
-                  DataColumn(label: Text('Type')),
-                  DataColumn(label: Text('Action')),
+                    DataColumn(label: Text('Qty')),
+                    DataColumn(label: Text('Rate')),
+                    DataColumn(label: Text('Amount')),
+                    DataColumn(label: Text('Code')),
+                    DataColumn(label: Text('Status')),
+                    DataColumn(label: Text('Type')),
+                    DataColumn(label: Text('Action')),
                   ],
                   rows: List.generate(_items.length, (i) {
-                  final r = _items[i];
-                  return DataRow(
-                    selected: _selectedRowIndex == i,
-                    onSelectChanged: (_) {
-                      setState(() => _selectedRowIndex = i);
-                      FocusScope.of(context).requestFocus(_tableFocusNode);
-                    },
-                    color: WidgetStateProperty.all(
-                        i.isEven ? Colors.grey.shade50 : Colors.white),
-                    cells: [
-                      DataCell(Text('${i + 1}')),
-                      DataCell(Text(r.itemName)),
-                      DataCell(Text(r.unit)),
-                      DataCell(Text(r.qty.toString())),
-                      DataCell(Text(r.rate.toStringAsFixed(2))),
-                      DataCell(Text(r.amount.toStringAsFixed(2))),
-                      DataCell(Text(r.itemCode)),
-                      DataCell(
-                        SizedBox(
-                          width: 130,
-                          child: DropdownButtonFormField<String>(
-                            initialValue: r.lineStatus,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: InputBorder.none,
+                    final r = _items[i];
+                    return DataRow(
+                      selected: _selectedRowIndex == i,
+                      onSelectChanged: (_) {
+                        setState(() => _selectedRowIndex = i);
+                        FocusScope.of(context).requestFocus(_tableFocusNode);
+                      },
+                      color: WidgetStateProperty.all(
+                          i.isEven ? Colors.grey.shade50 : Colors.white),
+                      cells: [
+                        DataCell(Text('${i + 1}')),
+                        DataCell(Text(r.itemName)),
+                        DataCell(Text(r.unit)),
+                        DataCell(Text(r.qty.toString())),
+                        DataCell(Text(r.rate.toStringAsFixed(2))),
+                        DataCell(Text(r.amount.toStringAsFixed(2))),
+                        DataCell(Text(r.itemCode)),
+                        DataCell(
+                          SizedBox(
+                            width: 130,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: r.lineStatus,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                border: InputBorder.none,
+                              ),
+                              items: const ['OPEN', 'CLOSED']
+                                  .map(
+                                    (status) => DropdownMenuItem(
+                                      value: status,
+                                      child: Text(status),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() {
+                                  r.lineStatus = value;
+                                });
+                              },
                             ),
-                            items: const ['OPEN', 'CLOSED']
-                                .map(
-                                  (status) => DropdownMenuItem(
-                                    value: status,
-                                    child: Text(status),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() {
-                                r.lineStatus = value;
-                              });
-                            },
                           ),
                         ),
-                      ),
-                      DataCell(Text(r.type)),
-                      DataCell(Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _editItem(i),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteItem(i),
-                          ),
-                        ],
-                      )),
-                    ],
-                  );
-                }),
+                        DataCell(Text(r.type)),
+                        DataCell(Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _editItem(i),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteItem(i),
+                            ),
+                          ],
+                        )),
+                      ],
+                    );
+                  }),
                 ),
               ),
             ),
@@ -706,11 +794,21 @@ class _IssueScreenState extends State<IssueScreen> {
           _totalChip('GST', totalGST),
           _totalChip('Net', netAmount, highlight: true),
           const Spacer(),
+
+          // UPDATED: Save Button with double-submit block
           FilledButton.icon(
-            icon: const Icon(Icons.save),
-            label: const Text('Save'),
-            onPressed: _saveIssue,
+            focusNode: _saveBtnFocus,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.save),
+            label: Text(_isSaving ? 'Saving...' : 'Save'),
+            onPressed: _isSaving ? null : _saveIssue,
           ),
+
           const SizedBox(width: 8),
           OutlinedButton(
             onPressed: () => Navigator.pop(context),
@@ -722,6 +820,8 @@ class _IssueScreenState extends State<IssueScreen> {
   }
 
   Future<void> _saveIssue() async {
+    if (_isSaving) return; // NEW: Block double submit
+
     if (_selectedDepartment == null) {
       _showMessage("Please select department");
       return;
@@ -736,6 +836,13 @@ class _IssueScreenState extends State<IssueScreen> {
       _showMessage("Add at least one item");
       return;
     }
+
+    // NEW: Instantly throw focus to Item Name to prevent button mashing
+    _itemNameFocus.requestFocus();
+
+    setState(() {
+      _isSaving = true;
+    });
 
     try {
       final header = {
@@ -769,7 +876,7 @@ class _IssueScreenState extends State<IssueScreen> {
       final shouldPrint = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-        title: const Text("Print Stock Out Slip"),
+          title: const Text("Print Stock Out Slip"),
           content: const Text("Do you want to print this stock out slip?"),
           actions: [
             TextButton(
@@ -777,6 +884,7 @@ class _IssueScreenState extends State<IssueScreen> {
               child: const Text("No"),
             ),
             FilledButton(
+              autofocus: true,
               onPressed: () => Navigator.pop(context, true),
               child: const Text("Yes"),
             ),
@@ -788,10 +896,16 @@ class _IssueScreenState extends State<IssueScreen> {
         await _printIssue();
       }
 
-      _finalclearItem();
-      _finalclearItem();
+      await _finalclearItem();
+      _deptFocus.requestFocus(); // Return to top
     } catch (e) {
       _showMessage(e.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
@@ -799,6 +913,10 @@ class _IssueScreenState extends State<IssueScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),
     );
+  }
+
+  void _nextFocus() {
+    FocusScope.of(context).nextFocus();
   }
 
   // ================= COMMON UI =================
@@ -823,68 +941,89 @@ class _IssueScreenState extends State<IssueScreen> {
         ),
       );
 
+  // UPDATED: Field supports FocusNode and onSubmit
   Widget _field(
     TextEditingController c,
     String l, {
+    bool readOnly = false,
+    double width = 200,
+    FocusNode? focusNode,
     TextInputAction textInputAction = TextInputAction.next,
-    ValueChanged<String>? onSubmitted,
+    VoidCallback? onSubmit,
   }) =>
       SizedBox(
-        width: 200,
+        width: width,
         child: TextField(
+          focusNode: focusNode,
           controller: c,
+          readOnly: readOnly,
           textInputAction: textInputAction,
-          onSubmitted: onSubmitted ??
-              (_) {
-                if (textInputAction == TextInputAction.next) {
-                  FocusScope.of(context).nextFocus();
-                } else {
-                  FocusScope.of(context).unfocus();
-                }
-              },
+          onSubmitted: (_) {
+            if (onSubmit != null) {
+              onSubmit();
+            } else {
+              if (textInputAction == TextInputAction.next) {
+                FocusScope.of(context).nextFocus();
+              } else {
+                FocusScope.of(context).unfocus();
+              }
+            }
+          },
           onTapOutside: (_) => FocusScope.of(context).unfocus(),
           decoration: InputDecoration(labelText: l),
         ),
       );
 
+  // UPDATED: Number field supports reverse arrow navigation
   Widget _number(
     TextEditingController c,
     String l, {
     FocusNode? focusNode,
+    FocusNode? prevNode,
     TextInputAction? textInputAction,
-    ValueChanged<String>? onSubmitted,
+    VoidCallback? onSubmit,
   }) =>
       SizedBox(
         width: 140,
-        child: TextField(
-          focusNode: focusNode,
-          controller: c,
-          keyboardType: TextInputType.number,
-          textInputAction: textInputAction ?? TextInputAction.next,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: InputDecoration(labelText: l),
-          onSubmitted: onSubmitted ??
-              (_) {
+        child: Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.arrowUp) {
+              prevNode?.requestFocus();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: TextField(
+            focusNode: focusNode,
+            controller: c,
+            keyboardType: TextInputType.number,
+            textInputAction: textInputAction ?? TextInputAction.next,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(labelText: l),
+            onSubmitted: (_) {
+              if (onSubmit != null) {
+                onSubmit();
+              } else {
                 if ((textInputAction ?? TextInputAction.next) ==
                     TextInputAction.next) {
                   FocusScope.of(context).nextFocus();
                 } else {
                   FocusScope.of(context).unfocus();
                 }
-              },
-          onTapOutside: (_) => FocusScope.of(context).unfocus(),
+              }
+            },
+            onTapOutside: (_) => FocusScope.of(context).unfocus(),
+          ),
         ),
       );
 
-  Widget _dropdown(
-    String l,
-    List<String> d,
-    String? v,
-    ValueChanged<String?> c,
-  ) =>
+  Widget _dropdown(String l, List<String> d, String? v, ValueChanged<String?> c,
+          {FocusNode? focusNode}) =>
       SizedBox(
         width: 260,
         child: DropdownButtonFormField<String>(
+          focusNode: focusNode,
           initialValue: v,
           items:
               d.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
@@ -915,11 +1054,13 @@ class _IssueScreenState extends State<IssueScreen> {
                     _date = selected;
                   });
                 }
+                _reqFocus.requestFocus(); // Move to Open Request selection
                 return null;
               },
             ),
           },
           child: TextField(
+            focusNode: _dateFocus, // UPDATED
             readOnly: true,
             controller: TextEditingController(
               text: DateFormat('dd-MMM-yyyy').format(_date),
@@ -933,12 +1074,12 @@ class _IssueScreenState extends State<IssueScreen> {
                 context: context,
                 initialDate: _date,
               );
-
               if (selected != null) {
                 setState(() {
                   _date = selected;
                 });
               }
+              _reqFocus.requestFocus();
             },
           ),
         ),
@@ -951,15 +1092,6 @@ class _IssueScreenState extends State<IssueScreen> {
 
     final property = propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
-
-    // pw.MemoryImage? logo;
-
-    // if (property?.logoPath != null && property!.logoPath!.isNotEmpty) {
-    //   final response = await http.get(Uri.parse(property.logoPath!));
-    //   if (response.statusCode == 200) {
-    //     logo = pw.MemoryImage(response.bodyBytes);
-    //   }
-    // }
 
     pdf.addPage(
       pw.MultiPage(
@@ -997,7 +1129,7 @@ class _IssueScreenState extends State<IssueScreen> {
                 padding: const pw.EdgeInsets.all(8),
                 decoration: pw.BoxDecoration(border: pw.Border.all()),
                 child: pw.Text(
-                      "STOCK OUT SLIP",
+                  "STOCK OUT SLIP",
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 ),
               ),
@@ -1119,7 +1251,6 @@ class _IssueScreenState extends State<IssueScreen> {
         ],
       ),
     );
-
     await Printing.layoutPdf(
       onLayout: (format) async => pdf.save(),
     );

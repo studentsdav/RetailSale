@@ -35,7 +35,7 @@ class StockOutReportController extends ChangeNotifier {
     originalData = res['data'];
     data = List.from(originalData);
 
-    _calculateTotal();
+    _calculateTotal(reportType);
 
     loading = false;
     notifyListeners();
@@ -51,15 +51,21 @@ class StockOutReportController extends ChangeNotifier {
       return matchDept && matchItem;
     }).toList();
 
-    _calculateTotal();
+    _calculateTotal(reportType);
     notifyListeners();
   }
 
-  void _calculateTotal() {
-    totalNet = data.fold(
-      0,
-      (sum, e) => sum + double.parse(e['net_amount'].toString()),
-    );
+  void _calculateTotal(reportType) {
+    totalNet = data.fold(0.0, (sum, e) {
+      double amount = 0.0;
+      if (reportType == "summary") {
+        amount = double.tryParse(e['total_amount']?.toString() ?? "") ?? 0.0;
+      } else {
+        amount = double.tryParse(e['amount']?.toString() ?? "") ?? 0.0;
+      }
+
+      return sum + amount;
+    });
   }
 
   List<String> get departments => originalData

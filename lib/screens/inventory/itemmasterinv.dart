@@ -71,10 +71,34 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
   int _autoCode = 1001;
   int? _editIndex;
-
   List<GroupModel> _groups = [];
   List<BrandModel> _brands = [];
   List<SubCategoryModel> _subCategories = [];
+
+  // NEW: Double-submit prevention shield
+  bool _isSaving = false;
+
+  // NEW: ================= FOCUS NODES =================
+  final FocusNode _nameFocus = FocusNode();
+  final FocusNode _hsnSacFocus = FocusNode();
+  final FocusNode _barcodeFocus = FocusNode();
+  final FocusNode _groupFocus = FocusNode();
+  final FocusNode _subCategoryFocus = FocusNode();
+  final FocusNode _brandFocus = FocusNode();
+  final FocusNode _unitFocus = FocusNode();
+  final FocusNode _inclusiveSwitchFocus = FocusNode();
+  final FocusNode _inclusiveScopeFocus = FocusNode();
+  final FocusNode _rateFocus = FocusNode();
+  final FocusNode _saleRateFocus = FocusNode();
+  final FocusNode _taxTypeFocus = FocusNode();
+  final FocusNode _taxPercentFocus = FocusNode();
+  final FocusNode _openingFocus = FocusNode();
+  final FocusNode _minFocus = FocusNode();
+  final FocusNode _maxFocus = FocusNode();
+  final FocusNode _discountFocus = FocusNode();
+  final FocusNode _schemeFocus = FocusNode();
+  final FocusNode _stockableFocus = FocusNode();
+  final FocusNode _saveBtnFocus = FocusNode();
 
   final List<String> _units = [
     'PCS',
@@ -130,23 +154,18 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
   Future<void> _loadMasters() async {
     final groupsRes = await ApiClient.get('/api/inventory/groups');
-
     final subRes = await ApiClient.get('/api/inventory/subcategories');
-
     final brandRes = await ApiClient.get('/api/inventory/brands');
 
     _groups = List<Map<String, dynamic>>.from(groupsRes['data'])
         .map((e) => GroupModel.fromJson(e))
         .toList();
-
     _subCategories = List<Map<String, dynamic>>.from(subRes['data'])
         .map((e) => SubCategoryModel.fromJson(e))
         .toList();
-
     _brands = List<Map<String, dynamic>>.from(brandRes['data'])
         .map((e) => BrandModel.fromJson(e))
         .toList();
-
     setState(() {});
   }
 
@@ -154,6 +173,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   void initState() {
     super.initState();
     _init();
+
+    // NEW: Auto-focus the first editable field (Item Name) when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _nameFocus.requestFocus();
+    });
   }
 
   @override
@@ -174,17 +198,37 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _tableHorizontalController.dispose();
     _searchNode.dispose();
     _tableFocusNode.dispose();
+
+    // NEW: Dispose nodes
+    _nameFocus.dispose();
+    _hsnSacFocus.dispose();
+    _barcodeFocus.dispose();
+    _groupFocus.dispose();
+    _subCategoryFocus.dispose();
+    _brandFocus.dispose();
+    _unitFocus.dispose();
+    _inclusiveSwitchFocus.dispose();
+    _inclusiveScopeFocus.dispose();
+    _rateFocus.dispose();
+    _saleRateFocus.dispose();
+    _taxTypeFocus.dispose();
+    _taxPercentFocus.dispose();
+    _openingFocus.dispose();
+    _minFocus.dispose();
+    _maxFocus.dispose();
+    _discountFocus.dispose();
+    _schemeFocus.dispose();
+    _stockableFocus.dispose();
+    _saveBtnFocus.dispose();
     super.dispose();
   }
 
   KeyEventResult _onTableKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
     if (_filtered.isEmpty) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
     final current = _selectedRowIndex ?? 0;
-
     if (key == LogicalKeyboardKey.arrowDown) {
       setState(() {
         _selectedRowIndex = ((current + 1).clamp(0, _filtered.length - 1));
@@ -245,8 +289,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _max.clear();
     _taxPercent.text = '0';
     _group = null;
+    _selectedGroup = null;
     _subCategory = null;
+    _selectedSubCategory = null;
     _brand = null;
+    _selectedBrand = null;
     _unit = null;
     _taxType = 'GST';
     _stockable = true;
@@ -260,10 +307,23 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _autoCode++;
     _generateCode();
     setState(() {});
+
+    // Auto-focus on name after clearing
+    _nameFocus.requestFocus();
   }
 
   Future<void> _saveItem() async {
+    if (_isSaving) return; // NEW: Block double submit
+
     if (!_formKey.currentState!.validate()) return;
+
+    // NEW: Jump focus away to prevent mashing
+    _nameFocus.requestFocus();
+
+    setState(() {
+      _isSaving = true;
+    });
+
     try {
       final taxPercent = double.tryParse(_taxPercent.text.trim()) ?? 0;
       final enteredBuyRate = double.parse(_rate.text);
@@ -284,6 +344,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               taxPercent,
             )
           : enteredSaleRate;
+
       final model = Item(
         id: _editIndex == null ? 0 : _items[_editIndex!].id,
         itemCode: _code.text,
@@ -301,9 +362,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         taxPercent: taxPercent,
         discountApplicable: _discountApplicable,
         schemeApplicable: _schemeApplicable,
-        openingBalance: double.parse(_opening.text),
-        minLevel: int.parse(_min.text),
-        maxLevel: int.parse(_max.text),
+        openingBalance:
+            double.parse(_opening.text.isEmpty ? "0" : _opening.text),
+        minLevel: int.parse(_min.text.isEmpty ? "0" : _min.text),
+        maxLevel: int.parse(_max.text.isEmpty ? "0" : _max.text),
         stockable: _stockable,
       );
 
@@ -335,6 +397,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       await _loadItems();
     } catch (e) {
       showErrorSnackbar(e.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
@@ -404,7 +472,6 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     final it = _filtered[i];
 
     _editIndex = _items.indexWhere((e) => e.id == it.id);
-
     _code.text = it.itemCode;
     _name.text = it.itemName;
     _hsnSac.text = it.hsnSacCode;
@@ -418,17 +485,14 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       (g) => g.groupName == it.itemGroup,
       orElse: () => _groups.first,
     );
-
     _selectedSubCategory = _subCategories.firstWhere(
       (s) => s.subCategoryName == it.subCategory,
       orElse: () => _subCategories.first,
     );
-
     _selectedBrand = _brands.firstWhere(
       (b) => b.brandName == it.brand,
       orElse: () => _brands.first,
     );
-
     _unit = it.unit;
 
     _rate.text = it.rate.toString();
@@ -445,6 +509,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _inclusiveRateScope = 'BOTH';
 
     setState(() {});
+    _nameFocus.requestFocus(); // Focus to name when editing
   }
 
   Future<void> _deleteItem(int i) async {
@@ -458,10 +523,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     setState(() => _filtered = itemCtrl.list);
   }
 
-  // ================= UI =================
+  // ================= EXPORT & IMPORT =================
   Future<void> _exportExcel() async {
     var excel = Excel.createExcel();
-
     final defaultSheet = excel.getDefaultSheet();
     if (defaultSheet != null) {
       excel.rename(defaultSheet, 'Items');
@@ -489,7 +553,6 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       TextCellValue('Max'),
       TextCellValue('Stockable'),
     ]);
-
     for (var item in _items) {
       sheet.appendRow([
         TextCellValue(item.itemCode),
@@ -513,22 +576,18 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       ]);
     }
 
-    // 🔥 SAVE IN DOWNLOADS WITH TIMESTAMP
     final directory =
         Directory('${Platform.environment['USERPROFILE']}\\Downloads');
-
     final fileName =
         'items_export_${DateTime.now().millisecondsSinceEpoch}.xlsx';
 
     final path = '${directory.path}\\$fileName';
 
     final file = File(path);
-
     final bytes = excel.encode();
     if (bytes == null) return;
 
     await file.writeAsBytes(bytes, flush: true);
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Exported Successfully\nSaved at: $path')),
     );
@@ -547,18 +606,15 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       type: FileType.custom,
       allowedExtensions: ['xlsx'],
     );
-
     if (result == null) return;
 
     final bytes = File(result.files.single.path!).readAsBytesSync();
     final excel = Excel.decodeBytes(bytes);
 
     List<Map<String, dynamic>> bulkData = [];
-
     for (var table in excel.tables.keys) {
       for (int i = 1; i < excel.tables[table]!.rows.length; i++) {
         final row = excel.tables[table]!.rows[i];
-
         bulkData.add({
           "item_code": row[0]?.value.toString(),
           "item_name": row[1]?.value.toString(),
@@ -585,7 +641,6 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     await ApiClient.post('/api/inventory/items/bulk-import', bulkData);
 
     await _loadItems();
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Import Successful')),
     );
@@ -638,18 +693,21 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             ),
           ],
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              _formCard(),
-              const SizedBox(height: 14),
-              _searchBar(),
-              const SizedBox(height: 14),
-              Expanded(
-                child: _dataTable(),
-              ),
-            ],
+        body: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _formCard(),
+                const SizedBox(height: 14),
+                _searchBar(),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: _dataTable(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -667,10 +725,19 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
           spacing: 14,
           runSpacing: 14,
           children: [
+            // Code is readonly, so we don't pass focus node to it.
             _text(_code, 'Item Code', readOnly: true),
-            _text(_name, 'Item Name'),
-            _text(_hsnSac, 'HSN / SAC Code'),
-            _text(_barcode, 'Barcode / Scan Code'),
+            _text(_name, 'Item Name',
+                focusNode: _nameFocus,
+                onSubmit: () => _hsnSacFocus.requestFocus()),
+            _text(_hsnSac, 'HSN / SAC Code',
+                focusNode: _hsnSacFocus,
+                prevNode: _nameFocus,
+                onSubmit: () => _barcodeFocus.requestFocus()),
+            _text(_barcode, 'Barcode / Scan Code',
+                focusNode: _barcodeFocus,
+                prevNode: _hsnSacFocus,
+                onSubmit: () => _groupFocus.requestFocus()),
             SizedBox(
               width: 220,
               child: TextFormField(
@@ -707,299 +774,353 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 ],
               ),
 
-            // 🔵 GROUP
+            // 鳩 GROUP
             SizedBox(
               width: 220,
-              child: Shortcuts(
-                shortcuts: const {
-                  SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                  SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-                },
-                child: Actions(
-                  actions: {
-                    ActivateIntent: CallbackAction<ActivateIntent>(
-                      onInvoke: (_) {
-                        _groupDropdownKey.currentState?.openDropDownSearch();
-                        return null;
-                      },
-                    ),
-                  },
-                  child: DropdownSearch<GroupModel>(
-                    key: _groupDropdownKey,
-                    selectedItem: _selectedGroup,
-                    items: (filter, infiniteScrollProps) {
-                      final List<GroupModel> list =
-                          List<GroupModel>.from(_groups);
-
-                      list.add(
-                        GroupModel(
-                          id: -1,
-                          groupName: "+ Add New Group",
-                        ),
-                      );
-
-                      return list;
-                    },
-                    itemAsString: (g) => g.groupName,
-                    compareFn: (a, b) => a.id == b.id,
-                    popupProps: const PopupProps.menu(
-                      showSearchBox: true,
-                    ),
-                    decoratorProps: DropDownDecoratorProps(
-                      decoration: InputDecoration(
-                        labelText: "Group",
-                        prefixIcon: _selectedGroup == null
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.edit, size: 18),
-                                tooltip: "Edit Group",
-                                onPressed: _showEditGroupDialog,
-                              ),
-                      ),
-                    ),
-                    onChanged: (value) async {
-                      if (value == null) return;
-
-                      if (value.id == -1) {
-                        _showAddGroupDialog();
-                        return;
-                      }
-
-                      setState(() {
-                        _selectedGroup = value;
-                        _selectedSubCategory = null;
-                      });
-                    },
-                  ),
-                ),
-              ),
-            ),
-
-            // 🟢 SUB CATEGORY
-            SizedBox(
-              width: 220,
-              child: SizedBox(
-                width: 220,
-                child: Shortcuts(
-                  shortcuts: const {
-                    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                    SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-                  },
-                  child: Actions(
-                    actions: {
-                      ActivateIntent: CallbackAction<ActivateIntent>(
-                        onInvoke: (_) {
-                          _subCategoryDropdownKey.currentState
-                              ?.openDropDownSearch();
-                          return null;
-                        },
-                      ),
-                    },
-                    child: DropdownSearch<SubCategoryModel>(
-                      key: _subCategoryDropdownKey,
-                      selectedItem: _selectedSubCategory,
-                      items: (filter, infiniteScrollProps) {
-                        if (_selectedGroup == null) {
-                          return <SubCategoryModel>[];
-                        }
-
-                        final List<SubCategoryModel> list = _subCategories
-                            .where((s) => s.groupId == _selectedGroup!.id)
-                            .toList();
-
-                        list.add(
-                          SubCategoryModel(
-                            id: -1,
-                            groupId: _selectedGroup!.id,
-                            subCategoryName: "+ Add New SubCategory",
-                          ),
-                        );
-
-                        return list;
-                      },
-                      decoratorProps: DropDownDecoratorProps(
-                        decoration: InputDecoration(
-                          labelText: "Sub Category",
-                          prefixIcon: _selectedSubCategory == null
-                              ? null
-                              : IconButton(
-                                  icon: const Icon(Icons.edit, size: 18),
-                                  tooltip: "Edit Subcategory",
-                                  onPressed: _showEditSubCategoryDialog,
-                                ),
-                        ),
-                      ),
-                      itemAsString: (s) => s.subCategoryName,
-                      compareFn: (a, b) => a.id == b.id,
-                      onChanged: (value) async {
-                        if (value == null) return;
-
-                        if (value.id == -1) {
-                          _showAddSubCategoryDialog();
-                          return;
-                        }
-
-                        setState(() {
-                          _selectedSubCategory = value;
-                        });
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // 🟠 BRAND
-            SizedBox(
-              width: 220,
-              child: Shortcuts(
-                shortcuts: const {
-                  SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                  SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-                },
-                child: Actions(
-                  actions: {
-                    ActivateIntent: CallbackAction<ActivateIntent>(
-                      onInvoke: (_) {
-                        _brandDropdownKey.currentState?.openDropDownSearch();
-                        return null;
-                      },
-                    ),
-                  },
-                  child: DropdownSearch<BrandModel>(
-                    key: _brandDropdownKey,
-                    selectedItem: _selectedBrand,
-                    items: (filter, infiniteScrollProps) {
-                      final List<BrandModel> list =
-                          List<BrandModel>.from(_brands);
-
-                      list.add(
-                        BrandModel(
-                          id: -1,
-                          brandName: "+ Add New Brand",
-                        ),
-                      );
-
-                      return list;
-                    },
-                    itemAsString: (b) => b.brandName,
-                    compareFn: (a, b) => a.id == b.id,
-                    popupProps: const PopupProps.menu(
-                      showSearchBox: true,
-                    ),
-                    decoratorProps: DropDownDecoratorProps(
-                      decoration: InputDecoration(
-                        labelText: "Brand",
-                        prefixIcon: _selectedBrand == null
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.edit, size: 18),
-                                tooltip: "Edit Brand",
-                                onPressed: _showEditBrandDialog,
-                              ),
-                      ),
-                    ),
-                    onChanged: (value) async {
-                      if (value == null) return;
-
-                      if (value.id == -1) {
-                        _showAddBrandDialog();
-                        return;
-                      }
-
-                      setState(() {
-                        _selectedBrand = value;
-                      });
-                    },
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: Shortcuts(
-                shortcuts: const {
-                  SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                  SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-                },
-                child: Actions(
-                  actions: {
-                    ActivateIntent: CallbackAction<ActivateIntent>(
-                      onInvoke: (_) {
-                        _unitDropdownKey.currentState?.openDropDownSearch();
-                        return null;
-                      },
-                    ),
-                  },
-                  child: DropdownSearch<String>(
-                    key: _unitDropdownKey,
-                    selectedItem: _unit,
-                    items: (filter, infiniteScrollProps) => _units,
-                    popupProps: const PopupProps.menu(
-                      showSearchBox: true,
-                      searchFieldProps: TextFieldProps(
-                        decoration: InputDecoration(
-                          hintText: "Search unit...",
-                        ),
-                      ),
-                    ),
-                    decoratorProps: const DropDownDecoratorProps(
-                      decoration: InputDecoration(
-                        labelText: "Unit",
-                      ),
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _unit = value;
-                      });
-                    },
-                  ),
-                ),
-              ),
-            ),
-
-            SizedBox(
-              width: 220,
-              child: SwitchListTile(
-                title: const Text('Get Inclusive'),
-                value: _useInclusiveRates,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (value) {
-                  setState(() {
-                    _useInclusiveRates = value;
-                    if (!value) {
-                      _inclusiveRateScope = 'BOTH';
+              child: Focus(
+                focusNode: _groupFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                      _barcodeFocus.requestFocus();
+                      return KeyEventResult.handled;
                     }
-                  });
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _groupDropdownKey.currentState?.openDropDownSearch();
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
                 },
+                child: DropdownSearch<GroupModel>(
+                  key: _groupDropdownKey,
+                  selectedItem: _selectedGroup,
+                  items: (filter, infiniteScrollProps) {
+                    final List<GroupModel> list =
+                        List<GroupModel>.from(_groups);
+                    list.add(
+                      GroupModel(
+                        id: -1,
+                        groupName: "+ Add New Group",
+                      ),
+                    );
+                    return list;
+                  },
+                  itemAsString: (g) => g.groupName,
+                  compareFn: (a, b) => a.id == b.id,
+                  popupProps: const PopupProps.menu(
+                    showSearchBox: true,
+                  ),
+                  decoratorProps: DropDownDecoratorProps(
+                    decoration: InputDecoration(
+                      labelText: "Group",
+                      prefixIcon: _selectedGroup == null
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              tooltip: "Edit Group",
+                              onPressed: _showEditGroupDialog,
+                            ),
+                    ),
+                  ),
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    if (value.id == -1) {
+                      _showAddGroupDialog();
+                      return;
+                    }
+
+                    setState(() {
+                      _selectedGroup = value;
+                      _selectedSubCategory = null;
+                    });
+                    _subCategoryFocus.requestFocus(); // Chaining
+                  },
+                ),
+              ),
+            ),
+
+            // 泙 SUB CATEGORY
+            SizedBox(
+              width: 220,
+              child: Focus(
+                focusNode: _subCategoryFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                      _groupFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _subCategoryDropdownKey.currentState
+                          ?.openDropDownSearch();
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: DropdownSearch<SubCategoryModel>(
+                  key: _subCategoryDropdownKey,
+                  selectedItem: _selectedSubCategory,
+                  items: (filter, infiniteScrollProps) {
+                    if (_selectedGroup == null) {
+                      return <SubCategoryModel>[];
+                    }
+                    final List<SubCategoryModel> list = _subCategories
+                        .where((s) => s.groupId == _selectedGroup!.id)
+                        .toList();
+                    list.add(
+                      SubCategoryModel(
+                        id: -1,
+                        groupId: _selectedGroup!.id,
+                        subCategoryName: "+ Add New SubCategory",
+                      ),
+                    );
+                    return list;
+                  },
+                  decoratorProps: DropDownDecoratorProps(
+                    decoration: InputDecoration(
+                      labelText: "Sub Category",
+                      prefixIcon: _selectedSubCategory == null
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              tooltip: "Edit Subcategory",
+                              onPressed: _showEditSubCategoryDialog,
+                            ),
+                    ),
+                  ),
+                  itemAsString: (s) => s.subCategoryName,
+                  compareFn: (a, b) => a.id == b.id,
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    if (value.id == -1) {
+                      _showAddSubCategoryDialog();
+                      return;
+                    }
+
+                    setState(() {
+                      _selectedSubCategory = value;
+                    });
+                    _brandFocus.requestFocus(); // Chaining
+                  },
+                ),
+              ),
+            ),
+
+            // 泛 BRAND
+            SizedBox(
+              width: 220,
+              child: Focus(
+                focusNode: _brandFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                      _subCategoryFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _brandDropdownKey.currentState?.openDropDownSearch();
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: DropdownSearch<BrandModel>(
+                  key: _brandDropdownKey,
+                  selectedItem: _selectedBrand,
+                  items: (filter, infiniteScrollProps) {
+                    final List<BrandModel> list =
+                        List<BrandModel>.from(_brands);
+                    list.add(
+                      BrandModel(
+                        id: -1,
+                        brandName: "+ Add New Brand",
+                      ),
+                    );
+                    return list;
+                  },
+                  itemAsString: (b) => b.brandName,
+                  compareFn: (a, b) => a.id == b.id,
+                  popupProps: const PopupProps.menu(
+                    showSearchBox: true,
+                  ),
+                  decoratorProps: DropDownDecoratorProps(
+                    decoration: InputDecoration(
+                      labelText: "Brand",
+                      prefixIcon: _selectedBrand == null
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              tooltip: "Edit Brand",
+                              onPressed: _showEditBrandDialog,
+                            ),
+                    ),
+                  ),
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    if (value.id == -1) {
+                      _showAddBrandDialog();
+                      return;
+                    }
+
+                    setState(() {
+                      _selectedBrand = value;
+                    });
+                    _unitFocus.requestFocus(); // Chaining
+                  },
+                ),
+              ),
+            ),
+
+            SizedBox(
+              width: 220,
+              child: Focus(
+                focusNode: _unitFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                      _brandFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _unitDropdownKey.currentState?.openDropDownSearch();
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: DropdownSearch<String>(
+                  key: _unitDropdownKey,
+                  selectedItem: _unit,
+                  items: (filter, infiniteScrollProps) => _units,
+                  popupProps: const PopupProps.menu(
+                    showSearchBox: true,
+                    searchFieldProps: TextFieldProps(
+                      decoration: InputDecoration(
+                        hintText: "Search unit...",
+                      ),
+                    ),
+                  ),
+                  decoratorProps: const DropDownDecoratorProps(
+                    decoration: InputDecoration(
+                      labelText: "Unit",
+                    ),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _unit = value;
+                    });
+                    _inclusiveSwitchFocus.requestFocus(); // Chaining
+                  },
+                ),
+              ),
+            ),
+
+            SizedBox(
+              width: 220,
+              child: Focus(
+                focusNode: _inclusiveSwitchFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      _unitFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                      setState(() {
+                        _useInclusiveRates = !_useInclusiveRates;
+                        if (!_useInclusiveRates) {
+                          _inclusiveRateScope = 'BOTH';
+                        }
+                      });
+                      if (_useInclusiveRates) {
+                        _inclusiveScopeFocus.requestFocus();
+                      } else {
+                        _rateFocus.requestFocus();
+                      }
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      if (_useInclusiveRates) {
+                        _inclusiveScopeFocus.requestFocus();
+                      } else {
+                        _rateFocus.requestFocus();
+                      }
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: SwitchListTile(
+                  title: const Text('Get Inclusive'),
+                  value: _useInclusiveRates,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (value) {
+                    setState(() {
+                      _useInclusiveRates = value;
+                      if (!value) {
+                        _inclusiveRateScope = 'BOTH';
+                      }
+                    });
+                    if (value) {
+                      _inclusiveScopeFocus.requestFocus();
+                    } else {
+                      _rateFocus.requestFocus();
+                    }
+                  },
+                ),
               ),
             ),
             if (_useInclusiveRates)
               SizedBox(
                 width: 220,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _inclusiveRateScope,
-                  decoration:
-                      const InputDecoration(labelText: 'Inclusive Apply To'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'BOTH',
-                      child: Text('Buy and Sale Rate'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'SALE_ONLY',
-                      child: Text('Sale Rate Only'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'BUY_ONLY',
-                      child: Text('Buy Rate Only'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _inclusiveRateScope = value);
+                child: Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                      _inclusiveSwitchFocus.requestFocus();
+                      return KeyEventResult.handled;
                     }
+                    return KeyEventResult.ignored;
                   },
+                  child: DropdownButtonFormField<String>(
+                    focusNode: _inclusiveScopeFocus,
+                    initialValue: _inclusiveRateScope,
+                    decoration:
+                        const InputDecoration(labelText: 'Inclusive Apply To'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'BOTH',
+                        child: Text('Buy and Sale Rate'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'SALE_ONLY',
+                        child: Text('Sale Rate Only'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'BUY_ONLY',
+                        child: Text('Buy Rate Only'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _inclusiveRateScope = value);
+                      }
+                      _rateFocus.requestFocus(); // Chaining
+                    },
+                  ),
                 ),
               ),
             _text(
@@ -1010,6 +1131,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                   ? 'Buy Rate (Inclusive)'
                   : 'Buy Rate',
               isDouble: true,
+              focusNode: _rateFocus,
+              prevNode: _useInclusiveRates
+                  ? _inclusiveScopeFocus
+                  : _inclusiveSwitchFocus,
+              onSubmit: () => _saleRateFocus.requestFocus(),
               helperText: _useInclusiveRates &&
                       (_inclusiveRateScope == 'BOTH' ||
                           _inclusiveRateScope == 'BUY_ONLY') &&
@@ -1029,6 +1155,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                   ? 'Sale Rate (Inclusive)'
                   : 'Sale Rate',
               isDouble: true,
+              focusNode: _saleRateFocus,
+              prevNode: _rateFocus,
+              onSubmit: () => _taxTypeFocus.requestFocus(),
               helperText: _useInclusiveRates &&
                       (_inclusiveRateScope == 'BOTH' ||
                           _inclusiveRateScope == 'SALE_ONLY') &&
@@ -1043,61 +1172,178 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             ),
             SizedBox(
               width: 220,
-              child: DropdownButtonFormField<String>(
-                initialValue: _taxType,
-                decoration: const InputDecoration(labelText: 'Tax Type'),
-                items: _taxTypes
-                    .map(
-                      (value) => DropdownMenuItem(
-                        value: value,
-                        child: Text(value),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _taxType = value);
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                    _saleRateFocus.requestFocus();
+                    return KeyEventResult.handled;
                   }
+                  return KeyEventResult.ignored;
                 },
+                child: DropdownButtonFormField<String>(
+                  focusNode: _taxTypeFocus,
+                  initialValue: _taxType,
+                  decoration: const InputDecoration(labelText: 'Tax Type'),
+                  items: _taxTypes
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(value),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _taxType = value);
+                    }
+                    _taxPercentFocus.requestFocus(); // Chaining
+                  },
+                ),
               ),
             ),
-            _text(_taxPercent, 'Tax %', isDouble: true),
+            _text(_taxPercent, 'Tax %',
+                isDouble: true,
+                focusNode: _taxPercentFocus,
+                prevNode: _taxTypeFocus,
+                onSubmit: () => _openingFocus.requestFocus()),
             _text(_opening, 'Opening Balance',
-                isDouble: true, readOnly: _editIndex == null ? false : true),
-            _text(_min, 'Min Level', isInt: true),
-            _text(_max, 'Max Level', isInt: true),
+                isDouble: true,
+                readOnly: _editIndex == null ? false : true,
+                focusNode: _openingFocus,
+                prevNode: _taxPercentFocus,
+                onSubmit: () => _minFocus.requestFocus()),
+            _text(_min, 'Min Level',
+                isInt: true,
+                focusNode: _minFocus,
+                prevNode: _openingFocus,
+                onSubmit: () => _maxFocus.requestFocus()),
+            _text(_max, 'Max Level',
+                isInt: true,
+                focusNode: _maxFocus,
+                prevNode: _minFocus,
+                onSubmit: () => _discountFocus.requestFocus()),
 
             SizedBox(
               width: 220,
-              child: SwitchListTile(
-                title: const Text('Discount Applicable'),
-                value: _discountApplicable,
-                onChanged: (v) => setState(() => _discountApplicable = v),
+              child: Focus(
+                focusNode: _discountFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      _maxFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                      setState(
+                          () => _discountApplicable = !_discountApplicable);
+                      _schemeFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _schemeFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: SwitchListTile(
+                  title: const Text('Discount Applicable'),
+                  value: _discountApplicable,
+                  onChanged: (v) {
+                    setState(() => _discountApplicable = v);
+                    _schemeFocus.requestFocus();
+                  },
+                ),
               ),
             ),
             SizedBox(
               width: 220,
-              child: SwitchListTile(
-                title: const Text('Scheme Applicable'),
-                value: _schemeApplicable,
-                onChanged: (v) => setState(() => _schemeApplicable = v),
+              child: Focus(
+                focusNode: _schemeFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      _discountFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                      setState(() => _schemeApplicable = !_schemeApplicable);
+                      _stockableFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _stockableFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: SwitchListTile(
+                  title: const Text('Scheme Applicable'),
+                  value: _schemeApplicable,
+                  onChanged: (v) {
+                    setState(() => _schemeApplicable = v);
+                    _stockableFocus.requestFocus();
+                  },
+                ),
               ),
             ),
             SizedBox(
               width: 220,
-              child: SwitchListTile(
-                title: const Text('Stockable'),
-                value: _stockable,
-                onChanged: (v) => setState(() => _stockable = v),
+              child: Focus(
+                focusNode: _stockableFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      _schemeFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                      setState(() => _stockable = !_stockable);
+                      _saveBtnFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _saveBtnFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: SwitchListTile(
+                  title: const Text('Stockable'),
+                  value: _stockable,
+                  onChanged: (v) {
+                    setState(() => _stockable = v);
+                    _saveBtnFocus.requestFocus();
+                  },
+                ),
               ),
             ),
-
             FilledButton.icon(
-              icon: const Icon(Icons.save),
-              label: Text(_editIndex == null ? 'Save Item' : 'Update Item'),
-              onPressed: _saveItem,
+              focusNode: _saveBtnFocus,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.save),
+              label: Text(_isSaving
+                  ? 'Saving...'
+                  : (_editIndex == null ? 'Save Item' : 'Update Item')),
+              onPressed: _isSaving ? null : _saveItem,
             ),
-
             OutlinedButton(
               onPressed: _clearForm,
               child: const Text('Clear'),
@@ -1110,12 +1356,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
   Future<void> _showEditBrandDialog() async {
     if (_selectedBrand == null) return;
-
     final TextEditingController nameCtrl =
         TextEditingController(text: _selectedBrand!.brandName);
-
     bool isLoading = false;
-
     await showDialog(
       context: context,
       builder: (context) {
@@ -1137,25 +1380,19 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       ? null
                       : () async {
                           if (nameCtrl.text.trim().isEmpty) return;
-
                           setStateDialog(() => isLoading = true);
-
                           await ApiClient.put(
                             '/api/inventory/brands/${_selectedBrand!.id}',
                             {
                               "brand_name": nameCtrl.text.trim(),
                             },
                           );
-
                           Navigator.pop(context);
-
                           await _loadMasters();
-
                           final updated = _brands.firstWhere(
                             (b) => b.id == _selectedBrand!.id,
                             orElse: () => _selectedBrand!,
                           );
-
                           setState(() {
                             _selectedBrand = updated;
                           });
@@ -1174,12 +1411,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
   Future<void> _showEditSubCategoryDialog() async {
     if (_selectedSubCategory == null) return;
-
     final TextEditingController nameCtrl =
         TextEditingController(text: _selectedSubCategory!.subCategoryName);
-
     bool isLoading = false;
-
     await showDialog(
       context: context,
       builder: (context) {
@@ -1202,25 +1436,19 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       ? null
                       : () async {
                           if (nameCtrl.text.trim().isEmpty) return;
-
                           setStateDialog(() => isLoading = true);
-
                           await ApiClient.put(
                             '/api/inventory/subcategories/${_selectedSubCategory!.id}',
                             {
                               "subcategory_name": nameCtrl.text.trim(),
                             },
                           );
-
                           Navigator.pop(context);
-
                           await _loadMasters();
-
                           final updated = _subCategories.firstWhere(
                             (s) => s.id == _selectedSubCategory!.id,
                             orElse: () => _selectedSubCategory!,
                           );
-
                           setState(() {
                             _selectedSubCategory = updated;
                           });
@@ -1239,12 +1467,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
   Future<void> _showEditGroupDialog() async {
     if (_selectedGroup == null) return;
-
     final TextEditingController nameCtrl =
         TextEditingController(text: _selectedGroup!.groupName);
-
     bool isLoading = false;
-
     await showDialog(
       context: context,
       builder: (context) {
@@ -1266,26 +1491,20 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       ? null
                       : () async {
                           if (nameCtrl.text.trim().isEmpty) return;
-
                           setStateDialog(() => isLoading = true);
-
                           await ApiClient.put(
                             '/api/inventory/groups/${_selectedGroup!.id}',
                             {
                               "group_name": nameCtrl.text.trim(),
                             },
                           );
-
                           Navigator.pop(context);
-
                           await _loadMasters();
-
-                          // 🔥 Re-select updated group
+                          // 櫨 Re-select updated group
                           final updated = _groups.firstWhere(
                             (g) => g.id == _selectedGroup!.id,
                             orElse: () => _selectedGroup!,
                           );
-
                           setState(() {
                             _selectedGroup = updated;
                           });
@@ -1305,7 +1524,6 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   void _showAddGroupDialog() {
     final TextEditingController nameCtrl = TextEditingController();
     bool isLoading = false;
-
     showDialog(
       context: context,
       builder: (context) {
@@ -1332,15 +1550,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       ? null
                       : () async {
                           if (nameCtrl.text.trim().isEmpty) return;
-
                           setStateDialog(() => isLoading = true);
-
                           await masterCtrl.createGroup(
                             nameCtrl.text.trim(),
                           );
                           await _loadMasters();
                           Navigator.pop(context);
-
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text("Group Added")),
                           );
@@ -1368,10 +1583,8 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       );
       return;
     }
-
     final TextEditingController nameCtrl = TextEditingController();
     bool isLoading = false;
-
     showDialog(
       context: context,
       builder: (context) {
@@ -1398,16 +1611,13 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       ? null
                       : () async {
                           if (nameCtrl.text.trim().isEmpty) return;
-
                           setStateDialog(() => isLoading = true);
-
                           await masterCtrl.createSubCategory(
                             _selectedGroup!.id,
                             nameCtrl.text.trim(),
                           );
                           await _loadMasters();
                           Navigator.pop(context);
-
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text("SubCategory Added")),
                           );
@@ -1431,7 +1641,6 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   void _showAddBrandDialog() {
     final TextEditingController nameCtrl = TextEditingController();
     bool isLoading = false;
-
     showDialog(
       context: context,
       builder: (context) {
@@ -1458,16 +1667,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       ? null
                       : () async {
                           if (nameCtrl.text.trim().isEmpty) return;
-
                           setStateDialog(() => isLoading = true);
-
                           await masterCtrl.createBrand(
                             nameCtrl.text.trim(),
                           );
                           await _loadMasters();
-
                           Navigator.pop(context);
-
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text("Brand Added")),
                           );
@@ -1489,7 +1694,6 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   }
 
   // ================= SEARCH =================
-
   Widget _searchBar() {
     return Center(
       child: Container(
@@ -1637,7 +1841,6 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   }
 
   // ================= COMMON =================
-
   Widget _card({String? title, required Widget child}) => Material(
         color: Colors.white,
         elevation: 1,
@@ -1666,60 +1869,59 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     bool isDouble = false,
     bool readOnly = false,
     String? helperText,
+    FocusNode? focusNode,
+    FocusNode? prevNode,
     TextInputAction textInputAction = TextInputAction.next,
+    VoidCallback? onSubmit,
   }) {
     return SizedBox(
       width: 220,
-      child: TextFormField(
-        controller: c,
-        readOnly: readOnly,
-        keyboardType: isInt
-            ? TextInputType.number
-            : isDouble
-                ? const TextInputType.numberWithOptions(decimal: true)
-                : TextInputType.text,
-        inputFormatters: isInt
-            ? [FilteringTextInputFormatter.digitsOnly]
-            : isDouble
-                ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))]
-                : [],
-        textInputAction: textInputAction,
-        onFieldSubmitted: (_) {
-          if (textInputAction == TextInputAction.next) {
-            FocusScope.of(context).nextFocus();
-          } else {
-            FocusScope.of(context).unfocus();
+      child: Focus(
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            prevNode?.requestFocus();
+            return KeyEventResult.handled;
           }
+          return KeyEventResult.ignored;
         },
-        onTapOutside: (_) => FocusScope.of(context).unfocus(),
-        decoration: InputDecoration(
-          labelText: l,
-          helperText: helperText,
-          filled: true,
-          fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
+        child: TextFormField(
+          focusNode: focusNode,
+          controller: c,
+          readOnly: readOnly,
+          keyboardType: isInt
+              ? TextInputType.number
+              : isDouble
+                  ? const TextInputType.numberWithOptions(decimal: true)
+                  : TextInputType.text,
+          inputFormatters: isInt
+              ? [FilteringTextInputFormatter.digitsOnly]
+              : isDouble
+                  ? [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}'))
+                    ]
+                  : [],
+          textInputAction: textInputAction,
+          onFieldSubmitted: (_) {
+            if (onSubmit != null) {
+              onSubmit();
+            } else if (textInputAction == TextInputAction.next) {
+              FocusScope.of(context).nextFocus();
+            } else {
+              FocusScope.of(context).unfocus();
+            }
+          },
+          onTapOutside: (_) => FocusScope.of(context).unfocus(),
+          decoration: InputDecoration(
+            labelText: l,
+            helperText: helperText,
+            filled: true,
+            fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
+          ),
+          onChanged: (_) => setState(() {}),
+          validator: (v) => v == null || v.isEmpty ? 'Required' : null,
         ),
-        onChanged: (_) => setState(() {}),
-        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-      ),
-    );
-  }
-
-  Widget _drop(
-    String l,
-    List<String> items,
-    String? val,
-    ValueChanged<String?> onChanged,
-  ) {
-    return SizedBox(
-      width: 220,
-      child: DropdownButtonFormField<String>(
-        initialValue: val,
-        items: items
-            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-            .toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(labelText: l),
-        validator: (v) => v == null ? 'Required' : null,
       ),
     );
   }

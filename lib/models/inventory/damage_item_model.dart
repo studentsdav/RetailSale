@@ -3,7 +3,7 @@ class DamageItem {
   final String itemCode;
   final String itemName;
   final String unit;
-  final int qty;
+  final double qty;
   final double rate;
   final String remarks;
 

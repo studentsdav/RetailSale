@@ -50,7 +50,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
       appBar: AppBar(
-              title: const Text('Issue / Stock Transfer Report'),
+        title: const Text('Issue / Stock Transfer Report'),
         centerTitle: true,
         actions: [
           ElevatedButton.icon(
@@ -354,7 +354,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
               DataCell(Text(
                   double.parse(e['avg_rate'].toString()).toStringAsFixed(2))),
               DataCell(Text(
-                double.parse(e['net_amount'].toString()).toStringAsFixed(2),
+                double.parse(e['total_amount'].toString()).toStringAsFixed(2),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               )),
             ]
@@ -366,7 +366,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
               DataCell(
                   Text(double.parse(e['rate'].toString()).toStringAsFixed(2))),
               DataCell(Text(
-                double.parse(e['net_amount'].toString()).toStringAsFixed(2),
+                double.parse(e['amount'].toString()).toStringAsFixed(2),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               )),
               DataCell(Text(e['department'] ?? '')),
@@ -439,7 +439,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
     // ===== Title =====
     sheet
         .cell(exc.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-      .value = exc.TextCellValue('ISSUE / STOCK TRANSFER REPORT');
+        .value = exc.TextCellValue('ISSUE / STOCK TRANSFER REPORT');
 
     row++;
 
@@ -541,7 +541,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
         header: (context) => pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-              pw.Text('Issue / Stock Transfer Report',
+            pw.Text('Issue / Stock Transfer Report',
                 style:
                     pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
             pw.Text('From: ${DateFormat('dd-MMM-yyyy').format(fromDate)} '

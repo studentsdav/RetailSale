@@ -38,6 +38,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
   String? _selectedItemName;
   int? _selectedBrandItemId;
   List<Item> _filteredBrands = [];
+
   // ================= ITEM =================
   final _code = TextEditingController();
   final numberingCtrl = NumberingSettingsController();
@@ -45,21 +46,44 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
   final _qty = TextEditingController();
   final _rate = TextEditingController();
   final _tax = TextEditingController();
-  final _qtyNode = FocusNode();
-  final _rateNode = FocusNode();
-  final _taxNode = FocusNode();
+
   final depctrl = IssueController();
   final propertyCtrl = PropertyInfoController();
   PropertyInfo? propertyInfo;
-  // final DateTime _expDate = DateTime.now();
+
   int? _editIndex;
   final List<PurchaseItem> _items = [];
   StockLocationdata? _selectedDepartment;
   bool _isStockable = true;
   bool _rateInclusive = false;
+
   final supplierCtrl = SupplierController();
   final itemCtrl = ItemController();
   final poCtrl = PurchaseOrderController();
+
+  // NEW: Double submit prevention
+  bool _isSaving = false;
+
+  // NEW: ================= FOCUS NODES =================
+  final FocusNode _supplierFocus = FocusNode();
+  final FocusNode _dateFocus = FocusNode();
+  final FocusNode _itemCodeFocus = FocusNode();
+  final FocusNode _itemNameFocus = FocusNode();
+  final FocusNode _brandFocus = FocusNode();
+  final FocusNode _qtyFocus = FocusNode();
+  final FocusNode _rateFocus = FocusNode();
+  final FocusNode _taxFocus = FocusNode();
+  final FocusNode _inclusiveFocus = FocusNode(); // NEW: Focus for the checkbox
+  final FocusNode _departmentFocus = FocusNode();
+  final FocusNode _addBtnFocus = FocusNode();
+  final FocusNode _saveBtnFocus = FocusNode();
+
+  // NEW: GlobalKeys to control the DropdownSearch widgets programmatically
+  final GlobalKey<DropdownSearchState<int>> _supplierSearchKey =
+      GlobalKey<DropdownSearchState<int>>();
+  final GlobalKey<DropdownSearchState<String>> _itemSearchKey =
+      GlobalKey<DropdownSearchState<String>>();
+
   // ================= TOTAL =================
   double get totalAmount => _items.fold(0, (s, e) => s + e.amount);
   double get totalGST =>
@@ -70,16 +94,59 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     return value % 1 == 0 ? value.toDouble().toString() : value.toString();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+    _loadPropertyInfo();
+
+    // NEW: Auto-focus the first field (Supplier) when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _supplierFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _supplierFocus.dispose();
+    _dateFocus.dispose();
+    _itemCodeFocus.dispose();
+    _itemNameFocus.dispose();
+    _brandFocus.dispose();
+    _qtyFocus.dispose();
+    _rateFocus.dispose();
+    _taxFocus.dispose();
+    _inclusiveFocus.dispose();
+    _departmentFocus.dispose();
+    _addBtnFocus.dispose();
+    _saveBtnFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPropertyInfo() async {
+    await propertyCtrl.load();
+    setState(() {
+      propertyInfo = propertyCtrl.data;
+    });
+  }
+
+  Future<void> _loadInitialData() async {
+    await supplierCtrl.load();
+    await itemCtrl.load();
+    await depctrl.getdepartment();
+    final no = await numberingCtrl.getNextPoNo(_date);
+    setState(() {
+      _poNo.text = no;
+    });
+  }
+
   // ================= ADD / UPDATE ITEM =================
-  void _saveItem() {
+  Future<void> _saveItem() async {
     if (_qty.text.isEmpty) return;
+
     if (_selectedBrandItemId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Brand is required',
-          ),
-        ),
+        const SnackBar(content: Text('Brand is required')),
       );
       return;
     }
@@ -93,8 +160,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Item already added. Please modify or delete existing item.',
-          ),
+              'Item already added. Please modify or delete existing item.'),
         ),
       );
       return;
@@ -102,22 +168,18 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
 
     if (!_isStockable && _selectedDepartment == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Department is required',
-          ),
-        ),
+        const SnackBar(content: Text('Department is required')),
       );
       return;
     }
+
     final taxPercent = double.tryParse(_tax.text.trim()) ?? 0;
     final enteredRate = double.tryParse(_rate.text.trim()) ?? 0;
+
     final baseRate = _rateInclusive
-        ? InclusiveRateHelper.exclusiveFromInclusive(
-            enteredRate,
-            taxPercent,
-          )
+        ? InclusiveRateHelper.exclusiveFromInclusive(enteredRate, taxPercent)
         : enteredRate;
+
     final item = PurchaseItem(
       itemCode: _code.text,
       itemName: _selectedItemName!,
@@ -139,7 +201,35 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         _editIndex = null;
       }
     });
-    _clearItem();
+
+    // NEW: "Add More" Loop logic
+    final addMore = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text("Item Added"),
+        content: const Text("Do you want to add more items?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("No"),
+          ),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Yes, Add More"),
+          ),
+        ],
+      ),
+    );
+
+    if (addMore == true) {
+      _clearItem();
+      _itemCodeFocus.requestFocus(); // Back to start of loop
+    } else {
+      _clearItem();
+      _saveBtnFocus.requestFocus(); // Straight to save button
+    }
   }
 
   void _editItem(int i) {
@@ -162,7 +252,6 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
           .where((e) => e.id == deptId)
           .cast<StockLocationdata?>()
           .firstOrNull;
-
       if (dept != null) {
         _selectedDepartment = dept;
       }
@@ -170,18 +259,11 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     _tax.text = r.tax.toString();
 
     setState(() {});
+    _itemNameFocus.requestFocus(); // Jump to item name on edit
   }
 
   void _deleteItem(int i) {
     setState(() => _items.removeAt(i));
-  }
-
-  @override
-  void dispose() {
-    _qtyNode.dispose();
-    _rateNode.dispose();
-    _taxNode.dispose();
-    super.dispose();
   }
 
   void _clearItem() {
@@ -216,31 +298,9 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     });
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _loadInitialData();
-    _loadPropertyInfo();
-  }
-
-  Future<void> _loadPropertyInfo() async {
-    await propertyCtrl.load();
-    setState(() {
-      propertyInfo = propertyCtrl.data;
-    });
-  }
-
-  Future<void> _loadInitialData() async {
-    await supplierCtrl.load();
-    await itemCtrl.load();
-    await depctrl.getdepartment();
-    final no = await numberingCtrl.getNextPoNo(_date);
-    setState(() {
-      setState(() => _poNo.text = no);
-    });
-  }
-
   Future<void> _savePurchaseOrder() async {
+    if (_isSaving) return; // NEW: Block double submit
+
     if (_supplierId == null) {
       _showMessage("Select vendor");
       return;
@@ -251,53 +311,69 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
       return;
     }
 
-    final po = PurchaseOrder(
-      poNo: _poNo.text,
-      manualNo: "",
-      supplierId: int.parse(_supplierId.toString()),
-      poDate: _date,
-      items: _items.map((e) {
-        return PurchaseItem(
-          itemId: e.itemId,
-          itemCode: e.itemCode,
-          itemName: e.itemName,
-          brand: e.brand,
-          unit: e.unit,
-          qty: e.qty,
-          rate: e.rate,
-          tax: e.tax,
-          department: e.department,
-        );
-      }).toList(),
-    );
+    // NEW: Instantly throw focus away to prevent button mashing
+    _itemNameFocus.requestFocus();
 
-    await poCtrl.create(po);
+    setState(() {
+      _isSaving = true;
+    });
 
-    final shouldPrint = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Print Purchase Order"),
-        content: const Text("Do you want to print this Purchase Order?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("No"),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Yes"),
-          ),
-        ],
-      ),
-    );
+    try {
+      final po = PurchaseOrder(
+        poNo: _poNo.text,
+        manualNo: "",
+        supplierId: int.parse(_supplierId.toString()),
+        poDate: _date,
+        items: _items.map((e) {
+          return PurchaseItem(
+            itemId: e.itemId,
+            itemCode: e.itemCode,
+            itemName: e.itemName,
+            brand: e.brand,
+            unit: e.unit,
+            qty: e.qty,
+            rate: e.rate,
+            tax: e.tax,
+            department: e.department,
+          );
+        }).toList(),
+      );
 
-    if (shouldPrint == true) {
-      await _printPurchaseOrder();
+      await poCtrl.create(po);
+
+      final shouldPrint = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Print Purchase Order"),
+          content: const Text("Do you want to print this Purchase Order?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("No"),
+            ),
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Yes"),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldPrint == true) {
+        await _printPurchaseOrder();
+      }
+
+      _showMessage("Purchase Order Saved");
+      _finalclearItem();
+      _itemCodeFocus.requestFocus(); // Focus back to start for new PO
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
-
-    _showMessage("Purchase Order Saved");
-
-    _finalclearItem();
   }
 
   void _showMessage(String msg) {
@@ -313,18 +389,21 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         title: const Text('Purchase Order'),
         centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _headerCard(),
-            const SizedBox(height: 12),
-            _itemEntryCard(),
-            const SizedBox(height: 12),
-            Expanded(child: _itemsTableCard()),
-            const SizedBox(height: 12),
-            _footerCard(),
-          ],
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              _headerCard(),
+              const SizedBox(height: 12),
+              _itemEntryCard(),
+              const SizedBox(height: 12),
+              Expanded(child: _itemsTableCard()),
+              const SizedBox(height: 12),
+              _footerCard(),
+            ],
+          ),
         ),
       ),
     );
@@ -339,39 +418,53 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         runSpacing: 16,
         children: [
           _field(_poNo, 'PO No', readOnly: true),
-          //  _field(_manualNo, 'Manual No'),
           SizedBox(
             width: 260,
-            child: DropdownSearch<int>(
-              selectedItem: _supplierId,
-              items: (filter, infiniteScrollProps) =>
-                  supplierCtrl.list.map((s) => s.id).toList(),
-              itemAsString: (id) {
-                final supplier =
-                    supplierCtrl.list.firstWhere((e) => e.id == id);
-                return supplier.supplierName;
+            // UPDATED: Wrapped Supplier DropdownSearch to handle Enter key
+            child: Focus(
+              focusNode: _supplierFocus,
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown)) {
+                  _supplierSearchKey.currentState?.openDropDownSearch();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
               },
-              popupProps: const PopupProps.menu(
-                showSearchBox: true,
-                searchFieldProps: TextFieldProps(
-                  decoration: InputDecoration(
-                    hintText: "Search vendor...",
+              child: DropdownSearch<int>(
+                key: _supplierSearchKey,
+                selectedItem: _supplierId,
+                items: (filter, infiniteScrollProps) =>
+                    supplierCtrl.list.map((s) => s.id).toList(),
+                itemAsString: (id) {
+                  final supplier =
+                      supplierCtrl.list.firstWhere((e) => e.id == id);
+                  return supplier.supplierName;
+                },
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  searchFieldProps: TextFieldProps(
+                    decoration: InputDecoration(
+                      hintText: "Search vendor...",
+                    ),
                   ),
                 ),
-              ),
-              decoratorProps: const DropDownDecoratorProps(
-                decoration: InputDecoration(
-                  labelText: "Vendor",
+                decoratorProps: const DropDownDecoratorProps(
+                  decoration: InputDecoration(
+                    labelText: "Vendor",
+                  ),
                 ),
+                onChanged: (value) {
+                  setState(() {
+                    _supplierId = value;
+                  });
+                  _dateFocus.requestFocus(); // Move to Date
+                },
               ),
-              onChanged: (value) {
-                setState(() {
-                  _supplierId = value;
-                });
-              },
             ),
           ),
-
           _dateField(),
         ],
       ),
@@ -386,84 +479,135 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         spacing: 16,
         runSpacing: 16,
         children: [
-          _field(_code, 'Item Code', readOnly: true),
+          // UPDATED: Catch Enter on Item Code
+          SizedBox(
+            width: 220,
+            child: Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                  _itemNameFocus.requestFocus();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: TextField(
+                focusNode: _itemCodeFocus,
+                controller: _code,
+                readOnly: true,
+                decoration: const InputDecoration(labelText: 'Item Code'),
+              ),
+            ),
+          ),
           SizedBox(
             width: 260,
-            child: DropdownSearch<String>(
-              selectedItem: _selectedItemName,
-              items: (filter, infiniteScrollProps) =>
-                  itemCtrl.list.map((e) => e.itemName).toSet().toList(),
-              popupProps: const PopupProps.menu(
-                showSearchBox: true,
-                searchFieldProps: TextFieldProps(
-                  decoration: InputDecoration(
-                    hintText: "Search item...",
+            // UPDATED: Item Name handles Enter/Down to open, Left arrow to go back
+            child: Focus(
+              focusNode: _itemNameFocus,
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                    _itemCodeFocus.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  if (event.logicalKey == LogicalKeyboardKey.enter ||
+                      event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                      event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                    _itemSearchKey.currentState?.openDropDownSearch();
+                    return KeyEventResult.handled;
+                  }
+                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                    return KeyEventResult.handled;
+                  }
+                }
+                return KeyEventResult.ignored;
+              },
+              child: DropdownSearch<String>(
+                key: _itemSearchKey,
+                selectedItem: _selectedItemName,
+                items: (filter, infiniteScrollProps) =>
+                    itemCtrl.list.map((e) => e.itemName).toSet().toList(),
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  searchFieldProps: TextFieldProps(
+                    decoration: InputDecoration(
+                      hintText: "Search item...",
+                    ),
                   ),
                 ),
-              ),
-              decoratorProps: const DropDownDecoratorProps(
-                decoration: InputDecoration(
-                  labelText: "Item Name",
+                decoratorProps: const DropDownDecoratorProps(
+                  decoration: InputDecoration(
+                    labelText: "Item Name",
+                  ),
                 ),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedItemName = value;
+                    _filteredBrands = itemCtrl.list
+                        .where((e) => e.itemName == value)
+                        .toList();
+                    _selectedBrandItemId = null;
+                    _code.clear();
+                    _rate.clear();
+                    _tax.clear();
+                    _qty.clear();
+                    _rateInclusive = false;
+                  });
+                  _brandFocus.requestFocus();
+                },
               ),
-              onChanged: (value) {
-                setState(() {
-                  _selectedItemName = value;
-
-                  _filteredBrands =
-                      itemCtrl.list.where((e) => e.itemName == value).toList();
-
-                  _selectedBrandItemId = null;
-
-                  _code.clear();
-                  _rate.clear();
-                  _tax.clear();
-                  _qty.clear();
-                  _rateInclusive = false;
-                });
-              },
             ),
           ),
 
           SizedBox(
             width: 220,
-            child: DropdownButtonFormField<int>(
-              initialValue: _selectedBrandItemId,
-              items: _filteredBrands
-                  .map((e) => DropdownMenuItem(
-                        value: e.id,
-                        child: Text(e.brand),
-                      ))
-                  .toList(),
-              onChanged: (v) {
-                final selected = _filteredBrands.firstWhere((e) => e.id == v);
-
-                setState(() {
-                  _selectedBrandItemId = v;
-
-                  _code.text = selected.itemCode;
-                  _unit.text = selected.unit;
-                  _rate.text = selected.rate.toString();
-                  _tax.text = selected.taxPercent.toString();
-                  _isStockable = selected.stockable;
-                  _rateInclusive = false;
-                  if (_isStockable) {
-                    _selectedDepartment = null;
-                  }
-                });
-                FocusScope.of(context).requestFocus(_qtyNode);
+            // UPDATED: Brand handles left arrow
+            child: Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                  _itemNameFocus.requestFocus();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
               },
-              decoration: const InputDecoration(labelText: 'Brand'),
+              child: DropdownButtonFormField<int>(
+                focusNode: _brandFocus,
+                initialValue: _selectedBrandItemId,
+                items: _filteredBrands
+                    .map((e) => DropdownMenuItem(
+                          value: e.id,
+                          child: Text(e.brand),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  final selected = _filteredBrands.firstWhere((e) => e.id == v);
+                  setState(() {
+                    _selectedBrandItemId = v;
+                    _code.text = selected.itemCode;
+                    _unit.text = selected.unit;
+                    _rate.text = selected.rate.toString();
+                    _tax.text = selected.taxPercent.toString();
+                    _isStockable = selected.stockable;
+                    _rateInclusive = false;
+                    if (_isStockable) {
+                      _selectedDepartment = null;
+                    }
+                  });
+                  _qtyFocus.requestFocus();
+                },
+                decoration: const InputDecoration(labelText: 'Brand'),
+              ),
             ),
           ),
-          _field(_unit, 'Unit'),
-          _number(
-            _qty,
-            'Qty',
-            focusNode: _qtyNode,
-            textInputAction: TextInputAction.next,
-            onSubmitted: (_) => FocusScope.of(context).requestFocus(_rateNode),
-          ),
+          _field(_unit, 'Unit', readOnly: true, width: 100),
+
+          _number(_qty, 'Qty',
+              focusNode: _qtyFocus,
+              prevNode: _brandFocus,
+              onSubmit: () => _rateFocus.requestFocus()),
+
           _number(
             _rate,
             _rateInclusive ? 'Rate (Inclusive)' : 'Rate',
@@ -474,52 +618,91 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                     taxPercent: double.tryParse(_tax.text.trim()) ?? 0,
                   )
                 : null,
-            focusNode: _rateNode,
-            textInputAction: TextInputAction.next,
-            onSubmitted: (_) => FocusScope.of(context).requestFocus(_taxNode),
+            focusNode: _rateFocus,
+            prevNode: _qtyFocus,
+            onSubmit: () => _taxFocus.requestFocus(),
           ),
-          _number(
-            _tax,
-            'Tax %',
-            focusNode: _taxNode,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _saveItem(),
-          ),
+
+          _number(_tax, 'Tax %',
+              focusNode: _taxFocus,
+              prevNode: _rateFocus,
+              onSubmit: () => _inclusiveFocus.requestFocus()),
+
           SizedBox(
             width: 180,
-            child: CheckboxListTile(
-              value: _rateInclusive,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Inclusive'),
-              controlAffinity: ListTileControlAffinity.leading,
-              onChanged: (value) {
-                setState(() {
-                  _rateInclusive = value ?? false;
-                });
+            // UPDATED: Checkbox wrapped in Focus for navigation and toggling
+            child: Focus(
+              focusNode: _inclusiveFocus,
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                      event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                    _taxFocus.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  if (event.logicalKey == LogicalKeyboardKey.enter ||
+                      event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                    setState(() {
+                      _rateInclusive = !_rateInclusive;
+                    });
+                    return KeyEventResult.handled;
+                  }
+                }
+                return KeyEventResult.ignored;
               },
-            ),
-          ),
-          if (!_isStockable)
-            SizedBox(
-              width: 260,
-              child: DropdownButtonFormField<StockLocationdata>(
-                initialValue: _selectedDepartment,
-                decoration: const InputDecoration(labelText: 'Department'),
-                items: depctrl.departments.map((d) {
-                  return DropdownMenuItem(
-                    value: d,
-                    child: Text(d.locationName),
-                  );
-                }).toList(),
-                onChanged: (val) {
+              child: CheckboxListTile(
+                value: _rateInclusive,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Inclusive'),
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: (value) {
                   setState(() {
-                    _selectedDepartment = val;
+                    _rateInclusive = value ?? false;
                   });
+                  if (!_isStockable) {
+                    _departmentFocus.requestFocus();
+                  } else {
+                    _addBtnFocus.requestFocus();
+                  }
                 },
               ),
             ),
-          //   _dateField('Exp Date', _expDate, (d) => setState(() => _expDate = d)),
+          ),
+
+          if (!_isStockable)
+            SizedBox(
+              width: 260,
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                    _inclusiveFocus.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: DropdownButtonFormField<StockLocationdata>(
+                  focusNode: _departmentFocus,
+                  initialValue: _selectedDepartment,
+                  decoration: const InputDecoration(labelText: 'Department'),
+                  items: depctrl.departments.map((d) {
+                    return DropdownMenuItem(
+                      value: d,
+                      child: Text(d.locationName),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedDepartment = val;
+                    });
+                    _addBtnFocus.requestFocus();
+                  },
+                ),
+              ),
+            ),
+
           FilledButton.icon(
+            focusNode: _addBtnFocus,
             icon: const Icon(Icons.add),
             label: Text(_editIndex == null ? 'Add Item' : 'Update Item'),
             onPressed: _saveItem,
@@ -561,7 +744,6 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                   String depname = "";
 
                   final deptId = int.tryParse(r.department ?? "");
-
                   if (deptId != null) {
                     final dept = depctrl.departments
                         .where((e) => e.id == deptId)
@@ -611,33 +793,40 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
   // ================= FOOTER =================
   Widget _footerCard() {
     return _card(
-        child: Row(
-          children: [
-            Chip(
-              label: Text(
+      child: Row(
+        children: [
+          Chip(
+            label: Text(
               'Before GST : ${totalAmount.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(width: 12),
-            Chip(
-              label: Text(
-                'GST : ${totalGST.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+          ),
+          const SizedBox(width: 12),
+          Chip(
+            label: Text(
+              'GST : ${totalGST.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(width: 12),
-            Chip(
-              label: Text(
-                'Net : ${netAmount.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+          ),
+          const SizedBox(width: 12),
+          Chip(
+            label: Text(
+              'Net : ${netAmount.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
+          ),
           const Spacer(),
           FilledButton.icon(
-            icon: const Icon(Icons.save),
-            label: const Text('Save'),
-            onPressed: _savePurchaseOrder,
+            focusNode: _saveBtnFocus,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.save),
+            label: Text(_isSaving ? 'Saving...' : 'Save'),
+            onPressed: _isSaving ? null : _savePurchaseOrder,
           ),
           const SizedBox(width: 8),
           OutlinedButton(
@@ -671,78 +860,99 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         ),
       );
 
+  // UPDATED: Now supports FocusNode and onSubmit for chaining
   Widget _field(
     TextEditingController c,
     String l, {
     bool readOnly = false,
-    TextInputAction textInputAction = TextInputAction.next,
-    ValueChanged<String>? onSubmitted,
+    double width = 220,
+    FocusNode? focusNode,
+    VoidCallback? onSubmit,
   }) =>
       SizedBox(
-        width: 220,
+        width: width,
         child: TextField(
+          focusNode: focusNode,
           controller: c,
           readOnly: readOnly,
-          textInputAction: textInputAction,
-          onSubmitted: onSubmitted ??
-              (_) {
-                if (textInputAction == TextInputAction.next) {
-                  FocusScope.of(context).nextFocus();
-                } else {
-                  FocusScope.of(context).unfocus();
-                }
-              },
-          onTapOutside: (_) => FocusScope.of(context).unfocus(),
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) {
+            if (onSubmit != null) onSubmit();
+          },
+          onEditingComplete: onSubmit == null ? _nextFocus : null,
           decoration: InputDecoration(labelText: l),
         ),
       );
 
+  // UPDATED: Custom number field now catches the Up arrow to go backwards
   Widget _number(
     TextEditingController c,
     String l, {
     String? helperText,
     FocusNode? focusNode,
-    TextInputAction? textInputAction,
-    ValueChanged<String>? onSubmitted,
+    FocusNode? prevNode,
+    VoidCallback? onSubmit,
   }) =>
       SizedBox(
         width: 140,
-        child: TextField(
-          focusNode: focusNode,
-          controller: c,
-          keyboardType: TextInputType.number,
-          textInputAction: textInputAction ?? TextInputAction.next,
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))
-          ],
-          decoration: InputDecoration(labelText: l, helperText: helperText),
-          onChanged: (_) => setState(() {}),
-          onSubmitted: onSubmitted ??
-              (_) {
-                if ((textInputAction ?? TextInputAction.next) ==
-                    TextInputAction.next) {
-                  FocusScope.of(context).nextFocus();
-                } else {
-                  FocusScope.of(context).unfocus();
-                }
-              },
-          onTapOutside: (_) => FocusScope.of(context).unfocus(),
+        child: Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.arrowUp) {
+              prevNode?.requestFocus();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: TextField(
+            focusNode: focusNode,
+            controller: c,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))
+            ],
+            decoration: InputDecoration(labelText: l, helperText: helperText),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) {
+              if (onSubmit != null) onSubmit();
+            },
+          ),
         ),
       );
 
-  Future<pw.MemoryImage?> _loadLogoFromUrl(String url) async {
-    try {
-      final response = await http.get(Uri.parse(url));
+  void _nextFocus() {
+    FocusScope.of(context).nextFocus();
+  }
 
-      if (response.statusCode == 200) {
-        Uint8List bytes = response.bodyBytes;
-        return pw.MemoryImage(bytes);
-      }
-    } catch (e) {
-      debugPrint("Logo load error: $e");
-    }
+  Widget _dateField() {
+    return SizedBox(
+      width: 180,
+      child: TextField(
+        focusNode: _dateFocus,
+        readOnly: true,
+        controller: TextEditingController(
+          text: DateFormat('dd-MMM-yyyy').format(_date),
+        ),
+        decoration: const InputDecoration(
+          labelText: 'Date',
+          suffixIcon: Icon(Icons.calendar_today),
+        ),
+        onTap: () async {
+          final selected = await pickSingleDate(
+            context: context,
+            initialDate: _date,
+          );
 
-    return null;
+          if (selected != null) {
+            setState(() {
+              _date = selected;
+            });
+          }
+          _itemCodeFocus.requestFocus(); // Move to Item Code next
+        },
+      ),
+    );
   }
 
   Future<void> _printPurchaseOrder() async {
@@ -986,32 +1196,4 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
           decoration: InputDecoration(labelText: label),
         ),
       );
-
-  Widget _dateField() {
-    return SizedBox(
-      width: 180,
-      child: TextField(
-        readOnly: true,
-        controller: TextEditingController(
-          text: DateFormat('dd-MMM-yyyy').format(_date),
-        ),
-        decoration: const InputDecoration(
-          labelText: 'Date',
-          suffixIcon: Icon(Icons.calendar_today),
-        ),
-        onTap: () async {
-          final selected = await pickSingleDate(
-            context: context,
-            initialDate: _date,
-          );
-
-          if (selected != null) {
-            setState(() {
-              _date = selected;
-            });
-          }
-        },
-      ),
-    );
-  }
 }
