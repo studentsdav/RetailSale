@@ -14,5 +14,21 @@
     "contact_phone": "",
     "tax_id": "",
     "pin": "$2b$10$SacVjKK0y6VS8u9sMLZzAuqGoqqGbCe3jV69semomQWMSFJcJuxK."
+  },
+  {
+    "client_id": "d0158002-36fd-4f59-8c69-637d2fd539b9",
+    "folderId": "1hy0LwU9zmsIqXBRjKwGoG5X9gawm0kN3",
+    "outlet_code": "OUTLET202605102056",
+    "outlet_id": 2,
+    "property_name": "HOTEL XYYZZZ",
+    "machine_id": "Masakali",
+    "db_name": "POSINVRETAIL",
+    "created_at": "2026-05-13T11:11:24.574Z",
+    "status": "ACTIVE",
+    "expiry_date": "",
+    "contact_email": "studentsdav6@gmail.com",
+    "contact_phone": "",
+    "tax_id": "",
+    "pin": "$2b$10$.4fD5p/M/w97WUbIqBD0YuYLKjJ946/X9nDxSr.Pm0R6My2TvHbOK"
   }
 ]

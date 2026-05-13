@@ -32,16 +32,18 @@ router.post('/property-info', ctrlprop.savePropertyInfo);
 
 // ITEM MASTER
 router.get('/items/can-import', itemCtrl.canImportItems);
+router.get('/items/can-reset-and-import', itemCtrl.canResetAndImportItems);
 router.get('/items/next-code', itemCtrl.getNextItemCode);
 router.post('/items', itemCtrl.createItem);
 router.get('/items', itemCtrl.getItems);
+router.post('/items/bulk-import', itemCtrl.bulkImportItems);
+router.delete('/items/delete-all-for-fresh-import', itemCtrl.deleteAllItemsForFreshImport);
+router.post('/items/generate-barcodes', itemCtrl.generateBarcodes);
 router.get('/items/:id', itemCtrl.getItemById);
 router.put('/items/:id', itemCtrl.updateItem);
 router.delete('/items/:id', itemCtrl.deleteItem);
 router.post('/items/:id/image', itemCtrl.uploadItemImage);
 router.delete('/items/:id/image', itemCtrl.deleteItemImage);
-router.post('/items/bulk-import', itemCtrl.bulkImportItems);
-router.post('/items/generate-barcodes', itemCtrl.generateBarcodes);
 
 
 

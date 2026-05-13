@@ -50,6 +50,33 @@ async function ensureMasterData(req, { outlet_id, row, transaction }) {
     }
 }
 
+async function hasAnyInventoryTransactions(req, outlet_id) {
+    const models = req.propertyDb.models;
+    const [purchaseOrderCount, salesCount, receiptCount, requestCount, issueCount] = await Promise.all([
+        models.purchase_orders.count({ where: { outlet_id } }),
+        models.sales_headers.count({ where: { outlet_id } }),
+        models.goods_receipts.count({ where: { outlet_id } }),
+        models.request_headers.count({ where: { outlet_id } }),
+        models.issue_headers.count({ where: { outlet_id } })
+    ]);
+
+    return (purchaseOrderCount + salesCount + receiptCount + requestCount + issueCount) > 0;
+}
+
+async function hasItemLinkedTransactions(req, itemId, outlet_id) {
+    const models = req.propertyDb.models;
+    const checks = [
+        models.purchase_order_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0),
+        models.sales_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0),
+        models.goods_receipt_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0),
+        models.request_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0),
+        models.issue_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0)
+    ];
+
+    const counts = await Promise.all(checks);
+    return counts.some((count) => Number(count || 0) > 0);
+}
+
 function generateBarcodeValue(item) {
     const numericId = Number(item.id || 0);
     return String(200000000000 + numericId).padStart(12, '0').slice(-12);
@@ -183,19 +210,63 @@ exports.createItem = async (req, res) => {
 exports.canImportItems = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-
-        const [receiptCount, requestCount, issueCount] = await Promise.all([
-            req.propertyDb.models.goods_receipts.count({ where: { outlet_id } }),
-            req.propertyDb.models.request_headers.count({ where: { outlet_id } }),
-            req.propertyDb.models.issue_headers.count({ where: { outlet_id } })
-        ]);
-
-        const totalRecords = receiptCount + requestCount + issueCount;
+        const hasTransactions = await hasAnyInventoryTransactions(req, outlet_id);
         res.json({
             success: true,
-            canImport: totalRecords === 0
+            canImport: !hasTransactions
         });
     } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.canResetAndImportItems = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const hasTransactions = await hasAnyInventoryTransactions(req, outlet_id);
+        res.json({
+            success: true,
+            canResetAndImport: !hasTransactions
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.deleteAllItemsForFreshImport = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const outlet_id = req.user.outlet_id;
+        const hasTransactions = await hasAnyInventoryTransactions(req, outlet_id);
+        if (hasTransactions) {
+            await t.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot delete all items because transactions already exist.'
+            });
+        }
+
+        await req.propertyDb.models.item_master.update(
+            { is_active: false },
+            { where: { outlet_id, is_active: true }, transaction: t }
+        );
+
+        await audit.log({
+            req,
+            module: 'ITEM_MASTER',
+            action: 'BULK_DEACTIVATE',
+            table: 'item_master',
+            recordId: null,
+            old_data: { scope: 'all_active_items' },
+            new_data: { is_active: false },
+            outlet_id,
+            user_id: req.user.id
+        });
+
+        await t.commit();
+        res.json({ success: true, message: 'All items deleted successfully.' });
+    } catch (err) {
+        await t.rollback();
         res.status(500).json({ success: false, error: err.message });
     }
 };
@@ -208,34 +279,44 @@ exports.bulkImportItems = async (req, res) => {
         const outlet_id = req.user.outlet_id;
         const items = req.body;
 
-        const [receiptCount, requestCount, issueCount] = await Promise.all([
-            req.propertyDb.models.goods_receipts.count({ where: { outlet_id } }),
-            req.propertyDb.models.request_headers.count({ where: { outlet_id } }),
-            req.propertyDb.models.issue_headers.count({ where: { outlet_id } })
-        ]);
-
-        const totalRecords = receiptCount + requestCount + issueCount;
-
-        if (totalRecords > 0) {
+        const hasTransactions = await hasAnyInventoryTransactions(req, outlet_id);
+        if (hasTransactions) {
             return res.status(400).json({
                 success: false,
-                message: 'Import allowed only on first setup'
+                message: 'Import is blocked because transactions already exist.'
             });
         }
 
+        // Simple behavior:
+        // If there are no transactions, clear existing active items first,
+        // then import the new Excel payload.
+        await req.propertyDb.models.item_master.update(
+            { is_active: false },
+            { where: { outlet_id, is_active: true }, transaction: t }
+        );
+
+        const seenCodes = new Set();
         for (const row of items) {
+            const normalizedCode = String(row.item_code || '').trim();
+            if (!normalizedCode) {
+                throw new Error('Item code is required in import file.');
+            }
+            if (seenCodes.has(normalizedCode.toLowerCase())) {
+                throw new Error(`Duplicate item code in import file: ${normalizedCode}`);
+            }
+            seenCodes.add(normalizedCode.toLowerCase());
+
             await ensureMasterData(req, { outlet_id, row, transaction: t });
 
-            await req.propertyDb.models.item_master.create({
+            const payload = {
                 outlet_id,
-                item_code: row.item_code,
-                item_code: row.item_code,
-                item_name: row.item_name,
+                item_code: normalizedCode,
+                item_name: String(row.item_name || '').trim(),
                 hsn_sac_code: row.hsn_sac_code || null,
-                item_group: row.item_group,
-                sub_category: row.sub_category,
-                brand: row.brand,
-                unit: row.unit,
+                item_group: String(row.item_group || '').trim(),
+                sub_category: String(row.sub_category || '').trim(),
+                brand: String(row.brand || '').trim(),
+                unit: String(row.unit || '').trim(),
                 barcode: row.barcode || null,
                 image_path: row.image_path || null,
                 rate: parseFloat(row.rate) || 0,
@@ -249,7 +330,18 @@ exports.bulkImportItems = async (req, res) => {
                 max_level: parseInt(row.max_level) || 0,
                 stockable: row.stockable === true || row.stockable === 'YES',
                 is_active: true
-            }, { transaction: t });
+            };
+
+            const existing = await req.propertyDb.models.item_master.findOne({
+                where: { outlet_id, item_code: normalizedCode },
+                transaction: t
+            });
+
+            if (existing) {
+                await existing.update(payload, { transaction: t });
+            } else {
+                await req.propertyDb.models.item_master.create(payload, { transaction: t });
+            }
         }
 
         await t.commit();
@@ -258,7 +350,13 @@ exports.bulkImportItems = async (req, res) => {
 
     } catch (err) {
         await t.rollback();
-        res.status(500).json({ success: false, error: err.message });
+        const details = Array.isArray(err?.errors)
+            ? err.errors.map((e) => e.message).join(', ')
+            : null;
+        res.status(500).json({
+            success: false,
+            error: details || err.message || 'Validation error during import'
+        });
     }
 };
 
@@ -392,6 +490,14 @@ exports.deleteItem = async (req, res) => {
 
         if (!item) {
             return res.status(404).json({ success: false, code: 404 });
+        }
+
+        const hasLinkedTransactions = await hasItemLinkedTransactions(req, item.id, outlet_id);
+        if (hasLinkedTransactions) {
+            return res.status(400).json({
+                success: false,
+                message: 'This item cannot be deleted because transaction history exists for it.'
+            });
         }
 
         await item.update({ is_active: false });

@@ -419,30 +419,11 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
       appBar: AppBar(
         elevation: 0,
         title: const Text("Modify Purchase Order"),
-        actions: [
-          TextButton.icon(
-            onPressed: _cancelPo,
-            icon: const Icon(Icons.cancel_outlined),
-            label: const Text("Cancel PO"),
-          ),
-          TextButton.icon(
-            onPressed: _reprint,
-            icon: const Icon(Icons.print),
-            label: const Text("Reprint"),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.save),
-            label: const Text("Update PO"),
-          ),
-          const SizedBox(width: 16),
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             /// SECTION TITLE
             const Text(
@@ -695,7 +676,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
               child: Wrap(
                 spacing: 12,
                 runSpacing: 12,
-                alignment: WrapAlignment.end,
+                alignment: WrapAlignment.center,
                 children: [
                   Tooltip(
                     message: 'Cancel purchase order',

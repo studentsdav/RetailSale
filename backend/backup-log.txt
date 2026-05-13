@@ -588,3 +588,18 @@ SyntaxError: Unexpected identifier 'res'
 2026-05-07T13:30:08.616Z [INFO] Cloud upload sequence completed successfully.
 2026-05-07T13:30:08.623Z [INFO] Hourly backup job execution finished.
 2026-05-07T13:30:10.989Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T10:58:28.970Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T11:09:47.763Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-05-13T11:11:27.057Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T11:11:29.376Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T11:11:29.409Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T11:11:48.105Z [INFO] Backup job already running for outlet [OUTLET202605102056]. Skipping duplicate trigger.
+2026-05-13T11:11:50.054Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T11:11:50.086Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T11:12:07.989Z [INFO] Backup job already running for outlet [OUTLET202605102056]. Skipping duplicate trigger.
+2026-05-13T11:13:01.272Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-05-13T11:14:50.654Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T11:14:50.763Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-05-13T11:17:23.132Z [INFO] Backup job already running for outlet [OUTLET202605102056]. Skipping duplicate trigger.
+2026-05-13T11:17:23.593Z [INFO] Backup job already running for outlet [OUTLET202605102056]. Skipping duplicate trigger.
+2026-05-13T11:18:15.826Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.

@@ -208,11 +208,38 @@ WHERE outlet_id = :outlet_id
             ? (preservedCustomerRowsResult[0] || [])
             : [];
 
-        if (tableNames.length > 0) {
-            const quotedNames = tableNames.map((name) => `"${name}"`).join(', ');
+        // IMPORTANT:
+        // Never TRUNCATE here. TRUNCATE would remove data of all outlets.
+        // Delete only rows belonging to the current outlet.
+        for (const tableName of tableNames) {
+            const columnCheckResult = await req.propertyDb.query(
+                `
+SELECT 1
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = :tableName
+  AND column_name = 'outlet_id'
+LIMIT 1
+                `,
+                {
+                    replacements: { tableName },
+                    transaction: t
+                }
+            );
+            const hasOutletId = Array.isArray(columnCheckResult)
+                ? (columnCheckResult[0] || []).length > 0
+                : false;
+
+            if (!hasOutletId) {
+                continue;
+            }
+
             await req.propertyDb.query(
-                `TRUNCATE TABLE ${quotedNames} RESTART IDENTITY CASCADE`,
-                { transaction: t }
+                `DELETE FROM "${tableName}" WHERE outlet_id = :outlet_id`,
+                {
+                    replacements: { outlet_id: req.user.outlet_id },
+                    transaction: t
+                }
             );
         }
 

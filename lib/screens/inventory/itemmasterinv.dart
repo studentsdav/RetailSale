@@ -77,6 +77,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
   // NEW: Double-submit prevention shield
   bool _isSaving = false;
+  bool _canResetAndImport = false;
 
   // NEW: ================= FOCUS NODES =================
   final FocusNode _nameFocus = FocusNode();
@@ -261,6 +262,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   Future<void> _init() async {
     await _loadMasters();
     await _loadItems();
+    await _loadItemImportPermission();
   }
 
   Future<void> _loadItems() async {
@@ -270,6 +272,24 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       _items = itemCtrl.list;
       _filtered = _items;
     });
+  }
+
+  Future<void> _loadItemImportPermission() async {
+    try {
+      final canReset = await _fetchCanResetAndImport();
+      if (!mounted) return;
+      setState(() {
+        _canResetAndImport = canReset;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _canResetAndImport = false);
+    }
+  }
+
+  Future<bool> _fetchCanResetAndImport() async {
+    final res = await ApiClient.get('/api/inventory/items/can-import');
+    return res['canImport'] == true;
   }
 
   Future<void> _generateCode() async {
@@ -513,9 +533,17 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   }
 
   Future<void> _deleteItem(int i) async {
-    final id = _filtered[i].id;
-    await itemCtrl.delete(id);
-    await _loadItems();
+    try {
+      final id = _filtered[i].id;
+      await itemCtrl.delete(id);
+      await _loadItems();
+      await _loadItemImportPermission();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+      );
+    }
   }
 
   void _searchItem(String q) async {
@@ -524,6 +552,13 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   }
 
   // ================= EXPORT & IMPORT =================
+  bool _toBool(dynamic raw, {bool defaultValue = false}) {
+    final v = raw?.toString().trim().toLowerCase() ?? '';
+    if (v == 'true' || v == 'yes' || v == '1') return true;
+    if (v == 'false' || v == 'no' || v == '0') return false;
+    return defaultValue;
+  }
+
   Future<void> _exportExcel() async {
     var excel = Excel.createExcel();
     final defaultSheet = excel.getDefaultSheet();
@@ -567,12 +602,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         DoubleCellValue(item.retailSalePrice),
         TextCellValue(item.taxType),
         DoubleCellValue(item.taxPercent),
-        TextCellValue(item.discountApplicable ? 'True' : 'False'),
-        TextCellValue(item.schemeApplicable ? 'True' : 'False'),
+        TextCellValue(item.discountApplicable ? 'true' : 'false'),
+        TextCellValue(item.schemeApplicable ? 'true' : 'false'),
         DoubleCellValue(item.openingBalance),
         IntCellValue(item.minLevel),
         IntCellValue(item.maxLevel),
-        TextCellValue(item.stockable ? 'True' : 'False'),
+        TextCellValue(item.stockable ? 'true' : 'false'),
       ]);
     }
 
@@ -594,10 +629,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   }
 
   Future<void> _importExcel() async {
-    final res = await ApiClient.get('/api/inventory/items/can-import');
-    if (res['canImport'] != true) {
+    final canReset = await _fetchCanResetAndImport();
+    if (!canReset) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Import allowed only on first setup')),
+        const SnackBar(
+          content: Text('Import blocked: transactions already exist.'),
+        ),
       );
       return;
     }
@@ -629,22 +666,57 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
           "tax_type": row[10]?.value.toString() ?? 'GST',
           "tax_percent": double.parse(row[11]?.value.toString() ?? "0"),
           "discount_applicable":
-              bool.parse(row[12]?.value.toString() ?? 'true'),
-          "scheme_applicable": bool.parse(row[13]?.value.toString() ?? 'true'),
+              _toBool(row[12]?.value, defaultValue: true),
+          "scheme_applicable": _toBool(row[13]?.value, defaultValue: true),
           "opening_balance": double.parse(row[14]?.value.toString() ?? "0"),
           "min_level": int.parse(row[15]?.value.toString() ?? "0"),
           "max_level": int.parse(row[16]?.value.toString() ?? "0"),
-          "stockable": bool.parse(row[17]?.value.toString() ?? "True"),
+          "stockable": _toBool(row[17]?.value, defaultValue: true),
         });
       }
     }
 
+    // Simple flow: backend clears old items first (only when no transactions)
+    // and then imports the new file in one API call.
     await ApiClient.post('/api/inventory/items/bulk-import', bulkData);
 
     await _loadItems();
+    await _loadItemImportPermission();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Import Successful')),
     );
+  }
+
+  Future<void> _deleteAllAndImportNew() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete All Items?'),
+        content: const Text(
+            'This will delete all current items and then you can import a new Excel file.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    try {
+      await _importExcel();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+      );
+    }
   }
 
   Future<void> _openBarcodeManager() async {
@@ -677,6 +749,15 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         appBar: AppBar(
           title: const Text('Item Master / Retail Catalog'),
           actions: [
+            if (_canResetAndImport)
+              TextButton.icon(
+                onPressed: _deleteAllAndImportNew,
+                icon: const Icon(Icons.delete_sweep, color: Colors.white),
+                label: const Text(
+                  'Delete All & Import',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
             IconButton(
               icon: const Icon(Icons.upload_file),
               tooltip: 'Import Excel',

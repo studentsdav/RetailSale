@@ -6,6 +6,8 @@ class Supplier {
   final String phone;
   final String? state;
   final String? gstin;
+  final String? taxIdNumber;
+  final String? taxIdType;
   final String? taxCountryCode;
   Supplier({
     required this.id,
@@ -15,6 +17,8 @@ class Supplier {
     required this.phone,
     this.state,
     this.gstin,
+    this.taxIdNumber,
+    this.taxIdType,
     this.taxCountryCode,
   });
 
@@ -27,6 +31,8 @@ class Supplier {
       phone: json['phone'] ?? '',
       state: json['state'],
       gstin: json['gstin'] ?? json['tax_id_number'],
+      taxIdNumber: json['tax_id_number'] ?? json['gstin'],
+      taxIdType: json['tax_id_type'],
       taxCountryCode: json['tax_country_code'],
     );
   }
@@ -39,7 +45,8 @@ class Supplier {
       'phone': phone,
       'state': state,
       'gstin': gstin,
-      'tax_id_number': gstin,
+      'tax_id_number': taxIdNumber ?? gstin,
+      'tax_id_type': taxIdType,
       'tax_country_code': taxCountryCode,
     };
   }

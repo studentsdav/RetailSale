@@ -361,10 +361,6 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
       backgroundColor: const Color(0xffF5F7FB),
       appBar: AppBar(
         title: const Text("Modify Receiving"),
-        actions: [
-          IconButton(icon: const Icon(Icons.print), onPressed: _print),
-          IconButton(icon: const Icon(Icons.save), onPressed: _save),
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),

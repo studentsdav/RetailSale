@@ -29,6 +29,8 @@ function normalizeSupplierPayload(body = {}) {
         phone: String(body.phone || '').trim(),
         state: String(body.state || '').trim() || null,
         gstin: String(body.gstin || body.tax_id_number || '').trim().toUpperCase() || null,
+        tax_id_number: String(body.tax_id_number || body.gstin || '').trim().toUpperCase() || null,
+        tax_id_type: String(body.tax_id_type || '').trim().toUpperCase() || null,
         tax_country_code: String(body.tax_country_code || 'IN').trim().toUpperCase() || null
     };
 }
@@ -56,8 +58,8 @@ exports.createSupplier = async (req, res) => {
             phone: payload.phone,
             state: payload.state,
             gstin: payload.gstin,
-            tax_id_number: payload.gstin,
-            tax_id_type: null,
+            tax_id_number: payload.tax_id_number,
+            tax_id_type: payload.tax_id_type,
             tax_country_code: payload.tax_country_code,
             is_active: true
         });
@@ -121,8 +123,8 @@ exports.bulkImportSuppliers = async (req, res) => {
             phone: normalizeSupplierPayload(row).phone,
             state: normalizeSupplierPayload(row).state,
             gstin: normalizeSupplierPayload(row).gstin,
-            tax_id_number: normalizeSupplierPayload(row).gstin,
-            tax_id_type: null,
+            tax_id_number: normalizeSupplierPayload(row).tax_id_number,
+            tax_id_type: normalizeSupplierPayload(row).tax_id_type,
             tax_country_code: normalizeSupplierPayload(row).tax_country_code,
             is_active: true
         }));
@@ -225,8 +227,8 @@ exports.updateSupplier = async (req, res) => {
             phone: payload.phone,
             state: payload.state,
             gstin: payload.gstin,
-            tax_id_number: payload.gstin,
-            tax_id_type: null,
+            tax_id_number: payload.tax_id_number,
+            tax_id_type: payload.tax_id_type,
             tax_country_code: payload.tax_country_code
         });
 

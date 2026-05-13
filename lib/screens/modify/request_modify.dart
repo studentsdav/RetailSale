@@ -362,20 +362,6 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
       backgroundColor: const Color(0xffF5F7FB),
       appBar: AppBar(
         title: const Text("Modify Request"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.cancel_outlined),
-            onPressed: _cancelRequest,
-          ),
-          IconButton(
-            icon: const Icon(Icons.print),
-            onPressed: _reprint,
-          ),
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _save,
-          )
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),

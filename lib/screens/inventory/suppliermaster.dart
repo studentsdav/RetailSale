@@ -192,6 +192,11 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       TextCellValue('Supplier Name'),
       TextCellValue('Address'),
       TextCellValue('Phone'),
+      TextCellValue('State'),
+      TextCellValue('GSTIN'),
+      TextCellValue('Tax ID Number'),
+      TextCellValue('Tax ID Type'),
+      TextCellValue('Tax Country Code'),
     ]);
 
     for (var s in _suppliers) {
@@ -200,6 +205,11 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
         TextCellValue(s.supplierName),
         TextCellValue(s.address ?? ''),
         TextCellValue(s.phone ?? ''),
+        TextCellValue(s.state ?? ''),
+        TextCellValue(s.gstin ?? ''),
+        TextCellValue(s.taxIdNumber ?? ''),
+        TextCellValue(s.taxIdType ?? ''),
+        TextCellValue(s.taxCountryCode ?? ''),
       ]);
     }
 
@@ -252,6 +262,11 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
           "supplier_name": row[1]?.value.toString(),
           "address": row[2]?.value.toString(),
           "phone": row[3]?.value.toString(),
+          "state": row.length > 4 ? row[4]?.value.toString() : null,
+          "gstin": row.length > 5 ? row[5]?.value.toString() : null,
+          "tax_id_number": row.length > 6 ? row[6]?.value.toString() : null,
+          "tax_id_type": row.length > 7 ? row[7]?.value.toString() : null,
+          "tax_country_code": row.length > 8 ? row[8]?.value.toString() : null,
         });
       }
     }
