@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/supplier_controller.dart';
 import '../../controllers/modify/receiving_modify_controller.dart';
+import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart';
 import '../../models/inventory/supplier_model.dart';
@@ -19,6 +20,9 @@ class ModifyReceivingScreen extends StatefulWidget {
 
 class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
   final ctrl = ReceivingModifyController();
+  bool get _canReprint =>
+      PermissionService.can('REPRINT_RECEIVING') || PermissionService.can('MODIFY_RECEIVING');
+  bool get _canModify => PermissionService.can('MODIFY_RECEIVING');
   final supplierCtrl = SupplierController();
   final propertyCtrl = PropertyInfoController();
 
@@ -569,42 +573,45 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                 runSpacing: 12,
                 alignment: WrapAlignment.end,
                 children: [
-                  Tooltip(
-                    message: 'Close modify screen',
-                    child: SizedBox(
-                      width: 170,
-                      height: 56,
-                      child: OutlinedButton.icon(
-                        onPressed: _closeScreen,
-                        icon: const Icon(Icons.close_outlined),
-                        label: const Text('Cancel'),
+                  if (_canModify)
+                    Tooltip(
+                      message: 'Close modify screen',
+                      child: SizedBox(
+                        width: 170,
+                        height: 56,
+                        child: OutlinedButton.icon(
+                          onPressed: _closeScreen,
+                          icon: const Icon(Icons.close_outlined),
+                          label: const Text('Cancel'),
+                        ),
                       ),
                     ),
-                  ),
-                  Tooltip(
-                    message: 'Print receiving voucher',
-                    child: SizedBox(
-                      width: 180,
-                      height: 56,
-                      child: FilledButton.icon(
-                        onPressed: _print,
-                        icon: const Icon(Icons.print_outlined),
-                        label: const Text('Print'),
+                  if (_canReprint)
+                    Tooltip(
+                      message: 'Print receiving voucher',
+                      child: SizedBox(
+                        width: 180,
+                        height: 56,
+                        child: FilledButton.icon(
+                          onPressed: _print,
+                          icon: const Icon(Icons.print_outlined),
+                          label: const Text('Print'),
+                        ),
                       ),
                     ),
-                  ),
-                  Tooltip(
-                    message: 'Save receiving changes',
-                    child: SizedBox(
-                      width: 180,
-                      height: 56,
-                      child: FilledButton.icon(
-                        onPressed: _save,
-                        icon: const Icon(Icons.save_outlined),
-                        label: const Text('Save'),
+                  if (_canModify)
+                    Tooltip(
+                      message: 'Save receiving changes',
+                      child: SizedBox(
+                        width: 180,
+                        height: 56,
+                        child: FilledButton.icon(
+                          onPressed: _save,
+                          icon: const Icon(Icons.save_outlined),
+                          label: const Text('Save'),
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

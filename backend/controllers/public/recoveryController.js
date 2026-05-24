@@ -488,8 +488,16 @@ async function triggerAutoReinstall(req, res) {
     // };
 
     const launchInstaller = (exePath) => {
+        const targetDir = rootDir;
+        const args = [
+            '/VERYSILENT',
+            '/SUPPRESSMSGBOXES',
+            '/NORESTART',
+            `/DIR=${targetDir}`,
+            `/D=${targetDir}`
+        ];
         // Run detached so Node doesn't block the installer from killing it!
-        const child = spawn(exePath, [], { detached: true, stdio: 'ignore' });
+        const child = spawn(exePath, args, { detached: true, stdio: 'ignore' });
         child.unref();
     };
 

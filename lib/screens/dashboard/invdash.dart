@@ -126,7 +126,9 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
   bool get _isHospitalityBusiness =>
       const {'HOTEL', 'RESTAURANT', 'CAFE', 'BAR'}.contains(_businessType);
   bool get _showRetailSalesSection =>
-      _isRetailBusiness || PermissionService.can('RETAIL_SALES');
+      _isRetailBusiness ||
+      PermissionService.can('RETAIL_SALES') ||
+      PermissionService.can('REPRINT_SALES_BILL');
   bool get _showRetailSalesReportSection =>
       _isRetailBusiness || PermissionService.can('RETAIL_SALES_REPORT');
   String get _dashboardTitle {
@@ -1422,50 +1424,58 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
             'MODIFY_PURCHASE',
             'MODIFY_RECEIVING',
             'MODIFY_ISSUE',
-            'RETAIL_SALES'
+            'REPRINT_REQUEST',
+            'REPRINT_PURCHASE',
+            'REPRINT_RECEIVING',
+            'REPRINT_ISSUE',
+            'RETAIL_SALES',
+            'REPRINT_SALES_BILL'
           ])) ...[
             _sectionTitle('Modify'),
-            _drawerItem(
-              Icons.edit_note,
-              'Modify Request',
-              permission: 'MODIFY_REQUEST',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const RequestModifyScreen()),
-                );
-              },
-            ),
-            _drawerItem(
-              Icons.assignment,
-              'Modify Purchase Order',
-              permission: 'MODIFY_PURCHASE',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const PurchaseOrderModifyScreen()),
-                );
-              },
-            ),
-            _drawerItem(
-              Icons.inventory_2,
-              'Modify Receiving (GRN)',
-              permission: 'MODIFY_RECEIVING',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const ModifyReceivingScreen()),
-                );
-              },
-            ),
-            if (_showRetailSalesSection)
+            if (PermissionService.can('MODIFY_REQUEST') ||
+                PermissionService.can('REPRINT_REQUEST'))
+              _drawerItem(
+                Icons.edit_note,
+                'Modify Request',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const RequestModifyScreen()),
+                  );
+                },
+              ),
+            if (PermissionService.can('MODIFY_PURCHASE') ||
+                PermissionService.can('REPRINT_PURCHASE'))
+              _drawerItem(
+                Icons.assignment,
+                'Modify Purchase Order',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const PurchaseOrderModifyScreen()),
+                  );
+                },
+              ),
+            if (PermissionService.can('MODIFY_RECEIVING') ||
+                PermissionService.can('REPRINT_RECEIVING'))
+              _drawerItem(
+                Icons.inventory_2,
+                'Modify Receiving (GRN)',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ModifyReceivingScreen()),
+                  );
+                },
+              ),
+            if (PermissionService.can('RETAIL_SALES') ||
+                PermissionService.can('REPRINT_SALES_BILL'))
               _drawerItem(
                 Icons.receipt_long,
                 'Reprint / Modify Sales Bill',
-                permission: 'RETAIL_SALES',
                 onTap: () {
                   Navigator.push(
                     context,
@@ -1475,17 +1485,19 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
                   );
                 },
               ),
-            _drawerItem(
-              Icons.outbox,
-              'Modify Stock Out',
-              permission: 'MODIFY_ISSUE',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const IssueModifyScreen()),
-                );
-              },
-            ),
+            if (PermissionService.can('MODIFY_ISSUE') ||
+                PermissionService.can('REPRINT_ISSUE'))
+              _drawerItem(
+                Icons.outbox,
+                'Modify Stock Out',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const IssueModifyScreen()),
+                  );
+                },
+              ),
             const Divider(),
           ],
 

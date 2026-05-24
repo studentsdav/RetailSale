@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:retailpos/screens/auth/inventorylogin.dart';
@@ -9,8 +10,9 @@ import 'package:path_provider/path_provider.dart';
 import '../../controllers/public/outlet_controller.dart';
 import '../../controllers/public/recovery_controller.dart';
 import '../../core/config/app_config.dart';
+import '../recovery/backup_service.dart';
 
-enum SetupMode { newClient, existingClient, recoverId }
+enum SetupMode { newClient, existingClient, recoverId, restoreLocal }
 
 enum FlowStep { initial, otpVerification }
 
@@ -45,8 +47,11 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
   FlowStep _step = FlowStep.initial;
 
   bool _isLoading = false;
+  bool _isRestoringLocalEnc = false;
   bool _obscurePin = true;
   bool _forgotPinMode = false;
+  String? _restoreEncName;
+  List<int>? _restoreEncBytes;
 
   final outletCtrl = OutletController();
   final recoveryCtrl = RecoveryController();
@@ -92,6 +97,8 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
       _recoveryPin.clear();
       _taxId.clear();
       _otpCode.clear();
+      _restoreEncName = null;
+      _restoreEncBytes = null;
 
       if (_mode == SetupMode.newClient) {
         _generateAndSetNewCode();
@@ -400,6 +407,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                   if (_mode == SetupMode.existingClient)
                     _buildExistingClientForm(),
                   if (_mode == SetupMode.recoverId) _buildRecoverIdForm(),
+                  if (_mode == SetupMode.restoreLocal) _buildRestoreLocalForm(),
                 ],
               ),
             ),
@@ -427,27 +435,124 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
   }
 
   Widget _buildModeSelector() {
+    final segments = <ButtonSegment<SetupMode>>[
+      const ButtonSegment(
+          value: SetupMode.newClient,
+          label: Text("New Registration"),
+          icon: Icon(Icons.add_business)),
+      const ButtonSegment(
+          value: SetupMode.existingClient,
+          label: Text("Link Existing"),
+          icon: Icon(Icons.link)),
+      const ButtonSegment(
+          value: SetupMode.recoverId,
+          label: Text("Recover Business ID"),
+          icon: Icon(Icons.search)),
+      if (_isLocalSetupServer)
+        const ButtonSegment(
+            value: SetupMode.restoreLocal,
+            label: Text("Restore"),
+            icon: Icon(Icons.restore)),
+    ];
     return SegmentedButton<SetupMode>(
-      segments: const [
-        ButtonSegment(
-            value: SetupMode.newClient,
-            label: Text("New Registration"),
-            icon: Icon(Icons.add_business)),
-        ButtonSegment(
-            value: SetupMode.existingClient,
-            label: Text("Link Existing"),
-            icon: Icon(Icons.link)),
-        ButtonSegment(
-            value: SetupMode.recoverId,
-            label: Text("Recover Business ID"),
-            icon: Icon(Icons.search)),
-      ],
+      segments: segments,
       selected: {_mode},
       onSelectionChanged: (Set<SetupMode> newSelection) =>
           _switchMode(newSelection.first),
       style: SegmentedButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
+    );
+  }
+
+  Future<void> _pickRestoreEncFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['enc'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final name = file.name.trim();
+    if (!name.toLowerCase().endsWith('.enc')) {
+      _showError('Only .enc backup file is allowed.');
+      return;
+    }
+    final bytes = file.bytes ??
+        (file.path != null ? await File(file.path!).readAsBytes() : null);
+    if (bytes == null || bytes.isEmpty) {
+      _showError('Selected file is empty.');
+      return;
+    }
+    setState(() {
+      _restoreEncName = name;
+      _restoreEncBytes = bytes;
+    });
+  }
+
+  Future<void> _restoreFromLocalEnc() async {
+    if (_restoreEncName == null ||
+        _restoreEncName!.isEmpty ||
+        _restoreEncBytes == null ||
+        _restoreEncBytes!.isEmpty) {
+      _showError('Please select .enc backup file first.');
+      return;
+    }
+
+    setState(() => _isRestoringLocalEnc = true);
+    try {
+      await BackupService.restoreFromLocalEnc(
+        fileName: _restoreEncName!,
+        bytes: _restoreEncBytes!,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Backup restored successfully from .enc file.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      if (mounted) setState(() => _isRestoringLocalEnc = false);
+    }
+  }
+
+  Widget _buildRestoreLocalForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Text(
+            'Select encrypted backup file (.enc) and restore on this server.',
+            style: TextStyle(color: Colors.blue),
+          ),
+        ),
+        const SizedBox(height: 18),
+        OutlinedButton.icon(
+          onPressed: _isRestoringLocalEnc ? null : _pickRestoreEncFile,
+          icon: const Icon(Icons.upload_file),
+          label: const Text('Select .enc File'),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          _restoreEncName == null
+              ? 'No file selected'
+              : 'Selected: $_restoreEncName',
+          style: const TextStyle(color: Color(0xFF475569)),
+        ),
+        const SizedBox(height: 24),
+        _buildActionButton(
+          _isRestoringLocalEnc ? 'Restoring...' : 'Restore Backup (.enc)',
+          _isRestoringLocalEnc ? () {} : _restoreFromLocalEnc,
+        ),
+      ],
     );
   }
 
@@ -891,8 +996,8 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
       width: double.infinity,
       height: 48,
       child: FilledButton(
-        onPressed: _isLoading ? null : onPressed,
-        child: _isLoading
+        onPressed: (_isLoading || _isRestoringLocalEnc) ? null : onPressed,
+        child: (_isLoading || _isRestoringLocalEnc)
             ? const SizedBox(
                 height: 20,
                 width: 20,

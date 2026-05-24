@@ -28,6 +28,7 @@ class _SystemUpdateScreenState extends State<SystemUpdateScreen> {
   String _latestVersion = '';
   String _changelog = '';
   String _downloadUrl = '';
+  String _installDir = '';
 
   @override
   void initState() {
@@ -60,6 +61,7 @@ class _SystemUpdateScreenState extends State<SystemUpdateScreen> {
       if (data['success'] == true) {
         _latestVersion = data['latest_version'];
         _downloadUrl = data['download_url'];
+        _installDir = (data['install_dir'] ?? '').toString().trim();
         _changelog = data['changelog'] ??
             'General bug fixes and performance improvements.';
 
@@ -133,16 +135,24 @@ class _SystemUpdateScreenState extends State<SystemUpdateScreen> {
 
       setState(() => _statusText = "Launch in progress...");
 
+      final installDir = _installDir.trim().isNotEmpty
+          ? _installDir.trim()
+          : File(Platform.resolvedExecutable).parent.path;
+      final installerArgs = <String>[
+        '/VERYSILENT',
+        '/SUPPRESSMSGBOXES',
+        '/NORESTART',
+        '/DIR=$installDir',
+        '/D=$installDir',
+      ];
+
       if (Platform.isWindows) {
-        await Process.start(
-          'cmd',
-          ['/c', 'start', '', file.path],
-          runInShell: true,
-        );
+        await Process.start(file.path, installerArgs,
+            mode: ProcessStartMode.detached, runInShell: true);
       } else {
         await Process.start(
           file.path,
-          [],
+          installerArgs,
           mode: ProcessStartMode.detached,
         );
       }

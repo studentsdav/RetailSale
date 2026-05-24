@@ -1,8 +1,10 @@
 [Setup]
 AppName=INVINS
+AppId={{8C07A1B8-7BE7-4F73-9A89-42D8F7B9D322}
 AppVersion=1.1.33
 AppPublisher=INVINS
 DefaultDirName={sd}\Retailpos
+UsePreviousAppDir=yes
 DefaultGroupName=Retailpos
 OutputBaseFilename=backend_Installer
 Compression=lzma
@@ -293,7 +295,7 @@ begin
     WizardForm.Refresh;
     Exec(
       ExpandConstant('{app}\Retailpos_Installer.exe'),
-      '/install /quiet /norestart',
+      '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="' + ExpandConstant('{app}') + '" /D=' + ExpandConstant('{app}'),
       '',
       SW_HIDE,
       ewWaitUntilTerminated,

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../models/auth/permission_service.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../inventory/salescreen.dart';
 
@@ -29,6 +30,12 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   Map<String, dynamic>? _selectedSale;
   Map<String, dynamic>? _selectedDetails;
   SaleOrder? _selectedOrder;
+  bool get _canReprintSales =>
+      PermissionService.can('REPRINT_SALES_BILL') ||
+      PermissionService.can('RETAIL_SALES');
+  bool get _canModifySales => PermissionService.can('MODIFY_SALES_BILL');
+  bool get _canModifySalesPayment =>
+      PermissionService.can('MODIFY_SALES_PAYMENT');
 
   int _saleNoNumericValue(String? saleNo) {
     final raw = (saleNo ?? '').trim();
@@ -663,64 +670,70 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                       runSpacing: 12,
                                       alignment: WrapAlignment.end,
                                       children: [
-                                        Tooltip(
-                                          message: 'Close modify screen',
-                                          child: SizedBox(
-                                            width: 170,
-                                            height: 56,
-                                            child: OutlinedButton.icon(
-                                              onPressed: _closeScreen,
-                                              icon: const Icon(
-                                                Icons.close_outlined,
+                                        if (_canModifySales ||
+                                            _canModifySalesPayment)
+                                          Tooltip(
+                                            message: 'Close modify screen',
+                                            child: SizedBox(
+                                              width: 170,
+                                              height: 56,
+                                              child: OutlinedButton.icon(
+                                                onPressed: _closeScreen,
+                                                icon: const Icon(
+                                                  Icons.close_outlined,
+                                                ),
+                                                label: const Text('Cancel'),
                                               ),
-                                              label: const Text('Cancel'),
                                             ),
                                           ),
-                                        ),
-                                        Tooltip(
-                                          message: 'Print selected bill',
-                                          child: SizedBox(
-                                            width: 180,
-                                            height: 56,
-                                            child: FilledButton.icon(
-                                              onPressed: _printSelected,
-                                              icon: const Icon(
-                                                Icons.print_outlined,
+                                        if (_canReprintSales)
+                                          Tooltip(
+                                            message: 'Print selected bill',
+                                            child: SizedBox(
+                                              width: 180,
+                                              height: 56,
+                                              child: FilledButton.icon(
+                                                onPressed: _printSelected,
+                                                icon: const Icon(
+                                                  Icons.print_outlined,
+                                                ),
+                                                label: const Text('Print'),
                                               ),
-                                              label: const Text('Print'),
                                             ),
                                           ),
-                                        ),
-                                        Tooltip(
-                                          message:
-                                              'Correct bill payment mode and sync ledger',
-                                          child: SizedBox(
-                                            width: 210,
-                                            height: 56,
-                                            child: FilledButton.icon(
-                                              onPressed: _modifyPaymentSelected,
-                                              icon: const Icon(
-                                                Icons.payments_outlined,
+                                        if (_canModifySalesPayment)
+                                          Tooltip(
+                                            message:
+                                                'Correct bill payment mode and sync ledger',
+                                            child: SizedBox(
+                                              width: 210,
+                                              height: 56,
+                                              child: FilledButton.icon(
+                                                onPressed:
+                                                    _modifyPaymentSelected,
+                                                icon: const Icon(
+                                                  Icons.payments_outlined,
+                                                ),
+                                                label: const Text(
+                                                    'Modify Payment'),
                                               ),
-                                              label:
-                                                  const Text('Modify Payment'),
                                             ),
                                           ),
-                                        ),
-                                        Tooltip(
-                                          message: 'Open bill in modify mode',
-                                          child: SizedBox(
-                                            width: 190,
-                                            height: 56,
-                                            child: FilledButton.icon(
-                                              onPressed: _modifySelected,
-                                              icon: const Icon(
-                                                Icons.edit_outlined,
+                                        if (_canModifySales)
+                                          Tooltip(
+                                            message: 'Open bill in modify mode',
+                                            child: SizedBox(
+                                              width: 190,
+                                              height: 56,
+                                              child: FilledButton.icon(
+                                                onPressed: _modifySelected,
+                                                icon: const Icon(
+                                                  Icons.edit_outlined,
+                                                ),
+                                                label: const Text('Modify'),
                                               ),
-                                              label: const Text('Modify'),
                                             ),
                                           ),
-                                        ),
                                       ],
                                     ),
                                   ),

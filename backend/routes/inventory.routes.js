@@ -20,6 +20,9 @@ const brandCtrl = require('../controllers/inventory/brand.controller');
 const backupController = require('../controllers/public/backup.controller');
 const syncDatabase = require('../modules/sheetService');
 
+// Public endpoint for recovery flow (no login required).
+router.post('/backup/restore-local-enc', backupController.restoreFromLocalEnc);
+
 router.use(auth, license('INVENTORY'));
 
 console.log({
@@ -60,6 +63,7 @@ router.post('/branding', brandingSettingsCtrl.saveBranding);
 router.get('/status', backupController.getBackupStatusAlert);
 router.post('/toggle', backupController.toggleBackup);
 router.get('/sync-latest', syncDatabase.syncDatabaseOnly);
+router.get('/backup/local-enc', backupController.createLocalEncBackup);
 
 // STOCK LOCATIONS
 router.get('/locations/next-code', locationCtrl.getNextLocationCode);

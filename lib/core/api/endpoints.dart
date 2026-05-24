@@ -29,6 +29,8 @@ class ApiEndpoints {
   static const backupStatus = '/api/inventory/status';
   static const toggleBackup = '/api/inventory/toggle';
   static const syncLatest = '/api/inventory/sync-latest';
+  static const localEncBackup = '/api/inventory/backup/local-enc';
+  static const restoreLocalEncBackup = '/api/inventory/backup/restore-local-enc';
 
   static const String settings = '/api/inventory/settings';
   static const String appBranding = '/api/inventory/branding';

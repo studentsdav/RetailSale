@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/issue_controller.dart';
 import '../../controllers/modify/request_modify-controller.dart';
+import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
@@ -22,6 +23,9 @@ class RequestModifyScreen extends StatefulWidget {
 
 class _RequestModifyScreenState extends State<RequestModifyScreen> {
   final ctrl = RequestModifyController();
+  bool get _canReprint =>
+      PermissionService.can('REPRINT_REQUEST') || PermissionService.can('MODIFY_REQUEST');
+  bool get _canModify => PermissionService.can('MODIFY_REQUEST');
   final issueCtrl = IssueController();
   final propertyCtrl = PropertyInfoController();
   PropertyInfo? propertyInfo;
@@ -609,42 +613,45 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
                 runSpacing: 12,
                 alignment: WrapAlignment.end,
                 children: [
-                  Tooltip(
-                    message: 'Cancel request',
-                    child: SizedBox(
-                      width: 180,
-                      height: 56,
-                      child: OutlinedButton.icon(
-                        onPressed: _cancelRequest,
-                        icon: const Icon(Icons.cancel_outlined),
-                        label: const Text('Cancel Request'),
+                  if (_canModify)
+                    Tooltip(
+                      message: 'Cancel request',
+                      child: SizedBox(
+                        width: 180,
+                        height: 56,
+                        child: OutlinedButton.icon(
+                          onPressed: _cancelRequest,
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('Cancel Request'),
+                        ),
                       ),
                     ),
-                  ),
-                  Tooltip(
-                    message: 'Print request slip',
-                    child: SizedBox(
-                      width: 180,
-                      height: 56,
-                      child: FilledButton.icon(
-                        onPressed: _reprint,
-                        icon: const Icon(Icons.print_outlined),
-                        label: const Text('Print'),
+                  if (_canReprint)
+                    Tooltip(
+                      message: 'Print request slip',
+                      child: SizedBox(
+                        width: 180,
+                        height: 56,
+                        child: FilledButton.icon(
+                          onPressed: _reprint,
+                          icon: const Icon(Icons.print_outlined),
+                          label: const Text('Print'),
+                        ),
                       ),
                     ),
-                  ),
-                  Tooltip(
-                    message: 'Save request changes',
-                    child: SizedBox(
-                      width: 180,
-                      height: 56,
-                      child: FilledButton.icon(
-                        onPressed: _save,
-                        icon: const Icon(Icons.save_outlined),
-                        label: const Text('Save'),
+                  if (_canModify)
+                    Tooltip(
+                      message: 'Save request changes',
+                      child: SizedBox(
+                        width: 180,
+                        height: 56,
+                        child: FilledButton.icon(
+                          onPressed: _save,
+                          icon: const Icon(Icons.save_outlined),
+                          label: const Text('Save'),
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

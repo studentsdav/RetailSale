@@ -1,7 +1,9 @@
 
 const { sendToGoogleScript } = require("../../modules/driveService");
 const sysConfig = require('../../utils/configManager');
+const path = require('path');
 
+const rootDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
 
 
 const SHEET_ID = sysConfig ? sysConfig.sheetId : null;
@@ -34,7 +36,8 @@ async function checkSystemUpdate(req, res) {
             latest_version: response.latest_version,
             download_url: response.download_url,
             changelog: response.changelog,
-            release_date: response.release_date
+            release_date: response.release_date,
+            install_dir: rootDir
         });
 
     } catch (error) {

@@ -42,6 +42,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     Permission1('MODIFY_PURCHASE', 'Modify Purchase Order'),
     Permission1('MODIFY_RECEIVING', 'Modify Receiving'),
     Permission1('MODIFY_ISSUE', 'Modify Stock Out'),
+    Permission1('REPRINT_REQUEST', 'Reprint Request'),
+    Permission1('REPRINT_PURCHASE', 'Reprint Purchase Order'),
+    Permission1('REPRINT_RECEIVING', 'Reprint Receiving'),
+    Permission1('REPRINT_ISSUE', 'Reprint Stock Out'),
+    Permission1('REPRINT_SALES_BILL', 'Reprint Sales Bill'),
+    Permission1('MODIFY_SALES_BILL', 'Modify Sales Bill'),
+    Permission1('MODIFY_SALES_PAYMENT', 'Modify Sales Payment'),
 
     /// ================= MASTER DATA =================
     Permission1('ITEM_MASTER', 'Item Master'),

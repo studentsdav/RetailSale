@@ -1,8 +1,10 @@
 [Setup]
 AppName=Retailpos
+AppId={{8C07A1B8-7BE7-4F73-9A89-42D8F7B9D322}
 AppVersion=1.1.31
 AppPublisher=Students dev
 DefaultDirName={sd}\Retailpos
+UsePreviousAppDir=yes
 DefaultGroupName=Retailpos
 OutputBaseFilename=Retailpos_Installer
 Compression=lzma

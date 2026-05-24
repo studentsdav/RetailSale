@@ -48,6 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loadingPrinters = false;
   bool _showNotifications = true;
   bool _didLoadBranding = false;
+  bool _isCreatingEncBackup = false;
   AppBrandingModel _branding = AppBrandingModel.defaults();
 
   bool get _isAdmin => PermissionService.user?.role == 'ADMIN';
@@ -289,6 +290,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }
                   }
                 },
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: FilledButton.icon(
+                  onPressed: _isCreatingEncBackup
+                      ? null
+                      : () async {
+                          setState(() => _isCreatingEncBackup = true);
+                          try {
+                            final savedPath =
+                                await BackupService.createAndSaveLocalEncBackup();
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '.enc backup saved to $savedPath',
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Failed to create backup: $e',
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          } finally {
+                            if (mounted) {
+                              setState(() => _isCreatingEncBackup = false);
+                            }
+                          }
+                        },
+                  icon: _isCreatingEncBackup
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.enhanced_encryption_outlined),
+                  label: Text(_isCreatingEncBackup
+                      ? 'Creating .enc backup...'
+                      : 'Create .enc Backup to Downloads'),
+                ),
               ),
             ]),
           _section('Inventory Settings', [

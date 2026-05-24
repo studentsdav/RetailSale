@@ -109,4 +109,32 @@ async function autoRestoreLatest(folderId) {
     }
 }
 
-module.exports = { autoRestoreLatest };
+async function restoreFromEncBuffer(encBuffer) {
+    const config = loadConfig();
+    const restoreDir = path.join(baseDir, "backups", `restore-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    const encFile = path.join(restoreDir, "restore.enc");
+    const zipFile = path.join(restoreDir, "restore.zip");
+
+    try {
+        fs.mkdirSync(restoreDir, { recursive: true });
+        fs.writeFileSync(encFile, encBuffer);
+
+        const extractedSqlFile = await decryptAndUnzip(encFile, zipFile, restoreDir);
+        if (!fs.existsSync(extractedSqlFile)) {
+            throw new Error("Extraction corrupted: 'backup.sql' was not found in the archive.");
+        }
+
+        await executeDatabaseRestore(
+            extractedSqlFile,
+            config.db_database,
+            config.db_user,
+            config.db_password
+        );
+    } finally {
+        if (fs.existsSync(restoreDir)) {
+            try { fs.rmSync(restoreDir, { recursive: true, force: true }); } catch (_) { }
+        }
+    }
+}
+
+module.exports = { autoRestoreLatest, restoreFromEncBuffer };

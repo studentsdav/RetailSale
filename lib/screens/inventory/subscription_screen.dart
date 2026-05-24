@@ -36,8 +36,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   final _totalPayment = TextEditingController(text: '0');
   final _search = TextEditingController();
 
-  DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now().add(const Duration(days: 30));
+  DateTime _startDate =
+      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  DateTime _endDate = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  ).add(const Duration(days: 29));
   Item? _selectedItem;
   SaleCustomer? _selectedCustomer;
   bool _loading = true;
@@ -84,8 +89,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     _customerAddress.text = customer.customerAddress;
     _customerGstin.text = customer.customerGstin;
     if (widget.renewMode) {
-      _startDate = DateTime.now();
-      _endDate = DateTime.now().add(const Duration(days: 30));
+      final now = DateTime.now();
+      _startDate = DateTime(now.year, now.month, now.day);
+      _endDate = DateTime(now.year, now.month, now.day)
+          .add(const Duration(days: 29));
     }
   }
 
@@ -121,6 +128,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     return DateTime(parsed.year, parsed.month, parsed.day);
   }
 
+  DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  int _inclusiveDaysBetween(DateTime start, DateTime end) {
+    final s = _dateOnly(start);
+    final e = _dateOnly(end);
+    final raw = e.difference(s).inDays + 1;
+    return raw < 1 ? 1 : raw;
+  }
+
   double _asDouble(dynamic value) =>
       double.tryParse(value?.toString() ?? '0') ?? 0;
 
@@ -129,7 +146,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     if (endDate == null) return false;
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
-    final renewWindowStart = endDate.subtract(const Duration(days: 3));
+    final renewWindowStart = endDate.subtract(const Duration(days: 7));
     return !todayOnly.isBefore(renewWindowStart);
   }
 
@@ -489,11 +506,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       if (schemeType != 'PRICE_DISCOUNT') return sum;
       return sum + (_asDouble(row['discount_amount']));
     });
-    final hasRenewBonus = renewalSchemes.any((row) =>
-        _asDouble(row['bonus_qty']) > 0 ||
-        (row['scheme_type']?.toString().trim().toUpperCase() == 'BONUS_QTY'));
-    final effectiveRenewEnd =
-        nextEnd.add(Duration(days: hasRenewBonus ? 1 : 0));
+    final effectiveRenewEnd = nextEnd;
     const payableRenewalDays = 30;
     final taxableAmount = ((currentRate * dailyQty * payableRenewalDays) -
             renewDiscount)
@@ -560,7 +573,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Renewed: ${DateFormat('dd-MMM-yyyy').format(nextStart)} to ${DateFormat('dd-MMM-yyyy').format(effectiveRenewEnd)}',
+          'Renewed: ${DateFormat('dd-MMM-yyyy').format(nextStart)} to ${DateFormat('dd-MMM-yyyy').format(nextEnd)}',
         ),
       ),
     );
@@ -568,12 +581,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   int get _subscriptionDays {
-    final raw = _endDate.difference(_startDate).inDays + 1;
-    return raw < 1 ? 1 : raw;
+    return _inclusiveDaysBetween(_startDate, _endDate);
   }
 
   int get _payableSubscriptionDays {
-    final payable = _subscriptionDays - 1;
+    final payable = _hasBonusExtension ? (_subscriptionDays - 1) : _subscriptionDays;
     return payable < 0 ? 0 : payable;
   }
 
@@ -590,14 +602,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       _itemRate * _dailyQtyValue * _payableSubscriptionDays;
 
   bool get _hasBonusExtension {
-    final normalized = _schemeDraft.normalized(
-      baseAmount: _baseSubscriptionAmount,
-      unitRate: _itemRate,
-    );
-    return normalized.type == 'BONUS_QTY' && normalized.bonusQty > 0;
+    // Keep this independent from computed totals to avoid recursive getter loops.
+    return _schemeDraft.type == 'BONUS_QTY' && _schemeDraft.bonusQty > 0;
   }
 
-  int get _bonusExtensionDays => _hasBonusExtension ? 1 : 0;
+  int get _bonusExtensionDays => 0;
 
   DateTime get _effectiveEndDate =>
       _endDate.add(Duration(days: _bonusExtensionDays));
@@ -862,7 +871,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       'customer_gstin': _selectedCustomer!.customerGstin.trim(),
       'item_id': item.id,
       'start_date': _startDate.toIso8601String(),
-      'end_date': _effectiveEndDate.toIso8601String(),
+      'end_date': _endDate.toIso8601String(),
       'daily_allowed_qty': double.tryParse(_dailyQty.text.trim()) ?? 0,
       'total_payment_amount': totalAmount,
       'taxable_amount': _taxableSubscriptionAmount,
@@ -910,8 +919,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     setState(() {
       _selectedItem = null;
       _schemeDraft = const _SchemeDraft();
-      _startDate = DateTime.now();
-      _endDate = DateTime.now().add(const Duration(days: 30));
+      final now = DateTime.now();
+      _startDate = DateTime(now.year, now.month, now.day);
+      _endDate = DateTime(now.year, now.month, now.day)
+          .add(const Duration(days: 29));
     });
   }
 
@@ -1059,7 +1070,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final periodDays = (startDate != null && endDate != null)
         ? (endDate.difference(startDate).inDays + 1)
         : 31;
-    final payableDays = periodDays > 0 ? periodDays - 1 : 0;
+    final bonusQtyForReceipt =
+        double.tryParse(subscription['bonus_qty']?.toString() ?? '0') ?? 0;
+    final payableDays = periodDays > 0
+        ? (bonusQtyForReceipt > 0 ? periodDays - 1 : periodDays)
+        : 0;
     final dailyQty =
         double.tryParse(subscription['daily_allowed_qty']?.toString() ?? '0') ??
             0;
@@ -2286,28 +2301,41 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                     children: [
                                       SizedBox(
                                         width: itemFieldWidth,
-                                        child: DropdownButtonFormField<Item>(
-                                          initialValue: _selectedItem,
-                                          decoration: const InputDecoration(
-                                              labelText: 'Item'),
-                                          items: _ctrl.items
-                                              .map(
-                                                (item) => DropdownMenuItem(
-                                                  value: item,
-                                                  child: Text(
-                                                    '${item.itemCode} - ${item.itemName}',
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              )
-                                              .toList(),
+                                        child: DropdownSearch<Item>(
+                                          selectedItem: _selectedItem,
+                                          items: (filter, _) async {
+                                            if (filter.trim().isEmpty) {
+                                              return _ctrl.items;
+                                            }
+                                            final q = filter.trim().toLowerCase();
+                                            return _ctrl.items.where((item) {
+                                              return item.itemName
+                                                      .toLowerCase()
+                                                      .contains(q) ||
+                                                  item.itemCode
+                                                      .toLowerCase()
+                                                      .contains(q);
+                                            }).toList();
+                                          },
+                                          itemAsString: (item) =>
+                                              '${item.itemCode} - ${item.itemName}',
+                                          compareFn: (a, b) => a.id == b.id,
+                                          popupProps: const PopupProps.menu(
+                                            showSearchBox: true,
+                                          ),
+                                          decoratorProps:
+                                              const DropDownDecoratorProps(
+                                            decoration: InputDecoration(
+                                              labelText: 'Item',
+                                              hintText:
+                                                  'Search by item code or name',
+                                            ),
+                                          ),
                                           onChanged: (value) {
-                                            setState(
-                                                () => _selectedItem = value);
+                                            setState(() => _selectedItem = value);
                                             _syncSuggestedPaymentAmount(
-                                                force: true);
+                                              force: true,
+                                            );
                                           },
                                         ),
                                       ),
@@ -2355,8 +2383,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                               lastDate: DateTime(2100),
                                             );
                                             if (picked != null) {
-                                              setState(
-                                                  () => _startDate = picked);
+                                              setState(() =>
+                                                  _startDate = _dateOnly(picked));
                                               _syncSuggestedPaymentAmount(
                                                   force: true);
                                             }
@@ -2381,7 +2409,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                               lastDate: DateTime(2100),
                                             );
                                             if (picked != null) {
-                                              setState(() => _endDate = picked);
+                                              setState(() =>
+                                                  _endDate = _dateOnly(picked));
                                               _syncSuggestedPaymentAmount(
                                                   force: true);
                                             }
@@ -2394,7 +2423,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                   Align(
                                     alignment: Alignment.centerLeft,
                                     child: Text(
-                                      'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${(_endDate.difference(_startDate).inDays + 1).clamp(1, 1000000)} | Effective end: ${DateFormat('dd-MMM-yyyy').format(_effectiveEndDate)}',
+                                      'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: Color(0xFF334155),

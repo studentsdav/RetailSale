@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/supplier_controller.dart';
 import '../../controllers/purchase/purchase_order_modify_controller.dart';
+import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart'
     show PropertyInfoController;
 import '../../core/api/api_client.dart';
@@ -24,6 +25,9 @@ class PurchaseOrderModifyScreen extends StatefulWidget {
 
 class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
   final ctrl = PurchaseOrderModifyController();
+  bool get _canReprint =>
+      PermissionService.can('REPRINT_PURCHASE') || PermissionService.can('MODIFY_PURCHASE');
+  bool get _canModify => PermissionService.can('MODIFY_PURCHASE');
   final supplierCtrl = SupplierController();
   final propertyCtrl = PropertyInfoController();
   PropertyInfo? propertyInfo;
@@ -678,42 +682,45 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                 runSpacing: 12,
                 alignment: WrapAlignment.center,
                 children: [
-                  Tooltip(
-                    message: 'Cancel purchase order',
-                    child: SizedBox(
-                      width: 180,
-                      height: 56,
-                      child: OutlinedButton.icon(
-                        onPressed: _cancelPo,
-                        icon: const Icon(Icons.cancel_outlined),
-                        label: const Text('Cancel PO'),
+                  if (_canModify)
+                    Tooltip(
+                      message: 'Cancel purchase order',
+                      child: SizedBox(
+                        width: 180,
+                        height: 56,
+                        child: OutlinedButton.icon(
+                          onPressed: _cancelPo,
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('Cancel PO'),
+                        ),
                       ),
                     ),
-                  ),
-                  Tooltip(
-                    message: 'Print purchase order',
-                    child: SizedBox(
-                      width: 180,
-                      height: 56,
-                      child: FilledButton.icon(
-                        onPressed: _reprint,
-                        icon: const Icon(Icons.print_outlined),
-                        label: const Text('Print'),
+                  if (_canReprint)
+                    Tooltip(
+                      message: 'Print purchase order',
+                      child: SizedBox(
+                        width: 180,
+                        height: 56,
+                        child: FilledButton.icon(
+                          onPressed: _reprint,
+                          icon: const Icon(Icons.print_outlined),
+                          label: const Text('Print'),
+                        ),
                       ),
                     ),
-                  ),
-                  Tooltip(
-                    message: 'Save purchase order changes',
-                    child: SizedBox(
-                      width: 200,
-                      height: 56,
-                      child: FilledButton.icon(
-                        onPressed: _save,
-                        icon: const Icon(Icons.save_outlined),
-                        label: const Text('Save'),
+                  if (_canModify)
+                    Tooltip(
+                      message: 'Save purchase order changes',
+                      child: SizedBox(
+                        width: 200,
+                        height: 56,
+                        child: FilledButton.icon(
+                          onPressed: _save,
+                          icon: const Icon(Icons.save_outlined),
+                          label: const Text('Save'),
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

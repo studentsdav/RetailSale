@@ -15,8 +15,8 @@ const { startLoyaltyExpiryJob } = require("./jobs/loyaltyExpiryJob");
 const { startAnalyticsRefreshJob } = require("./jobs/analyticsRefreshJob");
 const CLIENT_FILE = path.join(rootDir, "client.json");
 // body limits
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 const dbMiddleware = require('./middlewares/db.middleware');
 const ensureDatabase = require("./utils/ensureDatabase");
 const runMigrations = require('./utils/migrationRunner');
