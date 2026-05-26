@@ -128,6 +128,19 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     return DateTime(parsed.year, parsed.month, parsed.day);
   }
 
+  void _applyDefaultBonusQtyFromDaily({bool onlyWhenEmpty = true}) {
+    final qty = double.tryParse(_dailyQty.text.trim()) ?? 0;
+    if (qty <= 0) return;
+    if (_schemeDraft.type != 'BONUS_QTY') return;
+    if (onlyWhenEmpty && _schemeDraft.bonusQty > 0) return;
+    _applySchemeDraft(
+      _schemeDraft.copyWith(
+        bonusQty: qty,
+        value: qty,
+      ),
+    );
+  }
+
   DateTime _dateOnly(DateTime value) =>
       DateTime(value.year, value.month, value.day);
 
@@ -2089,7 +2102,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 final isWide = constraints.maxWidth >= 1200;
                 final isMedium = constraints.maxWidth >= 760;
                 const horizontalGap = 12.0;
-                final canvasWidth = constraints.maxWidth - 32; // ListView padding
+                final outerHorizontalPadding =
+                    constraints.maxWidth >= 1200 ? 56.0 : 24.0;
+                const maxContentWidth = 1160.0;
+                final canvasWidth = (constraints.maxWidth -
+                        (outerHorizontalPadding * 2))
+                    .clamp(0, maxContentWidth)
+                    .toDouble();
                 final formFieldWidth = isWide
                     ? (canvasWidth - (horizontalGap * 3)) / 4
                     : isMedium
@@ -2110,11 +2129,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       inputDecorationTheme: InputDecorationTheme(
                         filled: true,
                         fillColor: Colors.white,
-                        isDense: false,
-                        constraints: const BoxConstraints(minHeight: 56),
+                        isDense: true,
+                        constraints: const BoxConstraints(minHeight: 46),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
-                          vertical: 16,
+                          vertical: 12,
                         ),
                         labelStyle: const TextStyle(
                           color: Color(0xFF475569),
@@ -2144,58 +2163,75 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     child: RefreshIndicator(
                       onRefresh: _bootstrap,
                       child: ListView(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: outerHorizontalPadding,
+                          vertical: 18,
+                        ),
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(18),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF0F172A), Color(0xFF1E3A8A)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(18),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(.08),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: Wrap(
-                              spacing: 14,
-                              runSpacing: 14,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                const Text(
-                                  'Enterprise Subscription Workspace',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 16,
+                          Center(
+                            child: ConstrainedBox(
+                              constraints:
+                                  const BoxConstraints(maxWidth: maxContentWidth),
+                              child: Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF0F172A),
+                                      Color(0xFF1E3A8A)
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
                                   ),
+                                  borderRadius: BorderRadius.circular(18),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(.08),
+                                      blurRadius: 18,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
                                 ),
-                                _enterpriseStatChip(
-                                  'Active',
-                                  '$activeCount',
-                                  const Color(0xFF22C55E),
+                                child: Wrap(
+                                  spacing: 14,
+                                  runSpacing: 14,
+                                  crossAxisAlignment:
+                                      WrapCrossAlignment.center,
+                                  children: [
+                                    const Text(
+                                      'Enterprise Subscription Workspace',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    _enterpriseStatChip(
+                                      'Active',
+                                      '$activeCount',
+                                      const Color(0xFF22C55E),
+                                    ),
+                                    _enterpriseStatChip(
+                                      'Upcoming',
+                                      '$upcomingRenewalCount',
+                                      const Color(0xFFF59E0B),
+                                    ),
+                                    _enterpriseStatChip(
+                                      'Renewed',
+                                      '$renewedCount',
+                                      const Color(0xFF38BDF8),
+                                    ),
+                                  ],
                                 ),
-                                _enterpriseStatChip(
-                                  'Upcoming',
-                                  '$upcomingRenewalCount',
-                                  const Color(0xFFF59E0B),
-                                ),
-                                _enterpriseStatChip(
-                                  'Renewed',
-                                  '$renewedCount',
-                                  const Color(0xFF38BDF8),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 14),
-                          Card(
+                          Center(
+                            child: ConstrainedBox(
+                              constraints:
+                                  const BoxConstraints(maxWidth: maxContentWidth),
+                              child: Card(
                             elevation: 0,
                             color: Colors.white,
                             surfaceTintColor: Colors.transparent,
@@ -2333,6 +2369,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                           ),
                                           onChanged: (value) {
                                             setState(() => _selectedItem = value);
+                                            _applyDefaultBonusQtyFromDaily();
                                             _syncSuggestedPaymentAmount(
                                               force: true,
                                             );
@@ -2347,9 +2384,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                               .numberWithOptions(decimal: true),
                                           decoration: const InputDecoration(
                                               labelText: 'Daily Qty'),
-                                          onChanged: (_) =>
-                                              _syncSuggestedPaymentAmount(
-                                                  force: true),
+                                          onChanged: (_) {
+                                            _applyDefaultBonusQtyFromDaily(
+                                                onlyWhenEmpty: false);
+                                            _syncSuggestedPaymentAmount(
+                                                force: true);
+                                          },
                                         ),
                                       ),
                                       SizedBox(
@@ -2502,9 +2542,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                 ],
                               ),
                             ),
-                          ),
+                            )),
+                            ),
                           const SizedBox(height: 16),
-                          Card(
+                          Center(
+                            child: ConstrainedBox(
+                              constraints:
+                                  const BoxConstraints(maxWidth: maxContentWidth),
+                              child: Card(
                             elevation: 0,
                             color: Colors.white,
                             surfaceTintColor: Colors.transparent,
@@ -2715,7 +2760,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                 ],
                               ),
                             ),
-                          ),
+                            )),
+                            ),
                         ],
                       ),
                     ));
@@ -2942,8 +2988,12 @@ class _SchemeDraftEditor extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(
+                      SizedBox(
+                        width: 190,
                         child: TextFormField(
+                          key: ValueKey(
+                            'bonus-qty-${draft.bonusQty.toStringAsFixed(2)}',
+                          ),
                           initialValue: draft.bonusQty.toStringAsFixed(2),
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
@@ -2958,8 +3008,12 @@ class _SchemeDraftEditor extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Expanded(
+                      SizedBox(
+                        width: 230,
                         child: TextFormField(
+                          key: ValueKey(
+                            'bonus-eq-${draft.bonusQty.toStringAsFixed(2)}-${unitRate.toStringAsFixed(2)}',
+                          ),
                           initialValue: (draft.bonusQty * unitRate)
                               .clamp(0, baseAmount)
                               .toStringAsFixed(2),

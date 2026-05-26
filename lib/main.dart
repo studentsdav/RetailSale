@@ -45,17 +45,58 @@ class MyApp extends StatelessWidget {
     final uiPrefs = context.watch<UiPreferencesController>();
     final brandingCtrl = context.watch<AppBrandingController>();
     final baseTheme = AppTheme.getTheme(themeCtrl.themeKey);
+    final scheme = baseTheme.colorScheme;
+
+    EdgeInsets textFieldPadding;
+    double minInputHeight;
+    switch (uiPrefs.textfieldSize) {
+      case 'compact':
+        textFieldPadding = const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        );
+        minInputHeight = 42;
+        break;
+      case 'comfortable':
+        textFieldPadding = const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 18,
+        );
+        minInputHeight = 56;
+        break;
+      case 'normal':
+      default:
+        textFieldPadding = const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        );
+        minInputHeight = 48;
+        break;
+    }
+
+    Color resolvedCardColor;
+    switch (uiPrefs.cardColorStyle) {
+      case 'white':
+        resolvedCardColor = scheme.surface;
+        break;
+      case 'tint':
+        resolvedCardColor = scheme.surfaceContainer;
+        break;
+      case 'soft':
+      default:
+        resolvedCardColor = scheme.surfaceContainerLow;
+        break;
+    }
 
     final theme = uiPrefs.touchMode
         ? baseTheme.copyWith(
             visualDensity: VisualDensity.comfortable,
             materialTapTargetSize: MaterialTapTargetSize.padded,
             inputDecorationTheme: baseTheme.inputDecorationTheme.copyWith(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 18,
-              ),
+              contentPadding: textFieldPadding,
+              constraints: BoxConstraints(minHeight: minInputHeight),
             ),
+            cardTheme: baseTheme.cardTheme.copyWith(color: resolvedCardColor),
             filledButtonTheme: FilledButtonThemeData(
               style: baseTheme.filledButtonTheme.style?.copyWith(
                 minimumSize: WidgetStateProperty.all(const Size(0, 52)),
@@ -67,7 +108,13 @@ class MyApp extends StatelessWidget {
               ),
             ),
           )
-        : baseTheme;
+        : baseTheme.copyWith(
+            inputDecorationTheme: baseTheme.inputDecorationTheme.copyWith(
+              contentPadding: textFieldPadding,
+              constraints: BoxConstraints(minHeight: minInputHeight),
+            ),
+            cardTheme: baseTheme.cardTheme.copyWith(color: resolvedCardColor),
+          );
 
     return MaterialApp(
       scaffoldMessengerKey: globalSnackbarKey,

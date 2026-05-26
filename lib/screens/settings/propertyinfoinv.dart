@@ -207,8 +207,10 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                     icon: Icons.receipt_long_rounded,
                     children: [
                       _field(_gstNo, 'GST Identification Number',
+                          required: false,
                           prefixIcon: Icons.account_balance),
                       _field(_panNo, 'PAN Number',
+                          required: false,
                           prefixIcon: Icons.credit_card),
                       _field(_fssaiNo, 'FSSAI License (Optional)',
                           required: false, prefixIcon: Icons.verified_user),

@@ -249,14 +249,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ? s.defaultPrinterUrl
         : null;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F7F9),
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+    Future<void> saveAllSettings() async {
+      await LocalPreferences.setShowNotifications(_showNotifications);
+      await ctrl.save(s);
+      await brandingCtrl.save(
+        _branding.copyWith(themeKey: themeCtrl.themeKey),
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Settings saved successfully')),
+      );
+    }
+
+    Widget buildSaveBar() {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: FilledButton.icon(
+          icon: const Icon(Icons.save),
+          label: const Text('Save Settings'),
+          onPressed: saveAllSettings,
+        ),
+      );
+    }
+
+    Widget buildTabBody(List<Widget> sections, BoxConstraints constraints) {
+      final horizontalPadding = constraints.maxWidth >= 1200 ? 40.0 : 20.0;
+      return ListView(
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: 18,
+        ),
         children: [
-          if (AppConfig.isLocalServer)
-            _section('Data & Security', [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1180),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...sections,
+                  const SizedBox(height: 20),
+                  buildSaveBar(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF6F7F9),
+        appBar: AppBar(
+          title: const Text('Settings'),
+          bottom: const TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(text: 'Operations'),
+              Tab(text: 'Appearance'),
+              Tab(text: 'Billing & Print'),
+              Tab(text: 'Branding'),
+            ],
+          ),
+        ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            return TabBarView(
+              children: [
+                buildTabBody([
+                      if (AppConfig.isLocalServer)
+                        _section('Data & Security', [
               _switchTile(
                 'Enable Cloud Backup',
                 'Automatically sync your store data to Cloud',
@@ -338,8 +401,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : 'Create .enc Backup to Downloads'),
                 ),
               ),
-            ]),
-          _section('Inventory Settings', [
+                        ]),
+                      _section('Inventory Settings', [
             _switchTile(
               'Enable Auto Reorder Alert',
               'Notify when stock falls below reorder level',
@@ -358,16 +421,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               s.enableItemImagesInSales,
               (v) => setState(() => s.enableItemImagesInSales = v),
             ),
-          ]),
-          _section('Approval Rules', [
+                      ]),
+                      _section('Approval Rules', [
             _switchTile(
               'Damage Approval Required',
               'Manager approval required for damage entry',
               s.damageApprovalRequired,
               (v) => setState(() => s.damageApprovalRequired = v),
             ),
-          ]),
-          _section('Audit & Compliance', [
+                      ]),
+                      _section('Audit & Compliance', [
             _switchTile(
               'Enable Audit Log',
               'Track all stock changes and edits',
@@ -380,9 +443,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _showNotifications,
               (v) => setState(() => _showNotifications = v),
             ),
-          ]),
-          if (_isAdmin)
-            _section('Danger Zone', [
+                      ]),
+                      if (_isAdmin)
+                        _section('Danger Zone', [
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -425,8 +488,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
-            ]),
-          _section('Appearance', [
+                        ]),
+                ], constraints),
+                buildTabBody([
+                      _section('Appearance', [
             _switchTile(
               'Touch Screen Mode',
               'Larger tap targets and softer spacing for touch devices',
@@ -482,68 +547,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
             ),
-          ]),
-          _section('Branding', [
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: TextFormField(
-                key: ValueKey('branding-company-${_branding.companyName}'),
-                initialValue: _branding.companyName,
-                decoration: const InputDecoration(labelText: 'Company Name'),
-                onChanged: (value) =>
-                    _branding = _branding.copyWith(companyName: value),
+              child: DropdownButtonFormField<String>(
+                initialValue: uiPrefsCtrl.textfieldSize,
+                decoration: const InputDecoration(
+                  labelText: 'Global Textfield Size',
+                  helperText: 'Apply compact, normal, or comfortable height',
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'compact',
+                    child: Text('Compact'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'normal',
+                    child: Text('Normal'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'comfortable',
+                    child: Text('Comfortable'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    uiPrefsCtrl.updateTextfieldSize(value);
+                  }
+                },
               ),
             ),
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: TextFormField(
-                key: ValueKey('branding-product-${_branding.productName}'),
-                initialValue: _branding.productName,
-                decoration: const InputDecoration(labelText: 'Product Name'),
-                onChanged: (value) =>
-                    _branding = _branding.copyWith(productName: value),
+              child: DropdownButtonFormField<String>(
+                initialValue: uiPrefsCtrl.cardColorStyle,
+                decoration: const InputDecoration(
+                  labelText: 'Global Card Color',
+                  helperText: 'Control card tint across all screens',
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'soft',
+                    child: Text('Soft Surface'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'white',
+                    child: Text('Plain White'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'tint',
+                    child: Text('Theme Tint'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    uiPrefsCtrl.updateCardColorStyle(value);
+                  }
+                },
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: TextFormField(
-                key: ValueKey('branding-powered-${_branding.poweredByLabel}'),
-                initialValue: _branding.poweredByLabel,
-                decoration:
-                    const InputDecoration(labelText: 'Powered By Label'),
-                onChanged: (value) =>
-                    _branding = _branding.copyWith(poweredByLabel: value),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: TextFormField(
-                key: ValueKey('branding-email-${_branding.supportEmail}'),
-                initialValue: _branding.supportEmail,
-                decoration: const InputDecoration(labelText: 'Support Email'),
-                onChanged: (value) =>
-                    _branding = _branding.copyWith(supportEmail: value),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: TextFormField(
-                key: ValueKey('branding-phone-${_branding.supportPhone}'),
-                initialValue: _branding.supportPhone,
-                decoration: const InputDecoration(labelText: 'Support Phone'),
-                onChanged: (value) =>
-                    _branding = _branding.copyWith(supportPhone: value),
-              ),
-            ),
-            TextFormField(
-              key: ValueKey('branding-web-${_branding.supportWebsite}'),
-              initialValue: _branding.supportWebsite,
-              decoration: const InputDecoration(labelText: 'Support Website'),
-              onChanged: (value) =>
-                  _branding = _branding.copyWith(supportWebsite: value),
-            ),
-          ]),
-          _section('Printing', [
+                      ]),
+                ], constraints),
+                buildTabBody([
+                  _section('Printing', [
             _switchTile(
               'Auto Print on Save',
               'Automatically print after save',
@@ -626,8 +691,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : 'Every print opens the print dialog and user can choose printer.',
               style: const TextStyle(color: Color(0xFF64748B)),
             ),
-          ]),
-          _section('Global Billing', [
+                  ]),
+                  _section('Global Billing', [
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: TextFormField(
@@ -679,8 +744,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }
               },
             ),
-          ]),
-          _section('Default Charges', [
+                  ]),
+                  _section('Default Charges', [
             ...List.generate(
               s.defaultCharges.length,
               (index) => _chargeTile(
@@ -719,27 +784,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 label: const Text('Add Charge Rule'),
               ),
             ),
-          ]),
-          const SizedBox(height: 20),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              icon: const Icon(Icons.save),
-              label: const Text('Save Settings'),
-              onPressed: () async {
-                await LocalPreferences.setShowNotifications(_showNotifications);
-                await ctrl.save(s);
-                await brandingCtrl.save(
-                  _branding.copyWith(themeKey: themeCtrl.themeKey),
-                );
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Settings saved successfully')),
-                );
-              },
+                  ]),
+                ], constraints),
+                buildTabBody([
+                      _section('Branding', [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextFormField(
+                key: ValueKey('branding-company-${_branding.companyName}'),
+                initialValue: _branding.companyName,
+                decoration: const InputDecoration(labelText: 'Company Name'),
+                onChanged: (value) =>
+                    _branding = _branding.copyWith(companyName: value),
+              ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextFormField(
+                key: ValueKey('branding-product-${_branding.productName}'),
+                initialValue: _branding.productName,
+                decoration: const InputDecoration(labelText: 'Product Name'),
+                onChanged: (value) =>
+                    _branding = _branding.copyWith(productName: value),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextFormField(
+                key: ValueKey('branding-powered-${_branding.poweredByLabel}'),
+                initialValue: _branding.poweredByLabel,
+                decoration:
+                    const InputDecoration(labelText: 'Powered By Label'),
+                onChanged: (value) =>
+                    _branding = _branding.copyWith(poweredByLabel: value),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextFormField(
+                key: ValueKey('branding-email-${_branding.supportEmail}'),
+                initialValue: _branding.supportEmail,
+                decoration: const InputDecoration(labelText: 'Support Email'),
+                onChanged: (value) =>
+                    _branding = _branding.copyWith(supportEmail: value),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextFormField(
+                key: ValueKey('branding-phone-${_branding.supportPhone}'),
+                initialValue: _branding.supportPhone,
+                decoration: const InputDecoration(labelText: 'Support Phone'),
+                onChanged: (value) =>
+                    _branding = _branding.copyWith(supportPhone: value),
+              ),
+            ),
+            TextFormField(
+              key: ValueKey('branding-web-${_branding.supportWebsite}'),
+              initialValue: _branding.supportWebsite,
+              decoration: const InputDecoration(labelText: 'Support Website'),
+              onChanged: (value) =>
+                  _branding = _branding.copyWith(supportWebsite: value),
+            ),
+                      ]),
+                ], constraints),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

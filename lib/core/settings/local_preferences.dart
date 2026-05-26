@@ -10,6 +10,8 @@ class LocalPreferences {
   static const _brandingKey = 'app_branding';
   static const _touchModeKey = 'touch_mode_enabled';
   static const _defaultStartupScreenKey = 'default_startup_screen';
+  static const _textfieldSizeKey = 'ui_textfield_size';
+  static const _cardColorStyleKey = 'ui_card_color_style';
 
   static Future<bool> getShowNotifications() async {
     final prefs = await SharedPreferences.getInstance();
@@ -39,6 +41,26 @@ class LocalPreferences {
   static Future<void> setDefaultStartupScreen(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_defaultStartupScreenKey, value);
+  }
+
+  static Future<String> getTextfieldSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_textfieldSizeKey) ?? 'normal';
+  }
+
+  static Future<void> setTextfieldSize(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_textfieldSizeKey, value);
+  }
+
+  static Future<String> getCardColorStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_cardColorStyleKey) ?? 'soft';
+  }
+
+  static Future<void> setCardColorStyle(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_cardColorStyleKey, value);
   }
 
   static Future<String> getThemeKey() async {

@@ -59,6 +59,7 @@ class _SaleScreenState extends State<SaleScreen> {
   final _amountPaid = TextEditingController(text: '0');
   final _notes = TextEditingController();
   final _barcode = TextEditingController();
+  final FocusNode _barcodeFocusNode = FocusNode();
   final _entryQty = TextEditingController(text: '1');
   final _manualDiscountValue = TextEditingController(text: '0');
   final _voucherCode = TextEditingController();
@@ -79,6 +80,10 @@ class _SaleScreenState extends State<SaleScreen> {
   String _billingCountry = 'India';
   String _billFormat = 'A4';
   String _selectedCatalogCategory = 'ALL';
+  String _lastProcessedScanValue = '';
+  DateTime _lastProcessedScanAt = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _skipNextSubmitAfterAutoScan = false;
+  bool _isAutoScanProcessing = false;
   SaleCustomer? _selectedCustomer;
   Item? _selectedManualItem;
   SaleScheme? _selectedScheme;
@@ -267,6 +272,7 @@ class _SaleScreenState extends State<SaleScreen> {
     _amountPaid.dispose();
     _notes.dispose();
     _barcode.dispose();
+    _barcodeFocusNode.dispose();
     _entryQty.dispose();
     _manualDiscountValue.dispose();
     _voucherCode.dispose();
@@ -1297,6 +1303,26 @@ class _SaleScreenState extends State<SaleScreen> {
     return null;
   }
 
+  Item? _findItemExactForScan(String query) {
+    final value = query.trim().toLowerCase();
+    if (value.isEmpty) return null;
+    for (final item in ctrl.items) {
+      if (item.barcode.toLowerCase() == value ||
+          item.itemCode.toLowerCase() == value) {
+        return item;
+      }
+    }
+    // Handle scanner bursts where the same barcode is appended repeatedly:
+    // keep matching against suffix chunks so the last scanned code still works.
+    for (final item in ctrl.items) {
+      final barcode = item.barcode.toLowerCase().trim();
+      final itemCode = item.itemCode.toLowerCase().trim();
+      if (barcode.isNotEmpty && value.endsWith(barcode)) return item;
+      if (itemCode.isNotEmpty && value.endsWith(itemCode)) return item;
+    }
+    return null;
+  }
+
   List<Item> _suggestedItems(String query) {
     final value = query.trim().toLowerCase();
     if (value.isEmpty) return ctrl.items.take(10).toList();
@@ -1322,6 +1348,16 @@ class _SaleScreenState extends State<SaleScreen> {
         );
     if (item == null) return 0;
     return item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
+  }
+
+  void _syncCartRatesWithLatestCatalog() {
+    for (var i = 0; i < _items.length; i++) {
+      final line = _items[i];
+      if (line.isAdvanceFree || line.isSchemeFree) continue;
+      final latestRate = _defaultRateForItemId(line.itemId);
+      if ((line.rate - latestRate).abs() < 0.0001) continue;
+      _items[i] = line.copyWith(rate: latestRate, referenceRate: latestRate);
+    }
   }
 
   double _totalCartQtyForItemId(int itemId) {
@@ -1357,7 +1393,28 @@ class _SaleScreenState extends State<SaleScreen> {
   List<BillingCharge> get _activeCharges =>
       _charges.where((charge) => charge.isEnabled).toList();
 
+  void _focusBarcodeField() {
+    if (!mounted) return;
+    void requestIfNeeded() {
+      if (!mounted) return;
+      if (!_barcodeFocusNode.hasFocus) {
+        FocusScope.of(context).requestFocus(_barcodeFocusNode);
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      requestIfNeeded();
+      Future.delayed(const Duration(milliseconds: 60), requestIfNeeded);
+      Future.delayed(const Duration(milliseconds: 180), requestIfNeeded);
+      Future.delayed(const Duration(milliseconds: 360), requestIfNeeded);
+    });
+  }
+
   Future<void> _handleQuickEntry() async {
+    if (_skipNextSubmitAfterAutoScan) {
+      _skipNextSubmitAfterAutoScan = false;
+      return;
+    }
     final item = _entryMode == 'MANUAL'
         ? (_selectedManualItem ?? _findItem(_barcode.text))
         : _findItem(_barcode.text);
@@ -1367,6 +1424,11 @@ class _SaleScreenState extends State<SaleScreen> {
           content: Text('No product found. Scan barcode or search item again.'),
         ),
       );
+      setState(() {
+        _barcode.clear();
+        _selectedManualItem = null;
+      });
+      _focusBarcodeField();
       return;
     }
     if (_hasCustomerContext) {
@@ -1378,6 +1440,48 @@ class _SaleScreenState extends State<SaleScreen> {
       _selectedManualItem = null;
       _entryQty.text = '1';
     });
+    _focusBarcodeField();
+  }
+
+  Future<void> _tryAutoAddScannedItem(String rawValue) async {
+    if (_entryMode != 'SCAN') return;
+    if (_isAutoScanProcessing) return;
+    final normalized = rawValue.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+    final now = DateTime.now();
+    final isDuplicateBurst = normalized == _lastProcessedScanValue &&
+        now.difference(_lastProcessedScanAt).inMilliseconds < 900;
+    if (isDuplicateBurst) return;
+
+    final item = _findItemExactForScan(rawValue);
+    if (item == null) {
+      // If scanner keeps flooding a long unresolved value, reset field.
+      if (normalized.length > 40 && mounted) {
+        setState(() => _barcode.clear());
+      }
+      return;
+    }
+    _isAutoScanProcessing = true;
+    try {
+      if (mounted) {
+        setState(() {
+          _barcode.clear();
+          _selectedManualItem = null;
+          _entryQty.text = '1';
+        });
+        _focusBarcodeField();
+      }
+      if (_hasCustomerContext) {
+        await _ensureItemAdvanceSummary(item);
+      }
+      _addOrUpdateItem(item, qty: 1);
+      _focusBarcodeField();
+      _lastProcessedScanValue = normalized;
+      _lastProcessedScanAt = now;
+      _skipNextSubmitAfterAutoScan = true;
+    } finally {
+      _isAutoScanProcessing = false;
+    }
   }
 
   Future<void> _ensureItemAdvanceSummary(Item item) async {
@@ -1794,7 +1898,8 @@ class _SaleScreenState extends State<SaleScreen> {
         List<SaleItem>.from(_items.where((line) => !line.isAdvanceFree));
     final sourceItemIds = sourceItems.map((line) => line.itemId).toSet();
     final existingAdvanceFreeOnly = _items
-        .where((line) => line.isAdvanceFree && !sourceItemIds.contains(line.itemId))
+        .where((line) =>
+            line.isAdvanceFree && !sourceItemIds.contains(line.itemId))
         .toList(growable: false);
     if (sourceItems.isEmpty) {
       for (final line in _items.where((line) => line.isAdvanceFree)) {
@@ -1804,7 +1909,10 @@ class _SaleScreenState extends State<SaleScreen> {
             (_itemAdvanceAppliedQtyByItem[line.itemId] ?? 0) + qty;
         _itemAdvanceAppliedAmountByItem[line.itemId] =
             (_itemAdvanceAppliedAmountByItem[line.itemId] ?? 0) +
-                (qty * (line.rate > 0 ? line.rate : _defaultRateForItemId(line.itemId)));
+                (qty *
+                    (line.rate > 0
+                        ? line.rate
+                        : _defaultRateForItemId(line.itemId)));
       }
       // Cart already contains only free rows. Do not clear them on rebuild.
       return;
@@ -1873,8 +1981,9 @@ class _SaleScreenState extends State<SaleScreen> {
         if (qty <= 0) continue;
         _itemAdvanceAppliedQtyByItem[freeLine.itemId] =
             (_itemAdvanceAppliedQtyByItem[freeLine.itemId] ?? 0) + qty;
-        final baseRate =
-            freeLine.rate > 0 ? freeLine.rate : _defaultRateForItemId(freeLine.itemId);
+        final baseRate = freeLine.rate > 0
+            ? freeLine.rate
+            : _defaultRateForItemId(freeLine.itemId);
         _itemAdvanceAppliedAmountByItem[freeLine.itemId] =
             (_itemAdvanceAppliedAmountByItem[freeLine.itemId] ?? 0) +
                 (qty * baseRate);
@@ -3873,6 +3982,14 @@ class _SaleScreenState extends State<SaleScreen> {
       });
     }
 
+    // Refresh catalog before save so billing uses latest current item rates.
+    try {
+      await ctrl.loadInitialData();
+      _syncCartRatesWithLatestCatalog();
+    } catch (_) {
+      // Continue with cached rates if refresh fails.
+    }
+
     // Ensure item-advance (qty) is applied on the bill lines before totals are computed/saved.
     _rebuildItemAdvanceFreeLines();
 
@@ -3882,8 +3999,8 @@ class _SaleScreenState extends State<SaleScreen> {
     final invoice = _invoice;
     final orderItems = <SaleItem>[
       ...(invoice.items.isNotEmpty
-        ? invoice.items
-        : _items.where((line) => line.qty > 0).toList(growable: false)),
+          ? invoice.items
+          : _items.where((line) => line.qty > 0).toList(growable: false)),
     ];
     if (orderItems.isEmpty && cartSnapshot.isNotEmpty) {
       orderItems.addAll(cartSnapshot);
@@ -4008,7 +4125,8 @@ class _SaleScreenState extends State<SaleScreen> {
         saveResponse = await ctrl.createSale(order);
       }
     }
-    final normalizedSaveSaleIds = _normalizeSaleIds(saveResponse?['sale_ids']) ?? const <int>[];
+    final normalizedSaveSaleIds =
+        _normalizeSaleIds(saveResponse?['sale_ids']) ?? const <int>[];
     final modifiedSaleId =
         int.tryParse((modifyResponse?['sale_id'] ?? 0).toString()) ?? 0;
     final savedSaleIds = <int>[
@@ -4078,9 +4196,7 @@ class _SaleScreenState extends State<SaleScreen> {
     final shouldPrint = status == 'COMPLETED' &&
         (printAfterSave || (settingsCtrl.settings?.autoPrintOnSave ?? false));
     if (shouldPrint) {
-      final idsToPrint = savedSaleIds.isNotEmpty
-          ? savedSaleIds
-          : [savedSaleId];
+      final idsToPrint = savedSaleIds.isNotEmpty ? savedSaleIds : [savedSaleId];
       for (final saleId in idsToPrint) {
         if (saleId <= 0) continue;
         SaleOrder printOrder = order;
@@ -4233,6 +4349,7 @@ class _SaleScreenState extends State<SaleScreen> {
         ),
       );
     }
+    _focusBarcodeField();
   }
 
   double _jsonDouble(dynamic value) =>
@@ -5926,9 +6043,13 @@ class _SaleScreenState extends State<SaleScreen> {
               Expanded(
                 child: TextField(
                   controller: _barcode,
+                  focusNode: _barcodeFocusNode,
                   autofocus:
                       !context.watch<UiPreferencesController>().touchMode,
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (value) {
+                    setState(() {});
+                    _tryAutoAddScannedItem(value);
+                  },
                   onSubmitted: (_) => _handleQuickEntry(),
                   decoration: InputDecoration(
                     hintText: 'Search for items or scan barcode',
@@ -6120,13 +6241,17 @@ class _SaleScreenState extends State<SaleScreen> {
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  Text(
-                                    'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      color: Color(
-                                          0xFFD67D25), // Exact Orange from image
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 16,
+                                  Expanded(
+                                    child: Text(
+                                      'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(
+                                            0xFFD67D25), // Exact Orange from image
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 16,
+                                      ),
                                     ),
                                   ),
                                   // if (!(_showItemImages &&
@@ -6374,30 +6499,33 @@ class _SaleScreenState extends State<SaleScreen> {
                                 children: [
                                   Row(
                                     children: [
-                                      Text(
-                                        line.itemName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
+                                      Expanded(
+                                        child: Text(
+                                          line.itemName,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            height: 1.15,
+                                          ),
                                         ),
-                                      ),
-                                      Text(
-                                        ' (${line.unit})',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 8),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 4),
                                   Text(
-                                    'Rs. ${line.rate.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      color: Color(0xFF64748B),
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    ' (${line.unit})',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 8),
                                   ),
+                                  // const SizedBox(height: 4),
+                                  // Text(
+                                  //   'Rs. ${line.rate.toStringAsFixed(2)}',
+                                  //   style: const TextStyle(
+                                  //     color: Color(0xFF64748B),
+                                  //     fontWeight: FontWeight.w600,
+                                  //   ),
+                                  // ),
                                 ],
                               ),
                             ),
@@ -7472,16 +7600,10 @@ class _SaleScreenState extends State<SaleScreen> {
                 const SizedBox(height: 4),
                 Text(
                   '${line.itemCode}  |  ${line.unit}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style:
                       const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Rs. ${_displayLineTotal(line).toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    color: Color(0xFFFF7A1A),
-                    fontWeight: FontWeight.w800,
-                  ),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -7512,7 +7634,7 @@ class _SaleScreenState extends State<SaleScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 5),
           Container(
             height: 38,
             width: 118,
@@ -8785,8 +8907,10 @@ class _SaleScreenState extends State<SaleScreen> {
               Expanded(
                 child: TextField(
                   controller: _barcode,
+                  focusNode: _barcodeFocusNode,
                   autofocus:
                       !context.watch<UiPreferencesController>().touchMode,
+                  onChanged: (value) => _tryAutoAddScannedItem(value),
                   onSubmitted: (_) => _handleQuickEntry(),
                   style: const TextStyle(
                       fontSize: 20, fontWeight: FontWeight.w600),
@@ -9761,4 +9885,3 @@ class _VoucherDefinition {
     );
   }
 }
-
