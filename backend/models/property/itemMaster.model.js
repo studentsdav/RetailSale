@@ -97,6 +97,16 @@ module.exports = (sequelize, DataTypes) => {
                 defaultValue: 0
             },
 
+            pack_qty: {
+                type: DataTypes.DECIMAL(12, 2),
+                defaultValue: 0
+            },
+
+            loose_item_code: {
+                type: DataTypes.STRING(30),
+                allowNull: true
+            },
+
             min_level: {
                 type: DataTypes.INTEGER,
                 defaultValue: 0
@@ -149,6 +159,9 @@ module.exports = (sequelize, DataTypes) => {
                 },
                 {
                     fields: ['sub_category']
+                },
+                {
+                    fields: ['loose_item_code']
                 },
                 {
                     fields: ['is_active']

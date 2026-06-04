@@ -1195,6 +1195,22 @@ async function getSubscriptionCustomerAdvanceSummary(req, subscription, transact
     };
 }
 
+async function buildSubscriptionFinancialSummary(req, subscription, consumptions, transaction = undefined) {
+    const metrics = buildSubscriptionMetrics(subscription, consumptions);
+    const cashAdvanceSummary = await getSubscriptionCustomerAdvanceSummary(req, subscription, transaction);
+    const grossOutstanding = Math.max(toAmount(metrics.outstanding_amount), 0);
+    const availableAdvance = Math.max(toAmount(cashAdvanceSummary.available_amount), 0);
+    const customerAdvanceUsed = Math.min(grossOutstanding, availableAdvance);
+    const netOutstanding = Math.max(grossOutstanding - customerAdvanceUsed, 0);
+
+    return {
+        ...metrics,
+        gross_outstanding_amount: Number(grossOutstanding.toFixed(2)),
+        customer_advance_used: Number(customerAdvanceUsed.toFixed(2)),
+        outstanding_amount: Number(netOutstanding.toFixed(2))
+    };
+}
+
 async function buildSubscriptionLedgerResponse(req, subscriptionId) {
     const subscription = await req.propertyDb.models.milk_subscriptions.findOne({
         where: {
@@ -4219,7 +4235,8 @@ exports.getSubscriptionDetails = async (req, res) => {
             data: {
                 ...ledger.subscription.toJSON(),
                 scheme_totals: await getSubscriptionSchemeTotals(ledger.subscription),
-                financial_summary: buildSubscriptionMetrics(
+                financial_summary: await buildSubscriptionFinancialSummary(
+                    req,
                     ledger.subscription,
                     ledger.consumptions.map((row) => row.toJSON())
                 ),
@@ -4429,7 +4446,8 @@ exports.getSubscriptionLedger = async (req, res) => {
             success: true,
             data: {
                 subscription: ledger.subscription.toJSON(),
-                financial_summary: buildSubscriptionMetrics(
+                financial_summary: await buildSubscriptionFinancialSummary(
+                    req,
                     ledger.subscription,
                     ledger.consumptions.map((row) => row.toJSON())
                 ),
@@ -4481,17 +4499,6 @@ exports.generateFinalSettlement = async (req, res) => {
             transaction: t
         });
 
-        if (!consumptionRows.length) {
-            await t.commit();
-            return res.json({
-                success: true,
-                data: {
-                    settled: false,
-                    message: 'No consumption rows found'
-                }
-            });
-        }
-
         const metrics = buildSubscriptionMetrics(
             subscription,
             consumptionRows.map((row) => row.toJSON())
@@ -4500,26 +4507,54 @@ exports.generateFinalSettlement = async (req, res) => {
         const referenceRateRow = [...consumptionRows].reverse().find((row) => toAmount(row.rate) > 0);
         const referenceRate = toAmount(referenceRateRow?.rate);
         const bonusAmount = metrics.bonus_value;
-        const totalDue = Math.max(metrics.outstanding_amount, 0);
+        const grossDue = Math.max(metrics.outstanding_amount, 0);
         const creditAmount = Math.max(metrics.credited_amount, 0);
+        const cashAdvanceSummary = await getSubscriptionCustomerAdvanceSummary(req, subscription, t);
+        const availableCustomerAdvance = Math.max(toAmount(cashAdvanceSummary.available_amount), 0);
+        const customerAdvanceUsed = Math.min(grossDue, availableCustomerAdvance);
+        const totalDue = Math.max(grossDue - customerAdvanceUsed, 0);
         const paymentMode = String(req.body.payment_mode || req.body.paymentMode || 'CASH').trim().toUpperCase();
         const requestedAmount = Math.max(
             0,
             toAmount(req.body.amount_paid ?? req.body.amountPaid ?? totalDue)
         );
+        const availableCustomerAdvanceAfterDue = Math.max(
+            availableCustomerAdvance - customerAdvanceUsed,
+            0
+        );
+        const refundAvailable = availableCustomerAdvanceAfterDue + creditAmount;
+        const isRefundFlow = totalDue <= 0 && refundAvailable > 0;
+
+        if (totalDue > 0 && paymentMode === 'CREDIT') {
+            throw new Error(`Please clear the remaining due of ${totalDue.toFixed(2)} before settling the subscription.`);
+        }
+        if (totalDue > 0 && requestedAmount + 0.009 < totalDue) {
+            throw new Error(`Please pay the remaining due of ${totalDue.toFixed(2)} before settling the subscription.`);
+        }
+        if (isRefundFlow && requestedAmount <= 0) {
+            throw new Error(`Please enter refund amount before settling the subscription. Available advance is ${refundAvailable.toFixed(2)}.`);
+        }
+        if (isRefundFlow && requestedAmount > refundAvailable + 0.009) {
+            throw new Error(`Refund amount cannot exceed available advance of ${refundAvailable.toFixed(2)}.`);
+        }
+
         const isCreditCarryForward = paymentMode === 'CREDIT' && totalDue > 0;
-        const amountReceived = isCreditCarryForward
-            ? 0
-            : (totalDue > 0 ? Math.min(requestedAmount, totalDue) : 0);
-        const refundPaid = totalDue <= 0 && creditAmount > 0 ? Math.min(requestedAmount, creditAmount) : 0;
-        const advanceTopup = isCreditCarryForward
-            ? 0
-            : (totalDue > 0 ? Math.max(requestedAmount - totalDue, 0) : 0);
-        const balanceDue = isCreditCarryForward
-            ? totalDue
-            : Math.max(totalDue - amountReceived, 0);
-        const remainingCredit = Math.max(creditAmount - refundPaid, 0);
-        const advanceAmount = Number((remainingCredit + advanceTopup).toFixed(2));
+        const amountReceived = totalDue > 0 ? Math.min(requestedAmount, totalDue) : 0;
+        const refundFromAdvance = isRefundFlow
+            ? Math.min(requestedAmount, availableCustomerAdvanceAfterDue)
+            : 0;
+        const refundFromCredit = isRefundFlow
+            ? Math.max(requestedAmount - refundFromAdvance, 0)
+            : 0;
+        const refundPaid = Number((refundFromCredit + refundFromAdvance).toFixed(2));
+        const advanceTopup = totalDue > 0 ? Math.max(requestedAmount - totalDue, 0) : 0;
+        const balanceDue = Math.max(totalDue - amountReceived, 0);
+        const remainingCredit = Math.max(creditAmount - refundFromCredit, 0);
+        const remainingCustomerAdvance = Math.max(
+            availableCustomerAdvanceAfterDue - refundFromAdvance,
+            0
+        );
+        const advanceAmount = Number((remainingCredit + remainingCustomerAdvance + advanceTopup).toFixed(2));
         const amountPaid = Number((amountReceived + refundPaid).toFixed(2));
 
         const settlementNo = `SUBSET-${Date.now()}`;
@@ -4530,17 +4565,17 @@ exports.generateFinalSettlement = async (req, res) => {
             settlement_date: req.body.settlement_date || new Date(),
             period_start: subscription.start_date,
             period_end: subscription.end_date,
-            gross_excess_amount: metrics.actual_value,
-            scheme_discount_amount: schemeTotals.discountAmount,
-            bonus_amount: bonusAmount,
-            total_due: totalDue,
-            payment_mode: paymentMode,
-            amount_paid: amountPaid,
-            balance_due: balanceDue,
-            advance_amount: advanceAmount,
-            notes: req.body.notes || null,
-            created_by: req.user.id
-        }, { transaction: t });
+                gross_excess_amount: metrics.actual_value,
+                scheme_discount_amount: schemeTotals.discountAmount,
+                bonus_amount: bonusAmount,
+                total_due: grossDue,
+                payment_mode: paymentMode,
+                amount_paid: amountPaid,
+                balance_due: balanceDue,
+                advance_amount: advanceAmount,
+                notes: req.body.notes || null,
+                created_by: req.user.id
+            }, { transaction: t });
 
         await req.propertyDb.models.milk_subscription_consumptions.update(
             {
@@ -4635,6 +4670,15 @@ exports.generateFinalSettlement = async (req, res) => {
             });
         }
 
+        if (customerAdvanceUsed > 0) {
+            await consumeSubscriptionCustomerAdvance(
+                req,
+                subscription.id,
+                customerAdvanceUsed,
+                t
+            );
+        }
+
         if (advanceTopup > 0) {
             await addSubscriptionCustomerAdvance(
                 req,
@@ -4647,16 +4691,19 @@ exports.generateFinalSettlement = async (req, res) => {
             );
         }
 
-        if (refundPaid > 0) {
+        if (refundFromAdvance > 0) {
             await consumeSubscriptionCustomerAdvance(
                 req,
                 subscription.id,
-                refundPaid,
+                refundFromAdvance,
                 t
             );
         }
 
         if (!isCreditCarryForward && (amountReceived > 0 || advanceTopup > 0 || refundPaid > 0)) {
+            const advanceNoteSuffix = customerAdvanceUsed > 0
+                ? ` after applying customer advance ${customerAdvanceUsed.toFixed(2)}`
+                : '';
             await createLedgerEntry({
                 db: req.propertyDb,
                 outlet_id: req.user.outlet_id,
@@ -4674,8 +4721,8 @@ exports.generateFinalSettlement = async (req, res) => {
                 notes: refundPaid > 0
                     ? `Refund settled for ${subscription.item_name} (${Math.max(remainingCredit, 0).toFixed(2)} credit left)`
                     : (balanceDue > 0
-                        ? `Partial settlement for ${subscription.item_name} with outstanding ${balanceDue.toFixed(2)}`
-                        : `Final settlement for ${subscription.item_name}`),
+                        ? `Partial settlement for ${subscription.item_name} with outstanding ${balanceDue.toFixed(2)}${advanceNoteSuffix}`
+                        : `Final settlement for ${subscription.item_name}${advanceNoteSuffix}`),
                 created_by: req.user.id,
                 transaction: t
             });
@@ -4704,6 +4751,8 @@ exports.generateFinalSettlement = async (req, res) => {
                     prepaid_amount: metrics.prepaid_value,
                     actual_amount: metrics.actual_value,
                     credited_amount: creditAmount,
+                    gross_outstanding_amount: grossDue,
+                    customer_advance_used: Number(customerAdvanceUsed.toFixed(2)),
                     outstanding_amount: totalDue,
                     bonus_amount: bonusAmount,
                     payment_mode: paymentMode,

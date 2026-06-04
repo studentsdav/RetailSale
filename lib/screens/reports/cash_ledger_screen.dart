@@ -366,8 +366,19 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: paymentMode,
-                    items: const ['CASH', 'CARD', 'UPI', 'BANK']
-                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    items: const [
+                      'CASH',
+                      'CARD',
+                      'UPI',
+                      'BANK',
+                      'WAIVEOFF',
+                    ]
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(e == 'WAIVEOFF' ? 'Waive Off' : e),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) =>
                         setDialogState(() => paymentMode = value ?? 'CASH'),
@@ -482,8 +493,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: paymentMode,
-                    items: const ['CASH', 'CARD', 'UPI', 'BANK']
-                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    items: const ['CASH', 'CARD', 'UPI', 'BANK', 'WAIVEOFF']
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(e == 'WAIVEOFF' ? 'Waive Off' : e),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) =>
                         setDialogState(() => paymentMode = value ?? 'CASH'),
@@ -592,8 +608,21 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: paymentMode,
-                    items: const ['CASH', 'CARD', 'UPI', 'BANK']
-                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    items: const [
+                      'CASH',
+                      'CARD',
+                      'UPI',
+                      'BANK',
+                      'SUBSCRIPTION',
+                    ]
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(
+                              e == 'SUBSCRIPTION' ? 'Subscription' : e,
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) =>
                         setDialogState(() => paymentMode = value ?? 'CASH'),
@@ -1735,6 +1764,12 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   onPressed: () => _showRepaymentDialog(bill),
                                   child: const Text('Repayment'),
                                 ),
+                                FilledButton.tonal(
+                                  onPressed: bill.outstanding > 0.009
+                                      ? () => _showWaiveOffDialog(bill)
+                                      : null,
+                                  child: const Text('Waive Off'),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 14),
@@ -1788,11 +1823,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            '${payment.paymentMode} - ${_money(payment.amount)}',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                            ),
+                                          '${_paymentModeLabel(payment.paymentMode)} - ${_money(payment.amount)}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
                                           ),
+                                        ),
                                           Text(
                                             '${_fmtDate(payment.paymentDate)} - ${payment.referenceNo}',
                                           ),
@@ -1900,11 +1935,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                       Text(advance.note),
                                   ],
                                 ),
-                                IconButton(
-                                  onPressed: () =>
-                                      _showAdvanceDialog(customer, advance: advance),
-                                  icon: const Icon(Icons.edit_outlined),
-                                ),
+                                if (advance.paymentMode.trim().toUpperCase() !=
+                                        'SUBSCRIPTION')
+                                  IconButton(
+                                    onPressed: () =>
+                                        _showAdvanceDialog(customer, advance: advance),
+                                    icon: const Icon(Icons.edit_outlined),
+                                  ),
                               ],
                             ),
                           ),
@@ -1917,6 +1954,75 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               ),
           if (visibleCustomers.isEmpty)
             _emptyCard('No credit bills found for the selected filters.'),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showWaiveOffDialog(CreditBill bill) async {
+    final amountCtrl = TextEditingController(
+      text: bill.outstanding.toStringAsFixed(2),
+    );
+    final noteCtrl = TextEditingController(
+      text: 'Waive off for ${bill.billNo}',
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Waive Off Outstanding'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(bill.billNo),
+                subtitle: Text('Outstanding ${_money(bill.outstanding)}'),
+              ),
+              TextField(
+                controller: amountCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Waive Off Amount',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(labelText: 'Note'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              await ctrl.saveRepayment(
+                saleId: bill.saleId,
+                paymentDate: DateTime.now(),
+                amount: double.tryParse(amountCtrl.text.trim()) ?? 0,
+                paymentMode: 'WAIVEOFF',
+                referenceNo: '',
+                note: noteCtrl.text.trim(),
+              );
+              if (!mounted) return;
+              Navigator.pop(context);
+              await ctrl.loadCreditReport(
+                fromDate: fromDate,
+                toDate: toDate,
+                customer: creditSearchCtrl.text,
+              );
+            },
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -2635,6 +2741,18 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         ),
       );
 
+  String _paymentModeLabel(String paymentMode) {
+    switch (paymentMode.trim().toUpperCase()) {
+      case 'WAIVEOFF':
+      case 'WRITEOFF':
+      case 'WRITE_OFF':
+      case 'WAIVE_OFF':
+        return 'Waive Off';
+      default:
+        return paymentMode.trim().isEmpty ? 'CASH' : paymentMode.trim();
+    }
+  }
+
   String _ledgerNote(CashLedgerEntry entry) {
     if (entry.transactionType.toUpperCase() == 'INCOME' &&
         entry.notes.startsWith('SOURCE:')) {
@@ -2671,6 +2789,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         return 'Sales Credit';
       case 'REPAYMENT':
         return 'Credit Payment';
+      case 'WAIVE_OFF':
+        return 'Waive Off';
       case 'ADVANCE_APPLY':
         return 'Advance Adjustment';
       case 'OPENING_DEPOSIT':

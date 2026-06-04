@@ -16,6 +16,8 @@ class Item {
   final bool discountApplicable;
   final bool schemeApplicable;
   final double openingBalance;
+  final double packQty;
+  final String looseItemCode;
   final int minLevel;
   final int maxLevel;
   final bool stockable;
@@ -38,6 +40,8 @@ class Item {
     required this.discountApplicable,
     required this.schemeApplicable,
     required this.openingBalance,
+    required this.packQty,
+    required this.looseItemCode,
     required this.minLevel,
     required this.maxLevel,
     required this.stockable,
@@ -63,6 +67,8 @@ class Item {
       discountApplicable: json['discount_applicable'] ?? true,
       schemeApplicable: json['scheme_applicable'] ?? true,
       openingBalance: double.tryParse(json['opening_balance'].toString()) ?? 0,
+      packQty: double.tryParse(json['pack_qty'].toString()) ?? 0,
+      looseItemCode: json['loose_item_code'] ?? '',
       minLevel: json['min_level'] ?? 0,
       maxLevel: json['max_level'] ?? 0,
       stockable: json['stockable'] ?? true,
@@ -87,6 +93,8 @@ class Item {
       'discount_applicable': discountApplicable,
       'scheme_applicable': schemeApplicable,
       'opening_balance': openingBalance,
+      'pack_qty': packQty,
+      'loose_item_code': looseItemCode,
       'min_level': minLevel,
       'max_level': maxLevel,
       'stockable': stockable,

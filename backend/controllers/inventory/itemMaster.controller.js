@@ -2,6 +2,7 @@ const audit = require('../../services/audit.service');
 const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
+const { insertLedger } = require('../../services/stockLedger.service');
 
 async function ensureMasterData(req, { outlet_id, row, transaction }) {
     const groupName = String(row.item_group || '').trim();
@@ -139,6 +140,8 @@ exports.createItem = async (req, res) => {
             discount_applicable,
             scheme_applicable,
             opening_balance,
+            pack_qty,
+            loose_item_code,
             min_level,
             max_level,
             stockable
@@ -181,6 +184,8 @@ exports.createItem = async (req, res) => {
             discount_applicable: discount_applicable ?? true,
             scheme_applicable: scheme_applicable ?? true,
             opening_balance,
+            pack_qty: Number(pack_qty) || 0,
+            loose_item_code: String(loose_item_code || '').trim() || null,
             min_level,
             max_level,
             stockable,
@@ -326,6 +331,8 @@ exports.bulkImportItems = async (req, res) => {
                 discount_applicable: row.discount_applicable !== false && row.discount_applicable !== 'NO',
                 scheme_applicable: row.scheme_applicable !== false && row.scheme_applicable !== 'NO',
                 opening_balance: parseFloat(row.opening_balance) || 0,
+                pack_qty: parseFloat(row.pack_qty) || 0,
+                loose_item_code: String(row.loose_item_code || '').trim() || null,
                 min_level: parseInt(row.min_level) || 0,
                 max_level: parseInt(row.max_level) || 0,
                 stockable: row.stockable === true || row.stockable === 'YES',
@@ -440,6 +447,12 @@ exports.updateItem = async (req, res) => {
             ...item.toJSON(),
             ...req.body
         };
+        if (payload.pack_qty !== undefined) {
+            payload.pack_qty = Number(payload.pack_qty) || 0;
+        }
+        if (payload.loose_item_code !== undefined) {
+            payload.loose_item_code = String(payload.loose_item_code || '').trim() || null;
+        }
         const duplicate = await req.propertyDb.models.item_master.findOne({
             where: {
                 outlet_id,
@@ -524,6 +537,101 @@ exports.deleteItem = async (req, res) => {
     }
 
 
+};
+
+exports.openPackStock = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+
+    try {
+        const outlet_id = req.user.outlet_id;
+        const itemId = Number(req.params.id);
+        const packCount = Number(req.body.pack_count ?? 1);
+        const note = String(req.body.note || '').trim() || null;
+
+        if (!Number.isFinite(itemId) || itemId <= 0) {
+            throw new Error('Valid item id is required');
+        }
+        if (!Number.isFinite(packCount) || packCount <= 0) {
+            throw new Error('Pack count must be greater than 0');
+        }
+
+        const sourceItem = await req.propertyDb.models.item_master.findOne({
+            where: { id: itemId, outlet_id },
+            transaction: t
+        });
+        if (!sourceItem) {
+            throw new Error('Pack item not found');
+        }
+
+        const packQty = Number(sourceItem.pack_qty) || 0;
+        const looseItemCode = String(sourceItem.loose_item_code || '').trim();
+        if (packQty <= 0 || !looseItemCode) {
+            throw new Error('This item is not configured for pack-to-loose conversion');
+        }
+
+        const targetItem = await req.propertyDb.models.item_master.findOne({
+            where: { outlet_id, item_code: looseItemCode, is_active: true },
+            transaction: t
+        });
+        if (!targetItem) {
+            throw new Error(`Loose item ${looseItemCode} not found`);
+        }
+
+        const openQty = packQty * packCount;
+        const refNo = `OPENPACK-${sourceItem.item_code}-${Date.now()}`;
+        const remark = note || `Opened ${packCount} ${sourceItem.unit || 'pack'} from ${sourceItem.item_code} into ${targetItem.item_code}`;
+
+        await insertLedger({
+            db: req.propertyDb,
+            outlet_id,
+            item_code: sourceItem.item_code,
+            txn_date: new Date(),
+            txn_type: 'OPEN_PACK',
+            ref_no: refNo,
+            qty_in: 0,
+            qty_out: packCount,
+            transaction: t
+        });
+
+        await insertLedger({
+            db: req.propertyDb,
+            outlet_id,
+            item_code: targetItem.item_code,
+            txn_date: new Date(),
+            txn_type: 'OPEN_PACK',
+            ref_no: refNo,
+            qty_in: openQty,
+            qty_out: 0,
+            transaction: t
+        });
+
+        await audit.log({
+            req,
+            module: 'ITEM_MASTER',
+            action: 'OPEN_PACK',
+            table: 'stock_ledger',
+            recordId: sourceItem.id,
+            old_data: { source_item_code: sourceItem.item_code, loose_item_code: looseItemCode, pack_count: 0 },
+            new_data: { source_item_code: sourceItem.item_code, loose_item_code: looseItemCode, pack_count: packCount, loose_qty: openQty, note: remark },
+            outlet_id,
+            user_id: req.user.id
+        });
+
+        await t.commit();
+        res.json({
+            success: true,
+            data: {
+                source_item_code: sourceItem.item_code,
+                loose_item_code: targetItem.item_code,
+                pack_count: packCount,
+                loose_qty: openQty,
+                ref_no: refNo
+            }
+        });
+    } catch (err) {
+        await t.rollback();
+        res.status(400).json({ success: false, error: err.message });
+    }
 };
 
 exports.generateBarcodes = async (req, res) => {

@@ -42,6 +42,7 @@ router.get('/items', itemCtrl.getItems);
 router.post('/items/bulk-import', itemCtrl.bulkImportItems);
 router.delete('/items/delete-all-for-fresh-import', itemCtrl.deleteAllItemsForFreshImport);
 router.post('/items/generate-barcodes', itemCtrl.generateBarcodes);
+router.post('/items/:id/open-pack', itemCtrl.openPackStock);
 router.get('/items/:id', itemCtrl.getItemById);
 router.put('/items/:id', itemCtrl.updateItem);
 router.delete('/items/:id', itemCtrl.deleteItem);

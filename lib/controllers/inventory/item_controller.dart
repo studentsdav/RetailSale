@@ -74,4 +74,24 @@ class ItemController extends ChangeNotifier {
     notifyListeners();
     return list;
   }
+
+  Future<Map<String, dynamic>> openPack({
+    required int id,
+    required double packCount,
+    String note = '',
+  }) async {
+    loading = true;
+    notifyListeners();
+
+    final res = await ApiClient.post(
+      '${ApiEndpoints.items}/$id/open-pack',
+      {
+        'pack_count': packCount,
+        'note': note,
+      },
+    );
+
+    await load();
+    return Map<String, dynamic>.from(res['data'] as Map);
+  }
 }

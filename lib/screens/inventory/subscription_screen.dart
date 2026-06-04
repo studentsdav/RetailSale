@@ -1626,14 +1626,36 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         Map<String, dynamic>.from(details['advance_summary'] ?? const {});
     final cashAdvanceSummary =
         Map<String, dynamic>.from(details['cash_advance_summary'] ?? const {});
+    final grossOutstanding = double.tryParse(
+            financial['gross_outstanding_amount']?.toString() ??
+                financial['outstanding_amount']?.toString() ??
+                '0') ??
+        0;
     final outstanding =
         double.tryParse(financial['outstanding_amount']?.toString() ?? '0') ??
             0;
+    final cashAdvanceAvailable = double.tryParse(
+            cashAdvanceSummary['available_amount']?.toString() ?? '0') ??
+        0;
+    final cashAdvanceUsed = cashAdvanceAvailable > 0
+        ? (grossOutstanding > cashAdvanceAvailable
+            ? cashAdvanceAvailable
+            : grossOutstanding)
+        : 0;
+    final netOutstanding = outstanding;
     final credited =
         double.tryParse(financial['credited_amount']?.toString() ?? '0') ?? 0;
-    final isRefundFlow = outstanding <= 0 && credited > 0;
+    final isRefundFlow =
+        outstanding <= 0 && (cashAdvanceAvailable > 0 || credited > 0);
+    final refundPreview = isRefundFlow
+        ? (cashAdvanceAvailable > 0 ? cashAdvanceAvailable : credited)
+        : 0.0;
     final amountCtrl = TextEditingController(
-      text: outstanding > 0 ? outstanding.toStringAsFixed(2) : '0.00',
+      text: isRefundFlow
+          ? (cashAdvanceAvailable > 0
+              ? cashAdvanceAvailable.toStringAsFixed(2)
+              : credited.toStringAsFixed(2))
+          : (netOutstanding > 0 ? netOutstanding.toStringAsFixed(2) : '0.00'),
     );
     String paymentMode = 'CASH';
     final settled = await showDialog<Map<String, dynamic>>(
@@ -1659,7 +1681,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         'Item Qty Left', itemAdvanceSummary['available_qty']),
                   _summaryRow('Cash Advance Left',
                       cashAdvanceSummary['available_amount'] ?? credited),
-                  _summaryRow('Outstanding Due', outstanding),
+                  if (cashAdvanceUsed > 0)
+                    _summaryRow('Advance Applied', cashAdvanceUsed),
+                  _summaryRow('Gross Due', grossOutstanding),
+                  _summaryRow('Net Due', netOutstanding),
+                  if (isRefundFlow)
+                    _summaryRow('Refund From Advance', refundPreview),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     initialValue: paymentMode,
@@ -1670,15 +1697,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       DropdownMenuItem(value: 'CARD', child: Text('Card')),
                       DropdownMenuItem(value: 'UPI', child: Text('UPI')),
                       DropdownMenuItem(value: 'BANK', child: Text('Bank')),
-                      DropdownMenuItem(value: 'CREDIT', child: Text('Credit')),
                     ],
                     onChanged: (value) {
                       paymentMode = value ?? 'CASH';
-                      if (paymentMode == 'CREDIT') {
-                        amountCtrl.text = '0.00';
-                      } else if (outstanding > 0 &&
+                      if (netOutstanding > 0 &&
                           (double.tryParse(amountCtrl.text.trim()) ?? 0) <= 0) {
-                        amountCtrl.text = outstanding.toStringAsFixed(2);
+                        amountCtrl.text = netOutstanding.toStringAsFixed(2);
                       }
                     },
                   ),
@@ -1687,7 +1711,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     controller: amountCtrl,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    enabled: paymentMode != 'CREDIT',
                     decoration: InputDecoration(
                       labelText: isRefundFlow
                           ? 'Amount Refunded Now'
@@ -1698,9 +1721,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   Text(
                     isRefundFlow
                         ? 'If refund is less than available customer credit, remaining credit stays as advance for future purchases.'
-                        : (paymentMode == 'CREDIT'
-                            ? 'Credit mode will move full due to customer outstanding account and close this subscription.'
-                            : 'If due amount is higher than received amount, remaining balance stays outstanding. Extra received amount is saved as customer advance.'),
+                        : 'Amount received must clear the full net due. Extra received amount is saved as customer advance.',
                     style: const TextStyle(
                         color: Colors.black54, fontSize: 12, height: 1.4),
                   ),
@@ -1715,11 +1736,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ),
             FilledButton(
               onPressed: () {
+                final enteredAmount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                if (isRefundFlow && enteredAmount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter refund amount before settling.'),
+                    ),
+                  );
+                  return;
+                }
                 Navigator.pop(dialogContext, {
                   'payment_mode': paymentMode,
-                  'amount_paid': paymentMode == 'CREDIT'
-                      ? 0
-                      : (double.tryParse(amountCtrl.text.trim()) ?? 0),
+                  'amount_paid': enteredAmount,
                 });
               },
               child: const Text('Settle Now'),
@@ -1731,22 +1759,29 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     amountCtrl.dispose();
     if (settled == null) return;
 
-    final result = await _ctrl.generateFinalSettlement(
-      id,
-      notes: settled['notes']?.toString(),
-      settlementDate: DateTime.now(),
-      paymentMode: settled['payment_mode']?.toString(),
-      amountPaid: double.tryParse(settled['amount_paid']?.toString() ?? '0'),
-    );
-    await _reloadSubscriptions();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Settlement created: ${result['settlement']?['settlement_no'] ?? ''}',
+    try {
+      final result = await _ctrl.generateFinalSettlement(
+        id,
+        notes: settled['notes']?.toString(),
+        settlementDate: DateTime.now(),
+        paymentMode: settled['payment_mode']?.toString(),
+        amountPaid: double.tryParse(settled['amount_paid']?.toString() ?? '0'),
+      );
+      await _reloadSubscriptions();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Settlement created: ${result['settlement']?['settlement_no'] ?? ''}',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
 
   Future<void> _showCycleDirectionPicker(

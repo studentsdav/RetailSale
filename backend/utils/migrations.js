@@ -1815,6 +1815,30 @@ COMMIT;
       `);
     }
   },
+  {
+    version: 37,
+    description: "Pack to loose stock conversion support for item master",
+    up: async (db) => {
+      await db.query(`
+BEGIN;
+
+ALTER TABLE item_master
+ADD COLUMN IF NOT EXISTS pack_qty NUMERIC(12,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE item_master
+ADD COLUMN IF NOT EXISTS loose_item_code VARCHAR(30);
+
+CREATE INDEX IF NOT EXISTS idx_item_master_loose_item_code
+ON item_master(loose_item_code);
+
+UPDATE item_master
+SET pack_qty = COALESCE(pack_qty, 0),
+    loose_item_code = NULLIF(TRIM(loose_item_code), '');
+
+COMMIT;
+      `);
+    }
+  },
 
 
 ];

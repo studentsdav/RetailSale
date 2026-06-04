@@ -146,6 +146,11 @@ async function ensureRepaymentDuplicateFree({ req, sale_id, payment_date, amount
     if (existing) throw new Error('Duplicate repayment entry already exists');
 }
 
+function isWaiveOffMode(paymentMode) {
+    const mode = String(paymentMode || '').trim().toUpperCase();
+    return mode === 'WAIVEOFF' || mode === 'WRITEOFF' || mode === 'WRITE_OFF' || mode === 'WAIVE_OFF';
+}
+
 async function getSaleOrFail(req, saleId, transaction) {
     const sale = await req.propertyDb.models.sales_headers.findOne({
         where: {
@@ -617,6 +622,7 @@ exports.createRepayment = async (req, res) => {
 
         const sale = await getSaleOrFail(req, sale_id, t);
         await ensureRepaymentDuplicateFree({ req, sale_id, payment_date, amount, payment_mode, reference_no, transaction: t });
+        const waiveOff = isWaiveOffMode(payment_mode);
 
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id, transaction: t });
         const initialPaid = toAmount(sale.initial_amount_paid ?? sale.amount_paid);
@@ -639,14 +645,17 @@ exports.createRepayment = async (req, res) => {
             db: req.propertyDb,
             outlet_id: req.user.outlet_id,
             txn_date: payment_date,
-            transaction_type: 'REPAYMENT',
-            reference_type: 'REPAYMENT',
+            transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+            reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
             reference_id: repayment.id,
             reference_no: sale.sale_no,
             party_name: getCustomerLabel(sale),
             payment_method: payment_mode,
-            amount_in: amount,
-            notes: note || `Repayment received for ${sale.sale_no}`,
+            amount_in: waiveOff ? 0 : amount,
+            amount_out: waiveOff ? amount : 0,
+            notes: note || (waiveOff
+                ? `Waive off applied for ${sale.sale_no}`
+                : `Repayment received for ${sale.sale_no}`),
             created_by: req.user.id,
             transaction: t
         });
@@ -677,6 +686,7 @@ exports.updateRepayment = async (req, res) => {
         const payment_mode = String(req.body.payment_mode || repayment.payment_mode || 'CASH').trim().toUpperCase();
         const reference_no = String(req.body.reference_no ?? repayment.reference_no ?? '').trim() || null;
         const note = String(req.body.note ?? repayment.note ?? '').trim() || null;
+        const waiveOff = isWaiveOffMode(payment_mode);
 
         await ensureRepaymentDuplicateFree({ req, sale_id: repayment.sale_id, payment_date, amount, payment_mode, reference_no, excludeId: repayment.id, transaction: t });
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id: repayment.sale_id, exclude_repayment_id: repayment.id, transaction: t });
@@ -686,7 +696,9 @@ exports.updateRepayment = async (req, res) => {
 
         await repayment.update({ payment_date, amount, payment_mode, reference_no, note, updated_by: req.user.id }, { transaction: t });
 
-        const ledgerEntry = await findLinkedLedgerEntry(req.propertyDb, req.user.outlet_id, 'REPAYMENT', repayment.id, t);
+        const ledgerEntry =
+            await findLinkedLedgerEntry(req.propertyDb, req.user.outlet_id, waiveOff ? 'WAIVE_OFF' : 'REPAYMENT', repayment.id, t) ||
+            await findLinkedLedgerEntry(req.propertyDb, req.user.outlet_id, waiveOff ? 'REPAYMENT' : 'WAIVE_OFF', repayment.id, t);
         if (ledgerEntry) {
             await updateLedgerEntry({
                 db: req.propertyDb,
@@ -694,11 +706,16 @@ exports.updateRepayment = async (req, res) => {
                 outlet_id: req.user.outlet_id,
                 values: {
                     txn_date: payment_date,
+                    transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                    reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
                     reference_no: sale.sale_no,
                     party_name: getCustomerLabel(sale),
                     payment_method: payment_mode,
-                    amount_in: amount,
-                    notes: note || `Repayment received for ${sale.sale_no}`,
+                    amount_in: waiveOff ? 0 : amount,
+                    amount_out: waiveOff ? amount : 0,
+                    notes: note || (waiveOff
+                        ? `Waive off applied for ${sale.sale_no}`
+                        : `Repayment received for ${sale.sale_no}`),
                 },
                 transaction: t
             });
