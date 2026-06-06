@@ -80,4 +80,9 @@ class SupplierBillController extends ChangeNotifier {
 
     await load(); // reload after payment
   }
+
+  Future<SupplierBillDetail> getBillDetails(int billId) async {
+    final res = await ApiClient.get('${ApiEndpoints.supplierBillDetails}/$billId');
+    return SupplierBillDetail.fromJson(Map<String, dynamic>.from(res['data']));
+  }
 }

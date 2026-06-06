@@ -67,6 +67,7 @@ class ApiEndpoints {
   static const stockTransferReport = '/api/reports/stock-transfer';
 
   static const supplierBills = '/api/suppliers/bills/list';
+  static const supplierBillDetails = '/api/suppliers/bills';
 
   static const requests = '/api/inventory/requests';
   static const financeLedger = '/api/finance/ledger';

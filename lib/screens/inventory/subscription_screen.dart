@@ -879,6 +879,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 selectedSchemes.first['bonus_qty']?.toString() ?? '0') ??
             0)
         : 0;
+    final firstMode = paymentLines.isNotEmpty
+        ? (paymentLines.first['method']?.toString() ?? 'SUBSCRIPTION')
+        : 'SUBSCRIPTION';
+
     final payload = <String, dynamic>{
       'customer_name': _selectedCustomer!.customerName.trim(),
       'customer_phone': _selectedCustomer!.customerPhone.trim(),
@@ -895,6 +899,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       'item_rate': _itemRate,
       'bonus_qty': bonusQty,
       'selected_schemes': selectedSchemes,
+      'payment_mode': firstMode,
     };
 
     final saved = await _ctrl.createSubscription(payload);

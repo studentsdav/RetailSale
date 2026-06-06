@@ -1839,6 +1839,20 @@ COMMIT;
       `);
     }
   },
+  {
+    version: 38,
+    description: "Receiving item remarks support",
+    up: async (db) => {
+      await db.query(`
+BEGIN;
+
+ALTER TABLE goods_receipt_items
+ADD COLUMN IF NOT EXISTS remarks TEXT;
+
+COMMIT;
+      `);
+    }
+  },
 
 
 ];

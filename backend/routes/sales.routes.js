@@ -26,6 +26,8 @@ router.get('/subscriptions/:id/ledger', ctrl.getSubscriptionLedger);
 router.get('/subscriptions/:id', ctrl.getSubscriptionDetails);
 router.post('/subscriptions', ctrl.createSubscription);
 router.post('/subscriptions/:id/final-settlement', ctrl.generateFinalSettlement);
+router.delete('/subscriptions/:id', ctrl.deleteSubscription);
+router.put('/subscriptions/:id/status', ctrl.updateSubscriptionStatus);
 router.get('/item-advances', ctrl.listItemAdvances);
 router.post('/item-advances', ctrl.createItemAdvance);
 router.put('/item-advances/:id', ctrl.updateItemAdvance);

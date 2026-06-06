@@ -322,6 +322,14 @@ class _ReceivingScreenState extends State<ReceivingScreen> {
   Future<void> _saveReceiving() async {
     if (_isSaving) return; // NEW: Block double submit
 
+    final billNo = _supplierBill.text.trim();
+    if (billNo.isEmpty || billNo == '0') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Supplier Bill No cannot be 0 or blank')),
+      );
+      return;
+    }
+
     if (_supplierId == null || _items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vendor and items required')),

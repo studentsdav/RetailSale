@@ -14,6 +14,7 @@ router.put('/:id', supplierCtrl.updateSupplier);
 router.delete('/:id', supplierCtrl.deleteSupplier);
 
 router.get('/bills/list', billCtrl.getSupplierBills);
+router.get('/bills/:billId', billCtrl.getSupplierBillDetails);
 router.post('/bills/pay', billCtrl.paySupplierBill);
 router.get('/bills/:billId/payments', billCtrl.getBillPayments);
 

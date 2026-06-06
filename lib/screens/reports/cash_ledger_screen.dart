@@ -1615,7 +1615,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     'SUPPLIER_PAYMENT',
                     'INCOME',
                     'OPENING_DEPOSIT',
-                    'WITHDRAWAL'
+                    'WITHDRAWAL',
+                    'SUBSCRIPTION',
+                    'OUTSTANDING'
                   ],
                   (v) => setState(() => ledgerType = v ?? ''),
                   width: narrowFieldWidth,

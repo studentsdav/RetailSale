@@ -124,10 +124,10 @@ class SalesReportController extends ChangeNotifier {
       dayOnDay = [];
       highestZone = null;
       lowestZone = null;
+    } finally {
+      loading = false;
+      notifyListeners();
     }
-
-    loading = false;
-    notifyListeners();
   }
 
   void reset() {

@@ -1902,6 +1902,27 @@ class _SaleScreenState extends State<SaleScreen> {
             line.isAdvanceFree && !sourceItemIds.contains(line.itemId))
         .toList(growable: false);
     if (sourceItems.isEmpty) {
+      final hasAnyAdvanceCoverage = _customerSubscriptions.isNotEmpty ||
+          _itemAdvanceSummaries.values.any((summary) {
+            final remainingQty = _num(
+              summary['remaining_qty_total'] ??
+                  summary['remaining_qty'] ??
+                  summary['available_qty'],
+            );
+            return remainingQty > 0;
+          }) ||
+          _customerItemAdvances.any((row) {
+            final remainingQty = _num(
+              row['remaining_qty_total'] ??
+                  row['remaining_qty'] ??
+                  row['available_qty'],
+            );
+            return remainingQty > 0;
+          });
+      if (!hasAnyAdvanceCoverage) {
+        _items.removeWhere((line) => line.isAdvanceFree);
+        return;
+      }
       for (final line in _items.where((line) => line.isAdvanceFree)) {
         final qty = line.qty;
         if (qty <= 0) continue;
@@ -5784,7 +5805,7 @@ class _SaleScreenState extends State<SaleScreen> {
           _sidebarButton(Icons.inventory_2_outlined,
               onTap: _openItemMaster, tooltip: 'Item master'),
           _sidebarButton(Icons.add_card_rounded,
-              onTap: _createSchemeDialog, tooltip: 'Create voucher'),
+              onTap: _createSchemeDialog, tooltip: 'Create schemes'),
           _sidebarButton(Icons.local_offer_outlined,
               onTap: _showManageSchemesDialog, tooltip: 'Manage schemes'),
           _sidebarButton(Icons.storefront,

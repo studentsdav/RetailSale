@@ -181,6 +181,17 @@ class SalesController extends ChangeNotifier {
     return Map<String, dynamic>.from(res['data'] ?? const {});
   }
 
+  Future<void> deleteSubscription(int id) async {
+    await ApiClient.delete('${ApiEndpoints.salesSubscriptions}/$id');
+  }
+
+  Future<void> cancelSubscription(int id) async {
+    await ApiClient.put(
+      '${ApiEndpoints.salesSubscriptions}/$id/status',
+      {'status': 'CANCELLED'},
+    );
+  }
+
   Future<Map<String, dynamic>> getSubscriptionDetails(int id) async {
     final res = await ApiClient.get('${ApiEndpoints.salesSubscriptions}/$id');
     return Map<String, dynamic>.from(res['data'] ?? const {});

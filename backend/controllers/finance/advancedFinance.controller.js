@@ -183,14 +183,45 @@ function buildLedgerWhere(outlet_id, query) {
         if (toDate) where.txn_date[Op.lte] = dateKey(toDate);
     }
 
-    if (type && type !== 'ALL') where.transaction_type = type;
     if (paymentMethod && paymentMethod !== 'ALL') where.payment_method = paymentMethod;
+
+    const conditions = [];
+
+    if (type && type !== 'ALL') {
+        if (type === 'SUBSCRIPTION') {
+            conditions.push({
+                [Op.or]: [
+                    { transaction_type: { [Op.in]: ['SUBSCRIPTION_SETTLEMENT', 'SUBSCRIPTION_SETTLEMENT_PARTIAL', 'SUBSCRIPTION_SETTLEMENT_CREDIT', 'SUBSCRIPTION_SETTLEMENT_REFUND'] } },
+                    {
+                        transaction_type: 'CUSTOMER_ADVANCE',
+                        reference_type: 'SUBSCRIPTION'
+                    }
+                ]
+            });
+        } else if (type === 'OUTSTANDING') {
+            conditions.push({
+                [Op.or]: [
+                    { transaction_type: { [Op.in]: ['SALE_CREDIT', 'SUBSCRIPTION_SETTLEMENT_CREDIT', 'SUBSCRIPTION_SETTLEMENT_PARTIAL'] } },
+                    { notes: { [Op.iLike]: '%outstanding%' } }
+                ]
+            });
+        } else {
+            where.transaction_type = type;
+        }
+    }
+
     if (search) {
-        where[Op.or] = [
-            { reference_no: { [Op.iLike]: `%${search}%` } },
-            { party_name: { [Op.iLike]: `%${search}%` } },
-            { notes: { [Op.iLike]: `%${search}%` } }
-        ];
+        conditions.push({
+            [Op.or]: [
+                { reference_no: { [Op.iLike]: `%${search}%` } },
+                { party_name: { [Op.iLike]: `%${search}%` } },
+                { notes: { [Op.iLike]: `%${search}%` } }
+            ]
+        });
+    }
+
+    if (conditions.length > 0) {
+        where[Op.and] = conditions;
     }
 
     return where;

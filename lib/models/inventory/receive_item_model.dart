@@ -10,6 +10,7 @@ class ReceiveItem {
   final double tax;
   final DateTime? expiryDate;
   final String? department;
+  final String remarks;
   String lineStatus;
 
   ReceiveItem(
@@ -24,6 +25,7 @@ class ReceiveItem {
       required this.tax,
       this.expiryDate,
       required this.department,
+      this.remarks = '',
       this.lineStatus = 'CLOSED'});
 
   double get amount => qty * rate;
@@ -39,9 +41,10 @@ class ReceiveItem {
         'qty': qty,
         'rate': rate,
         'tax': tax,
-        'sale_rate': rate,
+        'sale_rate': saleRate,
         'expiry_date': expiryDate?.toIso8601String(),
         'department': department,
+        'remarks': remarks,
         'line_status': lineStatus
       };
 }

@@ -14,7 +14,8 @@ module.exports = (sequelize, DataTypes) => {
         tax_amount: DataTypes.DECIMAL(12, 2),
         total_after_tax: DataTypes.DECIMAL(12, 2),
         department: DataTypes.STRING,
-        expiry_date: DataTypes.DATEONLY
+        expiry_date: DataTypes.DATEONLY,
+        remarks: DataTypes.TEXT
     }, {
         tableName: 'goods_receipt_items',
         timestamps: false

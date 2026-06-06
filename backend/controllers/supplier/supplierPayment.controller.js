@@ -66,6 +66,60 @@ exports.getSupplierBills = async (req, res) => {
     }
 };
 
+exports.getSupplierBillDetails = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const billId = Number(req.params.billId);
+
+        if (!Number.isFinite(billId) || billId <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid bill id'
+            });
+        }
+
+        const bill = await req.propertyDb.models.supplier_bills.findOne({
+            where: { id: billId, outlet_id },
+            include: [{
+                model: req.propertyDb.models.supplier_master,
+                as: 'supplier',
+                attributes: ['supplier_name', 'phone', 'address']
+            }]
+        });
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: 'Supplier bill not found'
+            });
+        }
+
+        const grn = await req.propertyDb.models.goods_receipts.findOne({
+            where: {
+                outlet_id,
+                supplier_id: bill.supplier_id,
+                supplier_bill_no: bill.bill_no
+            },
+            include: [{
+                model: req.propertyDb.models.goods_receipt_items,
+                as: 'items'
+            }],
+            order: [[{ model: req.propertyDb.models.goods_receipt_items, as: 'items' }, 'id', 'ASC']]
+        });
+
+        res.json({
+            success: true,
+            data: {
+                bill: bill.toJSON(),
+                grn: grn ? grn.toJSON() : null,
+                items: grn?.items?.map((item) => item.toJSON()) || []
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
 exports.paySupplierBill = async (req, res) => {
     const t = await req.propertyDb.transaction();
 

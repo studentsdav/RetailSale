@@ -23,21 +23,23 @@ class StockInReportController extends ChangeNotifier {
     loading = true;
     notifyListeners();
 
-    final res = await ApiClient.get(
-      '${ApiEndpoints.stockInReport}'
-      '?from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}'
-      '&to_date=${DateFormat('yyyy-MM-dd').format(toDate)}'
-      '&search=$search',
-    );
+    try {
+      final res = await ApiClient.get(
+        '${ApiEndpoints.stockInReport}'
+        '?from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}'
+        '&to_date=${DateFormat('yyyy-MM-dd').format(toDate)}'
+        '&search=$search',
+      );
 
-    originalData =
-        (res['data'] as List).map((e) => StockInModel.fromJson(e)).toList();
+      originalData =
+          (res['data'] as List).map((e) => StockInModel.fromJson(e)).toList();
 
-    // Initially filtered data = original
-    filteredData = List.from(originalData);
-
-    loading = false;
-    notifyListeners();
+      // Initially filtered data = original
+      filteredData = List.from(originalData);
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
   }
 
   // ================= LOCAL FILTER =================

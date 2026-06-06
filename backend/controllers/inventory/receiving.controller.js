@@ -58,6 +58,15 @@ exports.createReceiving = async (req, res) => {
             items
         } = req.body;
 
+        const billNo = String(supplier_bill_no || '').trim();
+        if (!billNo || billNo === '0') {
+            await t.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Supplier bill no cannot be 0 or blank'
+            });
+        }
+
         let total = 0, gst = 0;
 
         items.forEach(i => {
@@ -639,6 +648,17 @@ exports.updateReceiving = async (req, res) => {
         }
 
         const oldData = grn.toJSON();
+
+        if (req.body.supplier_bill_no !== undefined) {
+            const billNo = String(req.body.supplier_bill_no || '').trim();
+            if (!billNo || billNo === '0') {
+                await t.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'Supplier bill no cannot be 0 or blank'
+                });
+            }
+        }
 
         await grn.update(req.body, { transaction: t });
         await t.commit();

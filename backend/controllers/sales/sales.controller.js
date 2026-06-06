@@ -1004,6 +1004,11 @@ function getSubscriptionReferenceNo(subscriptionId) {
     return `SUBSCRIPTION-${subscriptionId}`;
 }
 
+function buildManualAdvanceExclusionClause(alias = '') {
+    const prefix = alias ? `${alias}.` : '';
+    return `AND COALESCE(${prefix}note, '') NOT ILIKE 'Subscription #% prepaid qty%'`;
+}
+
 async function findSubscriptionItemAdvance(req, subscriptionId, itemId, transaction = undefined) {
     return req.propertyDb.models.customer_item_advances.findOne({
         where: {
@@ -4803,6 +4808,7 @@ SELECT
 FROM customer_item_advances cia
 LEFT JOIN item_master im ON im.id = cia.item_id
 WHERE cia.outlet_id = :outlet_id
+  ${buildManualAdvanceExclusionClause('cia')}
   AND (
     (:customer_phone <> '' AND cia.customer_phone = :customer_phone)
     OR (:customer_gstin <> '' AND cia.customer_gstin = :customer_gstin)
@@ -5022,6 +5028,7 @@ FROM customer_item_advances
 WHERE outlet_id = :outlet_id
   AND item_id = :item_id
   AND DATE(advance_date) <= :as_of_day
+  ${buildManualAdvanceExclusionClause()}
   AND (
     (:customer_phone <> '' AND customer_phone = :customer_phone)
     OR (:customer_gstin <> '' AND customer_gstin = :customer_gstin)
@@ -5048,6 +5055,7 @@ FROM customer_item_advances
 WHERE outlet_id = :outlet_id
   AND item_id = :item_id
   AND DATE(advance_date) <= :as_of_day
+  ${buildManualAdvanceExclusionClause()}
   AND (
     (:customer_phone <> '' AND customer_phone = :customer_phone)
     OR (:customer_gstin <> '' AND customer_gstin = :customer_gstin)
@@ -5123,6 +5131,7 @@ FROM customer_item_advances
 WHERE outlet_id = :outlet_id
   AND item_id = :item_id
   AND DATE(advance_date) BETWEEN :from_day AND :to_day
+  ${buildManualAdvanceExclusionClause()}
   AND (
     (:customer_phone <> '' AND customer_phone = :customer_phone)
     OR (:customer_gstin <> '' AND customer_gstin = :customer_gstin)
@@ -5304,6 +5313,156 @@ exports.validateVoucher = async (req, res) => {
         }
 
         res.json({ success: true, data: result.voucher });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.deleteSubscription = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const subscriptionId = Number(req.params.id);
+        if (!Number.isFinite(subscriptionId) || subscriptionId <= 0) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'Invalid subscription id' });
+        }
+
+        const subscription = await req.propertyDb.models.milk_subscriptions.findOne({
+            where: {
+                id: subscriptionId,
+                outlet_id: req.user.outlet_id
+            },
+            transaction: t
+        });
+
+        if (!subscription) {
+            await t.rollback();
+            return res.status(404).json({ success: false, message: 'Subscription not found' });
+        }
+
+        // Delete associated customer item advances
+        const itemAdvance = await findSubscriptionItemAdvance(req, subscriptionId, subscription.item_id, t);
+        if (itemAdvance) {
+            await itemAdvance.destroy({ transaction: t });
+        }
+
+        // Delete associated customer cash advances
+        const customerAdvance = await findSubscriptionCustomerAdvance(req, subscriptionId, t);
+        if (customerAdvance) {
+            await customerAdvance.destroy({ transaction: t });
+        }
+
+        // Delete and recalculate ledger entries
+        const entriesToDelete = await req.propertyDb.models.cash_ledger.findAll({
+            where: {
+                outlet_id: req.user.outlet_id,
+                reference_type: 'SUBSCRIPTION',
+                reference_id: subscriptionId
+            },
+            transaction: t
+        });
+
+        if (entriesToDelete.length > 0) {
+            let earliestDate = new Date();
+            for (const entry of entriesToDelete) {
+                const entryDate = new Date(entry.txn_date);
+                if (entryDate < earliestDate) {
+                    earliestDate = entryDate;
+                }
+            }
+
+            await req.propertyDb.models.cash_ledger.destroy({
+                where: {
+                    id: { [Op.in]: entriesToDelete.map(e => e.id) }
+                },
+                transaction: t
+            });
+
+            await recalculateLedgerBalances({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                fromDate: earliestDate,
+                transaction: t
+            });
+        }
+
+        // Log audit
+        await audit.log({
+            req,
+            module: 'SALES',
+            action: 'DELETE',
+            table: 'milk_subscriptions',
+            recordId: subscriptionId,
+            old_data: subscription.toJSON(),
+            outlet_id: req.user.outlet_id,
+            user_id: req.user.id
+        });
+
+        // Finally destroy the subscription. Cascade delete takes care of schemes, consumptions, settlements.
+        await subscription.destroy({ transaction: t });
+
+        await t.commit();
+        res.json({ success: true, message: 'Subscription deleted successfully' });
+    } catch (error) {
+        await t.rollback();
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.updateSubscriptionStatus = async (req, res) => {
+    try {
+        const subscriptionId = Number(req.params.id);
+        if (!Number.isFinite(subscriptionId) || subscriptionId <= 0) {
+            return res.status(400).json({ success: false, message: 'Invalid subscription id' });
+        }
+
+        const subscription = await req.propertyDb.models.milk_subscriptions.findOne({
+            where: {
+                id: subscriptionId,
+                outlet_id: req.user.outlet_id
+            }
+        });
+
+        if (!subscription) {
+            return res.status(404).json({ success: false, message: 'Subscription not found' });
+        }
+
+        const newStatus = String(req.body.status || '').trim().toUpperCase();
+        if (!newStatus) {
+            return res.status(400).json({ success: false, message: 'Status is required' });
+        }
+
+        const validStatuses = ['ACTIVE', 'EXPIRED', 'SETTLED', 'CANCELLED'];
+        if (!validStatuses.includes(newStatus)) {
+            return res.status(400).json({ success: false, message: 'Invalid status' });
+        }
+
+        const updates = {
+            status: newStatus,
+            updated_by: req.user.id
+        };
+
+        if (newStatus === 'CANCELLED' || newStatus === 'SETTLED' || newStatus === 'EXPIRED') {
+            updates.active_subscription = false;
+        } else if (newStatus === 'ACTIVE') {
+            updates.active_subscription = true;
+        }
+
+        await subscription.update(updates);
+
+        // Log audit
+        await audit.log({
+            req,
+            module: 'SALES',
+            action: 'UPDATE',
+            table: 'milk_subscriptions',
+            recordId: subscriptionId,
+            new_data: subscription.toJSON(),
+            outlet_id: req.user.outlet_id,
+            user_id: req.user.id
+        });
+
+        res.json({ success: true, data: subscription });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

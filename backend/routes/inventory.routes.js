@@ -86,6 +86,7 @@ router.put('/suppliers/:id', supplierCtrl.updateSupplier);
 router.delete('/suppliers/:id', supplierCtrl.deleteSupplier);
 
 router.get('/suppliers/bills/list', billCtrl.getSupplierBills);
+router.get('/suppliers/bills/:billId', billCtrl.getSupplierBillDetails);
 router.post('/suppliers/bills/pay', billCtrl.paySupplierBill);
 router.get('/suppliers/bills/:billId/payments', billCtrl.getBillPayments);
 

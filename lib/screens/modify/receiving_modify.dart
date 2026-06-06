@@ -12,7 +12,14 @@ import '../../models/common/property_info_model.dart';
 import '../../models/inventory/supplier_model.dart';
 
 class ModifyReceivingScreen extends StatefulWidget {
-  const ModifyReceivingScreen({super.key});
+  final int? initialGrnId;
+  final DateTime? initialReceiptDate;
+
+  const ModifyReceivingScreen({
+    super.key,
+    this.initialGrnId,
+    this.initialReceiptDate,
+  });
 
   @override
   State<ModifyReceivingScreen> createState() => _ModifyReceivingScreenState();
@@ -45,7 +52,24 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
     await supplierCtrl.load();
     await propertyCtrl.load();
     propertyInfo = propertyCtrl.data;
-    await _loadGRN();
+
+    if (widget.initialGrnId != null) {
+      await ctrl.loadGRNDetails(widget.initialGrnId!);
+      final rawReceiptDate = ctrl.grnDetails['receipt_date']?.toString();
+      final parsedReceiptDate = rawReceiptDate == null
+          ? null
+          : DateTime.tryParse(rawReceiptDate);
+      if (widget.initialReceiptDate != null) {
+        selectedDate = widget.initialReceiptDate!;
+      } else if (parsedReceiptDate != null) {
+        selectedDate = parsedReceiptDate;
+      }
+
+      await ctrl.loadGRNByDate(DateFormat('yyyy-MM-dd').format(selectedDate));
+      await _loadDetails(widget.initialGrnId!);
+    } else {
+      await _loadGRN();
+    }
   }
 
   Future<void> _loadGRN() async {

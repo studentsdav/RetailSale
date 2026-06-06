@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/reports/sales_report_controller.dart';
+import '../../controllers/reports/stock_in_report_controller.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class SalesReportScreen extends StatefulWidget {
@@ -22,11 +23,16 @@ class SalesReportScreen extends StatefulWidget {
 
 class _SalesReportScreenState extends State<SalesReportScreen> {
   final ctrl = SalesReportController();
+  final purchaseCtrl = StockInReportController();
   final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
   final _itemSearchCtrl = TextEditingController();
   final ScrollController _gstVerticalController = ScrollController();
   final ScrollController _gstHorizontalController = ScrollController();
+  final ScrollController _billWiseHorizontalController = ScrollController();
+  final ScrollController _dateWiseHorizontalController = ScrollController();
+  final ScrollController _gstr2VerticalController = ScrollController();
+  final ScrollController _gstr2HorizontalController = ScrollController();
 
   String _gstFilter = 'ALL';
   String _selectedGroup = 'ALL';
@@ -82,8 +88,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   @override
   void initState() {
     super.initState();
-    ctrl.init();
     _syncDates();
+    _loadReports();
   }
 
   @override
@@ -93,6 +99,11 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     _itemSearchCtrl.dispose();
     _gstVerticalController.dispose();
     _gstHorizontalController.dispose();
+    _billWiseHorizontalController.dispose();
+    _dateWiseHorizontalController.dispose();
+    _gstr2VerticalController.dispose();
+    _gstr2HorizontalController.dispose();
+    purchaseCtrl.dispose();
     ctrl.dispose();
     super.dispose();
   }
@@ -102,6 +113,21 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     _toCtrl.text = DateFormat('dd-MM-yyyy').format(ctrl.toDate);
   }
 
+  Future<void> _loadReports() async {
+    purchaseCtrl.fromDate = ctrl.fromDate;
+    purchaseCtrl.toDate = ctrl.toDate;
+    await Future.wait([
+      ctrl.load().catchError((_) {}),
+      purchaseCtrl.load().catchError((_) {}),
+    ]);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _reloadReports() async {
+    _syncDates();
+    await _loadReports();
+  }
+
   bool _isTaxedItem(SalesReportItem item) {
     return item.taxAmount > 0.009;
   }
@@ -109,6 +135,55 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   bool _isTaxedSale(SalesReport sale) {
     if (sale.totalTax > 0.009) return true;
     return sale.items.any(_isTaxedItem);
+  }
+
+  double _normalizeTaxRate(double rate) {
+    return double.parse(rate.toStringAsFixed(2));
+  }
+
+  double _itemTaxRate(SalesReportItem item) {
+    final rate = item.taxBreakup.fold<double>(0, (sum, tax) => sum + tax.rate);
+    return _normalizeTaxRate(rate);
+  }
+
+  Map<double, _TaxBandSummary> _saleTaxBands(SalesReport sale) {
+    final bands = <double, _TaxBandSummary>{};
+
+    for (final item in sale.items) {
+      final rate = _itemTaxRate(item);
+      final band = bands.putIfAbsent(rate, _TaxBandSummary.new);
+      band.taxableValue += item.taxableAmount;
+      band.taxAmount += item.taxAmount;
+    }
+
+    return bands;
+  }
+
+  Map<double, _TaxBandSummary> _mergeTaxBands(
+    Map<double, _TaxBandSummary> current,
+    Map<double, _TaxBandSummary> incoming,
+  ) {
+    for (final entry in incoming.entries) {
+      final band = current.putIfAbsent(entry.key, _TaxBandSummary.new);
+      band.taxableValue += entry.value.taxableValue;
+      band.taxAmount += entry.value.taxAmount;
+    }
+    return current;
+  }
+
+  List<double> get _availableTaxRates {
+    final rates = <double>{};
+    for (final sale in _billWiseSales) {
+      for (final item in sale.items) {
+        rates.add(_itemTaxRate(item));
+      }
+    }
+    final list = rates.toList()..sort();
+    return list;
+  }
+
+  String _formatTaxPercent(double rate) {
+    return rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(2);
   }
 
   List<_GstSalesRow> get _rows {
@@ -130,15 +205,16 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             customerGstin: customerGstin,
             placeOfSupply: placeOfSupply,
             itemDescription: item.itemName.trim(),
-            itemGroup:
-                item.itemGroup.trim().isEmpty ? 'Ungrouped' : item.itemGroup.trim(),
+            itemGroup: item.itemGroup.trim().isEmpty
+                ? 'Ungrouped'
+                : item.itemGroup.trim(),
             subCategory: item.subCategory.trim().isEmpty
                 ? 'Uncategorized'
                 : item.subCategory.trim(),
             hsnSacCode: item.hsnSacCode.trim(),
             quantity: item.qty,
             unit: item.unit.trim(),
-            taxableValue: item.taxableAmount,
+            taxableValue: _isTaxedItem(item) ? item.taxableAmount : 0,
             taxSaleValue: _isTaxedItem(item) ? item.netAmount : 0,
             nonTaxSaleValue: _isTaxedItem(item) ? 0 : item.netAmount,
             cgstAmount: _taxAmountFor(item, 'CGST'),
@@ -243,19 +319,35 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   int get _totalPages =>
       _rows.isEmpty ? 1 : ((_rows.length - 1) ~/ _rowsPerPage) + 1;
 
-  double get _taxSaleTotal => ctrl.list
-      .where(_isTaxedSale)
-      .fold<double>(0, (sum, sale) => sum + sale.netAmount);
+  double get _taxSaleTotal => ctrl.list.fold<double>(
+      0,
+      (sum, sale) =>
+          sum +
+          sale.items.fold<double>(
+            0,
+            (itemSum, item) =>
+                itemSum + (_isTaxedItem(item) ? item.netAmount : 0),
+          ));
 
-  double get _nonTaxSaleTotal => ctrl.list
-      .where((sale) => !_isTaxedSale(sale))
-      .fold<double>(0, (sum, sale) => sum + sale.netAmount);
+  double get _nonTaxSaleTotal => ctrl.list.fold<double>(
+      0,
+      (sum, sale) =>
+          sum +
+          sale.items.fold<double>(
+            0,
+            (itemSum, item) =>
+                itemSum + (_isTaxedItem(item) ? 0 : item.netAmount),
+          ));
   double get _headerTaxableTotal =>
-      ctrl.list.fold<double>(0, (sum, sale) => sum + sale.taxableAmount);
+      ctrl.list.fold<double>(0, (sum, sale) => sum + _taxableSaleValue(sale));
   double get _headerCgstTotal =>
       ctrl.list.fold<double>(0, (sum, sale) => sum + sale.cgstAmount);
   double get _headerSgstTotal =>
       ctrl.list.fold<double>(0, (sum, sale) => sum + sale.sgstAmount);
+  double get _headerIgstTotal =>
+      ctrl.list.fold<double>(0, (sum, sale) => sum + sale.igstAmount);
+  double get _headerTaxTotal =>
+      ctrl.list.fold<double>(0, (sum, sale) => sum + sale.totalTax);
   double get _headerRevenueTotal =>
       ctrl.list.fold<double>(0, (sum, sale) => sum + sale.netAmount);
 
@@ -298,28 +390,25 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.netAmount);
   double get _billWiseTaxTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalTax);
-  double get _billWiseDiscountTotal => _billWiseSales.fold<double>(
-      0, (sum, sale) => sum + sale.totalDiscount);
+  double get _billWiseDiscountTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalDiscount);
   double get _billWiseQtyTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalQty);
   double get _billWiseTaxableSaleTotal => _billWiseSales.fold<double>(
       0, (sum, sale) => sum + _billWiseTaxSaleValue(sale));
   double get _billWiseNonTaxableSaleTotal => _billWiseSales.fold<double>(
       0, (sum, sale) => sum + _billWiseNonTaxSaleValue(sale));
-  double get _billWiseGst5Total =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + _billWiseGstValue(sale, 5));
-  double get _billWiseGst0Total =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + _billWiseGstValue(sale, 0));
+  double get _billWiseGst5Total => _billWiseTaxBandsTotal[5]?.taxableValue ?? 0;
+  double get _billWiseGst0Total => _billWiseTaxBandsTotal[0]?.taxableValue ?? 0;
   double get _billWiseGst18Total =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + _billWiseGstValue(sale, 18));
+      _billWiseTaxBandsTotal[18]?.taxableValue ?? 0;
   double get _billWiseGst40Total =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + _billWiseGstValue(sale, 40));
-  double get _billWiseGst5TaxTotal =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + _billWiseGstTaxAmount(sale, 5));
+      _billWiseTaxBandsTotal[40]?.taxableValue ?? 0;
+  double get _billWiseGst5TaxTotal => _billWiseTaxBandsTotal[5]?.taxAmount ?? 0;
   double get _billWiseGst18TaxTotal =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + _billWiseGstTaxAmount(sale, 18));
+      _billWiseTaxBandsTotal[18]?.taxAmount ?? 0;
   double get _billWiseGst40TaxTotal =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + _billWiseGstTaxAmount(sale, 40));
+      _billWiseTaxBandsTotal[40]?.taxAmount ?? 0;
   int get _paymentWiseCountTotal =>
       ctrl.paymentModes.fold<int>(0, (sum, entry) => sum + entry.count);
   double get _paymentWiseAmountTotal =>
@@ -342,10 +431,40 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       _groupedRows.fold<double>(0, (sum, row) => sum + row.igstAmount);
   double get _itemWiseSalesTotal =>
       _groupedRows.fold<double>(0, (sum, row) => sum + row.totalInvoiceValue);
-  double get _itemWiseTaxableSaleTotal => _groupedRows.fold<double>(
-      0, (sum, row) => sum + row.taxSaleValue);
-  double get _itemWiseNonTaxableSaleTotal => _groupedRows.fold<double>(
-      0, (sum, row) => sum + row.nonTaxSaleValue);
+  double get _itemWiseTaxableSaleTotal =>
+      _groupedRows.fold<double>(0, (sum, row) => sum + row.taxSaleValue);
+  double get _itemWiseNonTaxableSaleTotal =>
+      _groupedRows.fold<double>(0, (sum, row) => sum + row.nonTaxSaleValue);
+  Map<double, _TaxBandSummary> get _billWiseTaxBandsTotal {
+    final bands = <double, _TaxBandSummary>{};
+    for (final sale in _billWiseSales) {
+      _mergeTaxBands(bands, _saleTaxBands(sale));
+    }
+    return bands;
+  }
+
+  Map<double, _TaxBandSummary> get _dateWiseTaxBandsTotal {
+    final bands = <double, _TaxBandSummary>{};
+    for (final row in _dateWiseSalesRows) {
+      _mergeTaxBands(bands, row.taxBands);
+    }
+    return bands;
+  }
+
+  double get _billWiseIgstTotal => _billWiseSales.fold<double>(
+      0, (sum, sale) => sum + _saleIgstAmount(sale));
+  double get _dateWiseIgstTotal =>
+      _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.igstAmount);
+  double get _gstr2TaxableTotal =>
+      _gstr2Rows.fold<double>(0, (sum, row) => sum + row.taxableValue);
+  double get _gstr2TaxTotal =>
+      _gstr2Rows.fold<double>(0, (sum, row) => sum + row.taxAmount);
+  double get _gstr2NetTotal =>
+      _gstr2Rows.fold<double>(0, (sum, row) => sum + row.totalAfterTax);
+  double get _gstr2OutstandingTotal =>
+      _gstr2Rows.fold<double>(0, (sum, row) => sum + row.outstandingAmount);
+  int get _gstr2BillCount =>
+      _gstr2Rows.fold<int>(0, (sum, row) => sum + row.billCount);
 
   double _billWiseTaxSaleValue(SalesReport sale) {
     return sale.items.fold<double>(
@@ -361,50 +480,99 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     );
   }
 
-  int _gstPercentForItem(SalesReportItem item) {
-    final gstRate = item.taxBreakup
-        .where((tax) {
-          final code = tax.code.toUpperCase();
-          return code == 'CGST' || code == 'SGST' || code == 'IGST';
-        })
-        .fold<double>(0, (sum, tax) => sum + tax.rate);
-    final rounded = gstRate.round();
-    if (rounded == 5 || rounded == 12 || rounded == 18 || rounded == 40) {
-      return rounded;
+  double _taxableSaleValue(SalesReport sale) {
+    return sale.items.fold<double>(
+      0,
+      (sum, item) => sum + (_isTaxedItem(item) ? item.taxableAmount : 0),
+    );
+  }
+
+  List<_Gstr2Row> get _gstr2Rows {
+    final grouped = <String, _Gstr2Row>{};
+    for (final row in purchaseCtrl.filteredData) {
+      final key = row.inwardsNo.toString();
+      final existing = grouped[key];
+      final taxableValue = row.rate * row.qty;
+      if (existing == null) {
+        grouped[key] = _Gstr2Row(
+          invoiceDate: row.date,
+          grnNo: row.grnNo,
+          billNo: row.billNo,
+          supplier: row.supplier,
+          supplierGstin: row.supplierGstin,
+          supplierState: row.supplierState,
+          billStatus: row.billStatus,
+          paidAmount: row.paidAmount,
+          outstandingAmount: row.outstandingAmount,
+          taxableValue: taxableValue,
+          taxAmount: row.taxAmount,
+          totalAfterTax: row.netAmount,
+          billCount: 1,
+          itemCount: 1,
+          qty: row.qty,
+        );
+      } else {
+        grouped[key] = existing.copyWith(
+          taxableValue: existing.taxableValue + taxableValue,
+          taxAmount: existing.taxAmount + row.taxAmount,
+          totalAfterTax: existing.totalAfterTax + row.netAmount,
+          itemCount: existing.itemCount + 1,
+          qty: existing.qty + row.qty,
+        );
+      }
     }
-    return 0;
+
+    return grouped.values.toList()
+      ..sort((a, b) => b.invoiceDate.compareTo(a.invoiceDate));
   }
 
-  double _billWiseGstValue(SalesReport sale, int percent) {
-    return sale.items.fold<double>(0, (sum, item) {
-      return sum + (_gstPercentForItem(item) == percent ? item.taxableAmount : 0);
-    });
+  double _saleTaxBandValue(SalesReport sale, double rate) {
+    return _saleTaxBands(sale)[_normalizeTaxRate(rate)]?.taxableValue ?? 0;
   }
 
-  double _billWiseGstTaxAmount(SalesReport sale, int percent) {
-    return sale.items.fold<double>(0, (sum, item) {
-      return sum + (_gstPercentForItem(item) == percent ? item.taxAmount : 0);
-    });
+  double _saleTaxBandTax(SalesReport sale, double rate) {
+    return _saleTaxBands(sale)[_normalizeTaxRate(rate)]?.taxAmount ?? 0;
+  }
+
+  double _saleIgstAmount(SalesReport sale) {
+    return sale.items.fold<double>(
+      0,
+      (sum, item) =>
+          sum +
+          item.taxBreakup
+              .where((tax) => tax.code.toUpperCase() == 'IGST')
+              .fold<double>(0, (taxSum, tax) => taxSum + tax.taxAmount),
+    );
+  }
+
+  double _bandTaxable(Map<double, _TaxBandSummary> bands, double rate) {
+    return bands[_normalizeTaxRate(rate)]?.taxableValue ?? 0;
+  }
+
+  double _bandTax(Map<double, _TaxBandSummary> bands, double rate) {
+    return bands[_normalizeTaxRate(rate)]?.taxAmount ?? 0;
+  }
+
+  double _bandSale(Map<double, _TaxBandSummary> bands, double rate) {
+    final band = bands[_normalizeTaxRate(rate)];
+    return band == null ? 0 : band.taxableValue + band.taxAmount;
   }
 
   List<_DateWiseSalesRow> get _dateWiseSalesRows {
     final grouped = <String, _DateWiseSalesRow>{};
     for (final sale in _billWiseSales) {
-      final dateOnly = DateTime(sale.saleDate.year, sale.saleDate.month, sale.saleDate.day);
+      final dateOnly =
+          DateTime(sale.saleDate.year, sale.saleDate.month, sale.saleDate.day);
       final key = DateFormat('yyyy-MM-dd').format(dateOnly);
       final current = grouped[key];
+      final saleBands = _saleTaxBands(sale);
       if (current == null) {
         grouped[key] = _DateWiseSalesRow(
           date: dateOnly,
           bills: 1,
           qty: sale.totalQty,
-          gst0Value: _billWiseGstValue(sale, 0),
-          gst5Value: _billWiseGstValue(sale, 5),
-          gst18Value: _billWiseGstValue(sale, 18),
-          gst40Value: _billWiseGstValue(sale, 40),
-          gst5Tax: _billWiseGstTaxAmount(sale, 5),
-          gst18Tax: _billWiseGstTaxAmount(sale, 18),
-          gst40Tax: _billWiseGstTaxAmount(sale, 40),
+          taxBands: saleBands,
+          igstAmount: _saleIgstAmount(sale),
           taxAmount: sale.totalTax,
           netAmount: sale.netAmount,
         );
@@ -412,13 +580,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         grouped[key] = current.copyWith(
           bills: current.bills + 1,
           qty: current.qty + sale.totalQty,
-          gst0Value: current.gst0Value + _billWiseGstValue(sale, 0),
-          gst5Value: current.gst5Value + _billWiseGstValue(sale, 5),
-          gst18Value: current.gst18Value + _billWiseGstValue(sale, 18),
-          gst40Value: current.gst40Value + _billWiseGstValue(sale, 40),
-          gst5Tax: current.gst5Tax + _billWiseGstTaxAmount(sale, 5),
-          gst18Tax: current.gst18Tax + _billWiseGstTaxAmount(sale, 18),
-          gst40Tax: current.gst40Tax + _billWiseGstTaxAmount(sale, 40),
+          taxBands: _mergeTaxBands(current.taxBands, saleBands),
+          igstAmount: current.igstAmount + _saleIgstAmount(sale),
           taxAmount: current.taxAmount + sale.totalTax,
           netAmount: current.netAmount + sale.netAmount,
         );
@@ -433,20 +596,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       _dateWiseSalesRows.fold<int>(0, (sum, row) => sum + row.bills);
   double get _dateWiseQtyTotal =>
       _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.qty);
-  double get _dateWiseGst0Total =>
-      _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.gst0Value);
-  double get _dateWiseGst5Total =>
-      _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.gst5Value);
-  double get _dateWiseGst18Total =>
-      _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.gst18Value);
-  double get _dateWiseGst40Total =>
-      _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.gst40Value);
-  double get _dateWiseGst5TaxTotal =>
-      _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.gst5Tax);
-  double get _dateWiseGst18TaxTotal =>
-      _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.gst18Tax);
-  double get _dateWiseGst40TaxTotal =>
-      _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.gst40Tax);
   double get _dateWiseTaxTotal =>
       _dateWiseSalesRows.fold<double>(0, (sum, row) => sum + row.taxAmount);
   double get _dateWiseNetTotal =>
@@ -467,14 +616,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   _GstSummary get _summary {
-    return _rows.fold(
+    return ctrl.list.fold(
       const _GstSummary(),
-      (sum, row) => _GstSummary(
-        taxableValue: sum.taxableValue + row.taxableValue,
-        cgstAmount: sum.cgstAmount + row.cgstAmount,
-        sgstAmount: sum.sgstAmount + row.sgstAmount,
-        igstAmount: sum.igstAmount + row.igstAmount,
-        totalRevenue: sum.totalRevenue + row.totalInvoiceValue,
+      (sum, sale) => _GstSummary(
+        taxableValue: sum.taxableValue + _taxableSaleValue(sale),
+        cgstAmount: sum.cgstAmount + sale.cgstAmount,
+        sgstAmount: sum.sgstAmount + sale.sgstAmount,
+        igstAmount: sum.igstAmount + sale.igstAmount,
+        totalRevenue: sum.totalRevenue + sale.netAmount,
       ),
     );
   }
@@ -532,9 +681,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     if (picked == null) return;
     setState(() {
       ctrl.fromDate = picked;
-      _syncDates();
     });
-    await ctrl.load();
+    await _reloadReports();
   }
 
   Future<void> _pickToDate() async {
@@ -547,18 +695,20 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     if (picked == null) return;
     setState(() {
       ctrl.toDate = picked;
-      _syncDates();
     });
-    await ctrl.load();
+    await _reloadReports();
   }
 
   Future<void> _exportExcel() async {
     final workbook = exc.Excel.createExcel();
+    final taxRates = _availableTaxRates;
     final sheetName = switch (_reportTabIndex) {
       0 => 'Payment_Wise_Sales',
       1 => 'Bill_Wise_Sales',
       2 => 'Item_Wise_Sales',
-      _ => 'Date_Wise_Sales',
+      3 => 'Date_Wise_Sales',
+      4 => 'GSTR_1_Sales',
+      _ => 'GSTR_2_Purchases',
     };
     final defaultSheet = workbook.getDefaultSheet();
     if (defaultSheet != null) {
@@ -590,28 +740,29 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Date',
           'Bill No',
           'Amount',
-          '0% Sale',
-          '5% Sale',
-          '5% GST',
-          '18% Sale',
-          '18% GST',
-          '40% Sale',
-          '40% GST',
+          ...taxRates.expand(
+            (rate) => [
+              '${_formatTaxPercent(rate)}% Sale',
+              if (rate > 0.009) '${_formatTaxPercent(rate)}% GST',
+            ],
+          ),
+          'IGST',
           'Tax',
         ].map(exc.TextCellValue.new).toList(),
       );
       for (final sale in _billWiseSales) {
+        final bands = _saleTaxBands(sale);
         sheet.appendRow([
           exc.TextCellValue(DateFormat('dd-MM-yyyy').format(sale.saleDate)),
           exc.TextCellValue(_maskedBillNo(sale.saleNo)),
           exc.DoubleCellValue(sale.netAmount),
-          exc.DoubleCellValue(_billWiseGstValue(sale, 0)),
-          exc.DoubleCellValue(_billWiseGstValue(sale, 5)),
-          exc.DoubleCellValue(_billWiseGstTaxAmount(sale, 5)),
-          exc.DoubleCellValue(_billWiseGstValue(sale, 18)),
-          exc.DoubleCellValue(_billWiseGstTaxAmount(sale, 18)),
-          exc.DoubleCellValue(_billWiseGstValue(sale, 40)),
-          exc.DoubleCellValue(_billWiseGstTaxAmount(sale, 40)),
+          ...taxRates.expand(
+            (rate) => [
+              exc.DoubleCellValue(_bandTaxable(bands, rate)),
+              if (rate > 0.009) exc.DoubleCellValue(_bandTax(bands, rate)),
+            ],
+          ),
+          exc.DoubleCellValue(_saleIgstAmount(sale)),
           exc.DoubleCellValue(sale.totalTax),
         ]);
       }
@@ -619,27 +770,26 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.TextCellValue('TOTAL'),
         exc.TextCellValue(''),
         exc.DoubleCellValue(_billWiseNetTotal),
-        exc.DoubleCellValue(_billWiseGst0Total),
-        exc.DoubleCellValue(_billWiseGst5Total),
-        exc.DoubleCellValue(_billWiseGst5TaxTotal),
-        exc.DoubleCellValue(_billWiseGst18Total),
-        exc.DoubleCellValue(_billWiseGst18TaxTotal),
-        exc.DoubleCellValue(_billWiseGst40Total),
-        exc.DoubleCellValue(_billWiseGst40TaxTotal),
+        ...taxRates.expand(
+          (rate) => [
+            exc.DoubleCellValue(_billWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
+            if (rate > 0.009)
+              exc.DoubleCellValue(_billWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+          ],
+        ),
+        exc.DoubleCellValue(_billWiseIgstTotal),
         exc.DoubleCellValue(_billWiseTaxTotal),
       ]);
     } else if (_reportTabIndex == 2) {
       sheet.appendRow(
         [
           'Label',
-          'Group',
-          'Subcategory',
           'HSN/SAC',
           'Rows',
           'Qty',
           'Unit',
-          'Tax Sale',
-          'Non Tax Sale',
+          'Taxed Sales',
+          'Non-Tax Sales',
           'Taxable Value',
           'CGST',
           'SGST',
@@ -650,8 +800,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       for (final row in _groupedRows) {
         sheet.appendRow([
           exc.TextCellValue(row.label),
-          exc.TextCellValue(row.itemGroup),
-          exc.TextCellValue(row.subCategory),
           exc.TextCellValue(row.hsnSacCode),
           exc.IntCellValue(row.lineCount),
           exc.DoubleCellValue(row.quantity),
@@ -668,8 +816,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       sheet.appendRow([
         exc.TextCellValue('TOTAL'),
         exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
         exc.DoubleCellValue(_itemWiseLineCountTotal),
         exc.DoubleCellValue(_itemWiseQtyTotal),
         exc.TextCellValue(''),
@@ -681,36 +827,98 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.DoubleCellValue(_itemWiseIgstTotal),
         exc.DoubleCellValue(_itemWiseSalesTotal),
       ]);
+    } else if (_reportTabIndex == 4) {
+      sheet.appendRow(
+        _gstHeaders.map(exc.TextCellValue.new).toList(),
+      );
+      for (final row in _rows) {
+        sheet.appendRow([
+          exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.invoiceDate)),
+          exc.TextCellValue(row.invoiceNumber),
+          exc.TextCellValue(row.customerName),
+          exc.TextCellValue(
+              row.customerGstin.isEmpty ? 'B2C' : row.customerGstin),
+          exc.TextCellValue(row.placeOfSupply),
+          exc.TextCellValue(row.itemDescription),
+          exc.TextCellValue(row.hsnSacCode),
+          exc.TextCellValue('${_formatQty(row.quantity)} ${row.unit}'),
+          exc.DoubleCellValue(row.taxableValue),
+          exc.DoubleCellValue(row.cgstAmount),
+          exc.DoubleCellValue(row.sgstAmount),
+          exc.DoubleCellValue(row.igstAmount),
+          exc.DoubleCellValue(row.totalInvoiceValue),
+        ]);
+      }
       sheet.appendRow([
-        exc.TextCellValue('TAXABLE SALE TOTAL'),
+        exc.TextCellValue('TOTAL'),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
-        exc.DoubleCellValue(_itemWiseTaxableSaleTotal),
         exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
+        exc.DoubleCellValue(_headerTaxableTotal),
+        exc.DoubleCellValue(_headerCgstTotal),
+        exc.DoubleCellValue(_headerSgstTotal),
+        exc.DoubleCellValue(
+            _rows.fold<double>(0, (sum, row) => sum + row.igstAmount)),
+        exc.DoubleCellValue(
+            _rows.fold<double>(0, (sum, row) => sum + row.totalInvoiceValue)),
       ]);
+    } else if (_reportTabIndex == 5) {
       sheet.appendRow([
-        exc.TextCellValue('NON-TAXABLE SALE TOTAL'),
+        'Date',
+        'GRN No',
+        'Bill No',
+        'Supplier',
+        'GSTIN',
+        'State',
+        'Items',
+        'Qty',
+        'Taxable Value',
+        'GST Amount',
+        'Net Amount',
+        'Paid',
+        'Outstanding',
+        'Status',
+      ].map(exc.TextCellValue.new).toList());
+      for (final row in _gstr2Rows) {
+        sheet.appendRow([
+          exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.invoiceDate)),
+          exc.TextCellValue(row.grnNo),
+          exc.TextCellValue(row.billNo),
+          exc.TextCellValue(row.supplier),
+          exc.TextCellValue(row.supplierGstin),
+          exc.TextCellValue(row.supplierState),
+          exc.IntCellValue(row.itemCount),
+          exc.DoubleCellValue(row.qty),
+          exc.DoubleCellValue(row.taxableValue),
+          exc.DoubleCellValue(row.taxAmount),
+          exc.DoubleCellValue(row.totalAfterTax),
+          exc.DoubleCellValue(row.paidAmount),
+          exc.DoubleCellValue(row.outstandingAmount),
+          exc.TextCellValue(row.billStatus),
+        ]);
+      }
+      sheet.appendRow([
+        exc.TextCellValue('TOTAL'),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
         exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.DoubleCellValue(_itemWiseNonTaxableSaleTotal),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.TextCellValue(''),
+        exc.DoubleCellValue(_gstr2Rows
+            .fold<int>(0, (sum, row) => sum + row.itemCount)
+            .toDouble()),
+        exc.DoubleCellValue(
+            _gstr2Rows.fold<double>(0, (sum, row) => sum + row.qty)),
+        exc.DoubleCellValue(_gstr2TaxableTotal),
+        exc.DoubleCellValue(_gstr2TaxTotal),
+        exc.DoubleCellValue(_gstr2NetTotal),
+        exc.DoubleCellValue(
+            _gstr2Rows.fold<double>(0, (sum, row) => sum + row.paidAmount)),
+        exc.DoubleCellValue(_gstr2OutstandingTotal),
         exc.TextCellValue(''),
       ]);
     } else {
@@ -719,29 +927,30 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Date',
           'Bills',
           'Qty',
-          '0% Sale',
-          '5% Sale',
-          '5% GST',
-          '18% Sale',
-          '18% GST',
-          '40% Sale',
-          '40% GST',
+          ...taxRates.expand(
+            (rate) => [
+              '${_formatTaxPercent(rate)}% Sale',
+              if (rate > 0.009) '${_formatTaxPercent(rate)}% GST',
+            ],
+          ),
+          'IGST',
           'Tax',
           'Net Amount',
         ].map(exc.TextCellValue.new).toList(),
       );
       for (final row in _dateWiseSalesRows) {
+        final bands = row.taxBands;
         sheet.appendRow([
           exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.date)),
           exc.IntCellValue(row.bills),
           exc.DoubleCellValue(row.qty),
-          exc.DoubleCellValue(row.gst0Value),
-          exc.DoubleCellValue(row.gst5Value),
-          exc.DoubleCellValue(row.gst5Tax),
-          exc.DoubleCellValue(row.gst18Value),
-          exc.DoubleCellValue(row.gst18Tax),
-          exc.DoubleCellValue(row.gst40Value),
-          exc.DoubleCellValue(row.gst40Tax),
+          ...taxRates.expand(
+            (rate) => [
+              exc.DoubleCellValue(_bandTaxable(bands, rate)),
+              if (rate > 0.009) exc.DoubleCellValue(_bandTax(bands, rate)),
+            ],
+          ),
+          exc.DoubleCellValue(row.igstAmount),
           exc.DoubleCellValue(row.taxAmount),
           exc.DoubleCellValue(row.netAmount),
         ]);
@@ -750,13 +959,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.TextCellValue('TOTAL'),
         exc.IntCellValue(_dateWiseBillsTotal),
         exc.DoubleCellValue(_dateWiseQtyTotal),
-        exc.DoubleCellValue(_dateWiseGst0Total),
-        exc.DoubleCellValue(_dateWiseGst5Total),
-        exc.DoubleCellValue(_dateWiseGst5TaxTotal),
-        exc.DoubleCellValue(_dateWiseGst18Total),
-        exc.DoubleCellValue(_dateWiseGst18TaxTotal),
-        exc.DoubleCellValue(_dateWiseGst40Total),
-        exc.DoubleCellValue(_dateWiseGst40TaxTotal),
+        ...taxRates.expand(
+          (rate) => [
+            exc.DoubleCellValue(_dateWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
+            if (rate > 0.009)
+              exc.DoubleCellValue(_dateWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+          ],
+        ),
+        exc.DoubleCellValue(_dateWiseIgstTotal),
         exc.DoubleCellValue(_dateWiseTaxTotal),
         exc.DoubleCellValue(_dateWiseNetTotal),
       ]);
@@ -781,11 +991,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   Future<void> _exportPdf() async {
     final pdf = pw.Document();
     final summary = _summary;
+    final taxRates = _availableTaxRates;
     final title = switch (_reportTabIndex) {
       0 => 'Payment Wise Sales Report',
       1 => 'Bill Wise Sales Report',
       2 => 'Item Wise Sales Report',
-      _ => 'Date Wise Sales Report',
+      3 => 'Date Wise Sales Report',
+      4 => 'GSTR-1 Sales Report',
+      _ => 'GSTR-2 Purchase Report',
     };
     final headers = switch (_reportTabIndex) {
       0 => ['Payment Mode', 'Sales Count', 'Amount'],
@@ -793,17 +1006,60 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Date',
           'Bill No',
           'Amount',
-          '0% Sale',
-          '5% Sale',
-          '5% GST',
-          '18% Sale',
-          '18% GST',
-          '40% Sale',
-          '40% GST',
+          ...taxRates.expand(
+            (rate) => [
+              '${_formatTaxPercent(rate)}% Sale',
+              '${_formatTaxPercent(rate)}% GST',
+            ],
+          ),
+          'IGST',
           'Tax'
         ],
-      2 => ['Label', 'Group', 'Subcategory', 'HSN/SAC', 'Rows', 'Qty', 'Unit', 'Tax Sale', 'Non Tax Sale', 'Taxable', 'CGST', 'SGST', 'IGST', 'Sales'],
-      _ => ['Date', 'Bills', 'Qty', '0% Sale', '5% Sale', '5% GST', '18% Sale', '18% GST', '40% Sale', '40% GST', 'Tax', 'Net Amount'],
+      2 => [
+          'Label',
+          'HSN/SAC',
+          'Rows',
+          'Qty',
+          'Unit',
+          'Taxed Sales',
+          'Non-Tax Sales',
+          'Taxable',
+          'CGST',
+          'SGST',
+          'IGST',
+          'Sales'
+        ],
+      3 => [
+          'Date',
+          'Bills',
+          'Qty',
+          ...taxRates.expand(
+            (rate) => [
+              '${_formatTaxPercent(rate)}% Sale',
+              '${_formatTaxPercent(rate)}% GST',
+            ],
+          ),
+          'IGST',
+          'Tax',
+          'Net Amount'
+        ],
+      4 => _gstHeaders,
+      _ => [
+          'Date',
+          'GRN No',
+          'Bill No',
+          'Supplier',
+          'GSTIN',
+          'State',
+          'Items',
+          'Qty',
+          'Taxable Value',
+          'GST Amount',
+          'Net Amount',
+          'Paid',
+          'Outstanding',
+          'Status'
+        ],
     };
     final data = switch (_reportTabIndex) {
       0 => ctrl.paymentModes
@@ -814,42 +1070,41 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           '$_paymentWiseCountTotal',
           _money(_paymentWiseAmountTotal),
         ]),
-      1 => _billWiseSales
-          .map(
-            (sale) => [
+      1 => _billWiseSales.map(
+          (sale) {
+            final bands = _saleTaxBands(sale);
+            return [
               DateFormat('dd-MM-yyyy').format(sale.saleDate),
               _maskedBillNo(sale.saleNo),
               _money(sale.netAmount),
-              _money(_billWiseGstValue(sale, 0)),
-              _money(_billWiseGstValue(sale, 5)),
-              _money(_billWiseGstTaxAmount(sale, 5)),
-              _money(_billWiseGstValue(sale, 18)),
-              _money(_billWiseGstTaxAmount(sale, 18)),
-              _money(_billWiseGstValue(sale, 40)),
-              _money(_billWiseGstTaxAmount(sale, 40)),
+              ...taxRates.expand(
+                (rate) => [
+                  _money(_bandTaxable(bands, rate)),
+                  _money(_bandTax(bands, rate)),
+                ],
+              ),
+              _money(_saleIgstAmount(sale)),
               _money(sale.totalTax),
-            ],
-          )
-          .toList()
-        ..add([
-          'TOTAL',
-          '',
-          _money(_billWiseNetTotal),
-          _money(_billWiseGst0Total),
-          _money(_billWiseGst5Total),
-          _money(_billWiseGst5TaxTotal),
-          _money(_billWiseGst18Total),
-          _money(_billWiseGst18TaxTotal),
-          _money(_billWiseGst40Total),
-          _money(_billWiseGst40TaxTotal),
-          _money(_billWiseTaxTotal),
-        ]),
+            ];
+          },
+        ).toList()
+          ..add([
+            'TOTAL',
+            '',
+            _money(_billWiseNetTotal),
+            ...taxRates.expand(
+              (rate) => [
+                _money(_billWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
+                _money(_billWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+              ],
+            ),
+            _money(_billWiseIgstTotal),
+            _money(_billWiseTaxTotal),
+          ]),
       2 => _groupedRows
           .map(
             (row) => [
               row.label,
-              row.itemGroup,
-              row.subCategory,
               row.hsnSacCode,
               '${row.lineCount}',
               _formatQty(row.quantity),
@@ -867,8 +1122,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         ..add([
           'TOTAL',
           '',
-          '',
-          '',
           _formatQty(_itemWiseLineCountTotal),
           _formatQty(_itemWiseQtyTotal),
           '',
@@ -879,52 +1132,20 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           _money(_itemWiseSgstTotal),
           _money(_itemWiseIgstTotal),
           _money(_itemWiseSalesTotal),
-        ])
-        ..add([
-          'TAXABLE SALE TOTAL',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          _money(_itemWiseTaxableSaleTotal),
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-        ])
-        ..add([
-          'NON-TAXABLE SALE TOTAL',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          _money(_itemWiseNonTaxableSaleTotal),
-          '',
-          '',
-          '',
-          '',
-          '',
         ]),
-      _ => _dateWiseSalesRows
+      3 => _dateWiseSalesRows
           .map(
             (row) => [
               DateFormat('dd-MM-yyyy').format(row.date),
               '${row.bills}',
               _formatQty(row.qty),
-              _money(row.gst0Value),
-              _money(row.gst5Value),
-              _money(row.gst5Tax),
-              _money(row.gst18Value),
-              _money(row.gst18Tax),
-              _money(row.gst40Value),
-              _money(row.gst40Tax),
+              ...taxRates.expand(
+                (rate) => [
+                  _money(_bandTaxable(row.taxBands, rate)),
+                  _money(_bandTax(row.taxBands, rate)),
+                ],
+              ),
+              _money(row.igstAmount),
               _money(row.taxAmount),
               _money(row.netAmount),
             ],
@@ -934,19 +1155,95 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'TOTAL',
           '$_dateWiseBillsTotal',
           _formatQty(_dateWiseQtyTotal),
-          _money(_dateWiseGst0Total),
-          _money(_dateWiseGst5Total),
-          _money(_dateWiseGst5TaxTotal),
-          _money(_dateWiseGst18Total),
-          _money(_dateWiseGst18TaxTotal),
-          _money(_dateWiseGst40Total),
-          _money(_dateWiseGst40TaxTotal),
+          ...taxRates.expand(
+            (rate) => [
+              _money(_dateWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
+              _money(_dateWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+            ],
+          ),
+          _money(_dateWiseIgstTotal),
           _money(_dateWiseTaxTotal),
           _money(_dateWiseNetTotal),
         ]),
+      4 => _rows
+          .map(
+            (row) => [
+              DateFormat('dd-MM-yyyy').format(row.invoiceDate),
+              row.invoiceNumber,
+              row.customerName,
+              row.customerGstin.isEmpty ? 'B2C' : row.customerGstin,
+              row.placeOfSupply,
+              row.itemDescription,
+              row.hsnSacCode,
+              '${_formatQty(row.quantity)} ${row.unit}',
+              _money(row.taxableValue),
+              _money(row.cgstAmount),
+              _money(row.sgstAmount),
+              _money(row.igstAmount),
+              _money(row.totalInvoiceValue),
+            ],
+          )
+          .toList()
+        ..add([
+          'TOTAL',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          _money(_headerTaxableTotal),
+          _money(_headerCgstTotal),
+          _money(_headerSgstTotal),
+          _money(_rows.fold<double>(0, (sum, row) => sum + row.igstAmount)),
+          _money(
+              _rows.fold<double>(0, (sum, row) => sum + row.totalInvoiceValue)),
+        ]),
+      _ => _gstr2Rows
+          .map(
+            (row) => [
+              DateFormat('dd-MM-yyyy').format(row.invoiceDate),
+              row.grnNo,
+              row.billNo,
+              row.supplier,
+              row.supplierGstin,
+              row.supplierState,
+              '${row.itemCount}',
+              _formatQty(row.qty),
+              _money(row.taxableValue),
+              _money(row.taxAmount),
+              _money(row.totalAfterTax),
+              _money(row.paidAmount),
+              _money(row.outstandingAmount),
+              row.billStatus,
+            ],
+          )
+          .toList()
+        ..add([
+          'TOTAL',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '${_gstr2Rows.fold<int>(0, (sum, row) => sum + row.itemCount)}',
+          _formatQty(_gstr2Rows.fold<double>(0, (sum, row) => sum + row.qty)),
+          _money(_gstr2TaxableTotal),
+          _money(_gstr2TaxTotal),
+          _money(_gstr2NetTotal),
+          _money(
+              _gstr2Rows.fold<double>(0, (sum, row) => sum + row.paidAmount)),
+          _money(_gstr2OutstandingTotal),
+          '',
+        ]),
     };
 
-    final rowsPerPage = _reportTabIndex == 1 ? 24 : 22;
+    final rowsPerPage = _reportTabIndex == 1
+        ? 24
+        : _reportTabIndex == 4 || _reportTabIndex == 5
+            ? 18
+            : 22;
     final chunks = <List<List<String>>>[];
     for (int i = 0; i < data.length; i += rowsPerPage) {
       chunks.add(
@@ -994,10 +1291,11 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                   child: pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
                     children: [
-                      _pdfSummaryBlock('Total Taxable', summary.taxableValue),
+                      _pdfSummaryBlock('Taxable Value', summary.taxableValue),
                       _pdfSummaryBlock('Total CGST', summary.cgstAmount),
                       _pdfSummaryBlock('Total SGST', summary.sgstAmount),
-                      _pdfSummaryBlock('Grand Revenue', summary.totalRevenue),
+                      _pdfSummaryBlock('Non-Tax Sales', _nonTaxSaleTotal),
+                      _pdfSummaryBlock('Net Sales', summary.totalRevenue),
                     ],
                   ),
                 ),
@@ -1053,9 +1351,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         ],
       ),
       body: AnimatedBuilder(
-        animation: ctrl,
+        animation: Listenable.merge([ctrl, purchaseCtrl]),
         builder: (_, __) {
-          if (ctrl.loading) {
+          if (ctrl.loading || purchaseCtrl.loading) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -1065,6 +1363,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               _buildTopFilters(),
               const SizedBox(height: 16),
               _buildSummaryRow(),
+              const SizedBox(height: 10),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'Formula: Taxable Value + GST = Tax-included sales, and Net Sales = Taxed Sales After GST + Non-Tax Sales.',
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
               const SizedBox(height: 16),
               _buildReportTabs(),
               const SizedBox(height: 16),
@@ -1077,11 +1386,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   Widget _buildReportTabs() {
-    final tabs = const [
+    const tabs = [
       'Payment Wise',
       'Bill Wise',
       'Item Wise',
       'Date Wise',
+      'GSTR-1',
+      'GSTR-2',
     ];
     return Container(
       padding: const EdgeInsets.all(8),
@@ -1104,8 +1415,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: FilledButton.tonal(
                 style: FilledButton.styleFrom(
-                  backgroundColor:
-                      selected ? const Color(0xFF17324D) : const Color(0xFFF8FAFC),
+                  backgroundColor: selected
+                      ? const Color(0xFF17324D)
+                      : const Color(0xFFF8FAFC),
                   foregroundColor:
                       selected ? Colors.white : const Color(0xFF17324D),
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1136,7 +1448,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     if (_reportTabIndex == 2) {
       return SizedBox(height: 560, child: _buildItemWiseDataTableSection());
     }
-    return SizedBox(height: 560, child: _buildDateWiseDataTableSection());
+    if (_reportTabIndex == 3) {
+      return SizedBox(height: 560, child: _buildDateWiseDataTableSection());
+    }
+    if (_reportTabIndex == 4) {
+      return SizedBox(height: 560, child: _buildGstr1Section());
+    }
+    return SizedBox(height: 560, child: _buildGstr2Section());
   }
 
   Widget _buildTopFilters() {
@@ -1219,8 +1537,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           SizedBox(
             width: 220,
             child: DropdownButtonFormField<String>(
-              initialValue:
-                  ctrl.paymentMode?.isNotEmpty == true ? ctrl.paymentMode : 'ALL',
+              initialValue: ctrl.paymentMode?.isNotEmpty == true
+                  ? ctrl.paymentMode
+                  : 'ALL',
               decoration:
                   const InputDecoration(labelText: 'Payment Method Filter'),
               items: [
@@ -1233,7 +1552,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 ),
               ],
               onChanged: (value) async {
-                ctrl.paymentMode = value == null || value == 'ALL' ? null : value;
+                ctrl.paymentMode =
+                    value == null || value == 'ALL' ? null : value;
                 await ctrl.load();
                 setState(() {});
               },
@@ -1294,31 +1614,74 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   Widget _buildSummaryRow() {
-    return Row(
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
       children: [
-        Expanded(
-            child: _metricCard('Total Taxable Value', _headerTaxableTotal,
-                const Color(0xFF0F766E))),
-        const SizedBox(width: 12),
-        Expanded(
-            child: _metricCard(
-                'Total CGST', _headerCgstTotal, const Color(0xFF2563EB))),
-        const SizedBox(width: 12),
-        Expanded(
-            child: _metricCard(
-                'Total SGST', _headerSgstTotal, const Color(0xFF7C3AED))),
-        const SizedBox(width: 12),
-        Expanded(
-            child: _metricCard('Grand Total Revenue', _headerRevenueTotal,
-                const Color(0xFFEA580C))),
-        const SizedBox(width: 12),
-        Expanded(
-            child: _metricCard(
-                'Tax Sale', _taxSaleTotal, const Color(0xFF16A34A))),
-        const SizedBox(width: 12),
-        Expanded(
-            child: _metricCard(
-                'Non Tax Sale', _nonTaxSaleTotal, const Color(0xFF64748B))),
+        SizedBox(
+          width: 240,
+          child: _metricCard(
+            'Taxable Value',
+            _headerTaxableTotal,
+            const Color(0xFF0F766E),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: _metricCard(
+            'Total CGST',
+            _headerCgstTotal,
+            const Color(0xFF2563EB),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: _metricCard(
+            'Total SGST',
+            _headerSgstTotal,
+            const Color(0xFF7C3AED),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: _metricCard(
+            'Total IGST',
+            _headerIgstTotal,
+            const Color(0xFF0EA5E9),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: _metricCard(
+            'GST Total',
+            _headerTaxTotal,
+            const Color(0xFFEA580C),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: _metricCard(
+            'Net Sales',
+            _headerRevenueTotal,
+            const Color(0xFFEA580C),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: _metricCard(
+            'Taxed Sales After GST',
+            _taxSaleTotal,
+            const Color(0xFF16A34A),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: _metricCard(
+            'Non-Tax Sales',
+            _nonTaxSaleTotal,
+            const Color(0xFF64748B),
+          ),
+        ),
       ],
     );
   }
@@ -1364,14 +1727,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           children: [
             Expanded(child: _buildSalesOverviewChart()),
             const SizedBox(width: 16),
-            Expanded(child: _buildComparisonChart('Month On Month', ctrl.monthOnMonth)),
+            Expanded(
+                child:
+                    _buildComparisonChart('Month On Month', ctrl.monthOnMonth)),
           ],
         ),
         const SizedBox(height: 16),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _buildComparisonChart('Week On Week', ctrl.weekOnWeek)),
+            Expanded(
+                child: _buildComparisonChart('Week On Week', ctrl.weekOnWeek)),
             const SizedBox(width: 16),
             Expanded(child: _buildComparisonChart('Day On Day', ctrl.dayOnDay)),
           ],
@@ -1429,8 +1795,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 DataColumn(label: Text('Date')),
                 DataColumn(label: Text('Bill No')),
                 DataColumn(label: Text('Payment')),
-                DataColumn(label: Text('Tax Sale')),
-                DataColumn(label: Text('Non Tax Sale')),
+                DataColumn(label: Text('Taxed Sales')),
+                DataColumn(label: Text('Non-Tax Sales')),
                 DataColumn(label: Text('Tax')),
                 DataColumn(label: Text('Net Amount')),
               ],
@@ -1452,8 +1818,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color:
-                                  _paymentColor(sale.paymentMode).withOpacity(0.14),
+                              color: _paymentColor(sale.paymentMode)
+                                  .withOpacity(0.14),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
@@ -1532,15 +1898,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     final summary = ctrl.summary;
     final points = <_ChartBarPoint>[
       _ChartBarPoint('Sales', summary.totalRevenue, const Color(0xFF2563EB)),
-      _ChartBarPoint('Discount', summary.totalDiscount, const Color(0xFFF59E0B)),
-      _ChartBarPoint('Profit', summary.estimatedProfit, const Color(0xFF16A34A)),
+      _ChartBarPoint(
+          'Discount', summary.totalDiscount, const Color(0xFFF59E0B)),
+      _ChartBarPoint(
+          'Profit', summary.estimatedProfit, const Color(0xFF16A34A)),
       _ChartBarPoint('Loss', summary.estimatedLoss, const Color(0xFFDC2626)),
     ];
 
     return _chartCard(
       title: 'Sales / Discount / Profit / Loss',
       child: SfCartesianChart(
-        primaryXAxis: CategoryAxis(),
+        primaryXAxis: const CategoryAxis(),
         tooltipBehavior: TooltipBehavior(enable: true),
         series: <CartesianSeries<_ChartBarPoint, String>>[
           ColumnSeries<_ChartBarPoint, String>(
@@ -1566,7 +1934,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           : SfCartesianChart(
               legend: const Legend(isVisible: true),
               tooltipBehavior: TooltipBehavior(enable: true),
-              primaryXAxis: CategoryAxis(),
+              primaryXAxis: const CategoryAxis(),
               series: <CartesianSeries<SalesComparisonPoint, String>>[
                 LineSeries<SalesComparisonPoint, String>(
                   name: 'Sales',
@@ -1752,6 +2120,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   Widget _buildBillWiseDataTableSection() {
     final rows = _billWiseSales;
+    final taxRates = _availableTaxRates;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -1773,164 +2142,148 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: rows.isEmpty
-                ? const Center(
-                    child: Text('No bill rows found for the selected range.'),
-                  )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(
-                          const Color(0xFFF8FAFC),
-                        ),
-                        dataRowMinHeight: 52,
-                        dataRowMaxHeight: 68,
-                        columns: const [
-                          DataColumn(label: Text('Date')),
-                          DataColumn(label: Text('Bill No')),
-                          DataColumn(label: Text('Amount')),
-                          DataColumn(label: Text('0% Sale')),
-                          DataColumn(label: Text('5% Sale')),
-                          DataColumn(label: Text('5% GST')),
-                          DataColumn(label: Text('18% Sale')),
-                          DataColumn(label: Text('18% GST')),
-                          DataColumn(label: Text('40% Sale')),
-                          DataColumn(label: Text('40% GST')),
-                          DataColumn(label: Text('Tax')),
-                        ],
-                        rows: [
-                          ...rows.map(
-                            (sale) => DataRow(
-                              color: WidgetStateProperty.all(
-                                _paymentColor(sale.paymentMode)
-                                    .withOpacity(0.08),
-                              ),
-                              cells: [
-                                DataCell(
-                                  Text(
-                                    DateFormat('dd-MM-yyyy')
-                                        .format(sale.saleDate),
+              child: rows.isEmpty
+                  ? const Center(
+                      child: Text('No bill rows found for the selected range.'),
+                    )
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.vertical,
+                      child: Scrollbar(
+                          controller: _billWiseHorizontalController,
+                          thumbVisibility: true,
+                          notificationPredicate: (notification) =>
+                              notification.metrics.axis == Axis.horizontal,
+                          child: SingleChildScrollView(
+                            controller: _billWiseHorizontalController,
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minWidth: 1800),
+                              child: DataTable(
+                                headingRowColor: WidgetStateProperty.all(
+                                  const Color(0xFFF8FAFC),
+                                ),
+                                dataRowMinHeight: 52,
+                                dataRowMaxHeight: 68,
+                                columns: [
+                                  const DataColumn(label: Text('Date')),
+                                  const DataColumn(label: Text('Bill No')),
+                                  const DataColumn(label: Text('Amount')),
+                                  ...taxRates.expand(
+                                    (rate) => [
+                                      DataColumn(
+                                          label: Text(
+                                              '${_formatTaxPercent(rate)}% Sale')),
+                                      if (rate > 0.009)
+                                        DataColumn(
+                                            label: Text(
+                                                '${_formatTaxPercent(rate)}% GST')),
+                                    ],
                                   ),
-                                ),
-                                DataCell(Text(_maskedBillNo(sale.saleNo))),
-                                DataCell(Text(_money(sale.netAmount))),
-                                DataCell(
-                                  Text(_money(_billWiseGstValue(sale, 0))),
-                                ),
-                                DataCell(
-                                  Text(_money(_billWiseGstValue(sale, 5))),
-                                ),
-                                DataCell(
-                                  Text(_money(_billWiseGstTaxAmount(sale, 5))),
-                                ),
-                                DataCell(
-                                  Text(_money(_billWiseGstValue(sale, 18))),
-                                ),
-                                DataCell(
-                                  Text(_money(_billWiseGstTaxAmount(sale, 18))),
-                                ),
-                                DataCell(
-                                  Text(_money(_billWiseGstValue(sale, 40))),
-                                ),
-                                DataCell(
-                                  Text(_money(_billWiseGstTaxAmount(sale, 40))),
-                                ),
-                                DataCell(Text(_money(sale.totalTax))),
-                              ],
+                                  const DataColumn(label: Text('IGST')),
+                                  const DataColumn(label: Text('Tax')),
+                                ],
+                                rows: [
+                                  ...rows.map(
+                                    (sale) => DataRow(
+                                      color: WidgetStateProperty.all(
+                                        _paymentColor(sale.paymentMode)
+                                            .withOpacity(0.08),
+                                      ),
+                                      cells: [
+                                        DataCell(
+                                          Text(
+                                            DateFormat('dd-MM-yyyy')
+                                                .format(sale.saleDate),
+                                          ),
+                                        ),
+                                        DataCell(
+                                            Text(_maskedBillNo(sale.saleNo))),
+                                        DataCell(Text(_money(sale.netAmount))),
+                                        ...taxRates.expand(
+                                          (rate) => [
+                                            DataCell(Text(_money(
+                                                _saleTaxBandValue(
+                                                    sale, rate)))),
+                                            if (rate > 0.009)
+                                              DataCell(Text(_money(
+                                                  _saleTaxBandTax(
+                                                      sale, rate)))),
+                                          ],
+                                        ),
+                                        DataCell(Text(
+                                            _money(_saleIgstAmount(sale)))),
+                                        DataCell(Text(_money(sale.totalTax))),
+                                      ],
+                                    ),
+                                  ),
+                                  DataRow(
+                                    color: WidgetStateProperty.all(
+                                      const Color(0xFFF8FAFC),
+                                    ),
+                                    cells: [
+                                      const DataCell(
+                                        Text(
+                                          'TOTAL',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      const DataCell(Text('')),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseNetTotal),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                      ...taxRates.expand(
+                                        (rate) => [
+                                          DataCell(
+                                            Text(
+                                              _money(_billWiseTaxBandsTotal[rate]
+                                                      ?.taxableValue ??
+                                                  0),
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w800),
+                                            ),
+                                          ),
+                                          if (rate > 0.009)
+                                            DataCell(
+                                              Text(
+                                                _money(
+                                                    _billWiseTaxBandsTotal[rate]
+                                                            ?.taxAmount ??
+                                                        0),
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.w800),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseIgstTotal),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseTaxTotal),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          DataRow(
-                            color: WidgetStateProperty.all(
-                              const Color(0xFFF8FAFC),
-                            ),
-                            cells: [
-                              const DataCell(
-                                Text(
-                                  'TOTAL',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                              ),
-                              const DataCell(Text('')),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseNetTotal),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseGst0Total),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseGst5Total),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseGst5TaxTotal),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseGst18Total),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseGst18TaxTotal),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseGst40Total),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseGst40TaxTotal),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  _money(_billWiseTaxTotal),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  )),
+                          )),
+                    ))
         ],
       ),
     );
@@ -1961,7 +2314,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           Expanded(
             child: groupedRows.isEmpty
                 ? const Center(
-                    child: Text('No item sales rows found for the selected range.'),
+                    child: Text(
+                        'No item sales rows found for the selected range.'),
                   )
                 : Scrollbar(
                     controller: _gstVerticalController,
@@ -1980,7 +2334,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                           primary: false,
                           scrollDirection: Axis.horizontal,
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(minWidth: 1280),
+                            constraints: const BoxConstraints(minWidth: 2000),
                             child: DataTable(
                               headingRowColor: WidgetStateProperty.all(
                                 const Color(0xFFF8FAFC),
@@ -1989,14 +2343,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                               dataRowMaxHeight: 68,
                               columns: const [
                                 DataColumn(label: Text('Label')),
-                                DataColumn(label: Text('Group')),
-                                DataColumn(label: Text('Subcategory')),
                                 DataColumn(label: Text('HSN/SAC')),
                                 DataColumn(label: Text('Rows')),
                                 DataColumn(label: Text('Qty')),
                                 DataColumn(label: Text('Unit')),
-                                DataColumn(label: Text('Tax Sale')),
-                                DataColumn(label: Text('Non Tax Sale')),
+                                DataColumn(label: Text('Taxed Sales')),
+                                DataColumn(label: Text('Non-Tax Sales')),
                                 DataColumn(label: Text('Taxable Value')),
                                 DataColumn(label: Text('CGST')),
                                 DataColumn(label: Text('SGST')),
@@ -2017,35 +2369,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                           ),
                                         ),
                                       ),
-                                      DataCell(
-                                        SizedBox(
-                                          width: 140,
-                                          child: Text(
-                                            row.itemGroup,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        SizedBox(
-                                          width: 170,
-                                          child: Text(
-                                            row.subCategory,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ),
                                       DataCell(Text(row.hsnSacCode)),
                                       DataCell(Text('${row.lineCount}')),
                                       DataCell(Text(_formatQty(row.quantity))),
                                       DataCell(Text(row.unit)),
                                       DataCell(
-                                        Text(_money(_itemWiseTaxSaleValue(row))),
+                                        Text(
+                                            _money(_itemWiseTaxSaleValue(row))),
                                       ),
                                       DataCell(
-                                        Text(_money(_itemWiseNonTaxSaleValue(row))),
+                                        Text(_money(
+                                            _itemWiseNonTaxSaleValue(row))),
                                       ),
                                       DataCell(Text(_money(row.taxableValue))),
                                       DataCell(Text(_money(row.cgstAmount))),
@@ -2070,8 +2404,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                         ),
                                       ),
                                     ),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
                                     const DataCell(Text('')),
                                     DataCell(
                                       Text(
@@ -2148,76 +2480,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                     ),
                                   ],
                                 ),
-                                DataRow(
-                                  color: WidgetStateProperty.all(
-                                    const Color(0xFFF1F5F9),
-                                  ),
-                                  cells: [
-                                    const DataCell(
-                                      Text(
-                                        'TAXABLE SALE TOTAL',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    DataCell(
-                                      Text(
-                                        _money(_itemWiseTaxableSaleTotal),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                  ],
-                                ),
-                                DataRow(
-                                  color: WidgetStateProperty.all(
-                                    const Color(0xFFF8FAFC),
-                                  ),
-                                  cells: [
-                                    const DataCell(
-                                      Text(
-                                        'NON-TAXABLE SALE TOTAL',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    DataCell(
-                                      Text(
-                                        _money(_itemWiseNonTaxableSaleTotal),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                    const DataCell(Text('')),
-                                  ],
-                                ),
                               ],
                             ),
                           ),
@@ -2233,6 +2495,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   Widget _buildDateWiseDataTableSection() {
     final rows = _dateWiseSalesRows;
+    final taxRates = _availableTaxRates;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -2256,109 +2519,139 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           Expanded(
             child: rows.isEmpty
                 ? const Center(
-                    child: Text('No date-wise rows found for the selected range.'),
+                    child:
+                        Text('No date-wise rows found for the selected range.'),
                   )
                 : SingleChildScrollView(
                     scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(
-                          const Color(0xFFF8FAFC),
-                        ),
-                        columns: const [
-                          DataColumn(label: Text('Date')),
-                          DataColumn(label: Text('Bills')),
-                          DataColumn(label: Text('Qty')),
-                          DataColumn(label: Text('0% Sale')),
-                          DataColumn(label: Text('5% Sale')),
-                          DataColumn(label: Text('5% GST')),
-                          DataColumn(label: Text('18% Sale')),
-                          DataColumn(label: Text('18% GST')),
-                          DataColumn(label: Text('40% Sale')),
-                          DataColumn(label: Text('40% GST')),
-                          DataColumn(label: Text('Tax')),
-                          DataColumn(label: Text('Net Amount')),
-                        ],
-                        rows: [
-                          ...rows.map(
-                            (row) => DataRow(
-                              cells: [
-                                DataCell(
-                                  Text(DateFormat('dd-MM-yyyy').format(row.date)),
-                                ),
-                                DataCell(Text('${row.bills}')),
-                                DataCell(Text(_formatQty(row.qty))),
-                                DataCell(Text(_money(row.gst0Value))),
-                                DataCell(Text(_money(row.gst5Value))),
-                                DataCell(Text(_money(row.gst5Tax))),
-                                DataCell(Text(_money(row.gst18Value))),
-                                DataCell(Text(_money(row.gst18Tax))),
-                                DataCell(Text(_money(row.gst40Value))),
-                                DataCell(Text(_money(row.gst40Tax))),
-                                DataCell(Text(_money(row.taxAmount))),
-                                DataCell(
-                                  Text(
-                                    _money(row.netAmount),
-                                    style: const TextStyle(fontWeight: FontWeight.w800),
-                                  ),
-                                ),
-                              ],
+                    child: Scrollbar(
+                      controller: _dateWiseHorizontalController,
+                      thumbVisibility: true,
+                      notificationPredicate: (notification) =>
+                          notification.metrics.axis == Axis.horizontal,
+                      child: SingleChildScrollView(
+                        controller: _dateWiseHorizontalController,
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 2000),
+                          child: DataTable(
+                            headingRowColor: WidgetStateProperty.all(
+                              const Color(0xFFF8FAFC),
                             ),
-                          ),
-                          DataRow(
-                            color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                            cells: [
-                              const DataCell(
-                                Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w800)),
+                            columns: [
+                              const DataColumn(label: Text('Date')),
+                              const DataColumn(label: Text('Bills')),
+                              const DataColumn(label: Text('Qty')),
+                              ...taxRates.expand(
+                                (rate) => [
+                                  DataColumn(
+                                      label: Text(
+                                          '${_formatTaxPercent(rate)}% Sale')),
+                                  if (rate > 0.009)
+                                    DataColumn(
+                                        label: Text(
+                                            '${_formatTaxPercent(rate)}% GST')),
+                                ],
                               ),
-                              DataCell(
-                                Text('$_dateWiseBillsTotal',
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                              const DataColumn(label: Text('IGST')),
+                              const DataColumn(label: Text('Tax')),
+                              const DataColumn(label: Text('Net Amount')),
+                            ],
+                            rows: [
+                              ...rows.map(
+                                (row) => DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(DateFormat('dd-MM-yyyy')
+                                          .format(row.date)),
+                                    ),
+                                    DataCell(Text('${row.bills}')),
+                                    DataCell(Text(_formatQty(row.qty))),
+                                    ...taxRates.expand(
+                                      (rate) => [
+                                        DataCell(Text(_money(
+                                            _bandTaxable(row.taxBands, rate)))),
+                                        if (rate > 0.009)
+                                          DataCell(Text(_money(
+                                              _bandTax(row.taxBands, rate)))),
+                                      ],
+                                    ),
+                                    DataCell(Text(_money(row.igstAmount))),
+                                    DataCell(Text(_money(row.taxAmount))),
+                                    DataCell(
+                                      Text(
+                                        _money(row.netAmount),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              DataCell(
-                                Text(_formatQty(_dateWiseQtyTotal),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseGst0Total),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseGst5Total),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseGst5TaxTotal),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseGst18Total),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseGst18TaxTotal),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseGst40Total),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseGst40TaxTotal),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseTaxTotal),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                              ),
-                              DataCell(
-                                Text(_money(_dateWiseNetTotal),
-                                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                              DataRow(
+                                color: WidgetStateProperty.all(
+                                    const Color(0xFFF8FAFC)),
+                                cells: [
+                                  const DataCell(
+                                    Text('TOTAL',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                  ),
+                                  DataCell(
+                                    Text('$_dateWiseBillsTotal',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                  ),
+                                  DataCell(
+                                    Text(_formatQty(_dateWiseQtyTotal),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                  ),
+                                  ...taxRates.expand(
+                                    (rate) => [
+                                      DataCell(
+                                        Text(
+                                          _money(_dateWiseTaxBandsTotal[rate]
+                                                  ?.taxableValue ??
+                                              0),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      if (rate > 0.009)
+                                        DataCell(
+                                          Text(
+                                            _money(_dateWiseTaxBandsTotal[rate]
+                                                    ?.taxAmount ??
+                                                0),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w800),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      _money(_dateWiseIgstTotal),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(_money(_dateWiseTaxTotal),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                  ),
+                                  DataCell(
+                                    Text(_money(_dateWiseNetTotal),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -2368,7 +2661,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     );
   }
 
-  Widget _buildDataTableSection() {
+  Widget _buildGstr1Section() {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -2380,20 +2673,19 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'GST Sales Register',
+            'GSTR-1 Sales Register',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),
           Text(
-            'Rows: ${_rows.length} � Filter: ${_gstFilter == 'ALL' ? 'All Sales' : _gstFilter == 'B2B_ONLY' ? 'B2B Only' : 'B2C Only'}',
+            'Rows: ${_rows.length} | Filter: ${_gstFilter == 'ALL' ? 'All Sales' : _gstFilter == 'B2B_ONLY' ? 'B2B Only' : 'B2C Only'}',
             style: const TextStyle(color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 12),
           Expanded(
             child: _rows.isEmpty
                 ? const Center(
-                    child:
-                        Text('No GST sales rows found for the selected range.'))
+                    child: Text('No GSTR-1 rows found for the selected range.'))
                 : Scrollbar(
                     controller: _gstVerticalController,
                     thumbVisibility: true,
@@ -2477,6 +2769,133 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     ),
                   ),
           )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGstr2Section() {
+    final rows = _gstr2Rows;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'GSTR-2 Purchase Register',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Bills: $_gstr2BillCount | Rows: ${rows.length} | Taxable: ${_money(_gstr2TaxableTotal)}',
+            style: const TextStyle(color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: rows.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No purchase rows found for the selected range.',
+                    ),
+                  )
+                : Scrollbar(
+                    controller: _gstr2VerticalController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _gstr2VerticalController,
+                      primary: false,
+                      scrollDirection: Axis.vertical,
+                      child: Scrollbar(
+                        controller: _gstr2HorizontalController,
+                        thumbVisibility: true,
+                        notificationPredicate: (notification) =>
+                            notification.metrics.axis == Axis.horizontal,
+                        child: SingleChildScrollView(
+                          controller: _gstr2HorizontalController,
+                          primary: false,
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minWidth: 1600),
+                            child: SingleChildScrollView(
+                              primary: false,
+                              child: DataTable(
+                                headingRowColor: WidgetStateProperty.all(
+                                    const Color(0xFFF8FAFC)),
+                                dataRowMinHeight: 52,
+                                dataRowMaxHeight: 68,
+                                columns: const [
+                                  DataColumn(label: Text('Date')),
+                                  DataColumn(label: Text('GRN No')),
+                                  DataColumn(label: Text('Bill No')),
+                                  DataColumn(label: Text('Supplier')),
+                                  DataColumn(label: Text('GSTIN')),
+                                  DataColumn(label: Text('State')),
+                                  DataColumn(label: Text('Items')),
+                                  DataColumn(label: Text('Qty')),
+                                  DataColumn(label: Text('Taxable Value')),
+                                  DataColumn(label: Text('GST Amount')),
+                                  DataColumn(label: Text('Net Amount')),
+                                  DataColumn(label: Text('Paid')),
+                                  DataColumn(label: Text('Outstanding')),
+                                  DataColumn(label: Text('Status')),
+                                ],
+                                rows: rows
+                                    .map(
+                                      (row) => DataRow(
+                                        cells: [
+                                          DataCell(Text(DateFormat('dd-MM-yyyy')
+                                              .format(row.invoiceDate))),
+                                          DataCell(Text(row.grnNo.isEmpty
+                                              ? '-'
+                                              : row.grnNo)),
+                                          DataCell(Text(row.billNo.isEmpty
+                                              ? '-'
+                                              : row.billNo)),
+                                          DataCell(SizedBox(
+                                            width: 180,
+                                            child: Text(
+                                              row.supplier,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          )),
+                                          DataCell(Text(
+                                              row.supplierGstin.isEmpty
+                                                  ? 'B2B/B2C'
+                                                  : row.supplierGstin)),
+                                          DataCell(Text(
+                                              row.supplierState.isEmpty
+                                                  ? '-'
+                                                  : row.supplierState)),
+                                          DataCell(Text('${row.itemCount}')),
+                                          DataCell(Text(_formatQty(row.qty))),
+                                          DataCell(
+                                              Text(_money(row.taxableValue))),
+                                          DataCell(Text(_money(row.taxAmount))),
+                                          DataCell(
+                                              Text(_money(row.totalAfterTax))),
+                                          DataCell(
+                                              Text(_money(row.paidAmount))),
+                                          DataCell(Text(
+                                              _money(row.outstandingAmount))),
+                                          DataCell(Text(row.billStatus)),
+                                        ],
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
         ],
       ),
     );
@@ -2666,17 +3085,22 @@ class _GroupedSalesRow {
   }
 }
 
+class _TaxBandSummary {
+  double taxableValue;
+  double taxAmount;
+
+  _TaxBandSummary({
+    this.taxableValue = 0,
+    this.taxAmount = 0,
+  });
+}
+
 class _DateWiseSalesRow {
   final DateTime date;
   final int bills;
   final double qty;
-  final double gst0Value;
-  final double gst5Value;
-  final double gst18Value;
-  final double gst40Value;
-  final double gst5Tax;
-  final double gst18Tax;
-  final double gst40Tax;
+  final Map<double, _TaxBandSummary> taxBands;
+  final double igstAmount;
   final double taxAmount;
   final double netAmount;
 
@@ -2684,13 +3108,8 @@ class _DateWiseSalesRow {
     required this.date,
     required this.bills,
     required this.qty,
-    required this.gst0Value,
-    required this.gst5Value,
-    required this.gst18Value,
-    required this.gst40Value,
-    required this.gst5Tax,
-    required this.gst18Tax,
-    required this.gst40Tax,
+    required this.taxBands,
+    required this.igstAmount,
     required this.taxAmount,
     required this.netAmount,
   });
@@ -2698,13 +3117,8 @@ class _DateWiseSalesRow {
   _DateWiseSalesRow copyWith({
     int? bills,
     double? qty,
-    double? gst0Value,
-    double? gst5Value,
-    double? gst18Value,
-    double? gst40Value,
-    double? gst5Tax,
-    double? gst18Tax,
-    double? gst40Tax,
+    Map<double, _TaxBandSummary>? taxBands,
+    double? igstAmount,
     double? taxAmount,
     double? netAmount,
   }) {
@@ -2712,15 +3126,82 @@ class _DateWiseSalesRow {
       date: date,
       bills: bills ?? this.bills,
       qty: qty ?? this.qty,
-      gst0Value: gst0Value ?? this.gst0Value,
-      gst5Value: gst5Value ?? this.gst5Value,
-      gst18Value: gst18Value ?? this.gst18Value,
-      gst40Value: gst40Value ?? this.gst40Value,
-      gst5Tax: gst5Tax ?? this.gst5Tax,
-      gst18Tax: gst18Tax ?? this.gst18Tax,
-      gst40Tax: gst40Tax ?? this.gst40Tax,
+      taxBands: taxBands ?? this.taxBands,
+      igstAmount: igstAmount ?? this.igstAmount,
       taxAmount: taxAmount ?? this.taxAmount,
       netAmount: netAmount ?? this.netAmount,
+    );
+  }
+}
+
+class _Gstr2Row {
+  final DateTime invoiceDate;
+  final String grnNo;
+  final String billNo;
+  final String supplier;
+  final String supplierGstin;
+  final String supplierState;
+  final String billStatus;
+  final double paidAmount;
+  final double outstandingAmount;
+  final double taxableValue;
+  final double taxAmount;
+  final double totalAfterTax;
+  final int billCount;
+  final int itemCount;
+  final double qty;
+
+  const _Gstr2Row({
+    required this.invoiceDate,
+    required this.grnNo,
+    required this.billNo,
+    required this.supplier,
+    required this.supplierGstin,
+    required this.supplierState,
+    required this.billStatus,
+    required this.paidAmount,
+    required this.outstandingAmount,
+    required this.taxableValue,
+    required this.taxAmount,
+    required this.totalAfterTax,
+    required this.billCount,
+    required this.itemCount,
+    required this.qty,
+  });
+
+  _Gstr2Row copyWith({
+    DateTime? invoiceDate,
+    String? grnNo,
+    String? billNo,
+    String? supplier,
+    String? supplierGstin,
+    String? supplierState,
+    String? billStatus,
+    double? paidAmount,
+    double? outstandingAmount,
+    double? taxableValue,
+    double? taxAmount,
+    double? totalAfterTax,
+    int? billCount,
+    int? itemCount,
+    double? qty,
+  }) {
+    return _Gstr2Row(
+      invoiceDate: invoiceDate ?? this.invoiceDate,
+      grnNo: grnNo ?? this.grnNo,
+      billNo: billNo ?? this.billNo,
+      supplier: supplier ?? this.supplier,
+      supplierGstin: supplierGstin ?? this.supplierGstin,
+      supplierState: supplierState ?? this.supplierState,
+      billStatus: billStatus ?? this.billStatus,
+      paidAmount: paidAmount ?? this.paidAmount,
+      outstandingAmount: outstandingAmount ?? this.outstandingAmount,
+      taxableValue: taxableValue ?? this.taxableValue,
+      taxAmount: taxAmount ?? this.taxAmount,
+      totalAfterTax: totalAfterTax ?? this.totalAfterTax,
+      billCount: billCount ?? this.billCount,
+      itemCount: itemCount ?? this.itemCount,
+      qty: qty ?? this.qty,
     );
   }
 }
