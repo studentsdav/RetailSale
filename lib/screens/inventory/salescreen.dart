@@ -68,6 +68,9 @@ class _SaleScreenState extends State<SaleScreen> {
   final _schemeDiscountValue = TextEditingController(text: '0');
   final _schemeMinQty = TextEditingController(text: '0');
   final _schemeMinAmount = TextEditingController(text: '0');
+  final ScrollController _categoryScrollController = ScrollController();
+  final ScrollController _schemeSelectionScrollController = ScrollController();
+  final ScrollController _schemeStripScrollController = ScrollController();
 
   DateTime _saleDate = DateTime.now();
   String _paymentMode = 'CASH';
@@ -88,6 +91,8 @@ class _SaleScreenState extends State<SaleScreen> {
   Item? _selectedManualItem;
   SaleScheme? _selectedScheme;
   SaleScheme? _selectedItemScheme;
+  String? _selectedIgstState;
+  String? _selectedIgstStateCode;
   _VoucherDefinition? _appliedVoucher;
   TimeOfDay? _schemeStartTime;
   TimeOfDay? _schemeEndTime;
@@ -280,6 +285,9 @@ class _SaleScreenState extends State<SaleScreen> {
     _schemeDiscountValue.dispose();
     _schemeMinQty.dispose();
     _schemeMinAmount.dispose();
+    _categoryScrollController.dispose();
+    _schemeSelectionScrollController.dispose();
+    _schemeStripScrollController.dispose();
     settingsCtrl.dispose();
     super.dispose();
   }
@@ -1664,6 +1672,74 @@ class _SaleScreenState extends State<SaleScreen> {
     );
     controller.dispose();
     if (qty != null) _updateLineQty(index, qty);
+  }
+
+  Future<void> _editTaxDialog(int index) async {
+    final item = _items[index];
+    String tempTaxType = item.taxType.isEmpty ? 'GST' : item.taxType;
+    final percentController = TextEditingController(
+      text: item.taxPercent.toStringAsFixed(item.taxPercent % 1 == 0 ? 0 : 2),
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return AlertDialog(
+            title: const Text('Edit Tax'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: tempTaxType,
+                  decoration: const InputDecoration(labelText: 'Tax Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'GST', child: Text('GST')),
+                    DropdownMenuItem(value: 'IGST', child: Text('IGST')),
+                    DropdownMenuItem(value: 'VAT', child: Text('VAT')),
+                    DropdownMenuItem(value: 'NONE', child: Text('No Tax')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => tempTaxType = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: percentController,
+                  autofocus: !context.watch<UiPreferencesController>().touchMode,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Tax Percentage',
+                    helperText: 'Example: 0, 5, 12, 18',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final newPercent = double.tryParse(percentController.text.trim()) ?? item.taxPercent;
+                  setState(() {
+                    _items[index] = item.copyWith(
+                      taxType: tempTaxType,
+                      taxPercent: newPercent,
+                    );
+                    _syncAmountPaidWithInvoice();
+                  });
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('Update'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    percentController.dispose();
   }
 
   Future<void> _applyCustomer(SaleCustomer customer) async {
@@ -3085,6 +3161,102 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
+  Future<void> _showTaxModeDialog() async {
+    String selectedMode = _taxMode;
+    String? tempIgstState = _selectedIgstState;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return AlertDialog(
+            title: const Text('Select Tax Mode'),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: selectedMode,
+                    decoration: const InputDecoration(labelText: 'Tax Mode'),
+                    items: const [
+                      DropdownMenuItem(value: 'CGST_SGST', child: Text('CGST + SGST')),
+                      DropdownMenuItem(value: 'IGST', child: Text('IGST')),
+                      DropdownMenuItem(value: 'VAT', child: Text('VAT')),
+                      DropdownMenuItem(value: 'CESS', child: Text('CESS')),
+                      DropdownMenuItem(value: 'CUSTOM', child: Text('Custom Tax')),
+                      DropdownMenuItem(value: 'NONE', child: Text('No Tax')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          selectedMode = value;
+                        });
+                      }
+                    },
+                  ),
+                  if (selectedMode == 'IGST') ...[
+                    const SizedBox(height: 16),
+                    DropdownSearch<String>(
+                      selectedItem: tempIgstState,
+                      items: (filter, _) async {
+                        if (filter.isEmpty) return _stateCodes.keys.toList();
+                        return _stateCodes.keys
+                            .where((state) => state.toLowerCase().contains(filter.toLowerCase()))
+                            .toList();
+                      },
+                      itemAsString: (state) {
+                        final code = _stateCodes[state];
+                        return '${_titleCase(state)} ($code)';
+                      },
+                      compareFn: (first, second) => first == second,
+                      popupProps: const PopupProps.menu(showSearchBox: true),
+                      decoratorProps: const DropDownDecoratorProps(
+                        decoration: InputDecoration(
+                          labelText: 'Select State (Place of Supply)',
+                          helperText: 'Required for IGST billing',
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          tempIgstState = value;
+                        });
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _taxMode = selectedMode;
+                    if (selectedMode == 'IGST') {
+                      _selectedIgstState = tempIgstState;
+                      _selectedIgstStateCode = tempIgstState != null ? _stateCodes[tempIgstState!] : null;
+                    } else {
+                      _selectedIgstState = null;
+                      _selectedIgstStateCode = null;
+                    }
+                    _syncAmountPaidWithInvoice();
+                  });
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   bool _isVoucherValid(_VoucherDefinition voucher, {bool showReason = true}) {
     final now = DateTime.now();
     final from = DateTime.tryParse(voucher.validFrom);
@@ -4066,6 +4238,16 @@ class _SaleScreenState extends State<SaleScreen> {
         'Retail round off: ${retailRoundOff >= 0 ? '+' : ''}${retailRoundOff.toStringAsFixed(2)}',
       );
     }
+    String? resolvedCustomerAddress = _customerAddress.text.trim();
+    if (_taxMode == 'IGST' && _selectedIgstState != null) {
+      if (resolvedCustomerAddress.isEmpty) {
+        resolvedCustomerAddress = 'State: ${_titleCase(_selectedIgstState!)}';
+      } else if (!resolvedCustomerAddress.toLowerCase().contains(_selectedIgstState!.toLowerCase())) {
+        resolvedCustomerAddress += ', State: ${_titleCase(_selectedIgstState!)}';
+      }
+    }
+    if (resolvedCustomerAddress.isEmpty) resolvedCustomerAddress = null;
+
     final order = SaleOrder(
       saleNo: _saleNo.text,
       saleDate: _saleDate,
@@ -4079,9 +4261,7 @@ class _SaleScreenState extends State<SaleScreen> {
       customerPhone: _customerPhone.text.trim().isEmpty
           ? null
           : _customerPhone.text.trim(),
-      customerAddress: _customerAddress.text.trim().isEmpty
-          ? null
-          : _customerAddress.text.trim(),
+      customerAddress: resolvedCustomerAddress,
       customerGstin: _customerGstin.text.trim().isEmpty
           ? null
           : _customerGstin.text.trim(),
@@ -4334,6 +4514,9 @@ class _SaleScreenState extends State<SaleScreen> {
       _manualDiscountType = 'AMOUNT';
       _voucherUsageMode = 'APPLY_NOW';
       _orderType = 'B2C';
+      _taxMode = 'CGST_SGST';
+      _selectedIgstState = null;
+      _selectedIgstStateCode = null;
       _saleDate = DateTime.now();
       _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
       _applyBillingDefaults();
@@ -6119,29 +6302,56 @@ class _SaleScreenState extends State<SaleScreen> {
           const SizedBox(height: 18),
           SizedBox(
             height: 48,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _catalogCategories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, index) {
-                final category = _catalogCategories[index];
-                final selected = category == _selectedCatalogCategory;
-                return FilterChip(
-                  selected: selected,
-                  showCheckmark: false,
-                  label: Text(category),
-                  labelStyle: TextStyle(
-                    color: selected ? Colors.white : const Color(0xFF475569),
-                    fontWeight: FontWeight.w700,
-                  ),
-                  selectedColor: const Color(0xFFFF7A1A),
-                  backgroundColor: const Color(0xFFF8FAFD),
-                  side: BorderSide.none,
-                  onSelected: (_) {
-                    setState(() => _selectedCatalogCategory = category);
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios, size: 16),
+                  onPressed: () {
+                    _categoryScrollController.animateTo(
+                      (_categoryScrollController.offset - 150).clamp(0.0, _categoryScrollController.position.maxScrollExtent),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
                   },
-                );
-              },
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    controller: _categoryScrollController,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _catalogCategories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final category = _catalogCategories[index];
+                      final selected = category == _selectedCatalogCategory;
+                      return FilterChip(
+                        selected: selected,
+                        showCheckmark: false,
+                        label: Text(category),
+                        labelStyle: TextStyle(
+                          color: selected ? Colors.white : const Color(0xFF475569),
+                          fontWeight: FontWeight.w700,
+                        ),
+                        selectedColor: const Color(0xFFFF7A1A),
+                        backgroundColor: const Color(0xFFF8FAFD),
+                        side: BorderSide.none,
+                        onSelected: (_) {
+                          setState(() => _selectedCatalogCategory = category);
+                        },
+                      );
+                    },
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onPressed: () {
+                    _categoryScrollController.animateTo(
+                      (_categoryScrollController.offset + 150).clamp(0.0, _categoryScrollController.position.maxScrollExtent),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 18),
@@ -6355,32 +6565,59 @@ class _SaleScreenState extends State<SaleScreen> {
             flex: 2,
             child: SizedBox(
               height: 36,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _availableSchemes.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final scheme = _availableSchemes[index];
-                  final selected =
-                      _hasCustomerContext && _isSchemeChipSelected(scheme);
-                  return FilterChip(
-                    selected: selected,
-                    onSelected: !_hasCustomerContext
-                        ? null
-                        : (isSelected) {
-                            if (isSelected) {
-                              _selectSchemeWithUsage(
-                                scheme,
-                                preserveExistingSelections: true,
-                              );
-                            } else {
-                              _toggleSelectedSchemeChip(scheme);
-                            }
-                          },
-                    label: Text(scheme.schemeName),
-                  );
-                },
-              ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios, size: 14),
+                  onPressed: () {
+                    _schemeSelectionScrollController.animateTo(
+                      (_schemeSelectionScrollController.offset - 150).clamp(0.0, _schemeSelectionScrollController.position.maxScrollExtent),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    controller: _schemeSelectionScrollController,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _availableSchemes.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final scheme = _availableSchemes[index];
+                      final selected =
+                          _hasCustomerContext && _isSchemeChipSelected(scheme);
+                      return FilterChip(
+                        selected: selected,
+                        onSelected: !_hasCustomerContext
+                            ? null
+                            : (isSelected) {
+                                if (isSelected) {
+                                  _selectSchemeWithUsage(
+                                    scheme,
+                                    preserveExistingSelections: true,
+                                  );
+                                } else {
+                                  _toggleSelectedSchemeChip(scheme);
+                                }
+                              },
+                        label: Text(scheme.schemeName),
+                      );
+                    },
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onPressed: () {
+                    _schemeSelectionScrollController.animateTo(
+                      (_schemeSelectionScrollController.offset + 150).clamp(0.0, _schemeSelectionScrollController.position.maxScrollExtent),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                ),
+              ],
+            ),
             ),
           ),
         ],
@@ -6712,6 +6949,13 @@ class _SaleScreenState extends State<SaleScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
+                        _tintedActionButton(
+                          icon: Icons.percent,
+                          onPressed: _showTaxModeDialog,
+                          backgroundColor: const Color(0xFFE0F2FE),
+                          foregroundColor: const Color(0xFF0369A1),
+                          tooltip: 'Select tax mode',
+                        ),
                         _tintedActionButton(
                           icon: Icons.add_card_rounded,
                           onPressed: _showDiscountDialog,
@@ -7924,52 +8168,79 @@ class _SaleScreenState extends State<SaleScreen> {
           const SizedBox(height: 12),
           SizedBox(
             height: 56,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _availableSchemes.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final scheme = _availableSchemes[index];
-                final selected = _selectedScheme?.id == scheme.id ||
-                    _selectedItemScheme?.id == scheme.id;
-                return Tooltip(
-                  message: selected
-                      ? 'Click again to remove ${scheme.schemeName}'
-                      : 'Click to apply ${scheme.schemeName}',
-                  child: OutlinedButton(
-                    onPressed: () => scheme.schemeScope.toUpperCase() == 'ITEM'
-                        ? (selected
-                            ? _setSelectedItemScheme(null, manual: true)
-                            : _selectSchemeWithUsage(scheme))
-                        : (selected
-                            ? _setSelectedScheme(null, manual: true)
-                            : _selectSchemeWithUsage(scheme)),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor:
-                          selected ? const Color(0xFFFFF3E7) : Colors.white,
-                      side: BorderSide(
-                        color: selected
-                            ? const Color(0xFFFF7A1A)
-                            : const Color(0xFFE2E8F0),
-                        width: selected ? 1.6 : 1,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                    ),
-                    child: Text(
-                      scheme.schemeName,
-                      style: TextStyle(
-                        color: selected
-                            ? const Color(0xFFE56A00)
-                            : const Color(0xFF475569),
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios, size: 16),
+                  onPressed: () {
+                    _schemeStripScrollController.animateTo(
+                      (_schemeStripScrollController.offset - 150).clamp(0.0, _schemeStripScrollController.position.maxScrollExtent),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    controller: _schemeStripScrollController,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _availableSchemes.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final scheme = _availableSchemes[index];
+                      final selected = _selectedScheme?.id == scheme.id ||
+                          _selectedItemScheme?.id == scheme.id;
+                      return Tooltip(
+                        message: selected
+                            ? 'Click again to remove ${scheme.schemeName}'
+                            : 'Click to apply ${scheme.schemeName}',
+                        child: OutlinedButton(
+                          onPressed: () => scheme.schemeScope.toUpperCase() == 'ITEM'
+                              ? (selected
+                                  ? _setSelectedItemScheme(null, manual: true)
+                                  : _selectSchemeWithUsage(scheme))
+                              : (selected
+                                  ? _setSelectedScheme(null, manual: true)
+                                  : _selectSchemeWithUsage(scheme)),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor:
+                                selected ? const Color(0xFFFFF3E7) : Colors.white,
+                            side: BorderSide(
+                              color: selected
+                                  ? const Color(0xFFFF7A1A)
+                                  : const Color(0xFFE2E8F0),
+                              width: selected ? 1.6 : 1,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 18),
+                          ),
+                          child: Text(
+                            scheme.schemeName,
+                            style: TextStyle(
+                              color: selected
+                                  ? const Color(0xFFE56A00)
+                                  : const Color(0xFF475569),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onPressed: () {
+                    _schemeStripScrollController.animateTo(
+                      (_schemeStripScrollController.offset + 150).clamp(0.0, _schemeStripScrollController.position.maxScrollExtent),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                ),
+              ],
             ),
           ),
           if (_appliedVoucher != null) ...[
@@ -9691,11 +9962,42 @@ class _SaleScreenState extends State<SaleScreen> {
             ),
           ),
           Expanded(flex: 2, child: Text(line.rate.toStringAsFixed(2))),
-          Expanded(flex: 2, child: Text(line.taxType)),
           Expanded(
             flex: 2,
-            child: Text(
-              line.taxPercent.toStringAsFixed(line.taxPercent % 1 == 0 ? 0 : 2),
+            child: InkWell(
+              onTap: isFree ? null : () => _editTaxDialog(index),
+              child: Row(
+                children: [
+                  Text(
+                    line.taxType,
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_drop_down, size: 16, color: Colors.blue),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: InkWell(
+              onTap: isFree ? null : () => _editTaxDialog(index),
+              child: Row(
+                children: [
+                  Text(
+                    line.taxPercent.toStringAsFixed(line.taxPercent % 1 == 0 ? 0 : 2),
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.edit, size: 14, color: Colors.blue),
+                ],
+              ),
             ),
           ),
           Expanded(flex: 2, child: Text(line.taxAmount.toStringAsFixed(2))),
@@ -9905,4 +10207,51 @@ class _VoucherDefinition {
           0,
     );
   }
+}
+
+const Map<String, String> _stateCodes = {
+  'andaman and nicobar islands': '35',
+  'andhra pradesh': '37',
+  'arunachal pradesh': '12',
+  'assam': '18',
+  'bihar': '10',
+  'chandigarh': '04',
+  'chhattisgarh': '22',
+  'dadra and nagar haveli and daman and diu': '26',
+  'delhi': '07',
+  'goa': '30',
+  'gujarat': '24',
+  'haryana': '06',
+  'himachal pradesh': '02',
+  'jammu and kashmir': '01',
+  'jharkhand': '20',
+  'karnataka': '29',
+  'kerala': '32',
+  'ladakh': '38',
+  'lakshadweep': '31',
+  'madhya pradesh': '23',
+  'maharashtra': '27',
+  'manipur': '14',
+  'meghalaya': '17',
+  'mizoram': '15',
+  'nagaland': '13',
+  'odisha': '21',
+  'puducherry': '34',
+  'punjab': '03',
+  'rajasthan': '08',
+  'sikkim': '11',
+  'tamil nadu': '33',
+  'telangana': '36',
+  'tripura': '16',
+  'uttar pradesh': '09',
+  'uttarakhand': '05',
+  'west bengal': '19',
+};
+
+String _titleCase(String value) {
+  return value
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
 }

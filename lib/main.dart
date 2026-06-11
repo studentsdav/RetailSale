@@ -148,27 +148,124 @@ class MyApp extends StatelessWidget {
       errorBorder: errorBorder,
     );
 
-    final theme = uiPrefs.touchMode
-        ? baseTheme.copyWith(
-            visualDensity: VisualDensity.comfortable,
-            materialTapTargetSize: MaterialTapTargetSize.padded,
-            inputDecorationTheme: dynamicInputDecorationTheme,
-            cardTheme: baseTheme.cardTheme.copyWith(color: resolvedCardColor),
-            filledButtonTheme: FilledButtonThemeData(
-              style: baseTheme.filledButtonTheme.style?.copyWith(
-                minimumSize: WidgetStateProperty.all(const Size(0, 52)),
-              ),
-            ),
-            outlinedButtonTheme: OutlinedButtonThemeData(
-              style: baseTheme.outlinedButtonTheme.style?.copyWith(
-                minimumSize: WidgetStateProperty.all(const Size(0, 52)),
-              ),
-            ),
-          )
-        : baseTheme.copyWith(
-            inputDecorationTheme: dynamicInputDecorationTheme,
-            cardTheme: baseTheme.cardTheme.copyWith(color: resolvedCardColor),
-          );
+    double cardRadius;
+    switch (uiPrefs.cardBorderStyle) {
+      case 'flat':
+        cardRadius = 0.0;
+        break;
+      case 'less_rounded':
+        cardRadius = 8.0;
+        break;
+      case 'rounded':
+      default:
+        cardRadius = 16.0;
+        break;
+    }
+
+    double buttonRadius;
+    switch (uiPrefs.buttonBorderStyle) {
+      case 'flat':
+        buttonRadius = 0.0;
+        break;
+      case 'less_rounded':
+        buttonRadius = 6.0;
+        break;
+      case 'rounded':
+      default:
+        buttonRadius = 12.0;
+        break;
+    }
+
+    double fontSizeScale;
+    switch (uiPrefs.fontSizeAdjustment) {
+      case 'small':
+        fontSizeScale = 0.85;
+        break;
+      case 'large':
+        fontSizeScale = 1.15;
+        break;
+      case 'extra_large':
+        fontSizeScale = 1.3;
+        break;
+      case 'normal':
+      default:
+        fontSizeScale = 1.0;
+        break;
+    }
+
+    TextTheme scaleTextTheme(TextTheme base, double factor) {
+      if (factor == 1.0) return base;
+      
+      TextStyle? scaleStyle(TextStyle? style, double defaultSize) {
+        if (style == null) return null;
+        final double currentSize = style.fontSize ?? defaultSize;
+        return style.copyWith(fontSize: currentSize * factor);
+      }
+
+      return TextTheme(
+        displayLarge: scaleStyle(base.displayLarge, 57),
+        displayMedium: scaleStyle(base.displayMedium, 45),
+        displaySmall: scaleStyle(base.displaySmall, 36),
+        headlineLarge: scaleStyle(base.headlineLarge, 32),
+        headlineMedium: scaleStyle(base.headlineMedium, 28),
+        headlineSmall: scaleStyle(base.headlineSmall, 24),
+        titleLarge: scaleStyle(base.titleLarge, 22),
+        titleMedium: scaleStyle(base.titleMedium, 16),
+        titleSmall: scaleStyle(base.titleSmall, 14),
+        bodyLarge: scaleStyle(base.bodyLarge, 16),
+        bodyMedium: scaleStyle(base.bodyMedium, 14),
+        bodySmall: scaleStyle(base.bodySmall, 12),
+        labelLarge: scaleStyle(base.labelLarge, 14),
+        labelMedium: scaleStyle(base.labelMedium, 12),
+        labelSmall: scaleStyle(base.labelSmall, 11),
+      );
+    }
+
+    final scaledTextTheme = scaleTextTheme(baseTheme.textTheme, fontSizeScale);
+
+    final customCardTheme = CardThemeData(
+      color: resolvedCardColor,
+      elevation: baseTheme.cardTheme.elevation,
+      shadowColor: baseTheme.cardTheme.shadowColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(cardRadius),
+        side: baseTheme.cardTheme.shape is RoundedRectangleBorder
+            ? (baseTheme.cardTheme.shape as RoundedRectangleBorder).side
+            : BorderSide.none,
+      ),
+    );
+
+    final customFilledButtonStyle = (baseTheme.filledButtonTheme.style ?? FilledButton.styleFrom()).copyWith(
+      shape: WidgetStateProperty.all(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(buttonRadius),
+        ),
+      ),
+      minimumSize: uiPrefs.touchMode
+          ? WidgetStateProperty.all(const Size(0, 52))
+          : null,
+    );
+
+    final customOutlinedButtonStyle = (baseTheme.outlinedButtonTheme.style ?? OutlinedButton.styleFrom()).copyWith(
+      shape: WidgetStateProperty.all(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(buttonRadius),
+        ),
+      ),
+      minimumSize: uiPrefs.touchMode
+          ? WidgetStateProperty.all(const Size(0, 52))
+          : null,
+    );
+
+    final theme = baseTheme.copyWith(
+      textTheme: scaledTextTheme,
+      inputDecorationTheme: dynamicInputDecorationTheme,
+      cardTheme: customCardTheme,
+      filledButtonTheme: FilledButtonThemeData(style: customFilledButtonStyle),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: customOutlinedButtonStyle),
+      visualDensity: uiPrefs.touchMode ? VisualDensity.comfortable : baseTheme.visualDensity,
+      materialTapTargetSize: uiPrefs.touchMode ? MaterialTapTargetSize.padded : baseTheme.materialTapTargetSize,
+    );
 
     return MaterialApp(
       scaffoldMessengerKey: globalSnackbarKey,

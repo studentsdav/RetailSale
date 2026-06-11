@@ -23,6 +23,19 @@ class BackupService {
     }
   }
 
+  static Future<Map<String, dynamic>> checkDetailedStatus() async {
+    try {
+      final res = await ApiClient.get(ApiEndpoints.backupStatus);
+      if (res['success'] == true) {
+        return Map<String, dynamic>.from(res);
+      }
+      return const {};
+    } catch (e) {
+      debugPrint("Error checking detailed backup status: $e");
+      return const {};
+    }
+  }
+
   static Future<bool> syncLatest() async {
     try {
       final res = await ApiClient.get(ApiEndpoints.syncLatest);

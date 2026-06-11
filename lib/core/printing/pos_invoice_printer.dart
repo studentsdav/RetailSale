@@ -272,7 +272,18 @@ class PosInvoicePrinter {
             ),
           if ((order.customerGstin ?? '').trim().isNotEmpty)
             _thermalMetaRow('GSTIN', order.customerGstin!.trim(), '', ''),
-          if ((order.customerAddress ?? '').trim().isNotEmpty)
+          if (order.billingTaxMode == 'IGST' || (data.buyerState != null && data.buyerState!.isNotEmpty))
+            _thermalMetaRow(
+              'Place of Supply',
+              data.buyerState != null && data.buyerState!.isNotEmpty
+                  ? _titleCase(data.buyerState!)
+                  : 'Local',
+              'State Code',
+              data.buyerState != null && data.buyerState!.isNotEmpty
+                  ? (data.buyerStateCode ?? '-')
+                  : (data.sellerStateCode ?? '-'),
+            ),
+          if (_cleanAddressForPrint(order.customerAddress).isNotEmpty)
             pw.Padding(
               padding: const pw.EdgeInsets.symmetric(vertical: 1),
               child: pw.Row(
@@ -288,7 +299,7 @@ class PosInvoicePrinter {
                   ),
                   pw.Expanded(
                     child: pw.Text(
-                      order.customerAddress!.trim(),
+                      _cleanAddressForPrint(order.customerAddress),
                       style: pw.TextStyle(
                         font: regular,
                         fontSize: 8,
@@ -576,7 +587,9 @@ class PosInvoicePrinter {
                       ),
                       _a4MetaRow(
                         'Place of Supply',
-                        data.buyerState ?? sellerState,
+                        data.buyerState != null && data.buyerState!.isNotEmpty
+                            ? '${_titleCase(data.buyerState!)}${data.buyerStateCode != null ? ' / ${data.buyerStateCode}' : ''}'
+                            : (sellerState.isNotEmpty ? '${_titleCase(sellerState)}${data.sellerStateCode != null ? ' / ${data.sellerStateCode}' : ''}' : '-'),
                       ),
                     ],
                   ),
@@ -601,9 +614,9 @@ class PosInvoicePrinter {
                       _a4MetaRow('Customer', buyerName),
                       _a4MetaRow(
                         'Address',
-                        (order.customerAddress ?? '').trim().isEmpty
+                        _cleanAddressForPrint(order.customerAddress).isEmpty
                             ? '--'
-                            : order.customerAddress!.trim(),
+                            : _cleanAddressForPrint(order.customerAddress),
                       ),
                       _a4MetaRow(
                         'Phone',
@@ -1409,10 +1422,30 @@ class PosInvoicePrinter {
     return '${normalized.substring(0, length - 1)}…';
   }
 
+  static String _cleanAddressForPrint(String? rawAddress) {
+    if (rawAddress == null || rawAddress.trim().isEmpty) return '';
+    String address = rawAddress.trim();
+    
+    while (true) {
+      final stateIndex = address.toLowerCase().lastIndexOf(', state:');
+      if (stateIndex != -1) {
+        address = address.substring(0, stateIndex).trim();
+      } else {
+        break;
+      }
+    }
+    
+    if (address.toLowerCase().startsWith('state:')) {
+      return '';
+    }
+    
+    return address;
+  }
+
   static String _deriveBuyerState(SaleOrder order, PropertyInfo? property) {
     final gstStateCode = _stateCodeFromGstin(order.customerGstin);
     if (gstStateCode != null) {
-      return _stateNameByCode[gstStateCode] ?? property?.state ?? '';
+      return _stateNameByCode[gstStateCode] ?? (order.billingTaxMode == 'IGST' ? '' : property?.state ?? '');
     }
 
     final address = order.customerAddress ?? '';
@@ -1422,7 +1455,7 @@ class PosInvoicePrinter {
       }
     }
 
-    return property?.state ?? '';
+    return order.billingTaxMode == 'IGST' ? '' : property?.state ?? '';
   }
 
   static String? _stateCodeFromGstin(String? gstin) {

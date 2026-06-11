@@ -537,6 +537,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           await uiPrefsCtrl.updateTextfieldSize('compact');
                           await uiPrefsCtrl.updateTextfieldBorderStyle('rectangular');
                           await uiPrefsCtrl.updateCardColorStyle('white');
+                          await uiPrefsCtrl.updateCardBorderStyle('flat');
+                          await uiPrefsCtrl.updateButtonBorderStyle('flat');
                           
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -701,6 +703,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) {
                   if (value != null) {
                     uiPrefsCtrl.updateCardColorStyle(value);
+                  }
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: DropdownButtonFormField<String>(
+                initialValue: uiPrefsCtrl.cardBorderStyle,
+                decoration: const InputDecoration(
+                  labelText: 'Global Card Shape',
+                  helperText: 'Choose the corner roundness for all cards',
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'rounded',
+                    child: Text('Rounded (Default)'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'less_rounded',
+                    child: Text('Less Rounded'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'flat',
+                    child: Text('Flat (Sharp Corners)'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    uiPrefsCtrl.updateCardBorderStyle(value);
+                  }
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: DropdownButtonFormField<String>(
+                initialValue: uiPrefsCtrl.buttonBorderStyle,
+                decoration: const InputDecoration(
+                  labelText: 'Global Button Shape',
+                  helperText: 'Choose the corner roundness for buttons',
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'rounded',
+                    child: Text('Rounded (Default)'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'less_rounded',
+                    child: Text('Less Rounded'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'flat',
+                    child: Text('Flat (Sharp Corners)'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    uiPrefsCtrl.updateButtonBorderStyle(value);
+                  }
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: DropdownButtonFormField<String>(
+                initialValue: uiPrefsCtrl.fontSizeAdjustment,
+                decoration: const InputDecoration(
+                  labelText: 'Global Font Size Scale',
+                  helperText: 'Adjust text size across all views',
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'small',
+                    child: Text('Small'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'normal',
+                    child: Text('Normal (Default)'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'large',
+                    child: Text('Large'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'extra_large',
+                    child: Text('Extra Large'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    uiPrefsCtrl.updateFontSizeAdjustment(value);
                   }
                 },
               ),

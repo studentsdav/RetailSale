@@ -8,12 +8,18 @@ class UiPreferencesController extends ChangeNotifier {
   String _textfieldSize = 'normal';
   String _textfieldBorderStyle = 'rounded';
   String _cardColorStyle = 'soft';
+  String _cardBorderStyle = 'rounded';
+  String _buttonBorderStyle = 'rounded';
+  String _fontSizeAdjustment = 'normal';
 
   bool get touchMode => _touchMode;
   String get defaultStartupScreen => _defaultStartupScreen;
   String get textfieldSize => _textfieldSize;
   String get textfieldBorderStyle => _textfieldBorderStyle;
   String get cardColorStyle => _cardColorStyle;
+  String get cardBorderStyle => _cardBorderStyle;
+  String get buttonBorderStyle => _buttonBorderStyle;
+  String get fontSizeAdjustment => _fontSizeAdjustment;
 
   Future<void> load() async {
     _touchMode = await LocalPreferences.getTouchMode();
@@ -21,6 +27,9 @@ class UiPreferencesController extends ChangeNotifier {
     _textfieldSize = await LocalPreferences.getTextfieldSize();
     _textfieldBorderStyle = await LocalPreferences.getTextfieldBorderStyle();
     _cardColorStyle = await LocalPreferences.getCardColorStyle();
+    _cardBorderStyle = await LocalPreferences.getCardBorderStyle();
+    _buttonBorderStyle = await LocalPreferences.getButtonBorderStyle();
+    _fontSizeAdjustment = await LocalPreferences.getFontSizeAdjustment();
     notifyListeners();
   }
 
@@ -56,6 +65,27 @@ class UiPreferencesController extends ChangeNotifier {
     if (_cardColorStyle == value) return;
     _cardColorStyle = value;
     await LocalPreferences.setCardColorStyle(value);
+    notifyListeners();
+  }
+
+  Future<void> updateCardBorderStyle(String value) async {
+    if (_cardBorderStyle == value) return;
+    _cardBorderStyle = value;
+    await LocalPreferences.setCardBorderStyle(value);
+    notifyListeners();
+  }
+
+  Future<void> updateButtonBorderStyle(String value) async {
+    if (_buttonBorderStyle == value) return;
+    _buttonBorderStyle = value;
+    await LocalPreferences.setButtonBorderStyle(value);
+    notifyListeners();
+  }
+
+  Future<void> updateFontSizeAdjustment(String value) async {
+    if (_fontSizeAdjustment == value) return;
+    _fontSizeAdjustment = value;
+    await LocalPreferences.setFontSizeAdjustment(value);
     notifyListeners();
   }
 }

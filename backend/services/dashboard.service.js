@@ -374,11 +374,14 @@ FROM item_stock;
   let grandProfit = 0;
   let grandLoss = 0;
   let grandRevenue = 0;
+  let grandTaxableRevenue = 0;
   let cogsTotal = 0;
   let todayDiscount = 0;
   let todayRevenue = 0;
+  let todayTaxableRevenue = 0;
   let todayCollection = 0;
   let todayCogs = 0;
+  let todayGst = 0;
 
   for (const sale of sales) {
     const saleDate = normalizeDate(sale.sale_date);
@@ -389,12 +392,13 @@ FROM item_stock;
     for (const item of sale.items || []) {
       const qty = toNumber(item.qty);
       const lineNet = toNumber(item.net_amount);
+      const lineTaxable = toNumber(item.taxable_amount);
       const itemCost = toNumber(item.item?.rate) * qty;
       cogsTotal = roundAmount(cogsTotal + itemCost);
       if (fitsRange(saleDate, currentDayStart, currentDayEnd)) {
         todayCogs = roundAmount(todayCogs + itemCost);
       }
-      const lineProfit = lineNet - itemCost;
+      const lineProfit = lineTaxable - itemCost;
       saleProfit += Math.max(lineProfit, 0);
       saleLoss += lineProfit < 0 ? Math.abs(lineProfit) : 0;
 
@@ -420,17 +424,20 @@ FROM item_stock;
     }
 
     grandRevenue = roundAmount(grandRevenue + saleRevenue);
+    grandTaxableRevenue = roundAmount(grandTaxableRevenue + toNumber(sale.taxable_amount));
     grandProfit = roundAmount(grandProfit + saleProfit);
     grandLoss = roundAmount(grandLoss + saleLoss);
     if (fitsRange(saleDate, currentDayStart, currentDayEnd)) {
       todayDiscount = roundAmount(todayDiscount + toNumber(sale.total_discount));
       todayRevenue = roundAmount(todayRevenue + saleRevenue);
+      todayTaxableRevenue = roundAmount(todayTaxableRevenue + toNumber(sale.taxable_amount));
+      todayGst = roundAmount(todayGst + toNumber(sale.total_tax));
     }
 
-    addPeriod('day', saleDate, saleRevenue, saleProfit, saleLoss);
-    addPeriod('week', saleDate, saleRevenue, saleProfit, saleLoss);
-    addPeriod('month', saleDate, saleRevenue, saleProfit, saleLoss);
-    addPeriod('year', saleDate, saleRevenue, saleProfit, saleLoss);
+    addPeriod('day', saleDate, toNumber(sale.taxable_amount), saleProfit, saleLoss);
+    addPeriod('week', saleDate, toNumber(sale.taxable_amount), saleProfit, saleLoss);
+    addPeriod('month', saleDate, toNumber(sale.taxable_amount), saleProfit, saleLoss);
+    addPeriod('year', saleDate, toNumber(sale.taxable_amount), saleProfit, saleLoss);
   }
 
   let todaySubscriptionQty = 0;
@@ -445,9 +452,11 @@ FROM item_stock;
       todaySubscriptionAmount = roundAmount(todaySubscriptionAmount + cAmount);
       todaySubscriptionQty = roundAmount(todaySubscriptionQty + cQty);
       todayRevenue = roundAmount(todayRevenue + cAmount);
+      todayTaxableRevenue = roundAmount(todayTaxableRevenue + cAmount);
     }
 
     grandRevenue = roundAmount(grandRevenue + cAmount);
+    grandTaxableRevenue = roundAmount(grandTaxableRevenue + cAmount);
 
     addPeriod('day', cDate, cAmount, 0, 0);
     addPeriod('week', cDate, cAmount, 0, 0);
@@ -541,13 +550,13 @@ FROM item_stock;
     addCashPeriod('year', entryDate, netAmount);
   }
 
-  const grossProfitValue = roundAmount(grandRevenue - cogsTotal);
+  const grossProfitValue = roundAmount(grandTaxableRevenue - cogsTotal);
   const grossProfit = grossProfitValue > 0 ? grossProfitValue : 0;
   const grossLoss = grossProfitValue < 0 ? Math.abs(grossProfitValue) : 0;
-  const todayGrossProfitValue = roundAmount(todayRevenue - todayCogs);
+  const todayGrossProfitValue = roundAmount(todayTaxableRevenue - todayCogs);
   const todayGrossProfit = todayGrossProfitValue > 0 ? todayGrossProfitValue : 0;
   const todayGrossLoss = todayGrossProfitValue < 0 ? Math.abs(todayGrossProfitValue) : 0;
-  const grossMarginPercent = grandRevenue > 0 ? roundAmount((grossProfitValue / grandRevenue) * 100) : 0;
+  const grossMarginPercent = grandTaxableRevenue > 0 ? roundAmount((grossProfitValue / grandTaxableRevenue) * 100) : 0;
   const customerOutstanding = roundAmount(customerOutstandingResult?.[0]?.total_outstanding || 0);
   const supplierOutstanding = roundAmount(supplierOutstandingResult?.[0]?.total_outstanding || 0);
   const monthlyTransactionTypes = [...monthlyTransactionTypeMap.values()]
@@ -618,6 +627,7 @@ FROM item_stock;
       todayCogs: todayCogs,
       todayGrossProfit: todayGrossProfit,
       todayGrossLoss: todayGrossLoss,
+      todayGst: todayGst,
       netSubscription,
       netDebit: cashOutTotal
     },

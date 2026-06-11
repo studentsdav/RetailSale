@@ -676,7 +676,19 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
+            onPressed: () {
+              final phone = phoneCtrl.text.trim();
+              if (phone.isNotEmpty) {
+                final exists = ctrl.customers.any((c) => c.customerPhone.trim() == phone);
+                if (exists) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('This phone number is already registered.')),
+                  );
+                  return;
+                }
+              }
+              Navigator.pop(dialogContext, true);
+            },
             child: const Text('Save'),
           ),
         ],
@@ -811,12 +823,25 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           ? customer.customerPhone.trim()
           : customer.customerName.trim();
       if (searchKey.isNotEmpty) {
-        final summary = await ctrl.getCustomerCreditSummary(searchKey);
-        hasExistingBills = (summary['bills'] as List? ?? const []).isNotEmpty;
+        final sales = await ctrl.listSales(search: searchKey, latestOnly: false);
+        hasExistingBills = sales.any((sale) {
+          final saleStatus = (sale['status'] ?? '').toString().toUpperCase();
+          if (saleStatus == 'CUSTOMER') return false;
+          final salePhone = (sale['customer_phone'] ?? '').toString().trim();
+          final saleName = (sale['customer_name'] ?? '').toString().trim();
+          if (customer.customerPhone.trim().isNotEmpty) {
+            return salePhone == customer.customerPhone.trim();
+          } else {
+            return saleName.toLowerCase() == customer.customerName.trim().toLowerCase();
+          }
+        });
       }
     } catch (_) {
       hasExistingBills = false;
     }
+
+    final hasSubscription = _hasSubscriptionByCustomer[_customerKey(customer)] ?? false;
+    final isPhoneLocked = hasExistingBills || hasSubscription;
 
     if (!mounted) return;
 
@@ -836,9 +861,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: phoneCtrl,
-                readOnly: hasExistingBills,
+                readOnly: isPhoneLocked,
                 keyboardType: TextInputType.phone,
-                inputFormatters: hasExistingBills
+                inputFormatters: isPhoneLocked
                     ? null
                     : [
                         FilteringTextInputFormatter.digitsOnly,
@@ -846,9 +871,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                       ],
                 decoration: InputDecoration(
                   labelText: 'Contact No',
-                  helperText: hasExistingBills
-                      ? 'Phone number is locked because bills already exist.'
-                      : 'Phone number can be updated because no bills exist.',
+                  helperText: isPhoneLocked
+                      ? 'Phone number is locked because bills or subscriptions exist.'
+                      : 'Phone number can be updated because no bills or subscriptions exist.',
                 ),
               ),
               const SizedBox(height: 12),
@@ -894,6 +919,56 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   }
 
   Future<void> _deleteCustomer(SaleCustomer customer) async {
+    var hasExistingBills = false;
+    setState(() => _loading = true);
+    try {
+      final searchKey = customer.customerPhone.trim().isNotEmpty
+          ? customer.customerPhone.trim()
+          : customer.customerName.trim();
+      if (searchKey.isNotEmpty) {
+        final sales = await ctrl.listSales(search: searchKey, latestOnly: false);
+        hasExistingBills = sales.any((sale) {
+          final saleStatus = (sale['status'] ?? '').toString().toUpperCase();
+          if (saleStatus == 'CUSTOMER') return false;
+          final salePhone = (sale['customer_phone'] ?? '').toString().trim();
+          final saleName = (sale['customer_name'] ?? '').toString().trim();
+          if (customer.customerPhone.trim().isNotEmpty) {
+            return salePhone == customer.customerPhone.trim();
+          } else {
+            return saleName.toLowerCase() == customer.customerName.trim().toLowerCase();
+          }
+        });
+      }
+    } catch (_) {
+      hasExistingBills = false;
+    }
+    setState(() => _loading = false);
+
+    final hasSubscription = _hasSubscriptionByCustomer[_customerKey(customer)] ?? false;
+    if (hasExistingBills || hasSubscription) {
+      if (!mounted) return;
+      String message = 'This customer cannot be deleted because they have associated bills.';
+      if (hasSubscription && hasExistingBills) {
+        message = 'This customer cannot be deleted because they have associated bills and subscriptions.';
+      } else if (hasSubscription) {
+        message = 'This customer cannot be deleted because they have associated subscriptions.';
+      }
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Cannot Delete Customer'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1160,28 +1235,29 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                                   ),
                                                 ),
                                               ),
-                                              Tooltip(
-                                                message: 'Delete customer',
-                                                child: OutlinedButton.icon(
-                                                  onPressed: () =>
-                                                      _deleteCustomer(customer),
-                                                  icon: const Icon(
-                                                    Icons.delete_outline,
-                                                    color: Colors.red,
-                                                    size: 18,
-                                                  ),
-                                                  label: const Text('Delete'),
-                                                  style: OutlinedButton.styleFrom(
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 8,
+                                              if (!hasSubscription)
+                                                Tooltip(
+                                                  message: 'Delete customer',
+                                                  child: OutlinedButton.icon(
+                                                    onPressed: () =>
+                                                        _deleteCustomer(customer),
+                                                    icon: const Icon(
+                                                      Icons.delete_outline,
+                                                      color: Colors.red,
+                                                      size: 18,
+                                                    ),
+                                                    label: const Text('Delete'),
+                                                    style: OutlinedButton.styleFrom(
+                                                      visualDensity:
+                                                          VisualDensity.compact,
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 8,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
                                               Tooltip(
                                                 message: 'Start a subscription',
                                                 child: FilledButton.tonalIcon(

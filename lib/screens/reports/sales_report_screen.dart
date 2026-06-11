@@ -12,6 +12,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/reports/sales_report_controller.dart';
 import '../../controllers/reports/stock_in_report_controller.dart';
+import '../../controllers/settings/property_info_controller.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class SalesReportScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class SalesReportScreen extends StatefulWidget {
 class _SalesReportScreenState extends State<SalesReportScreen> {
   final ctrl = SalesReportController();
   final purchaseCtrl = StockInReportController();
+  final propertyCtrl = PropertyInfoController();
   final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
   final _itemSearchCtrl = TextEditingController();
@@ -88,6 +90,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   @override
   void initState() {
     super.initState();
+    propertyCtrl.load();
     _syncDates();
     _loadReports();
   }
@@ -3151,6 +3154,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       if (address.contains(entry.key)) {
         return '${_titleCase(entry.key)} / ${entry.value}';
       }
+    }
+
+    if (sale.billingTaxMode != 'IGST' && propertyCtrl.data?.state != null) {
+      final stateName = propertyCtrl.data!.state!;
+      final stateCode = _stateCodes[stateName.toLowerCase()] ?? '--';
+      return '${_titleCase(stateName)} / $stateCode';
     }
 
     return 'Unknown / --';

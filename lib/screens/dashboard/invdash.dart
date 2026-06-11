@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:intl/intl.dart';
 
 import 'package:flutter/material.dart';
 import 'dart:io';
@@ -110,6 +111,12 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
   double todayCogs = 0;
   double todayGrossProfit = 0;
   double todayGrossLoss = 0;
+  double todayGst = 0;
+  Timer? _appBarTimer;
+  Timer? _dataProtectionTimer;
+  DateTime _currentTime = DateTime.now();
+  DateTime? _lastUploadDateTime;
+  String _lastUploadTime = 'Never';
   final UserController userCtrl = UserController();
   // DATA
   List<String> lowStockItems = [];
@@ -153,12 +160,23 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
   @override
   void initState() {
     super.initState();
+    _currentTime = DateTime.now();
+    _appBarTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentTime = DateTime.now();
+        });
+      }
+    });
 
     _loadPropertyInfo();
 
     _loadDashboard();
 
     _verifyDataProtection();
+    _dataProtectionTimer = Timer.periodic(const Duration(hours: 1), (timer) {
+      _verifyDataProtection();
+    });
 
     _loadNotificationPreference();
 
@@ -182,6 +200,7 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
             backgroundColor: Colors.green,
           ),
         );
+        await _verifyDataProtection();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -210,15 +229,116 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
   Future<void> _verifyDataProtection() async {
     if (!AppConfig.isLocalServer) return;
 
-    final alertStatus = await BackupService.checkStatus();
+    final statusMap = await BackupService.checkDetailedStatus();
+    final alertStatus = statusMap['alert'] ?? 'NONE';
+    final lastSync = statusMap['lastSyncTime'];
+
+    if (lastSync != null) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(lastSync as int);
+      _lastUploadDateTime = dt;
+      _lastUploadTime = DateFormat('dd-MMM-yyyy hh:mm a').format(dt);
+    } else {
+      _lastUploadDateTime = null;
+      _lastUploadTime = 'Never';
+    }
 
     if (!mounted) return;
+    setState(() {});
 
     if (alertStatus == 'ENABLE_PROMPT') {
       _showEnableCloudDialog();
     } else if (alertStatus == 'SYNC_FAILED') {
       _showSyncWarningDialog();
     }
+  }
+
+  int get _hoursSinceLastUpload {
+    if (_lastUploadDateTime == null) return 999;
+    return DateTime.now().difference(_lastUploadDateTime!).inHours;
+  }
+
+  Widget _buildBackupStatusBanner() {
+    if (!AppConfig.isLocalServer) return const SizedBox.shrink();
+
+    final hours = _hoursSinceLastUpload;
+    final isSafe = hours < 12;
+    final bgColor = isSafe ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2);
+    final borderColor = isSafe ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5);
+    final textColor = isSafe ? const Color(0xFF166534) : const Color(0xFF991B1B);
+    final iconColor = isSafe ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isSafe ? Icons.cloud_done : Icons.cloud_off,
+            color: iconColor,
+            size: 28,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Enterprise Data Sync Status",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "Last Upload: $_lastUploadTime${hours == 999 ? ' (Never synced)' : ' ($hours hours ago)'}",
+                  style: TextStyle(
+                    color: textColor.withOpacity(0.85),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!isSafe) ...[
+            const SizedBox(width: 12),
+            _isSyncing
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDC2626)),
+                    ),
+                  )
+                : FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: _performSync,
+                    icon: const Icon(Icons.cloud_upload, size: 16),
+                    label: const Text(
+                      "Upload Data",
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+          ],
+        ],
+      ),
+    );
   }
 
 // =====================================================================
@@ -504,6 +624,7 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
         todayCogs = safeDouble(data['kpis']['todayCogs']);
         todayGrossProfit = safeDouble(data['kpis']['todayGrossProfit']);
         todayGrossLoss = safeDouble(data['kpis']['todayGrossLoss']);
+        todayGst = safeDouble(data['kpis']['todayGst']);
 
         // Low stock list
         lowStockItems = List<String>.from(data['lowStockItems']);
@@ -619,6 +740,8 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
 
   @override
   void dispose() {
+    _appBarTimer?.cancel();
+    _dataProtectionTimer?.cancel();
     _notificationTimer?.cancel();
     super.dispose();
   }
@@ -636,7 +759,34 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
     return Scaffold(
       drawer: _buildInventoryDrawer(),
       appBar: AppBar(
-        title: Text(_dashboardTitle),
+        centerTitle: true,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _dashboardTitle,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white70
+                    : Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              DateFormat('dd-MMM-yyyy hh:mm:ss a').format(_currentTime),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF60A5FA)
+                    : const Color(0xFF1D4ED8),
+              ),
+            ),
+          ],
+        ),
         actions: [
           if (_userRole == 'ADMIN' && AppConfig.isLocalServer)
             Padding(
@@ -774,6 +924,7 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
+                    _buildBackupStatusBanner(),
                     _kpiRow(),
                     const SizedBox(height: 12),
                     _lowStockAlert(),
@@ -924,6 +1075,15 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
                     ),
                   );
                 },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _statCard(
+                'Today GST',
+                'Rs. ${todayGst.toStringAsFixed(0)}',
+                Icons.account_balance_outlined,
+                const Color(0xFFE11D48),
               ),
             ),
           ],

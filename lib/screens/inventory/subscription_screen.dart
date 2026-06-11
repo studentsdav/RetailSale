@@ -98,7 +98,42 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     }
   }
 
-  Future<void> _reloadSubscriptions() async {
+  Future<void> _confirmDeleteSubscription(Map<String, dynamic> subscription) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Subscription'),
+        content: const Text('Are you sure you want to delete this subscription? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _ctrl.deleteSubscription(subscription['id']);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subscription deleted successfully')),
+        );
+        _reloadSubscriptions();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _reloadSubscriptions({bool reset = false}) async {
     final backendStatus = (_statusFilter == 'ACTIVE' ||
             _statusFilter == 'SETTLED' ||
             _statusFilter == 'CANCELLED')
@@ -1951,40 +1986,48 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _statusBgColor(subscription),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    _statusLabel(subscription),
-                    style: TextStyle(
-                      color: _statusTextColor(subscription),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => _showLedger(subscription),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    alignment: Alignment.centerLeft,
-                  ),
-                  child: Text(
-                    '$cust - $itemName',
-                    style: const TextStyle(
-                      color: Color(0xFF1E3A8A),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
+                Expanded(
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _statusBgColor(subscription),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          _statusLabel(subscription),
+                          style: TextStyle(
+                            color: _statusTextColor(subscription),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _showLedger(subscription),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          alignment: Alignment.centerLeft,
+                        ),
+                        child: Text(
+                          '$cust - $itemName',
+                          style: const TextStyle(
+                            color: Color(0xFF1E3A8A),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -2091,6 +2134,30 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       await _settleSubscription(subscription, details);
                     },
                     child: const Text('Settle'),
+                  ),
+                if (consumedDays == '0' && (double.tryParse(subscription['consumed_qty']?.toString() ?? '0') ?? 0) == 0)
+                  IconButton(
+                    onPressed: () async {
+                      final id = int.tryParse(subscription['id']?.toString() ?? '') ?? 0;
+                      if (id <= 0) return;
+                      
+                      final details = await _ctrl.getSubscriptionLedger(id);
+                      final financial = Map<String, dynamic>.from(details['financial_summary'] ?? const {});
+                      final outstanding = double.tryParse(financial['outstanding_amount']?.toString() ?? '0') ?? 0;
+                      
+                      if (!mounted) return;
+                      
+                      if (outstanding > 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please settle all balance before deleting.')),
+                        );
+                        return;
+                      }
+                      
+                      await _confirmDeleteSubscription(subscription);
+                    },
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    tooltip: 'Delete Subscription',
                   ),
               ],
             ),

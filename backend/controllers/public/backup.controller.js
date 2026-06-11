@@ -24,7 +24,8 @@ exports.getBackupStatusAlert = (req, res) => {
 
         return res.status(200).json({
             success: true,
-            alert: alertType
+            alert: alertType,
+            lastSyncTime: status.lastSyncTime
         });
 
     } catch (err) {

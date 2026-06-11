@@ -1023,3 +1023,60 @@ SyntaxError: Unexpected token ')'
 2026-06-07T12:33:38.818Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-06-07T12:35:41.080Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-06-07T12:35:41.113Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:30:00.044Z [INFO] Hourly backup job started.
+2026-06-10T16:30:00.154Z [INFO] Hourly backup job started.
+2026-06-10T16:30:00.680Z [INFO] Backup created. File size: 0.03 MB
+2026-06-10T16:30:00.682Z [INFO] Verifying backup integrity before local retention and upload.
+2026-06-10T16:30:00.691Z [INFO] Backup created. File size: 0.03 MB
+2026-06-10T16:30:00.692Z [INFO] Verifying backup integrity before local retention and upload.
+2026-06-10T16:30:00.771Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-06-10T16:30:00.787Z [INFO] Hourly backup job execution finished.
+2026-06-10T16:30:00.797Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-06-10T16:30:21.338Z [INFO] Cloud upload sequence completed successfully.
+2026-06-10T16:30:21.354Z [INFO] Hourly backup job execution finished.
+2026-06-10T16:30:23.299Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:30:23.326Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:37:36.958Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:37:36.990Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:37:46.906Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:37:46.943Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:37:52.550Z [ERROR] [FATAL] Uncaught Exception: Unexpected token ')'
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\public\backup.controller.js:20
+        });
+         ^
+
+SyntaxError: Unexpected token ')'
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\inventory.routes.js:20:26)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-06-10T16:37:58.393Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:37:58.422Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:38:05.132Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T16:38:05.159Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T17:03:22.889Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-10T17:03:22.920Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-11T15:30:41.108Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-11T15:30:41.201Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-11T15:37:44.046Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-06-11T16:30:00.051Z [INFO] Hourly backup job started.
+2026-06-11T16:30:00.277Z [INFO] Hourly backup job started.
+2026-06-11T16:30:00.935Z [INFO] Backup created. File size: 0.03 MB
+2026-06-11T16:30:00.937Z [INFO] Verifying backup integrity before local retention and upload.
+2026-06-11T16:30:00.950Z [INFO] Backup created. File size: 0.03 MB
+2026-06-11T16:30:00.951Z [INFO] Verifying backup integrity before local retention and upload.
+2026-06-11T16:30:01.044Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-06-11T16:30:01.066Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-06-11T16:30:01.075Z [INFO] Hourly backup job execution finished.
+2026-06-11T16:30:11.041Z [INFO] Cloud upload sequence completed successfully.
+2026-06-11T16:30:11.058Z [INFO] Hourly backup job execution finished.
+2026-06-11T16:30:12.991Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-11T16:30:13.018Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-11T17:02:40.755Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-06-11T17:02:40.780Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
