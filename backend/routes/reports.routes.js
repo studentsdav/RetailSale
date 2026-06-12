@@ -16,6 +16,8 @@ const dmgCtrl = require('../controllers/report/damageReportsummery.controller');
 const salesCtrl = require('../controllers/report/salesReport.controller');
 const schemeCtrl = require('../controllers/report/schemeReport.controller');
 const loyaltyCtrl = require('../controllers/report/loyaltyReport.controller');
+const supplierReportCtrl = require('../controllers/report/supplierReport.controller');
+
 
 
 
@@ -39,5 +41,7 @@ router.get('/stock-balance', balance.getStockBalance);
 router.get('/damage', damage.getDamageReport);
 router.get('/closing', closing.getClosingReport);
 router.get('/dmgsummery', dmgCtrl.getDamageReport);
+router.get('/supplier-payments', supplierReportCtrl.getSupplierPaymentsReport);
+
 
 module.exports = router;

@@ -14,6 +14,7 @@ class SupplierBillController extends ChangeNotifier {
   double totalPurchase = 0;
   double totalPaid = 0;
   double totalUnpaid = 0;
+  double availableCredit = 0;
 
   DateTime fromDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime toDate = DateTime.now();
@@ -51,6 +52,18 @@ class SupplierBillController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loadAvailableCredit(int id) async {
+    try {
+      final res = await ApiClient.get('${ApiEndpoints.supplierAvailableCredit}/$id/available-credit');
+      availableCredit = (res['data']?['availableCredit'] ?? 0.0).toDouble();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error loading available credit: $e");
+      availableCredit = 0;
+      notifyListeners();
+    }
+  }
+
   Future<void> init() async {
     await loadSuppliers();
     await load();
@@ -63,12 +76,14 @@ class SupplierBillController extends ChangeNotifier {
     String? referenceNo,
     DateTime? paymentDate,
     String note = '',
+    double creditAdjusted = 0,
   }) async {
     await ApiClient.post(
       ApiEndpoints.paySupplierBill,
       {
         "bill_id": billId,
         "amount": amount,
+        "credit_adjusted": creditAdjusted,
         "payment_mode": paymentMode,
         "reference_no": referenceNo,
         "payment_date": paymentDate == null

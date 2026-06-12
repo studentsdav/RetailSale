@@ -143,6 +143,23 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     );
   }
 
+  Future<void> _printCreditNote(Map<String, dynamic> creditNote) async {
+    try {
+      setState(() => _loading = true);
+      await PosInvoicePrinter.printCreditNote(
+        creditNote: creditNote,
+        property: propertyCtrl.data,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to print Credit Note: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _modifySelected() async {
     final saleId = int.tryParse('${_selectedSale?['id'] ?? ''}');
     if (saleId == null) return;
@@ -154,6 +171,200 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     );
     if (changed == true) {
       await _loadSales();
+    }
+  }
+
+  Future<void> _showReturnDialog() async {
+    if (_selectedOrder == null) return;
+    
+    // Maintain a map of item_id -> (isSelected, returnQty)
+    final itemsState = <int, Map<String, dynamic>>{};
+    final rawItems = _selectedDetails?['items'] as List? ?? const [];
+    for (final rawItem in rawItems) {
+      final itemId = int.tryParse(rawItem['item_id']?.toString() ?? '') ?? 0;
+      final originalQty = double.tryParse(rawItem['qty']?.toString() ?? '') ?? 0.0;
+      final returnedQty = double.tryParse(rawItem['returned_qty']?.toString() ?? '') ?? 0.0;
+      final remainingQty = originalQty - returnedQty;
+      if (remainingQty <= 0) continue; // Item is already fully returned
+
+      itemsState[itemId] = {
+        'selected': true, // Default to selected
+        'qty': remainingQty, // Default to remaining quantity
+        'maxQty': remainingQty,
+        'name': rawItem['item_name']?.toString() ?? '',
+        'code': rawItem['item_code']?.toString() ?? '',
+      };
+    }
+
+    if (itemsState.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All items in this bill have already been returned.')),
+      );
+      return;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setInnerState) {
+            final allSelected = itemsState.values.every((val) => val['selected'] == true);
+
+            void toggleAll(bool? val) {
+              setInnerState(() {
+                for (final key in itemsState.keys) {
+                  itemsState[key]!['selected'] = val ?? false;
+                }
+              });
+            }
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Icon(Icons.assignment_return_outlined, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  const Text('Select Items to Return'),
+                ],
+              ),
+              content: SizedBox(
+                width: 500,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Choose which items to return and the quantity. Returned stock will be reverted to your inventory.',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      title: const Text('Select All / Deselect All', style: TextStyle(fontWeight: FontWeight.bold)),
+                      value: allSelected,
+                      onChanged: toggleAll,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      dense: true,
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: itemsState.entries.map((entry) {
+                          final itemId = entry.key;
+                          final state = entry.value;
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: state['selected'],
+                                  onChanged: (val) {
+                                    setInnerState(() {
+                                      state['selected'] = val ?? false;
+                                    });
+                                  },
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(state['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      Text('${state['code']} • Max: ${state['maxQty']}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                SizedBox(
+                                  width: 80,
+                                  child: TextFormField(
+                                    initialValue: state['qty'].toString(),
+                                    decoration: const InputDecoration(
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    ),
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    enabled: state['selected'],
+                                    onChanged: (val) {
+                                      final parsed = double.tryParse(val) ?? 0.0;
+                                      if (parsed > state['maxQty']) {
+                                        setInnerState(() {
+                                          state['qty'] = state['maxQty'];
+                                        });
+                                      } else if (parsed < 0) {
+                                        setInnerState(() {
+                                          state['qty'] = 0.0;
+                                        });
+                                      } else {
+                                        state['qty'] = parsed;
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    // Check if at least one item is selected with > 0 quantity
+                    final selectedEntries = itemsState.entries.where((e) => e.value['selected'] == true && e.value['qty'] > 0).toList();
+                    if (selectedEntries.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select at least one item with quantity > 0 to return')),
+                      );
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(true);
+                  },
+                  child: const Text('Confirm Return'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result != true) return;
+
+    final selectedItems = itemsState.entries
+        .where((e) => e.value['selected'] == true && e.value['qty'] > 0)
+        .map((e) => {
+              'item_id': e.key,
+              'qty_to_return': e.value['qty'],
+            })
+        .toList();
+
+    setState(() => _loading = true);
+    try {
+      final saleId = int.parse('${_selectedSale!['id']}');
+      await ctrl.returnSale(saleId: saleId, items: selectedItems);
+      
+      await _loadSales();
+      if (_selectedSale != null) {
+        await _selectSale(_selectedSale!);
+      }
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sale items returned successfully and stock reverted to inventory!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to return sale: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -540,7 +751,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                       title:
                                           Text('${sale['sale_no'] ?? 'Bill'}'),
                                       subtitle: Text(
-                                        '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateFormat('dd-MMM-yyyy hh:mm a').format(saleDate)} • Rs. ${_fmtAmount(sale['net_amount'])}',
+                                        '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateFormat('dd-MMM-yyyy hh:mm a').format(saleDate)} • Rs. ${_fmtAmount(sale['net_amount'])}${sale['status'] == 'RETURNED' ? ' • [RETURNED]' : ''}',
                                       ),
                                       trailing: const Icon(Icons.chevron_right),
                                       onTap: () => _selectSale(sale),
@@ -574,7 +785,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              'Bill ${_selectedOrder!.saleNo}',
+                                              'Bill ${_selectedOrder!.saleNo}${_selectedDetails?['status'] == 'RETURNED' ? ' (Returned)' : ''}',
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .titleLarge,
@@ -642,24 +853,69 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Expanded(
-                                    child: ListView.separated(
-                                      itemCount: _selectedOrder!.items.length,
-                                      separatorBuilder: (_, __) =>
-                                          const Divider(height: 1),
-                                      itemBuilder: (context, index) {
-                                        final item =
-                                            _selectedOrder!.items[index];
-                                        return ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(item.itemName),
-                                          subtitle: Text(
-                                            '${item.itemCode} • Qty ${item.qty.toStringAsFixed(2)} • Rate ${item.rate.toStringAsFixed(2)}',
+                                    child: ListView(
+                                      children: [
+                                        ..._selectedOrder!.items.map((item) {
+                                          final rawItem = (_selectedDetails?['items'] as List? ?? const []).firstWhere(
+                                            (raw) => raw['item_id'] == item.itemId,
+                                            orElse: () => null,
+                                          );
+                                          final returnedQty = double.tryParse(rawItem?['returned_qty']?.toString() ?? '') ?? 0.0;
+                                          final returnSuffix = returnedQty > 0
+                                              ? ' (Ret: ${returnedQty.toStringAsFixed(2)})'
+                                              : '';
+
+                                          return ListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            title: Text(item.itemName),
+                                            subtitle: Text(
+                                              '${item.itemCode} • Qty ${item.qty.toStringAsFixed(2)}$returnSuffix • Rate ${item.rate.toStringAsFixed(2)}',
+                                            ),
+                                            trailing: Text(
+                                              'Rs. ${item.netAmount.toStringAsFixed(2)}',
+                                            ),
+                                          );
+                                        }),
+                                        if (_selectedDetails?['credit_notes'] != null &&
+                                            (_selectedDetails?['credit_notes'] as List).isNotEmpty) ...[
+                                          const SizedBox(height: 16),
+                                          const Divider(),
+                                          const Text(
+                                            'Credit Notes Issued',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
-                                          trailing: Text(
-                                            'Rs. ${item.netAmount.toStringAsFixed(2)}',
-                                          ),
-                                        );
-                                      },
+                                          const SizedBox(height: 8),
+                                          ...(_selectedDetails?['credit_notes'] as List).map((cn) {
+                                            final cnMap = Map<String, dynamic>.from(cn);
+                                            final cnDate = DateTime.tryParse(cnMap['credit_note_date']?.toString() ?? '') ?? DateTime.now();
+                                            return ListTile(
+                                              contentPadding: EdgeInsets.zero,
+                                              title: Text('${cnMap['credit_note_no']}'),
+                                              subtitle: Text(
+                                                'Date: ${DateFormat('dd-MMM-yyyy').format(cnDate)} • Reason: ${cnMap['reason'] ?? 'Sales Return'}',
+                                              ),
+                                              trailing: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    'Rs. ${double.parse((cnMap['net_amount'] ?? 0).toString()).toStringAsFixed(2)}',
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.print, color: Colors.blue),
+                                                    onPressed: () => _printCreditNote(cnMap),
+                                                    tooltip: 'Print Credit Note',
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          }),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                   const SizedBox(height: 16),
@@ -731,6 +987,25 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                   Icons.edit_outlined,
                                                 ),
                                                 label: const Text('Modify'),
+                                              ),
+                                            ),
+                                          ),
+                                        if (_canModifySales && _selectedDetails?['status'] != 'RETURNED')
+                                          Tooltip(
+                                            message: 'Return items from this bill',
+                                            child: SizedBox(
+                                              width: 170,
+                                              height: 56,
+                                              child: FilledButton.icon(
+                                                onPressed: _showReturnDialog,
+                                                icon: const Icon(
+                                                  Icons.assignment_return_outlined,
+                                                ),
+                                                label: const Text('Return'),
+                                                style: FilledButton.styleFrom(
+                                                  backgroundColor: Colors.orange,
+                                                  foregroundColor: Colors.white,
+                                                ),
                                               ),
                                             ),
                                           ),

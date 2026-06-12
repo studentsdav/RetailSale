@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
 
         payment_date: { type: DataTypes.DATEONLY, allowNull: false },
         amount: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+        credit_adjusted: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0.00 },
 
         payment_mode: DataTypes.STRING(20),
         reference_no: DataTypes.STRING(50),

@@ -1,3 +1,5 @@
+// ignore_for_file: depend_on_referenced_packages, deprecated_member_use, unused_element
+
 import 'dart:io';
 
 import 'package:dropdown_search/dropdown_search.dart';
@@ -371,18 +373,26 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
   // ================= PAYMENT DIALOG =================
   Future<void> _openPaymentDialog(SupplierBill bill) async {
     final amountCtrl = TextEditingController();
+    final creditAdjustedCtrl = TextEditingController(text: '0');
     final referenceCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
     String paymentMode = 'CASH';
     DateTime paymentDate = DateTime.now();
     String? errorText;
     SupplierBillDetail? detail;
+    double availableCredit = 0;
 
     try {
       detail = await ctrl.getBillDetails(bill.id);
+      if (detail.supplierId != null) {
+        await ctrl.loadAvailableCredit(detail.supplierId!);
+        availableCredit = ctrl.availableCredit;
+      }
     } catch (_) {
       detail = null;
     }
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -390,6 +400,27 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final enteredAmount = double.tryParse(amountCtrl.text) ?? 0;
+            final enteredCredit = double.tryParse(creditAdjustedCtrl.text) ?? 0;
+
+            void validate() {
+              final amt = double.tryParse(amountCtrl.text) ?? 0;
+              final cred = double.tryParse(creditAdjustedCtrl.text) ?? 0;
+              final tot = amt + cred;
+
+              if (amt < 0) {
+                errorText = 'Pay amount cannot be negative';
+              } else if (cred < 0) {
+                errorText = 'Credit adjustment cannot be negative';
+              } else if (cred > availableCredit + 0.009) {
+                errorText = 'Exceeds available credit (Rs. ${availableCredit.toStringAsFixed(2)})';
+              } else if (tot <= 0) {
+                errorText = 'Enter pay amount or credit to adjust';
+              } else if (tot > bill.balance + 0.009) {
+                errorText = 'Total exceeds outstanding balance';
+              } else {
+                errorText = null;
+              }
+            }
 
             return AlertDialog(
               shape: RoundedRectangleBorder(
@@ -559,6 +590,33 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                         _billPreviewCard(detail, compact: true),
                         const SizedBox(height: 18),
                       ],
+                      // 💳 Available Credit Banner
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: availableCredit > 0 ? Colors.green.shade50 : Colors.blueGrey.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: availableCredit > 0 ? Colors.green.shade200 : Colors.blueGrey.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              availableCredit > 0 ? Icons.stars : Icons.info_outline,
+                              color: availableCredit > 0 ? Colors.green.shade800 : Colors.blueGrey.shade700,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Available Credit: Rs. ${availableCredit.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: availableCredit > 0 ? Colors.green.shade800 : Colors.blueGrey.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       // 💰 Inputs Section
                       TextField(
                         controller: amountCtrl,
@@ -585,20 +643,45 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         ),
                         onChanged: (v) {
-                          final amt = double.tryParse(v) ?? 0;
-
                           setDialogState(() {
-                            if (amt <= 0) {
-                              errorText = 'Enter valid amount';
-                            } else if (amt > bill.balance) {
-                              errorText = 'Amount exceeds balance';
-                            } else {
-                              errorText = null;
-                            }
+                            validate();
                           });
                         },
                       ),
                       const SizedBox(height: 14),
+                      if (availableCredit > 0) ...[
+                        TextField(
+                          controller: creditAdjustedCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                          decoration: InputDecoration(
+                            labelText: 'Credit to Adjust',
+                            hintText: 'Enter credit amount to use',
+                            prefixIcon: const Icon(Icons.star_border, size: 20),
+                            suffixText: 'INR',
+                            errorText: errorText,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.blueGrey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.blueGrey.shade200),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.blue.shade600, width: 2),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          ),
+                          onChanged: (v) {
+                            setDialogState(() {
+                              validate();
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                      ],
                       DropdownButtonFormField<String>(
                         initialValue: paymentMode,
                         decoration: InputDecoration(
@@ -618,7 +701,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                           ),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         ),
-                        items: ['CASH', 'CARD', 'UPI', 'BANK']
+                        items: ['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT']
                             .map((e) => DropdownMenuItem(
                                   value: e,
                                   child: Text(e, style: const TextStyle(fontWeight: FontWeight.w500)),
@@ -739,12 +822,13 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                     elevation: 1,
                   ),
-                  onPressed: errorText != null || enteredAmount <= 0
+                  onPressed: errorText != null || (enteredAmount + enteredCredit) <= 0
                       ? null
                       : () async {
                           await ctrl.payBill(
                             billId: bill.id,
                             amount: enteredAmount,
+                            creditAdjusted: enteredCredit,
                             paymentMode: paymentMode,
                             paymentDate: paymentDate,
                             referenceNo: referenceCtrl.text.trim(),

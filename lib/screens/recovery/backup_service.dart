@@ -50,6 +50,20 @@ class BackupService {
     }
   }
 
+  static Future<bool> uploadLatest() async {
+    try {
+      final res = await ApiClient.post(ApiEndpoints.uploadLatest, {});
+
+      if (res['success'] == true) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint("Error uploading database: $e");
+      return false;
+    }
+  }
+
   static Future<bool> toggleCloudSync(bool enable) async {
     try {
       final res = await ApiClient.post(

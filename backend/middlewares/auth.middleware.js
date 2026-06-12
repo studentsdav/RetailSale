@@ -13,7 +13,10 @@ module.exports = (req, res, next) => {
         // If the token is invalid/expired, this line will throw an error and jump to the catch block
         const data = jwt.verify(token);
 
-        req.user = data;
+        req.user = {
+            ...data,
+            id: data.user_id || data.id
+        };
         req.outlet_id = data.outlet_id;
         req.outlet_code = data.outlet_code;
         next();

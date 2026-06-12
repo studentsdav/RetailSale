@@ -131,9 +131,10 @@ exports.getSalesReport = async (req, res) => {
         const outlet_id = req.user.outlet_id;
         const { from_date, to_date, payment_mode, search } = req.query;
 
+        // Query sales headers
         const where = {
             outlet_id,
-            status: 'COMPLETED',
+            status: { [Op.in]: ['COMPLETED', 'RETURNED'] },
             is_deleted: false,
             is_latest: true
         };
@@ -171,6 +172,37 @@ exports.getSalesReport = async (req, res) => {
                 }]
             }],
             order: [['sale_date', 'DESC'], ['id', 'DESC']]
+        });
+
+        // Query sales credit notes in parallel
+        const cnWhere = {
+            outlet_id,
+        };
+        if (from_date && to_date) {
+            cnWhere.credit_note_date = {
+                [Op.between]: [from_date, to_date]
+            };
+        }
+        if (search) {
+            cnWhere[Op.or] = [
+                { credit_note_no: { [Op.iLike]: `%${search}%` } },
+                { customer_name: { [Op.iLike]: `%${search}%` } },
+                { customer_phone: { [Op.iLike]: `%${search}%` } }
+            ];
+        }
+
+        const cnInclude = [{
+            model: req.propertyDb.models.sales_headers,
+            as: 'sale'
+        }];
+        if (payment_mode) {
+            cnInclude[0].where = { payment_mode };
+        }
+
+        const creditNotes = await req.propertyDb.models.sales_credit_notes.findAll({
+            where: cnWhere,
+            include: cnInclude,
+            order: [['credit_note_date', 'DESC'], ['id', 'DESC']]
         });
 
         let totalSubscriptionAmount = 0;
@@ -224,167 +256,351 @@ exports.getSalesReport = async (req, res) => {
         let profit = 0;
         let loss = 0;
 
-        const data = sales.map((sale) => {
-            const saleDate = normalizeDate(sale.sale_date);
-            const charges = safeArray(sale.charges);
-            const saleTaxBreakup = safeArray(sale.tax_breakup);
-            const zone = resolveSaleZone(saleDate);
-            const chargeSplit = sumChargeTotals(charges);
-            const saleTaxSplit = aggregateTaxes({ sale, taxAccumulator });
+        // Combine sales and credit notes into a unified array, sorted by date DESC
+        const allRecords = [
+            ...sales.map(s => ({ type: 'SALE', record: s, date: new Date(s.sale_date) })),
+            ...creditNotes.map(cn => ({ type: 'CN', record: cn, date: new Date(cn.credit_note_date) }))
+        ];
+        allRecords.sort((a, b) => b.date - a.date);
 
-            const lineItems = sale.items.map((item) => {
-                const qty = toNumber(item.qty);
-                const saleRate = toNumber(item.rate);
-                const lineAmount = toNumber(item.amount);
-                const lineNetAmount = toNumber(item.net_amount);
-                const lineTaxAmount = toNumber(item.tax_amount);
-                const lineDiscount = toNumber(item.line_discount);
-                const itemCostRate = toNumber(item.item?.rate);
-                const lineCost = itemCostRate * qty;
-                const lineProfit = lineNetAmount - lineCost;
+        const data = allRecords.map((rec) => {
+            if (rec.type === 'SALE') {
+                const sale = rec.record;
+                const saleDate = normalizeDate(sale.sale_date);
+                const charges = safeArray(sale.charges);
+                const saleTaxBreakup = safeArray(sale.tax_breakup);
+                const zone = resolveSaleZone(saleDate);
+                const chargeSplit = sumChargeTotals(charges);
+                const saleTaxSplit = aggregateTaxes({ sale, taxAccumulator });
 
-                totalQty += qty;
-                estimatedCost += lineCost;
+                const lineItems = sale.items.map((item) => {
+                    const qty = toNumber(item.qty);
+                    const saleRate = toNumber(item.rate);
+                    const lineAmount = toNumber(item.amount);
+                    const lineNetAmount = toNumber(item.net_amount);
+                    const lineTaxAmount = toNumber(item.tax_amount);
+                    const lineDiscount = toNumber(item.line_discount);
+                    const itemCostRate = toNumber(item.item?.rate);
+                    const lineCost = itemCostRate * qty;
+                    const lineProfit = lineNetAmount - lineCost;
 
-                if (!itemZoneMap[item.item_name]) {
-                    itemZoneMap[item.item_name] = {
-                        item_name: item.item_name,
+                    totalQty += qty;
+                    estimatedCost += lineCost;
+
+                    const itemName = item.item_name;
+                    if (!itemZoneMap[itemName]) {
+                        itemZoneMap[itemName] = {
+                            item_name: itemName,
+                            item_code: item.item_code,
+                            zones: Object.fromEntries(SALES_ZONES.map((entry) => [entry.key, 0])),
+                            total_qty: 0,
+                            total_sales: 0
+                        };
+                    }
+
+                    itemZoneMap[itemName].zones[zone.key] = roundAmount(
+                        itemZoneMap[itemName].zones[zone.key] + lineNetAmount
+                    );
+                    itemZoneMap[itemName].total_qty = roundAmount(
+                        itemZoneMap[itemName].total_qty + qty
+                    );
+                    itemZoneMap[itemName].total_sales = roundAmount(
+                        itemZoneMap[itemName].total_sales + lineNetAmount
+                    );
+
+                    return {
                         item_code: item.item_code,
-                        zones: Object.fromEntries(SALES_ZONES.map((entry) => [entry.key, 0])),
-                        total_qty: 0,
-                        total_sales: 0
+                        item_name: item.item_name,
+                        item_group: item.item?.item_group || '',
+                        sub_category: item.item?.sub_category || '',
+                        brand: item.item?.brand || '',
+                        hsn_sac_code: item.hsn_sac_code || item.item?.hsn_sac_code || '',
+                        barcode: item.barcode,
+                        unit: item.unit,
+                        qty,
+                        rate: saleRate,
+                        amount: lineAmount,
+                        line_discount: lineDiscount,
+                        taxable_amount: toNumber(item.taxable_amount),
+                        tax_amount: lineTaxAmount,
+                        line_total: toNumber(item.line_total),
+                        net_amount: lineNetAmount,
+                        cost_rate: itemCostRate,
+                        estimated_cost: lineCost,
+                        estimated_profit: lineProfit,
+                        tax_breakup: safeArray(item.tax_breakup)
+                    };
+                });
+
+                const saleGross = toNumber(sale.sub_total);
+                const saleTaxable = toNumber(sale.taxable_amount);
+                const saleDiscount = toNumber(sale.total_discount);
+                const saleChargeTotal = toNumber(sale.charge_total);
+                const saleTotalTax = toNumber(sale.total_tax);
+                const saleNetRevenue = toNumber(sale.net_amount);
+                const saleEstimatedCost = lineItems.reduce((sum, item) => sum + item.estimated_cost, 0);
+                const saleProfit = saleNetRevenue - saleEstimatedCost;
+                const saleLoss = saleProfit < 0 ? Math.abs(saleProfit) : 0;
+                const salePositiveProfit = saleProfit > 0 ? saleProfit : 0;
+
+                grossSales = roundAmount(grossSales + saleGross);
+                taxableAmount = roundAmount(taxableAmount + saleTaxable);
+                totalDiscount = roundAmount(totalDiscount + saleDiscount);
+                totalRevenue = roundAmount(totalRevenue + saleNetRevenue);
+                totalCharges = roundAmount(totalCharges + saleChargeTotal);
+                totalPackingCharges = roundAmount(totalPackingCharges + chargeSplit.packingCharges);
+                totalOtherCharges = roundAmount(totalOtherCharges + chargeSplit.otherCharges);
+                gst = roundAmount(gst + saleTaxSplit.gst);
+                vat = roundAmount(vat + saleTaxSplit.vat);
+                otherTaxes = roundAmount(otherTaxes + saleTaxSplit.otherTaxes);
+                profit = roundAmount(profit + salePositiveProfit);
+                loss = roundAmount(loss + saleLoss);
+
+                const paymentKey = String(sale.payment_mode || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+                if (!paymentModeSummary[paymentKey]) {
+                    paymentModeSummary[paymentKey] = {
+                        payment_mode: paymentKey,
+                        amount: 0,
+                        sales_count: 0
                     };
                 }
+                paymentModeSummary[paymentKey].amount = roundAmount(
+                    paymentModeSummary[paymentKey].amount + saleNetRevenue
+                );
+                paymentModeSummary[paymentKey].sales_count += 1;
 
-                itemZoneMap[item.item_name].zones[zone.key] = roundAmount(
-                    itemZoneMap[item.item_name].zones[zone.key] + lineNetAmount
+                timeZoneMap[zone.key].sales_count += 1;
+                timeZoneMap[zone.key].total_sales = roundAmount(
+                    timeZoneMap[zone.key].total_sales + saleNetRevenue
                 );
-                itemZoneMap[item.item_name].total_qty = roundAmount(
-                    itemZoneMap[item.item_name].total_qty + qty
+                timeZoneMap[zone.key].taxable_amount = roundAmount(
+                    timeZoneMap[zone.key].taxable_amount + saleTaxable
                 );
-                itemZoneMap[item.item_name].total_sales = roundAmount(
-                    itemZoneMap[item.item_name].total_sales + lineNetAmount
+                timeZoneMap[zone.key].profit = roundAmount(
+                    timeZoneMap[zone.key].profit + saleProfit
                 );
+
+                const monthKey = formatMonthKey(saleDate);
+                const weekKey = formatWeekKey(saleDate);
+                const dayKey = formatDayKey(saleDate);
+
+                for (const [key, store] of [[monthKey, monthMap], [weekKey, weekMap], [dayKey, dayMap]]) {
+                    if (!store[key]) {
+                        store[key] = { period: key, sales: 0, profit: 0, loss: 0 };
+                    }
+                    store[key].sales = roundAmount(store[key].sales + saleNetRevenue);
+                    store[key].profit = roundAmount(store[key].profit + salePositiveProfit);
+                    store[key].loss = roundAmount(store[key].loss + saleLoss);
+                }
 
                 return {
-                    item_code: item.item_code,
-                    item_name: item.item_name,
-                    item_group: item.item?.item_group || '',
-                    sub_category: item.item?.sub_category || '',
-                    brand: item.item?.brand || '',
-                    hsn_sac_code: item.hsn_sac_code || item.item?.hsn_sac_code || '',
-                    barcode: item.barcode,
-                    unit: item.unit,
-                    qty,
-                    rate: saleRate,
-                    amount: lineAmount,
-                    line_discount: lineDiscount,
-                    taxable_amount: toNumber(item.taxable_amount),
-                    tax_amount: lineTaxAmount,
-                    line_total: toNumber(item.line_total),
-                    net_amount: lineNetAmount,
-                    cost_rate: itemCostRate,
-                    estimated_cost: lineCost,
-                    estimated_profit: lineProfit,
-                    tax_breakup: safeArray(item.tax_breakup)
+                    id: sale.id,
+                    sale_no: sale.sale_no,
+                    sale_date: sale.sale_date,
+                    sale_zone: zone.key,
+                    customer_name: sale.customer_name,
+                    customer_phone: sale.customer_phone,
+                    customer_address: sale.customer_address,
+                    customer_gstin: sale.customer_gstin,
+                    payment_mode: sale.payment_mode,
+                    payment_reference: sale.payment_reference,
+                    order_type: sale.order_type,
+                    billing_country: sale.billing_country,
+                    billing_tax_mode: sale.billing_tax_mode,
+                    bill_format: sale.bill_format,
+                    scheme_name: sale.scheme_name,
+                    total_qty: toNumber(sale.total_qty),
+                    sub_total: saleGross,
+                    taxable_amount: saleTaxable,
+                    cgst_amount: toNumber(sale.cgst_amount),
+                    sgst_amount: toNumber(sale.sgst_amount),
+                    igst_amount: toNumber(sale.igst_amount),
+                    total_tax: saleTotalTax,
+                    charge_total: saleChargeTotal,
+                    charge_tax_total: toNumber(sale.charge_tax_total),
+                    total_discount: saleDiscount,
+                    net_amount: saleNetRevenue,
+                    estimated_cost: saleEstimatedCost,
+                    estimated_profit: saleProfit,
+                    estimated_loss: saleLoss,
+                    charges,
+                    tax_breakup: saleTaxBreakup,
+                    items: lineItems
                 };
-            });
+            } else {
+                // Process Credit Note as a negative sale entry to reduce monthly returns
+                const cn = rec.record;
+                const cnDate = normalizeDate(cn.credit_note_date);
+                const zone = resolveSaleZone(cnDate);
 
-            const saleGross = toNumber(sale.sub_total);
-            const saleTaxable = toNumber(sale.taxable_amount);
-            const saleDiscount = toNumber(sale.total_discount);
-            const saleChargeTotal = toNumber(sale.charge_total);
-            const saleTotalTax = toNumber(sale.total_tax);
-            const saleNetRevenue = toNumber(sale.net_amount);
-            const saleEstimatedCost = lineItems.reduce((sum, item) => sum + item.estimated_cost, 0);
-            const saleProfit = saleNetRevenue - saleEstimatedCost;
-            const saleLoss = saleProfit < 0 ? Math.abs(saleProfit) : 0;
-            const salePositiveProfit = saleProfit > 0 ? saleProfit : 0;
-
-            grossSales = roundAmount(grossSales + saleGross);
-            taxableAmount = roundAmount(taxableAmount + saleTaxable);
-            totalDiscount = roundAmount(totalDiscount + saleDiscount);
-            totalRevenue = roundAmount(totalRevenue + saleNetRevenue);
-            totalCharges = roundAmount(totalCharges + saleChargeTotal);
-            totalPackingCharges = roundAmount(totalPackingCharges + chargeSplit.packingCharges);
-            totalOtherCharges = roundAmount(totalOtherCharges + chargeSplit.otherCharges);
-            gst = roundAmount(gst + saleTaxSplit.gst);
-            vat = roundAmount(vat + saleTaxSplit.vat);
-            otherTaxes = roundAmount(otherTaxes + saleTaxSplit.otherTaxes);
-            profit = roundAmount(profit + salePositiveProfit);
-            loss = roundAmount(loss + saleLoss);
-
-            const paymentKey = String(sale.payment_mode || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
-            if (!paymentModeSummary[paymentKey]) {
-                paymentModeSummary[paymentKey] = {
-                    payment_mode: paymentKey,
-                    amount: 0,
-                    sales_count: 0
-                };
-            }
-            paymentModeSummary[paymentKey].amount = roundAmount(
-                paymentModeSummary[paymentKey].amount + saleNetRevenue
-            );
-            paymentModeSummary[paymentKey].sales_count += 1;
-
-            timeZoneMap[zone.key].sales_count += 1;
-            timeZoneMap[zone.key].total_sales = roundAmount(
-                timeZoneMap[zone.key].total_sales + saleNetRevenue
-            );
-            timeZoneMap[zone.key].taxable_amount = roundAmount(
-                timeZoneMap[zone.key].taxable_amount + saleTaxable
-            );
-            timeZoneMap[zone.key].profit = roundAmount(
-                timeZoneMap[zone.key].profit + saleProfit
-            );
-
-            const monthKey = formatMonthKey(saleDate);
-            const weekKey = formatWeekKey(saleDate);
-            const dayKey = formatDayKey(saleDate);
-
-            for (const [key, store] of [[monthKey, monthMap], [weekKey, weekMap], [dayKey, dayMap]]) {
-                if (!store[key]) {
-                    store[key] = { period: key, sales: 0, profit: 0, loss: 0 };
+                const cnTaxBreakup = [];
+                const cgst = toNumber(cn.cgst_amount);
+                const sgst = toNumber(cn.sgst_amount);
+                const igst = toNumber(cn.igst_amount);
+                if (cgst > 0) {
+                    taxAccumulator['CGST'] = (taxAccumulator['CGST'] || 0) - cgst;
+                    cnTaxBreakup.push({ code: 'CGST', label: 'CGST', tax_amount: -cgst });
                 }
-                store[key].sales = roundAmount(store[key].sales + saleNetRevenue);
-                store[key].profit = roundAmount(store[key].profit + salePositiveProfit);
-                store[key].loss = roundAmount(store[key].loss + saleLoss);
-            }
+                if (sgst > 0) {
+                    taxAccumulator['SGST'] = (taxAccumulator['SGST'] || 0) - sgst;
+                    cnTaxBreakup.push({ code: 'SGST', label: 'SGST', tax_amount: -sgst });
+                }
+                if (igst > 0) {
+                    taxAccumulator['IGST'] = (taxAccumulator['IGST'] || 0) - igst;
+                    cnTaxBreakup.push({ code: 'IGST', label: 'IGST', tax_amount: -igst });
+                }
 
-            return {
-                id: sale.id,
-                sale_no: sale.sale_no,
-                sale_date: sale.sale_date,
-                sale_zone: zone.key,
-                customer_name: sale.customer_name,
-                customer_phone: sale.customer_phone,
-                customer_address: sale.customer_address,
-                customer_gstin: sale.customer_gstin,
-                payment_mode: sale.payment_mode,
-                payment_reference: sale.payment_reference,
-                order_type: sale.order_type,
-                billing_country: sale.billing_country,
-                billing_tax_mode: sale.billing_tax_mode,
-                bill_format: sale.bill_format,
-                scheme_name: sale.scheme_name,
-                total_qty: toNumber(sale.total_qty),
-                sub_total: saleGross,
-                taxable_amount: saleTaxable,
-                cgst_amount: toNumber(sale.cgst_amount),
-                sgst_amount: toNumber(sale.sgst_amount),
-                igst_amount: toNumber(sale.igst_amount),
-                total_tax: saleTotalTax,
-                charge_total: saleChargeTotal,
-                charge_tax_total: toNumber(sale.charge_tax_total),
-                total_discount: saleDiscount,
-                net_amount: saleNetRevenue,
-                estimated_cost: saleEstimatedCost,
-                estimated_profit: saleProfit,
-                estimated_loss: saleLoss,
-                charges,
-                tax_breakup: saleTaxBreakup,
-                items: lineItems
-            };
+                const lineItems = safeArray(cn.items).map((item) => {
+                    const qty = -toNumber(item.qty);
+                    const saleRate = toNumber(item.rate);
+                    const lineAmount = -toNumber(item.amount || (item.rate * item.qty));
+                    const lineNetAmount = -toNumber(item.line_total || item.net_amount);
+                    const lineTaxAmount = -toNumber(item.tax_amount);
+                    const lineDiscount = 0;
+                    const lineCost = 0;
+                    const lineProfit = lineNetAmount;
+
+                    totalQty += qty;
+
+                    const itemName = item.item_name;
+                    if (!itemZoneMap[itemName]) {
+                        itemZoneMap[itemName] = {
+                            item_name: itemName,
+                            item_code: item.item_code,
+                            zones: Object.fromEntries(SALES_ZONES.map((entry) => [entry.key, 0])),
+                            total_qty: 0,
+                            total_sales: 0
+                        };
+                    }
+
+                    itemZoneMap[itemName].zones[zone.key] = roundAmount(
+                        itemZoneMap[itemName].zones[zone.key] + lineNetAmount
+                    );
+                    itemZoneMap[itemName].total_qty = roundAmount(
+                        itemZoneMap[itemName].total_qty + qty
+                    );
+                    itemZoneMap[itemName].total_sales = roundAmount(
+                        itemZoneMap[itemName].total_sales + lineNetAmount
+                    );
+
+                    const itemTaxBreakup = safeArray(item.tax_breakup).map(t => ({
+                        ...t,
+                        tax_amount: -toNumber(t.tax_amount)
+                    }));
+
+                    return {
+                        item_code: item.item_code,
+                        item_name: item.item_name,
+                        item_group: item.item_group || '',
+                        sub_category: item.sub_category || '',
+                        brand: item.brand || '',
+                        hsn_sac_code: item.hsn_sac_code || '',
+                        barcode: item.barcode || '',
+                        unit: item.unit || 'PCS',
+                        qty,
+                        rate: saleRate,
+                        amount: lineAmount,
+                        line_discount: lineDiscount,
+                        taxable_amount: -toNumber(item.taxable_amount),
+                        tax_amount: lineTaxAmount,
+                        line_total: lineNetAmount,
+                        net_amount: lineNetAmount,
+                        cost_rate: 0,
+                        estimated_cost: lineCost,
+                        estimated_profit: lineProfit,
+                        tax_breakup: itemTaxBreakup
+                    };
+                });
+
+                const saleGross = -toNumber(cn.sub_total);
+                const saleTaxable = -toNumber(cn.taxable_amount);
+                const saleDiscount = 0;
+                const saleChargeTotal = 0;
+                const saleTotalTax = -toNumber(cn.total_tax);
+                const saleNetRevenue = -toNumber(cn.net_amount);
+                const saleEstimatedCost = 0;
+                const saleProfit = saleNetRevenue;
+                const saleLoss = 0;
+                const salePositiveProfit = saleProfit;
+
+                grossSales = roundAmount(grossSales + saleGross);
+                taxableAmount = roundAmount(taxableAmount + saleTaxable);
+                totalDiscount = roundAmount(totalDiscount + saleDiscount);
+                totalRevenue = roundAmount(totalRevenue + saleNetRevenue);
+                gst = roundAmount(gst - cgst - sgst - igst);
+                profit = roundAmount(profit + salePositiveProfit);
+
+                const paymentKey = String(cn.sale?.payment_mode || 'CREDIT_NOTE').trim().toUpperCase() || 'UNKNOWN';
+                if (!paymentModeSummary[paymentKey]) {
+                    paymentModeSummary[paymentKey] = {
+                        payment_mode: paymentKey,
+                        amount: 0,
+                        sales_count: 0
+                    };
+                }
+                paymentModeSummary[paymentKey].amount = roundAmount(
+                    paymentModeSummary[paymentKey].amount + saleNetRevenue
+                );
+                paymentModeSummary[paymentKey].sales_count -= 1;
+
+                timeZoneMap[zone.key].sales_count -= 1;
+                timeZoneMap[zone.key].total_sales = roundAmount(
+                    timeZoneMap[zone.key].total_sales + saleNetRevenue
+                );
+                timeZoneMap[zone.key].taxable_amount = roundAmount(
+                    timeZoneMap[zone.key].taxable_amount + saleTaxable
+                );
+                timeZoneMap[zone.key].profit = roundAmount(
+                    timeZoneMap[zone.key].profit + saleProfit
+                );
+
+                const monthKey = formatMonthKey(cnDate);
+                const weekKey = formatWeekKey(cnDate);
+                const dayKey = formatDayKey(cnDate);
+
+                for (const [key, store] of [[monthKey, monthMap], [weekKey, weekMap], [dayKey, dayMap]]) {
+                    if (!store[key]) {
+                        store[key] = { period: key, sales: 0, profit: 0, loss: 0 };
+                    }
+                    store[key].sales = roundAmount(store[key].sales + saleNetRevenue);
+                    store[key].profit = roundAmount(store[key].profit + salePositiveProfit);
+                }
+
+                return {
+                    id: `cn-${cn.id}`,
+                    sale_no: cn.credit_note_no,
+                    sale_date: cn.credit_note_date,
+                    sale_zone: zone.key,
+                    customer_name: cn.customer_name,
+                    customer_phone: cn.customer_phone,
+                    customer_address: cn.sale?.customer_address || '',
+                    customer_gstin: cn.customer_gstin,
+                    payment_mode: cn.sale?.payment_mode || 'CREDIT_NOTE',
+                    payment_reference: cn.credit_note_no,
+                    order_type: cn.sale?.order_type || 'RETAIL',
+                    billing_country: cn.sale?.billing_country || 'INDIA',
+                    billing_tax_mode: cn.sale?.billing_tax_mode || 'GST',
+                    bill_format: cn.sale?.bill_format || 'A4',
+                    scheme_name: cn.sale?.scheme_name || '',
+                    total_qty: -toNumber(cn.total_qty),
+                    sub_total: saleGross,
+                    taxable_amount: saleTaxable,
+                    cgst_amount: -cgst,
+                    sgst_amount: -sgst,
+                    igst_amount: -igst,
+                    total_tax: saleTotalTax,
+                    charge_total: saleChargeTotal,
+                    charge_tax_total: 0,
+                    total_discount: saleDiscount,
+                    net_amount: saleNetRevenue,
+                    estimated_cost: 0,
+                    estimated_profit: saleProfit,
+                    estimated_loss: 0,
+                    charges: [],
+                    tax_breakup: cnTaxBreakup,
+                    items: lineItems
+                };
+            }
         });
 
         const zoneSummary = Object.values(timeZoneMap);
@@ -396,7 +612,7 @@ exports.getSalesReport = async (req, res) => {
             .slice(0, 12);
 
         const summary = {
-            total_bills: data.length,
+            total_bills: sales.length, // Count only actual sales bills
             total_qty: roundAmount(totalQty),
             gross_sales: roundAmount(grossSales),
             taxable_amount: roundAmount(taxableAmount),
@@ -419,7 +635,7 @@ exports.getSalesReport = async (req, res) => {
             success: true,
             count: data.length,
             summary,
-            payment_mode_breakdown: Object.values(paymentModeSummary),
+            payment_mode_breakdown: Object.values(paymentModeSummary).filter(entry => entry.sales_count !== 0 || entry.amount !== 0),
             time_zone_breakdown: zoneSummary,
             insights: {
                 highest_sale_zone: highZone,
@@ -442,4 +658,4 @@ exports.getSalesReport = async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
-};
+};;

@@ -121,7 +121,10 @@ async function createClientFolder(outletCode) {
 }
 
 async function uploadBackupViaScript(filePath, fileName, targetFolderId) {
-    if (!(await isOnline())) return log("No internet, skipping upload");
+    if (!(await isOnline())) {
+        log("No internet, skipping upload");
+        throw new Error("No internet connection.");
+    }
 
     try {
         log(`Uploading ${fileName}...`);
@@ -138,6 +141,7 @@ async function uploadBackupViaScript(filePath, fileName, targetFolderId) {
         log(`Upload success! File ID: ${res.fileId}`);
     } catch (error) {
         console.error("[DRIVE_SERVICE] Upload failed:", error.message);
+        throw error;
     }
 }
 
@@ -150,6 +154,7 @@ async function cleanOldBackups(folderId) {
         log("Old backups cleaned successfully");
     } catch (error) {
         console.error("[DRIVE_SERVICE] Clean old backups failed:", error.message);
+        throw error;
     }
 }
 

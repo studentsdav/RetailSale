@@ -3,6 +3,8 @@ const auth = require('../middlewares/auth.middleware');
 const license = require('../middlewares/license.middleware');
 const ctrlprop = require('../controllers/public/propertyInfo.controller');
 const itemCtrl = require('../controllers/inventory/itemMaster.controller');
+const bomCtrl = require('../controllers/inventory/bom.controller');
+const assemblyCtrl = require('../controllers/inventory/assembly.controller');
 const locationCtrl = require('../controllers/inventory/stockLocation.controller');
 const numberingCtrl = require('../controllers/inventory/numberingSettingsV2.controller');
 const issueCtrl = require('../controllers/inventory/issue.controller');
@@ -50,11 +52,17 @@ router.delete('/items/:id', itemCtrl.deleteItem);
 router.post('/items/:id/image', itemCtrl.uploadItemImage);
 router.delete('/items/:id/image', itemCtrl.deleteItemImage);
 
+// BOM ENDPOINTS
+router.get('/boms/:parentItemId', bomCtrl.getBOM);
+router.post('/boms', bomCtrl.saveBOM);
+router.post('/boms/:parentItemId/update-cost', bomCtrl.updateParentCost);
 
-
-console.log({
-    response: "reached"
-})
+// ASSEMBLY ENDPOINTS
+router.get('/assemblies/next-no', assemblyCtrl.getNextAssemblyNo);
+router.post('/assemblies', assemblyCtrl.createAssembly);
+router.get('/assemblies', assemblyCtrl.listAssemblies);
+router.get('/assemblies/:id', assemblyCtrl.getAssemblyDetails);
+router.put('/assemblies/:id/stop', assemblyCtrl.stopAssembly);
 
 // SETTINGS
 router.get('/settings', settingsctrl.getSettings);
@@ -65,6 +73,7 @@ router.post('/branding', brandingSettingsCtrl.saveBranding);
 router.get('/status', backupController.getBackupStatusAlert);
 router.post('/toggle', backupController.toggleBackup);
 router.get('/sync-latest', syncDatabase.syncDatabaseOnly);
+router.post('/backup/upload-latest', backupController.uploadBackupOnDemand);
 router.get('/backup/local-enc', backupController.createLocalEncBackup);
 
 // STOCK LOCATIONS

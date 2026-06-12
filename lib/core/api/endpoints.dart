@@ -30,6 +30,7 @@ class ApiEndpoints {
   static const backupStatus = '/api/inventory/status';
   static const toggleBackup = '/api/inventory/toggle';
   static const syncLatest = '/api/inventory/sync-latest';
+  static const uploadLatest = '/api/inventory/backup/upload-latest';
   static const localEncBackup = '/api/inventory/backup/local-enc';
   static const restoreLocalEncBackup = '/api/inventory/backup/restore-local-enc';
 
@@ -53,6 +54,7 @@ class ApiEndpoints {
   static const purReport = '/api/reports/purchase-orders';
 
   static const returnReport = '/api/reports/return';
+  static const supplierPaymentsReport = '/api/reports/supplier-payments';
 
   static const requestReport = '/api/reports/request';
 
@@ -66,6 +68,7 @@ class ApiEndpoints {
 
   static const stockTransferReport = '/api/reports/stock-transfer';
 
+  static const supplierAvailableCredit = '/api/suppliers';
   static const supplierBills = '/api/suppliers/bills/list';
   static const supplierBillDetails = '/api/suppliers/bills';
 
@@ -85,6 +88,8 @@ class ApiEndpoints {
   static const sales = '/api/sales';
   static const salesSchemes = '/api/sales/schemes';
   static const salesCustomers = '/api/sales/customers';
+  static const salesRefunds = '/api/sales/refunds';
+  static const salesPayRefund = '/api/sales/refunds/pay';
   static const salesSubscriptions = '/api/sales/subscriptions';
   static const salesSubscriptionCustomer = '/api/sales/subscriptions/customer';
   static const salesVouchers = '/api/sales/vouchers';

@@ -120,6 +120,49 @@ exports.getSupplierBillDetails = async (req, res) => {
     }
 };
 
+async function calculateSupplierAvailableCredit(db, outlet_id, supplier_id, transaction) {
+    const totalCreditRefunded = await db.models.supplier_return_refunds.sum('amount', {
+        where: {
+            outlet_id,
+            supplier_id,
+            payment_mode: 'CREDIT'
+        },
+        transaction
+    }) || 0;
+
+    const totalCreditAdjusted = await db.models.supplier_payments.sum('credit_adjusted', {
+        where: {
+            outlet_id,
+            supplier_id
+        },
+        transaction
+    }) || 0;
+
+    return Math.max(0, Number(totalCreditRefunded) - Number(totalCreditAdjusted));
+}
+
+exports.getAvailableCredit = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const supplier_id = Number(req.params.supplierId);
+
+        if (!supplier_id) {
+            return res.status(400).json({ success: false, message: 'Invalid supplier id' });
+        }
+
+        const availableCredit = await calculateSupplierAvailableCredit(req.propertyDb, outlet_id, supplier_id);
+
+        res.json({
+            success: true,
+            data: {
+                availableCredit
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
 exports.paySupplierBill = async (req, res) => {
     const t = await req.propertyDb.transaction();
 
@@ -127,6 +170,7 @@ exports.paySupplierBill = async (req, res) => {
         const outlet_id = req.user.outlet_id;
 
         const { bill_id, amount } = req.body;
+        const credit_adjusted = Number(req.body.credit_adjusted || 0);
         const paymentMode = String(req.body.payment_mode || 'CASH').trim().toUpperCase();
         const referenceNo = String(req.body.reference_no || '').trim() || null;
         const paymentDate = dateKey(req.body.payment_date || new Date());
@@ -145,19 +189,28 @@ exports.paySupplierBill = async (req, res) => {
         }
 
         const balance = bill.bill_amount - bill.paid_amount;
+        const totalApplied = Number(amount) + Number(credit_adjusted);
 
-        if (amount <= 0 || amount > balance) {
+        if (totalApplied <= 0 || totalApplied > balance + 0.009) {
             await t.rollback();
             return res.status(400).json({
                 message: 'Invalid payment amount'
             });
         }
 
+        if (credit_adjusted > 0) {
+            const availableCredit = await calculateSupplierAvailableCredit(req.propertyDb, outlet_id, bill.supplier_id, t);
+            if (credit_adjusted > availableCredit + 0.009) {
+                await t.rollback();
+                return res.status(400).json({
+                    message: `Adjusted credit exceeds available credit. Available: ${availableCredit.toFixed(2)}`
+                });
+            }
+        }
+
         const oldBillData = bill.toJSON();
 
-        bill.paid_amount =
-            Number(bill.paid_amount) + Number(amount);
-
+        bill.paid_amount = Number(bill.paid_amount) + Number(totalApplied);
 
         const totalPaid = Number(bill.paid_amount);
         const totalBill = Number(bill.bill_amount);
@@ -168,10 +221,8 @@ exports.paySupplierBill = async (req, res) => {
                 : totalPaid > 0
                     ? 'PARTIAL'
                     : 'UNPAID';
-        console.log("Before Save:", bill.paid_amount);
 
         await bill.save({ transaction: t });
-        console.log("After Save:", bill.paid_amount);
 
         await req.propertyDb.models.supplier_payments.create({
             outlet_id,
@@ -179,6 +230,7 @@ exports.paySupplierBill = async (req, res) => {
             bill_id: bill.id,
             payment_date: paymentDate,
             amount,
+            credit_adjusted,
             payment_mode: paymentMode,
             reference_no: referenceNo,
             created_by: req.user.id
@@ -189,21 +241,23 @@ exports.paySupplierBill = async (req, res) => {
             { transaction: t }
         );
 
-        await createLedgerEntry({
-            db: req.propertyDb,
-            outlet_id,
-            txn_date: paymentDate,
-            transaction_type: 'SUPPLIER_PAYMENT',
-            reference_type: 'SUPPLIER_BILL',
-            reference_id: bill.id,
-            reference_no: bill.bill_no,
-            party_name: supplier?.supplier_name || null,
-            payment_method: paymentMode,
-            amount_out: amount,
-            notes: note || `Supplier payment for bill ${bill.bill_no}`,
-            created_by: req.user.id,
-            transaction: t
-        });
+        if (amount > 0) {
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id,
+                txn_date: paymentDate,
+                transaction_type: 'SUPPLIER_PAYMENT',
+                reference_type: 'SUPPLIER_BILL',
+                reference_id: bill.id,
+                reference_no: bill.bill_no,
+                party_name: supplier?.supplier_name || null,
+                payment_method: paymentMode,
+                amount_out: amount,
+                notes: note || `Supplier payment for bill ${bill.bill_no}`,
+                created_by: req.user.id,
+                transaction: t
+            });
+        }
 
         await audit.log({
             req,

@@ -1,42 +1,66 @@
 const audit = require('../../services/audit.service');
 
 const TRANSACTION_TABLES = [
+    // 1. Supplier Return tables (dependent children first)
+    'supplier_return_refunds',
+    'supplier_return_items',
+    'supplier_return_headers',
+
+    // 2. Goods Receipt tables (dependent children first)
+    'goods_receipt_items',
+    'goods_receipts',
+
+    // 3. Supplier Payments & Bills
+    'supplier_payments',
+    'supplier_bills',
+
+    // 4. Purchase Orders
+    'purchase_order_items',
+    'purchase_orders',
+
+    // 5. Return Headers & Items (reference issue_headers)
+    'return_items',
+    'return_headers',
+
+    // 6. Issue Headers & Items
+    'issue_items',
+    'issue_headers',
+
+    // 7. Damage Headers & Items
+    'damage_items',
+    'damage_headers',
+
+    // 8. Assembly Headers & Items
+    'assembly_items',
+    'assembly_headers',
+
+    // 9. Request Headers & Items
+    'request_items',
+    'request_headers',
+
+    // 10. Milk Subscription tables
+    'milk_subscription_consumptions',
+    'milk_subscription_settlements',
+    'milk_subscription_schemes',
+    'milk_subscriptions',
+
+    // 11. Sales & Customer Advances tables
     'sales_items',
-    'sales_headers',
     'customer_repayments',
     'customer_advances',
     'customer_item_advances',
+    'sales_refunds',
+    'sales_headers',
+
+    // 12. Miscellaneous/Independent tables
     'sales_scheme_customers',
-    'milk_subscriptions',
-    'milk_subscription_schemes',
-    'milk_subscription_consumptions',
-    'milk_subscription_settlements',
     'customer_loyalty_ledger',
     'loyalty_master_config',
     'cash_ledger',
     'expense_entries',
     'daily_opening_balances',
     'stock_ledger',
-    'goods_receipt_items',
-    'goods_receipts',
-    'purchase_order_items',
-    'purchase_orders',
-    'issue_items',
-    'issue_headers',
-    'damage_items',
-    'damage_headers',
-    'return_items',
-    'return_headers',
-    'supplier_return_items',
-    'supplier_return_headers',
-    'supplier_return_refunds',
-    'supplier_bills',
-    'supplier_payments',
-    'request_items',
-    'request_headers',
-    'audit_logs',
-    'cash_ledger',
-    'expense_entries'
+    'audit_logs'
 ];
 
 const PROTECTED_TABLES = new Set([
@@ -175,6 +199,11 @@ exports.clearTransactionData = async (req, res) => {
         const tableNames = (existingTables || [])
             .map((row) => row.tablename)
             .filter(Boolean);
+
+        // Sort tableNames according to defined order in WIPE_TABLES to respect foreign key constraints
+        tableNames.sort((a, b) => {
+            return WIPE_TABLES.indexOf(a) - WIPE_TABLES.indexOf(b);
+        });
 
         const headerModel = req.propertyDb.models.sales_headers;
         const columns = headerModel?.rawAttributes || {};

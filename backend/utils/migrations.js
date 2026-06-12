@@ -1853,8 +1853,122 @@ COMMIT;
       `);
     }
   },
+  {
+    version: 39,
+    description: "Add credit_adjusted to supplier_payments and allow CREDIT payment mode",
+    up: async (db) => {
+      await db.query(`
+BEGIN;
 
+ALTER TABLE supplier_payments ADD COLUMN IF NOT EXISTS credit_adjusted NUMERIC(12,2) DEFAULT 0;
 
+ALTER TABLE supplier_payments DROP CONSTRAINT IF EXISTS supplier_payments_payment_mode_check;
+ALTER TABLE supplier_payments ADD CONSTRAINT supplier_payments_payment_mode_check CHECK (payment_mode IN ('CASH','CARD','UPI','BANK','CREDIT'));
+
+ALTER TABLE supplier_return_refunds DROP CONSTRAINT IF EXISTS supplier_return_refunds_payment_mode_check;
+ALTER TABLE supplier_return_refunds ADD CONSTRAINT supplier_return_refunds_payment_mode_check CHECK (payment_mode IN ('CASH','CARD','UPI','BANK','CREDIT'));
+
+COMMIT;
+      `);
+    }
+  },
+  {
+    version: 40,
+    description: "Add tables for item BOMs and product assembly tracking",
+    up: async (db) => {
+      await db.query(`
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS item_boms (
+    id SERIAL PRIMARY KEY,
+    outlet_id INT NOT NULL,
+    parent_item_id INT NOT NULL REFERENCES item_master(id) ON DELETE CASCADE,
+    component_item_id INT NOT NULL REFERENCES item_master(id) ON DELETE CASCADE,
+    quantity NUMERIC(12,4) NOT NULL DEFAULT 1.0000,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_item_boms UNIQUE(outlet_id, parent_item_id, component_item_id)
+);
+
+CREATE TABLE IF NOT EXISTS assembly_headers (
+    id SERIAL PRIMARY KEY,
+    outlet_id INT NOT NULL,
+    assembly_no VARCHAR(50) NOT NULL,
+    assembly_date DATE NOT NULL,
+    parent_item_id INT NOT NULL REFERENCES item_master(id),
+    qty NUMERIC(12,2) NOT NULL,
+    composite_cost NUMERIC(12,2) NOT NULL,
+    total_cost NUMERIC(12,2) NOT NULL,
+    notes TEXT,
+    created_by INT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS assembly_items (
+    id SERIAL PRIMARY KEY,
+    outlet_id INT NOT NULL,
+    assembly_id INT NOT NULL REFERENCES assembly_headers(id) ON DELETE CASCADE,
+    component_item_id INT NOT NULL REFERENCES item_master(id),
+    qty_required NUMERIC(12,4) NOT NULL,
+    qty_used NUMERIC(12,4) NOT NULL,
+    rate NUMERIC(12,2) NOT NULL,
+    total_cost NUMERIC(12,2) NOT NULL
+);
+
+COMMIT;
+      `);
+    }
+  },
+  {
+    version: 41,
+    description: "Add status column to assembly_headers",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE assembly_headers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'RUNNING';
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 42,
+    description: "Add sales_credit_notes table for sales returns and credit notes",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        CREATE TABLE IF NOT EXISTS sales_credit_notes (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+            sale_id INTEGER NOT NULL REFERENCES sales_headers(id) ON DELETE CASCADE,
+            credit_note_no VARCHAR(50) NOT NULL UNIQUE,
+            credit_note_date DATE NOT NULL,
+            customer_name VARCHAR(150),
+            customer_phone VARCHAR(20),
+            customer_gstin VARCHAR(20),
+            items JSONB NOT NULL,
+            total_qty DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            sub_total DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            taxable_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            cgst_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            sgst_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            igst_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            total_tax DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            net_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            reason VARCHAR(100),
+            status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_sales_credit_notes_sale_id ON sales_credit_notes(sale_id);
+        CREATE INDEX IF NOT EXISTS idx_sales_credit_notes_outlet_id ON sales_credit_notes(outlet_id);
+        CREATE INDEX IF NOT EXISTS idx_sales_credit_notes_credit_note_date ON sales_credit_notes(credit_note_date);
+        COMMIT;
+      `);
+    }
+  }
 ];
 
 module.exports = migrations;

@@ -17,6 +17,7 @@ import '../../utils/inclusive_rate_helper.dart';
 import '../../widgets/entry_shortcuts.dart';
 import 'item_barcode_manager_screen.dart';
 import 'stocktransferinv.dart';
+import 'bom_setup_dialog.dart';
 
 class ItemMasterScreen extends StatefulWidget {
   const ItemMasterScreen({super.key});
@@ -2101,7 +2102,21 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                               Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                IconButton(
+                                  IconButton(
+                                      tooltip: 'Manage BOM',
+                                      icon: const Icon(Icons.settings_input_component,
+                                          color: Colors.blue),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => BOMSetupDialog(
+                                            parentItem: it,
+                                            itemCtrl: itemCtrl,
+                                            onCostUpdated: () => _loadItems(),
+                                          ),
+                                        );
+                                      }),
+                                  IconButton(
                                       icon: const Icon(Icons.edit),
                                       onPressed: () => _editItem(i)),
                                   IconButton(

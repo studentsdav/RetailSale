@@ -32,6 +32,7 @@ import '../inventory/receiving.dart';
 import '../inventory/requestiteminv.dart';
 import '../inventory/salescreen.dart';
 import '../inventory/stocktransferinv.dart';
+import '../inventory/assembly_screen.dart';
 import '../inventory/returnissueitem.dart';
 import '../inventory/supplier_return_refund_screen.dart';
 import '../inventory/supplier_return_screen.dart';
@@ -56,6 +57,8 @@ import '../reports/subscription_report_screen.dart';
 import '../reports/sales_report_screen.dart';
 import '../reports/store_analysis_screen.dart';
 import '../reports/stock_ledger_report_screen.dart';
+import '../reports/supplier_payments_report_screen.dart';
+import '../reports/refund_pending_report_screen.dart';
 import '../reports/stock_transfer_report_screen.dart';
 import '../reports/stockbalance.dart';
 import '../reports/stockinreport.dart';
@@ -185,6 +188,26 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
     _loadUserRole();
   }
 
+  Future<bool?> _showConfirmSyncDialog() async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Sync'),
+        content: const Text('Proceed to replace data from online to local?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Proceed'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _performSync() async {
     setState(() => _isSyncing = true);
 
@@ -205,6 +228,37 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to sync database. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
+  Future<void> _performUpload() async {
+    setState(() => _isSyncing = true);
+
+    try {
+      final success = await BackupService.uploadLatest();
+
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Database backup uploaded to cloud successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        await _verifyDataProtection();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to upload backup to cloud. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -328,7 +382,7 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    onPressed: _performSync,
+                    onPressed: _performUpload,
                     icon: const Icon(Icons.cloud_upload, size: 16),
                     label: const Text(
                       "Upload Data",
@@ -803,7 +857,12 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
                   : IconButton(
                       icon: const Icon(Icons.cloud_download),
                       tooltip: 'Sync Latest Data',
-                      onPressed: _performSync,
+                      onPressed: () async {
+                        final confirm = await _showConfirmSyncDialog();
+                        if (confirm == true) {
+                          await _performSync();
+                        }
+                      },
                     ),
             ),
           IconButton(
@@ -1629,6 +1688,11 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
               Navigator.push(context,
                   MaterialPageRoute(builder: (_) => const StockTransferScreen()));
             }),
+            _drawerItem(Icons.build, 'Product Assembly',
+                permission: 'STOCK_OUT', onTap: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const AssemblyScreen()));
+            }),
             _drawerItem(Icons.undo, 'Return Department Items',
                 permission: 'RETURN', onTap: () {
               Navigator.push(
@@ -1667,6 +1731,15 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => const SupplierReturnRefundScreen(),
+                ),
+              );
+            }),
+            _drawerItem(Icons.assignment_return_outlined, 'Pending Refunds',
+                permission: 'REPORTS', onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RefundPendingReportScreen(),
                 ),
               );
             }),
@@ -1930,6 +2003,13 @@ class _UserInventoryDashboardState extends State<UserInventoryDashboard> {
                   context,
                   MaterialPageRoute(
                       builder: (_) => const StockLedgerReportScreen()));
+            }),
+            _drawerItem(Icons.payment_outlined, 'Vendor Payment Report',
+                permission: 'REPORTS', onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const SupplierPaymentsReportScreen()));
             }),
             _drawerItem(Icons.store, 'Vendor Purchase Order',
                 permission: 'PURCHASE_REPORT', onTap: () {

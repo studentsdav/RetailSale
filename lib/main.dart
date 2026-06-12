@@ -8,6 +8,16 @@ import 'controllers/settings/app_branding_controller.dart';
 import 'controllers/settings/system_settings_controller.dart';
 import 'controllers/settings/theme_controller.dart';
 import 'controllers/settings/ui_preferences_controller.dart';
+import 'controllers/settings/theme_controller.dart';
+import 'controllers/settings/ui_preferences_controller.dart';
+import 'controllers/settings/app_branding_controller.dart';
+import 'controllers/settings/system_settings_controller.dart';
+import 'controllers/settings/theme_controller.dart';
+import 'controllers/settings/ui_preferences_controller.dart';
+import 'controllers/settings/app_branding_controller.dart';
+import 'controllers/security/user_controller.dart';
+import 'controllers/security/recovery_controller.dart';
+import 'controllers/inventory/bom_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/config/app_brand.dart';
 import 'core/theme/app_theme.dart';
@@ -30,6 +40,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AppBrandingController()..loadLocal()),
         ChangeNotifierProvider(create: (_) => UserController()),
         ChangeNotifierProvider(create: (_) => RecoveryController()),
+        ChangeNotifierProvider(create: (_) => BOMController()),
       ],
       child: const MyApp(),
     ),

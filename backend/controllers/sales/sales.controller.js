@@ -2268,6 +2268,7 @@ async function createSaleVersion({
         }, { transaction });
 
         if (status === 'COMPLETED' && affectStock) {
+            // Always deduct the parent item itself
             await insertLedger({
                 db: req.propertyDb,
                 outlet_id,
@@ -2278,6 +2279,39 @@ async function createSaleVersion({
                 qty_out: qty,
                 transaction
             });
+
+            // If it is a composite item, also deduct components
+            const bomComponents = await req.propertyDb.models.item_boms.findAll({
+                where: { outlet_id, parent_item_id: row.item_id },
+                include: [
+                    {
+                        model: req.propertyDb.models.item_master,
+                        as: 'component_item',
+                        where: { is_active: true }
+                    }
+                ],
+                transaction
+            });
+
+            if (bomComponents && bomComponents.length > 0) {
+                for (const bomComp of bomComponents) {
+                    const compItem = bomComp.component_item;
+                    if (!compItem) continue;
+                    const qtyRequiredPerUnit = Number(bomComp.quantity);
+                    const totalQtyNeeded = qtyRequiredPerUnit * qty;
+
+                    await insertLedger({
+                        db: req.propertyDb,
+                        outlet_id,
+                        item_code: compItem.item_code,
+                        txn_date: header.sale_date,
+                        txn_type: stockTxnType,
+                        ref_no: header.sale_no,
+                        qty_out: totalQtyNeeded,
+                        transaction
+                    });
+                }
+            }
         }
     }
 
@@ -2367,6 +2401,7 @@ async function reverseSaleStock({ req, transaction, sale, items }) {
     if (sale.status !== 'COMPLETED') return;
 
     for (const row of items) {
+        // Always revert the parent item itself
         await insertLedger({
             db: req.propertyDb,
             outlet_id: req.user.outlet_id,
@@ -2377,6 +2412,39 @@ async function reverseSaleStock({ req, transaction, sale, items }) {
             qty_in: toAmount(row.qty),
             transaction
         });
+
+        // If it is a composite item, also revert components
+        const bomComponents = await req.propertyDb.models.item_boms.findAll({
+            where: { outlet_id: req.user.outlet_id, parent_item_id: row.item_id },
+            include: [
+                {
+                    model: req.propertyDb.models.item_master,
+                    as: 'component_item',
+                    where: { is_active: true }
+                }
+            ],
+            transaction
+        });
+
+        if (bomComponents && bomComponents.length > 0) {
+            for (const bomComp of bomComponents) {
+                const compItem = bomComp.component_item;
+                if (!compItem) continue;
+                const qtyRequiredPerUnit = Number(bomComp.quantity);
+                const totalQtyToRevert = qtyRequiredPerUnit * toAmount(row.qty);
+
+                await insertLedger({
+                    db: req.propertyDb,
+                    outlet_id: req.user.outlet_id,
+                    item_code: compItem.item_code,
+                    txn_date: new Date(),
+                    txn_type: 'SALE_MODIFY_REVERSE',
+                    ref_no: sale.sale_no,
+                    qty_in: totalQtyToRevert,
+                    transaction
+                });
+            }
+        }
     }
 }
 
@@ -2410,6 +2478,7 @@ async function applySaleModificationStockDelta({
 
         if (Math.abs(diff) <= 0.000001) continue;
 
+        // Always apply stock delta adjustment to the parent item itself
         await insertLedger({
             db: req.propertyDb,
             outlet_id: req.user.outlet_id,
@@ -2421,6 +2490,46 @@ async function applySaleModificationStockDelta({
             qty_out: diff > 0 ? diff : 0,
             transaction
         });
+
+        const item = await req.propertyDb.models.item_master.findOne({
+            where: { outlet_id: req.user.outlet_id, item_code: itemCode },
+            transaction
+        });
+
+        const bomComponents = item
+            ? await req.propertyDb.models.item_boms.findAll({
+                where: { outlet_id: req.user.outlet_id, parent_item_id: item.id },
+                include: [
+                    {
+                        model: req.propertyDb.models.item_master,
+                        as: 'component_item',
+                        where: { is_active: true }
+                    }
+                ],
+                transaction
+            })
+            : [];
+
+        if (bomComponents && bomComponents.length > 0) {
+            for (const bomComp of bomComponents) {
+                const compItem = bomComp.component_item;
+                if (!compItem) continue;
+                const qtyRequiredPerUnit = Number(bomComp.quantity);
+                const totalDiff = qtyRequiredPerUnit * diff;
+
+                await insertLedger({
+                    db: req.propertyDb,
+                    outlet_id: req.user.outlet_id,
+                    item_code: compItem.item_code,
+                    txn_date: new Date(),
+                    txn_type: 'SALE_MOD_ADJ',
+                    ref_no: refNo,
+                    qty_in: totalDiff < 0 ? Math.abs(totalDiff) : 0,
+                    qty_out: totalDiff > 0 ? totalDiff : 0,
+                    transaction
+                });
+            }
+        }
     }
 }
 
@@ -3310,7 +3419,11 @@ exports.listSales = async (req, res) => {
         const toDate = parseDateOnly(req.query.to_date);
         const where = { outlet_id: req.user.outlet_id };
         if (status) {
-            where.status = status;
+            if (status === 'COMPLETED') {
+                where.status = { [Op.in]: ['COMPLETED', 'RETURNED'] };
+            } else {
+                where.status = status;
+            }
         }
         if (latestOnly) {
             where.is_latest = true;
@@ -3677,7 +3790,30 @@ exports.getSaleDetails = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Sale not found' });
         }
 
-        res.json({ success: true, data: sale });
+        // Load all credit notes for this sale to compute returned quantities
+        const creditNotes = await req.propertyDb.models.sales_credit_notes.findAll({
+            where: { sale_id: sale.id, outlet_id }
+        });
+
+        const alreadyReturned = {};
+        creditNotes.forEach(cn => {
+            if (Array.isArray(cn.items)) {
+                cn.items.forEach(it => {
+                    alreadyReturned[it.item_id] = (alreadyReturned[it.item_id] || 0) + Number(it.qty);
+                });
+            }
+        });
+
+        const saleJson = sale.toJSON();
+        saleJson.items = saleJson.items.map(item => {
+            return {
+                ...item,
+                returned_qty: alreadyReturned[item.item_id] || 0
+            };
+        });
+        saleJson.credit_notes = creditNotes;
+
+        res.json({ success: true, data: saleJson });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -5465,5 +5601,397 @@ exports.updateSubscriptionStatus = async (req, res) => {
         res.json({ success: true, data: subscription });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.returnSale = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const { sale_id, items } = req.body;
+        const outlet_id = req.user.outlet_id;
+
+        const sale = await req.propertyDb.models.sales_headers.findOne({
+            where: { id: sale_id, outlet_id, is_deleted: false },
+            include: [{ model: req.propertyDb.models.sales_items, as: 'items' }],
+            transaction: t
+        });
+
+        if (!sale) {
+            return res.status(404).json({ success: false, message: 'Sale not found' });
+        }
+
+        if (sale.status !== 'COMPLETED' && sale.status !== 'RETURNED') {
+            return res.status(400).json({ success: false, message: 'Only completed sales can be returned' });
+        }
+
+        // Load existing Credit Notes for this sale to compute remaining quantities
+        const existingCNs = await req.propertyDb.models.sales_credit_notes.findAll({
+            where: { sale_id: sale.id, outlet_id },
+            transaction: t
+        });
+        const alreadyReturned = {};
+        for (const cn of existingCNs) {
+            if (Array.isArray(cn.items)) {
+                for (const it of cn.items) {
+                    alreadyReturned[it.item_id] = (alreadyReturned[it.item_id] || 0) + Number(it.qty);
+                }
+            }
+        }
+
+        const cnItems = [];
+        let cnTotalQty = 0;
+        let cnSubTotal = 0;
+        let cnTaxableAmount = 0;
+        let cnCgstAmount = 0;
+        let cnSgstAmount = 0;
+        let cnIgstAmount = 0;
+        let cnTotalTax = 0;
+        let cnNetAmount = 0;
+
+        // Revert stock for selected return items and build credit note items
+        for (const returnItem of items) {
+            const saleItem = sale.items.find(it => it.item_id === returnItem.item_id);
+            if (!saleItem) continue;
+
+            const qtyToReturn = Number(returnItem.qty_to_return || 0);
+            if (qtyToReturn <= 0) continue;
+
+            const prevReturned = alreadyReturned[saleItem.item_id] || 0;
+            const maxReturnable = Number(saleItem.qty) - prevReturned;
+            if (qtyToReturn > maxReturnable + 0.009) {
+                await t.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `Cannot return more than remaining quantity (${maxReturnable.toFixed(2)}) for item ${saleItem.item_name}`
+                });
+            }
+
+            // Calculate proportionate values
+            const proportion = qtyToReturn / Number(saleItem.qty);
+            const taxable_amount = toAmount(Number(saleItem.taxable_amount) * proportion);
+            const tax_amount = toAmount(Number(saleItem.tax_amount) * proportion);
+            const line_total = toAmount(Number(saleItem.line_total) * proportion);
+            const rate = Number(saleItem.rate);
+            const tax_percent = Number(saleItem.tax_percent);
+
+            let cgst_amount = 0;
+            let sgst_amount = 0;
+            let igst_amount = 0;
+            let tax_breakup = [];
+
+            if (Array.isArray(saleItem.tax_breakup)) {
+                tax_breakup = saleItem.tax_breakup.map(tax => {
+                    const taxAmt = toAmount(Number(tax.taxAmount) * proportion);
+                    if (tax.code === 'CGST') cgst_amount += taxAmt;
+                    if (tax.code === 'SGST') sgst_amount += taxAmt;
+                    if (tax.code === 'IGST') igst_amount += taxAmt;
+                    return {
+                        ...tax,
+                        taxAmount: taxAmt
+                    };
+                });
+            }
+
+            cnItems.push({
+                item_id: saleItem.item_id,
+                item_code: saleItem.item_code,
+                item_name: saleItem.item_name,
+                qty: qtyToReturn,
+                rate,
+                tax_percent,
+                taxable_amount,
+                cgst_amount,
+                sgst_amount,
+                igst_amount,
+                tax_amount,
+                line_total,
+                tax_breakup
+            });
+
+            cnTotalQty += qtyToReturn;
+            cnSubTotal += toAmount(rate * qtyToReturn);
+            cnTaxableAmount += taxable_amount;
+            cnCgstAmount += cgst_amount;
+            cnSgstAmount += sgst_amount;
+            cnIgstAmount += igst_amount;
+            cnTotalTax += tax_amount;
+            cnNetAmount += line_total;
+
+            // Always revert the parent item itself in stock ledger
+            await insertLedger({
+                db: req.propertyDb,
+                outlet_id,
+                item_code: saleItem.item_code,
+                txn_date: new Date(),
+                txn_type: 'SALE_RETURN',
+                ref_no: sale.sale_no,
+                qty_in: qtyToReturn,
+                transaction: t
+            });
+
+            // If it is a composite item, also revert components
+            const bomComponents = await req.propertyDb.models.item_boms.findAll({
+                where: { outlet_id, parent_item_id: saleItem.item_id },
+                include: [
+                    {
+                        model: req.propertyDb.models.item_master,
+                        as: 'component_item',
+                        where: { is_active: true }
+                    }
+                ],
+                transaction: t
+            });
+
+            if (bomComponents && bomComponents.length > 0) {
+                for (const bomComp of bomComponents) {
+                    const compItem = bomComp.component_item;
+                    if (!compItem) continue;
+                    const qtyRequiredPerUnit = Number(bomComp.quantity);
+                    const totalQtyToRevert = qtyRequiredPerUnit * qtyToReturn;
+
+                    await insertLedger({
+                        db: req.propertyDb,
+                        outlet_id,
+                        item_code: compItem.item_code,
+                        txn_date: new Date(),
+                        txn_type: 'SALE_RETURN',
+                        ref_no: sale.sale_no,
+                        qty_in: totalQtyToRevert,
+                        transaction: t
+                    });
+                }
+            }
+        }
+
+        if (cnItems.length === 0) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'No valid items/quantities to return' });
+        }
+
+        // Generate Credit Note Number
+        const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const cnCount = await req.propertyDb.models.sales_credit_notes.count({
+            where: { outlet_id, credit_note_date: new Date() },
+            transaction: t
+        });
+        const seqCN = String(cnCount + 1).padStart(4, '0');
+        const credit_note_no = `CN-${todayStr}-${seqCN}`;
+
+        // Create the Credit Note record
+        const creditNote = await req.propertyDb.models.sales_credit_notes.create({
+            outlet_id,
+            sale_id: sale.id,
+            credit_note_no,
+            credit_note_date: new Date(),
+            customer_name: sale.customer_name,
+            customer_phone: sale.customer_phone,
+            customer_gstin: sale.customer_gstin,
+            items: cnItems,
+            total_qty: cnTotalQty,
+            sub_total: cnSubTotal,
+            taxable_amount: cnTaxableAmount,
+            cgst_amount: cnCgstAmount,
+            sgst_amount: cnSgstAmount,
+            igst_amount: cnIgstAmount,
+            total_tax: cnTotalTax,
+            net_amount: cnNetAmount,
+            reason: 'Sales Return',
+            status: 'PENDING',
+            notes: `Credit Note issued for sales return on bill ${sale.sale_no}`,
+            created_by: req.user.id
+        }, { transaction: t });
+
+        // Update sale status to RETURNED only if all items are fully returned
+        let allFullyReturned = true;
+        for (const saleItem of sale.items) {
+            const prevRet = alreadyReturned[saleItem.item_id] || 0;
+            const returnedThisTime = cnItems.find(it => it.item_id === saleItem.item_id)?.qty || 0;
+            if (prevRet + returnedThisTime < Number(saleItem.qty) - 0.009) {
+                allFullyReturned = false;
+                break;
+            }
+        }
+        if (allFullyReturned) {
+            await sale.update({ status: 'RETURNED' }, { transaction: t });
+        }
+
+        // Generate and insert a pending refund record
+        const refundCount = await req.propertyDb.models.sales_refunds.count({
+            where: { outlet_id, refund_date: new Date() },
+            transaction: t
+        });
+        const seqRefund = String(refundCount + 1).padStart(4, '0');
+        const refund_no = `REF-${todayStr}-${seqRefund}`;
+
+        await req.propertyDb.models.sales_refunds.create({
+            outlet_id,
+            sale_id: sale.id,
+            refund_no,
+            refund_date: new Date(),
+            amount_pending: cnNetAmount,
+            amount_paid: 0,
+            status: 'PENDING',
+            notes: `Pending refund for Credit Note ${credit_note_no} against bill ${sale.sale_no}`,
+            created_by: req.user.id
+        }, { transaction: t });
+
+        await audit.log({
+            req,
+            module: 'SALES',
+            action: 'RETURN',
+            table: 'sales_headers',
+            recordId: sale.id,
+            newData: { status: allFullyReturned ? 'RETURNED' : 'COMPLETED', credit_note: creditNote.toJSON() },
+            outlet_id,
+            user_id: req.user.id
+        });
+
+        await t.commit();
+        res.json({
+            success: true,
+            message: 'Sale returned, Credit Note generated, and pending refund recorded successfully',
+            credit_note: creditNote
+        });
+    } catch (err) {
+        await t.rollback();
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.listRefunds = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const status = String(req.query.status || '').trim().toUpperCase();
+        const search = String(req.query.search || '').trim();
+        const fromDate = parseDateOnly(req.query.from_date);
+        const toDate = parseDateOnly(req.query.to_date);
+
+        const where = { outlet_id };
+        if (status) {
+            where.status = status;
+        }
+
+        if (fromDate || toDate) {
+            where.refund_date = {};
+            if (fromDate) {
+                fromDate.setHours(0, 0, 0, 0);
+                where.refund_date[Op.gte] = fromDate;
+            }
+            if (toDate) {
+                toDate.setHours(23, 59, 59, 999);
+                where.refund_date[Op.lte] = toDate;
+            }
+        }
+
+        const include = [
+            {
+                model: req.propertyDb.models.sales_headers,
+                as: 'sale',
+                attributes: ['sale_no', 'customer_name', 'customer_phone', 'customer_gstin']
+            }
+        ];
+
+        if (search) {
+            where[Op.or] = [
+                { refund_no: { [Op.iLike]: `%${search}%` } },
+                { notes: { [Op.iLike]: `%${search}%` } },
+                { '$sale.sale_no$': { [Op.iLike]: `%${search}%` } },
+                { '$sale.customer_name$': { [Op.iLike]: `%${search}%` } },
+                { '$sale.customer_phone$': { [Op.iLike]: `%${search}%` } }
+            ];
+        }
+
+        const data = await req.propertyDb.models.sales_refunds.findAll({
+            where,
+            include,
+            order: [['refund_date', 'DESC'], ['id', 'DESC']]
+        });
+
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.payRefund = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const outlet_id = req.user.outlet_id;
+        const { refund_id, amount_paid, payment_mode, reference_no, notes } = req.body;
+
+        const refund = await req.propertyDb.models.sales_refunds.findOne({
+            where: { id: refund_id, outlet_id },
+            transaction: t
+        });
+
+        if (!refund) {
+            return res.status(404).json({ success: false, message: 'Refund record not found' });
+        }
+
+        if (refund.status === 'PAID') {
+            return res.status(400).json({ success: false, message: 'Refund is already fully paid' });
+        }
+
+        const amountPaidNumeric = Number(amount_paid || 0);
+        if (amountPaidNumeric <= 0) {
+            return res.status(400).json({ success: false, message: 'Paid amount must be positive' });
+        }
+
+        const newAmountPaid = Number(refund.amount_paid) + amountPaidNumeric;
+        const newAmountPending = Number(refund.amount_pending);
+        
+        let newStatus = 'PARTIALLY_PAID';
+        if (newAmountPaid >= newAmountPending) {
+            newStatus = 'PAID';
+        }
+
+        await refund.update({
+            amount_paid: newAmountPaid,
+            status: newStatus,
+            payment_mode,
+            reference_no,
+            notes: notes || refund.notes,
+            updated_by: req.user.id
+        }, { transaction: t });
+
+        // Fetch sale to log correct party_name
+        const sale = await req.propertyDb.models.sales_headers.findOne({
+            where: { id: refund.sale_id, outlet_id },
+            transaction: t
+        });
+
+        // Insert into Cash Ledger
+        await createLedgerEntry({
+            db: req.propertyDb,
+            outlet_id,
+            txn_date: new Date(),
+            transaction_type: 'SALE_REFUND',
+            reference_type: 'SALE_REFUND',
+            reference_id: refund.id,
+            reference_no: refund.refund_no,
+            party_name: sale?.customer_name || sale?.customer_phone || 'Walk-in Customer',
+            payment_method: payment_mode || 'CASH',
+            amount_out: amountPaidNumeric,
+            notes: notes || `Refund paid against bill ${sale?.sale_no || ''}`,
+            created_by: req.user.id,
+            transaction: t
+        });
+
+        await audit.log({
+            req,
+            module: 'SALES',
+            action: 'PAY_REFUND',
+            table: 'sales_refunds',
+            recordId: refund.id,
+            newData: refund.toJSON(),
+            outlet_id,
+            user_id: req.user.id
+        });
+
+        await t.commit();
+        res.json({ success: true, message: 'Refund processed successfully and cash ledger updated.' });
+    } catch (err) {
+        await t.rollback();
+        res.status(500).json({ success: false, error: err.message });
     }
 };

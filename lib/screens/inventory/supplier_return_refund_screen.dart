@@ -67,7 +67,7 @@ class _SupplierReturnRefundScreenState
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: mode,
-                    items: const ['CASH', 'CARD', 'UPI', 'BANK']
+                    items: const ['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT']
                         .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                         .toList(),
                     onChanged: (value) => mode = value ?? 'CASH',
@@ -118,6 +118,8 @@ class _SupplierReturnRefundScreenState
                       setDialog(() => error = 'Enter valid refund amount');
                       return;
                     }
+                    final navigator = Navigator.of(context);
+                    final messenger = ScaffoldMessenger.of(context);
                     try {
                       await ctrl.receiveRefund(
                         returnId: record.id,
@@ -131,10 +133,11 @@ class _SupplierReturnRefundScreenState
                             ? null
                             : notesCtrl.text.trim(),
                       );
-                      if (!mounted) return;
-                      Navigator.pop(context);
+                      navigator.pop();
                       await _load();
-                      _showMessage('Refund received and ledger credited');
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Refund received and ledger credited')),
+                      );
                     } catch (e) {
                       setDialog(
                         () => error =

@@ -76,6 +76,12 @@ propertyDb.models.sales_headers =
 propertyDb.models.sales_items =
     require('../../models/property/salesItem.model')(propertyDb, DataTypes);
 
+propertyDb.models.sales_refunds =
+    require('../../models/property/salesRefund.model')(propertyDb, DataTypes);
+
+propertyDb.models.sales_credit_notes =
+    require('../../models/property/salesCreditNote.model')(propertyDb, DataTypes);
+
 propertyDb.models.sales_schemes =
     require('../../models/property/salesScheme.model')(propertyDb, DataTypes);
 propertyDb.models.sales_scheme_customers =
@@ -147,6 +153,14 @@ propertyDb.models.brands =
 
 propertyDb.models.system_notification =
     require('../../models/property/system_notification.model')(propertyDb, DataTypes);
+
+// BOM & ASSEMBLY
+propertyDb.models.item_boms =
+    require('../../models/property/itemBom.model')(propertyDb, DataTypes);
+propertyDb.models.assembly_headers =
+    require('../../models/property/assemblyHeader.model')(propertyDb, DataTypes);
+propertyDb.models.assembly_items =
+    require('../../models/property/assemblyItem.model')(propertyDb, DataTypes);
 
 
 Object.values(propertyDb.models).forEach(model => {

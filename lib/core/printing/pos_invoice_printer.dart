@@ -1602,6 +1602,386 @@ class PosInvoicePrinter {
     for (final entry in _stateCodes.entries) entry.value: _titleCase(entry.key),
   };
 
+  static Future<void> printCreditNote({
+    required Map<String, dynamic> creditNote,
+    required PropertyInfo? property,
+    Printer? printer,
+    bool directPrint = false,
+  }) async {
+    final pdfBytes = await buildCreditNotePdf(
+      creditNote: creditNote,
+      property: property,
+    );
+
+    if (directPrint && printer != null) {
+      await Printing.directPrintPdf(
+        printer: printer,
+        name: creditNote['credit_note_no'] ?? 'CreditNote',
+        onLayout: (_) async => pdfBytes,
+      );
+      return;
+    }
+
+    await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+  }
+
+  static Future<Uint8List> buildCreditNotePdf({
+    required Map<String, dynamic> creditNote,
+    required PropertyInfo? property,
+  }) async {
+    final document = pw.Document();
+    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
+
+    final cnNo = creditNote['credit_note_no']?.toString() ?? '';
+    final cnDateRaw = creditNote['credit_note_date']?.toString() ?? '';
+    final cnDate = DateTime.tryParse(cnDateRaw) ?? DateTime.now();
+
+    final originalSaleNo = creditNote['sale'] is Map
+        ? (creditNote['sale']['sale_no']?.toString() ?? '')
+        : '';
+    final originalSaleDateRaw = creditNote['sale'] is Map
+        ? (creditNote['sale']['sale_date']?.toString() ?? '')
+        : '';
+    final originalSaleDate = DateTime.tryParse(originalSaleDateRaw) ?? DateTime.now();
+
+    final customerName = creditNote['customer_name']?.toString() ?? 'Walk-in Customer';
+    final customerPhone = creditNote['customer_phone']?.toString() ?? '--';
+    final customerGstin = creditNote['customer_gstin']?.toString() ?? 'URD';
+
+    final sellerName = property?.legalName.isNotEmpty == true
+        ? property!.legalName
+        : property?.propertyName ?? AppBrand.productName;
+
+    final sellerAddressLines = [
+      if ((property?.address ?? '').isNotEmpty) property!.address,
+      if ((property?.city ?? '').isNotEmpty || (property?.pinCode ?? '').isNotEmpty)
+        '${property?.city ?? ''} ${property?.pinCode ?? ''}'.trim(),
+    ].join(', ');
+
+    final itemsList = (creditNote['items'] as List? ?? const []).cast<Map<String, dynamic>>();
+
+    document.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(24, 24, 24, 30),
+        build: (_) => [
+          // Header Row
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.blueGrey700, width: 1),
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Container(
+                  width: 74,
+                  height: 74,
+                  alignment: pw.Alignment.center,
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.blueGrey700),
+                  ),
+                  child: logo == null
+                      ? pw.Text(
+                          'LOGO',
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        )
+                      : pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Image(logo, fit: pw.BoxFit.contain),
+                        ),
+                ),
+                pw.SizedBox(width: 12),
+                pw.Expanded(
+                  child: pw.Center(
+                    child: pw.Text(
+                      'CREDIT NOTE',
+                      style: pw.TextStyle(
+                        fontSize: 20,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                pw.SizedBox(width: 12),
+                pw.SizedBox(
+                  width: 210,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        sellerName,
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 3),
+                      if (sellerAddressLines.isNotEmpty)
+                        pw.Text(sellerAddressLines, style: const pw.TextStyle(fontSize: 8.8)),
+                      if ((property?.mobile ?? '').isNotEmpty)
+                        pw.Text('Contact: ${property!.mobile}', style: const pw.TextStyle(fontSize: 8.8)),
+                      if ((property?.email ?? '').isNotEmpty)
+                        pw.Text('Email: ${property!.email}', style: const pw.TextStyle(fontSize: 8.8)),
+                      pw.Text(
+                        'GSTIN: ${((property?.gstNo ?? '').trim().isEmpty) ? '--' : property!.gstNo.trim()}',
+                        style: pw.TextStyle(
+                          fontSize: 8.8,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.Text(
+                        'State: ${property?.state ?? '--'}',
+                        style: const pw.TextStyle(fontSize: 8.8),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 12),
+
+          // CN Info & Billed To
+          pw.Container(
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey600),
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Padding(
+                    padding: const pw.EdgeInsets.all(10),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Credit Note Info',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.SizedBox(height: 6),
+                        _a4MetaCNRow('Credit Note No', cnNo),
+                        _a4MetaCNRow('Credit Note Dt', _date.format(cnDate)),
+                        _a4MetaCNRow('Original Inv No', originalSaleNo),
+                        _a4MetaCNRow('Original Inv Dt', _date.format(originalSaleDate)),
+                      ],
+                    ),
+                  ),
+                ),
+                pw.Container(
+                  width: 1,
+                  color: PdfColors.grey600,
+                  height: 110,
+                ),
+                pw.Expanded(
+                  child: pw.Padding(
+                    padding: const pw.EdgeInsets.all(10),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Billed To',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.SizedBox(height: 6),
+                        _a4MetaCNRow('Customer', customerName),
+                        _a4MetaCNRow('Phone', customerPhone),
+                        _a4MetaCNRow('GSTIN', customerGstin),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 12),
+
+          // Items Table
+          pw.Table.fromTextArray(
+            headers: const [
+              'S.No',
+              'Description of Goods',
+              'Qty',
+              'Rate',
+              'Taxable Value',
+              'GST %',
+              'CGST',
+              'SGST',
+              'IGST',
+              'Total Amount'
+            ],
+            data: List.generate(itemsList.length, (index) {
+              final it = itemsList[index];
+              final qty = double.tryParse((it['qty'] ?? 0).toString()) ?? 0.0;
+              final rate = double.tryParse((it['rate'] ?? 0).toString()) ?? 0.0;
+              final taxable = double.tryParse((it['taxable_amount'] ?? 0).toString()) ?? 0.0;
+              final taxPercent = double.tryParse((it['tax_percent'] ?? 0).toString()) ?? 0.0;
+              final cgst = double.tryParse((it['cgst_amount'] ?? 0).toString()) ?? 0.0;
+              final sgst = double.tryParse((it['sgst_amount'] ?? 0).toString()) ?? 0.0;
+              final igst = double.tryParse((it['igst_amount'] ?? 0).toString()) ?? 0.0;
+              final total = double.tryParse((it['line_total'] ?? 0).toString()) ?? 0.0;
+
+              return [
+                '${index + 1}',
+                '${it['item_name'] ?? ''}',
+                qty.toStringAsFixed(2),
+                rate.toStringAsFixed(2),
+                taxable.toStringAsFixed(2),
+                '${taxPercent.toStringAsFixed(0)}%',
+                cgst > 0 ? cgst.toStringAsFixed(2) : '-',
+                sgst > 0 ? sgst.toStringAsFixed(2) : '-',
+                igst > 0 ? igst.toStringAsFixed(2) : '-',
+                total.toStringAsFixed(2),
+              ];
+            }),
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            columnWidths: const {
+              0: pw.FixedColumnWidth(25),
+              1: pw.FlexColumnWidth(4),
+              2: pw.FixedColumnWidth(35),
+              3: pw.FixedColumnWidth(45),
+              4: pw.FixedColumnWidth(55),
+              5: pw.FixedColumnWidth(35),
+              6: pw.FixedColumnWidth(40),
+              7: pw.FixedColumnWidth(40),
+              8: pw.FixedColumnWidth(40),
+              9: pw.FixedColumnWidth(60),
+            },
+            cellAlignment: pw.Alignment.centerRight,
+            cellAlignments: {
+              0: pw.Alignment.center,
+              1: pw.Alignment.centerLeft,
+            },
+          ),
+          pw.SizedBox(height: 12),
+
+          // Bottom Section
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                  children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(10),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey500),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'Amount in Words',
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.SizedBox(height: 5),
+                          pw.Text(
+                            _amountInWords(double.tryParse((creditNote['net_amount'] ?? 0).toString()) ?? 0.0),
+                            style: const pw.TextStyle(fontSize: 9),
+                          ),
+                        ],
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Text(
+                      'Notes: ${creditNote['notes'] ?? ''}',
+                      style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 12),
+              pw.SizedBox(
+                width: 240,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey600),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      _a4MetaCNRow('Total Qty Returned', '${double.tryParse((creditNote['total_qty'] ?? 0).toString())?.toStringAsFixed(2)}'),
+                      _a4MetaCNRow('Taxable Value', '${double.tryParse((creditNote['taxable_amount'] ?? 0).toString())?.toStringAsFixed(2)}'),
+                      if ((double.tryParse((creditNote['cgst_amount'] ?? 0).toString()) ?? 0) > 0)
+                        _a4MetaCNRow('Total CGST', '${double.tryParse((creditNote['cgst_amount'] ?? 0).toString())?.toStringAsFixed(2)}'),
+                      if ((double.tryParse((creditNote['sgst_amount'] ?? 0).toString()) ?? 0) > 0)
+                        _a4MetaCNRow('Total SGST', '${double.tryParse((creditNote['sgst_amount'] ?? 0).toString())?.toStringAsFixed(2)}'),
+                      if ((double.tryParse((creditNote['igst_amount'] ?? 0).toString()) ?? 0) > 0)
+                        _a4MetaCNRow('Total IGST', '${double.tryParse((creditNote['igst_amount'] ?? 0).toString())?.toStringAsFixed(2)}'),
+                      _a4MetaCNRow('Total Tax', '${double.tryParse((creditNote['total_tax'] ?? 0).toString())?.toStringAsFixed(2)}'),
+                      pw.Divider(),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('REFUND VALUE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                          pw.Text(
+                            _money(double.tryParse((creditNote['net_amount'] ?? 0).toString()) ?? 0.0),
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 24),
+          pw.Row(
+            children: [
+              pw.Spacer(),
+              pw.Expanded(
+                child: pw.Container(
+                  height: 48,
+                  padding: const pw.EdgeInsets.all(6),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey500),
+                  ),
+                  child: pw.Align(
+                    alignment: pw.Alignment.bottomCenter,
+                    child: pw.Text(
+                      'Authorized Signatory',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return document.save();
+  }
+
+  static pw.Widget _a4MetaCNRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(
+        children: [
+          pw.Text(
+            '$label: ',
+            style: pw.TextStyle(fontSize: 8.8, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.Expanded(
+            child: pw.Text(
+              value,
+              style: const pw.TextStyle(fontSize: 8.8),
+              textAlign: pw.TextAlign.right,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static String _titleCase(String value) {
     return value
         .split(' ')

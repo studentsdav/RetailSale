@@ -295,21 +295,23 @@ exports.receiveRefund = async (req, res) => {
             status: deriveRefundStatus(header.total_amount, refundedAmount)
         }, { transaction: t });
 
-        await createLedgerEntry({
-            db: req.propertyDb,
-            outlet_id,
-            txn_date: refund_date,
-            transaction_type: 'SUPPLIER_RETURN_REFUND',
-            reference_type: 'SUPPLIER_RETURN',
-            reference_id: header.id,
-            reference_no: header.return_no,
-            party_name: header.supplier?.supplier_name || null,
-            payment_method: payment_mode,
-            amount_in: refundAmount,
-            notes: notes || `Refund received for supplier return ${header.return_no}`,
-            created_by: user_id,
-            transaction: t
-        });
+        if (payment_mode !== 'CREDIT') {
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id,
+                txn_date: refund_date,
+                transaction_type: 'SUPPLIER_RETURN_REFUND',
+                reference_type: 'SUPPLIER_RETURN',
+                reference_id: header.id,
+                reference_no: header.return_no,
+                party_name: header.supplier?.supplier_name || null,
+                payment_method: payment_mode,
+                amount_in: refundAmount,
+                notes: notes || `Refund received for supplier return ${header.return_no}`,
+                created_by: user_id,
+                transaction: t
+            });
+        }
 
         await audit.log({
             req,

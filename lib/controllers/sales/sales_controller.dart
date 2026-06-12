@@ -417,6 +417,19 @@ class SalesController extends ChangeNotifier {
     return Map<String, dynamic>.from(res);
   }
 
+  Future<void> returnSale({
+    required int saleId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    await ApiClient.post(
+      '${ApiEndpoints.sales}/return',
+      {
+        'sale_id': saleId,
+        'items': items,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> updateSalePaymentMode({
     required int saleId,
     required String paymentMode,
@@ -650,5 +663,53 @@ class SalesController extends ChangeNotifier {
       });
       remaining -= payAmount;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> listRefunds({
+    String? status,
+    DateTime? fromDate,
+    DateTime? toDate,
+    String? search,
+  }) async {
+    final params = <String>[];
+    if (status != null && status.trim().isNotEmpty) {
+      params.add('status=${Uri.encodeComponent(status.trim())}');
+    }
+    if (fromDate != null) {
+      params.add('from_date=${Uri.encodeComponent(fromDate.toIso8601String())}');
+    }
+    if (toDate != null) {
+      params.add('to_date=${Uri.encodeComponent(toDate.toIso8601String())}');
+    }
+    if (search != null && search.trim().isNotEmpty) {
+      params.add('search=${Uri.encodeComponent(search.trim())}');
+    }
+    final query = params.isEmpty
+        ? ApiEndpoints.salesRefunds
+        : '${ApiEndpoints.salesRefunds}?${params.join('&')}';
+    final res = await ApiClient.get(query);
+    return (res['data'] as List? ?? const [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> payRefund({
+    required int refundId,
+    required double amountPaid,
+    required String paymentMode,
+    String? referenceNo,
+    String? notes,
+  }) async {
+    final res = await ApiClient.post(
+      ApiEndpoints.salesPayRefund,
+      {
+        'refund_id': refundId,
+        'amount_paid': amountPaid,
+        'payment_mode': paymentMode,
+        if (referenceNo != null) 'reference_no': referenceNo,
+        if (notes != null) 'notes': notes,
+      },
+    );
+    return Map<String, dynamic>.from(res);
   }
 }
