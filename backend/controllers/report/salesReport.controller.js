@@ -567,9 +567,9 @@ exports.getSalesReport = async (req, res) => {
                 }
 
                 return {
-                    id: `cn-${cn.id}`,
+                    id: -toNumber(cn.id),
                     sale_no: cn.credit_note_no,
-                    sale_date: cn.credit_note_date,
+                    sale_date: new Date(cn.credit_note_date).toISOString(),
                     sale_zone: zone.key,
                     customer_name: cn.customer_name,
                     customer_phone: cn.customer_phone,

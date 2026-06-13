@@ -907,7 +907,11 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                   const SizedBox(width: 8),
                                                   IconButton(
                                                     icon: const Icon(Icons.print, color: Colors.blue),
-                                                    onPressed: () => _printCreditNote(cnMap),
+                                                    onPressed: () {
+                                                      final mapWithSale = Map<String, dynamic>.from(cnMap);
+                                                      mapWithSale['sale'] = _selectedDetails;
+                                                      _printCreditNote(mapWithSale);
+                                                    },
                                                     tooltip: 'Print Credit Note',
                                                   ),
                                                 ],

@@ -38,8 +38,8 @@ class SalesReportController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      var query = '?from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}'
-          '&to_date=${DateFormat('yyyy-MM-dd').format(toDate)}';
+      var query = '?from_date=${DateFormat("yyyy-MM-dd").format(fromDate)}'
+          '&to_date=${DateFormat("yyyy-MM-dd").format(toDate)}';
 
       if (paymentMode != null && paymentMode!.isNotEmpty) {
         query += '&payment_mode=$paymentMode';
@@ -112,7 +112,9 @@ class SalesReportController extends ChangeNotifier {
           .map((e) =>
               SalesComparisonPoint.fromJson(Map<String, dynamic>.from(e)))
           .toList();
-    } catch (_) {
+    } catch (e, stackTrace) {
+      debugPrint('Error loading sales report: $e');
+      debugPrint('Stack trace: $stackTrace');
       list = [];
       summary = SalesSummary.empty;
       paymentModes = [];
