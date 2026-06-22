@@ -1,3 +1,35 @@
+// Patch TextDecoder to support 'ascii' encoding under packaged Node environments (like pkg target node18)
+try {
+    new TextDecoder('ascii');
+} catch (e) {
+    const OriginalTextDecoder = globalThis.TextDecoder || (typeof global !== 'undefined' ? global.TextDecoder : null);
+    if (OriginalTextDecoder) {
+        const PatchedTextDecoder = class TextDecoder extends OriginalTextDecoder {
+            constructor(encoding, options) {
+                if (typeof encoding === 'string' && (encoding.toLowerCase() === 'ascii' || encoding.toLowerCase() === 'us-ascii')) {
+                    super('utf-8', options);
+                } else {
+                    super(encoding, options);
+                }
+            }
+        };
+        if (typeof globalThis !== 'undefined') {
+            globalThis.TextDecoder = PatchedTextDecoder;
+        }
+        if (typeof global !== 'undefined') {
+            global.TextDecoder = PatchedTextDecoder;
+        }
+        try {
+            const util = require('util');
+            if (util && util.TextDecoder) {
+                util.TextDecoder = PatchedTextDecoder;
+            }
+        } catch (utilErr) {
+            // Ignore if util cannot be loaded or patched
+        }
+    }
+}
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
