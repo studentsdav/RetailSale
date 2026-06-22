@@ -16,8 +16,31 @@ function roundAmount(value) {
   return Number(toNumber(value).toFixed(2));
 }
 
+function formatDateLocalYmd(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function normalizeDate(value) {
-  const date = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    const clean = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+      const [year, month, day] = clean.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(clean)) {
+      const parts = clean.split(/[\sT]/);
+      const [year, month, day] = parts[0].split('-').map(Number);
+      const timeParts = parts[1].split('.')[0].split(':').map(Number);
+      return new Date(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]);
+    }
+  }
+  const date = new Date(value);
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
@@ -69,6 +92,7 @@ function growthPercent(current, previous) {
 }
 
 exports.getInventoryDashboard = async (outletId, db) => {
+  const todayStr = formatDateLocalYmd(new Date());
 
   const [
     kpis,
@@ -94,8 +118,8 @@ exports.getInventoryDashboard = async (outletId, db) => {
             COALESCE(SUM(qty_out),0) AS today_out
           FROM stock_ledger
           WHERE outlet_id = :outletId
-          AND txn_date = CURRENT_DATE
-        `, { replacements: { outletId }, type: QueryTypes.SELECT }),
+          AND txn_date = :today::DATE
+        `, { replacements: { outletId, today: todayStr }, type: QueryTypes.SELECT }),
 
     // Low stock items (calculated from stock_ledger)
     db.query(`
@@ -128,10 +152,10 @@ HAVING
             SUM(qty_out) AS issued
           FROM stock_ledger
           WHERE outlet_id = :outletId
-          AND txn_date >= CURRENT_DATE - INTERVAL '6 days'
+          AND txn_date >= :today::DATE - INTERVAL '6 days'
           GROUP BY txn_date
           ORDER BY txn_date
-        `, { replacements: { outletId }, type: QueryTypes.SELECT }),
+        `, { replacements: { outletId, today: todayStr }, type: QueryTypes.SELECT }),
 
     // Department wise issue
     db.query(`
@@ -152,10 +176,10 @@ HAVING
           FROM damage_headers h
           JOIN damage_items i ON i.damage_id = h.id
           WHERE h.outlet_id = :outletId
-          AND damage_date >= CURRENT_DATE - INTERVAL '6 days'
+          AND damage_date >= :today::DATE - INTERVAL '6 days'
           GROUP BY damage_date
           ORDER BY damage_date
-        `, { replacements: { outletId }, type: QueryTypes.SELECT }),
+        `, { replacements: { outletId, today: todayStr }, type: QueryTypes.SELECT }),
 
     // Category stock % (ledger-based, no nested aggregates)
     db.query(`
@@ -259,6 +283,7 @@ FROM item_stock;
         AND status = 'COMPLETED'
         AND is_latest = TRUE
         AND is_deleted = FALSE
+        AND NOT (order_type = 'DELIVERY' AND COALESCE(payment_mode, '') != 'CREDIT')
     `, { replacements: { outletId }, type: QueryTypes.SELECT }),
     db.query(`
       SELECT
@@ -402,25 +427,27 @@ FROM item_stock;
       saleProfit += Math.max(lineProfit, 0);
       saleLoss += lineProfit < 0 ? Math.abs(lineProfit) : 0;
 
-      const zone = resolveSaleZone(saleDate).key;
-      const itemKey = `${item.item_name}||${item.item_code || ''}`;
-      if (!topItemMap.has(itemKey)) {
-        topItemMap.set(itemKey, {
-          item_name: item.item_name,
-          item_code: item.item_code || '',
-          item_group: item.item?.item_group || '',
-          sub_category: item.item?.sub_category || '',
-          brand: item.item?.brand || '',
-          total_qty: 0,
-          total_sales: 0,
-          zones: Object.fromEntries(SALES_ZONES.map((entry) => [entry.key, { qty: 0, sales: 0 }]))
-        });
+      if (fitsRange(saleDate, currentDayStart, currentDayEnd)) {
+        const zone = resolveSaleZone(saleDate).key;
+        const itemKey = `${item.item_name}||${item.item_code || ''}`;
+        if (!topItemMap.has(itemKey)) {
+          topItemMap.set(itemKey, {
+            item_name: item.item_name,
+            item_code: item.item_code || '',
+            item_group: item.item?.item_group || '',
+            sub_category: item.item?.sub_category || '',
+            brand: item.item?.brand || '',
+            total_qty: 0,
+            total_sales: 0,
+            zones: Object.fromEntries(SALES_ZONES.map((entry) => [entry.key, { qty: 0, sales: 0 }]))
+          });
+        }
+        const itemEntry = topItemMap.get(itemKey);
+        itemEntry.total_qty = roundAmount(itemEntry.total_qty + qty);
+        itemEntry.total_sales = roundAmount(itemEntry.total_sales + lineNet);
+        itemEntry.zones[zone].qty = roundAmount(itemEntry.zones[zone].qty + qty);
+        itemEntry.zones[zone].sales = roundAmount(itemEntry.zones[zone].sales + lineNet);
       }
-      const itemEntry = topItemMap.get(itemKey);
-      itemEntry.total_qty = roundAmount(itemEntry.total_qty + qty);
-      itemEntry.total_sales = roundAmount(itemEntry.total_sales + lineNet);
-      itemEntry.zones[zone].qty = roundAmount(itemEntry.zones[zone].qty + qty);
-      itemEntry.zones[zone].sales = roundAmount(itemEntry.zones[zone].sales + lineNet);
     }
 
     grandRevenue = roundAmount(grandRevenue + saleRevenue);

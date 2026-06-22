@@ -4,14 +4,35 @@ const loadConfig = require("../../utils/decryptConfig");
 
 exports.getPropertyInfo = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        let actualOutletId = req.user?.outlet_id || req.query?.outlet_id || req.body?.outlet_id;
+
+        // If it's a string code (like OUTLET001), resolve it to integer id
+        if (typeof actualOutletId === 'string' && actualOutletId.startsWith('OUTLET')) {
+            const outlet = await req.propertyDb.models.outlets.findOne({
+                where: { outlet_code: actualOutletId }
+            });
+            if (outlet) {
+                actualOutletId = outlet.id;
+            }
+        }
+
+        // Fallback: if still null/undefined, find the first active outlet
+        if (!actualOutletId) {
+            const defaultOutlet = await req.propertyDb.models.outlets.findOne({
+                where: { is_active: true }
+            });
+            if (defaultOutlet) {
+                actualOutletId = defaultOutlet.id;
+            }
+        }
 
         const info = await req.propertyDb.models.property_info.findOne({
-            where: { outlet_id }
+            where: { outlet_id: actualOutletId }
         });
 
         res.json({ success: true, data: info });
     } catch (err) {
+        console.error("GET PROPERTY INFO ERROR STACK:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 };

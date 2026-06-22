@@ -159,7 +159,7 @@ Requires: JWT + `INVENTORY` license module.
 - `POST /suppliers/bills/pay`
 - `GET /suppliers/bills/:billId/payments`
 
-## 6.6 Numbering
+## 6.6 Document Sequencing
 
 - `GET /numbering`
 - `POST /numbering`

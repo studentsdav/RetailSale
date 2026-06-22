@@ -23,7 +23,7 @@ class ApiEndpoints {
 
   static const suppliers = '/api/inventory/suppliers';
 
-  static const numberingSettings = '/api/inventory/numbering';
+  static const documentSequence = '/api/inventory/numbering';
 
   static const users = '/api/users';
 
@@ -104,6 +104,9 @@ class ApiEndpoints {
   static const analyticsSalesTrend = '/api/analytics/sales-trend';
   static const analyticsMarketBasket = '/api/analytics/market-basket';
   static const analyticsTopCustomerItems = '/api/analytics/top-customer-items';
+  static const aiQuery = '/api/analytics/query';
+  static const aiQueryExportCsv = '/api/analytics/export/csv';
+  static const aiQueryExportPdf = '/api/analytics/export/pdf';
   static const schemeReport = '/api/reports/scheme-report';
   static const schemeCycleDetail = '/api/reports/scheme-cycle-detail';
   static const String requestPasswordResetOtp =
@@ -112,4 +115,12 @@ class ApiEndpoints {
       '/api/public/emergency-reset/verify-and-reset';
   static const String recoverUsername =
       '/api/public/emergency-reset/recover-username';
+
+  // WhatsApp Integration Endpoints
+  static const String whatsappConfig = '/api/whatsapp/config';
+  static const String whatsappTemplates = '/api/whatsapp/templates';
+  static const String whatsappCampaigns = '/api/whatsapp/campaigns';
+  static const String whatsappLogs = '/api/whatsapp/logs';
+  static const String whatsappAudience = '/api/whatsapp/campaigns/audience';
+  static const String whatsappBilling = '/api/whatsapp/billing/dashboard';
 }

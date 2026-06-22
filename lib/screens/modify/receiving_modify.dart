@@ -218,24 +218,29 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text("GRN No: ${grn['grn_no']}"),
-                  pw.Text(
-                    "Date: ${DateFormat('dd-MMM-yyyy').format(receiptDate)}",
-                  ),
-                  pw.Text("PO No: $poNumber"),
-                ],
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("GRN No: ${grn['grn_no']}"),
+                    pw.Text(
+                      "Date: ${DateFormat('dd-MMM-yyyy').format(receiptDate)}",
+                    ),
+                    pw.Text("PO No: $poNumber"),
+                  ],
+                ),
               ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text("Supplier: ${supplier.supplierName}"),
-                  pw.Text(
-                    "Bill No: ${grn['supplier_bill_no'] ?? ''}",
-                  ),
-                ],
+              pw.SizedBox(width: 20),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("Supplier: ${supplier.supplierName}"),
+                    pw.Text(
+                      "Bill No: ${grn['supplier_bill_no'] ?? ''}",
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

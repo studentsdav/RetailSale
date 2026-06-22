@@ -46,7 +46,7 @@ For username recovery, outlet recovery, forgot password, latest sync, and backup
 
 ## Settings Guide
 
-For complete setup of outlet, property, numbering, printing, billing, and system preferences:
+For complete setup of outlet, property, document sequence, printing, billing, and system preferences:
 
 - [Settings-Guide](./Settings-Guide.md)
 

@@ -16,6 +16,7 @@ router.put('/withdrawals/:id', advancedCtrl.updateWithdrawal);
 router.get('/withdrawals', advancedCtrl.getWithdrawalReport);
 router.get('/ledger', advancedCtrl.getLedgerReport);
 router.post('/repayments', advancedCtrl.createRepayment);
+router.post('/repayments/bulk-adjust', advancedCtrl.adjustBulkRepayment);
 router.put('/repayments/:id', advancedCtrl.updateRepayment);
 router.post('/advances', advancedCtrl.createAdvance);
 router.put('/advances/:id', advancedCtrl.updateAdvance);

@@ -21,6 +21,7 @@ class Item {
   final int minLevel;
   final int maxLevel;
   final bool stockable;
+  final bool isSaleable;
 
   Item({
     required this.id,
@@ -45,6 +46,7 @@ class Item {
     required this.minLevel,
     required this.maxLevel,
     required this.stockable,
+    required this.isSaleable,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -72,6 +74,7 @@ class Item {
       minLevel: json['min_level'] ?? 0,
       maxLevel: json['max_level'] ?? 0,
       stockable: json['stockable'] ?? true,
+      isSaleable: json['is_saleable'] ?? true,
     );
   }
 
@@ -98,6 +101,7 @@ class Item {
       'min_level': minLevel,
       'max_level': maxLevel,
       'stockable': stockable,
+      'is_saleable': isSaleable,
     };
   }
 }

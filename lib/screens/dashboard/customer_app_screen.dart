@@ -1,0 +1,5378 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import '../../core/api/api_client.dart';
+import '../../core/config/app_config.dart';
+import '../../core/auth/token_storage.dart';
+import '../../controllers/dashboard/dashboard_controller.dart'
+    as UserProfiledata;
+import '../../models/security/app_user_model.dart';
+import 'retailer_console_screen.dart';
+import 'rider_console_screen.dart';
+
+class CustomerAppScreen extends StatefulWidget {
+  const CustomerAppScreen({super.key});
+
+  @override
+  State<CustomerAppScreen> createState() => _CustomerAppScreenState();
+}
+
+class _CustomerAppScreenState extends State<CustomerAppScreen> {
+  UserProfile? _currentUser;
+  bool _isLoading = false;
+
+  // --- Customer Tab State ---
+  List<dynamic> _catalogItems = [];
+  final Map<int, Map<String, dynamic>> _cart =
+      {}; // item_id -> { 'item': Map, 'qty': double }
+  final TextEditingController _custNameCtrl = TextEditingController();
+  final TextEditingController _custPhoneCtrl = TextEditingController();
+  final TextEditingController _custAddressCtrl = TextEditingController();
+  String _paymentMode = 'UNPAID'; // UNPAID (CoD) or PAID (Prepaid)
+  String _chosenPaymentMethod = 'CASH'; // CASH, CARD, UPI
+  double _minDeliveryOrderValue = 0.0;
+  double _deliveryCharge = 0.0;
+  double _deliveryGstPercent = 18.0;
+  double _platformFee = 10.0;
+  double _platformGstPercent = 18.0;
+  double _otherCharges = 0.0;
+  double _otherChargesGstPercent = 18.0;
+  List<dynamic> _customCharges = [];
+  List<dynamic> _coupons = [];
+  final TextEditingController _couponCodeCtrl = TextEditingController();
+  Map<String, dynamic>? _appliedCoupon;
+  int? _activeOrderId;
+  bool _isExchangeAvailable = true;
+  bool _isRefundAvailable = true;
+  List<dynamic> _subscriptions = [];
+  bool _isSubscriptionsLoading = false;
+  int _historySubTabIndex = 0; // 0 for Orders, 1 for Subscriptions
+  Map<String, dynamic>? _activeOrder;
+  Timer? _trackingTimer;
+
+  // Search, Category, and Pagination state
+  int _currentPage = 1;
+  int _totalPages = 1;
+  String _searchQuery = '';
+  String _selectedCategory = '';
+  List<String> _categories = [];
+  final ScrollController _scrollController = ScrollController();
+  bool _isMoreLoading = false;
+
+  // Customer Auth & History State
+  Map<String, dynamic>? _loggedInCustomer;
+  bool _showRegisterForm = false;
+  int _customerSubTabIndex = 0; // 0 for Shop, 1 for Cart, 2 for Purchases
+  List<dynamic> _historyOrders = [];
+  List<dynamic> _historySales = [];
+
+  final TextEditingController _loginPhoneCtrl = TextEditingController();
+  final TextEditingController _loginPasswordCtrl = TextEditingController();
+  final TextEditingController _regNameCtrl = TextEditingController();
+  final TextEditingController _regPhoneCtrl = TextEditingController();
+  final TextEditingController _regPasswordCtrl = TextEditingController();
+  final TextEditingController _regAddressCtrl = TextEditingController();
+  final TextEditingController _custGstinCtrl = TextEditingController();
+  String _gstin = '';
+  String _billFormat = 'A4'; // loaded from system settings
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_scrollListener);
+    _loadUserAndData();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
+    _custNameCtrl.dispose();
+    _custPhoneCtrl.dispose();
+    _custAddressCtrl.dispose();
+    _loginPhoneCtrl.dispose();
+    _loginPasswordCtrl.dispose();
+    _regNameCtrl.dispose();
+    _regPhoneCtrl.dispose();
+    _regPasswordCtrl.dispose();
+    _regAddressCtrl.dispose();
+    _custGstinCtrl.dispose();
+    _couponCodeCtrl.dispose();
+    _stopTrackingOrder();
+    super.dispose();
+  }
+
+  double _getItemPrice(Map<String, dynamic> item) {
+    final b2bRate = double.tryParse(item['b2b_rate']?.toString() ?? '') ?? 0.0;
+    if (_gstin.isNotEmpty && b2bRate > 0) {
+      return b2bRate;
+    }
+    return double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
+        double.tryParse(item['rate']?.toString() ?? '') ??
+        0.0;
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      if (!_isMoreLoading && _currentPage < _totalPages) {
+        _loadNextPage();
+      }
+    }
+  }
+
+  Future<void> _loadUserAndData() async {
+    setState(() => _isLoading = true);
+    _currentUser = await UserProfiledata.load();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final customerDataStr = prefs.getString('delivery_logged_in_customer');
+      if (customerDataStr != null) {
+        final Map<String, dynamic> customerData = jsonDecode(customerDataStr);
+        _loggedInCustomer = customerData;
+        _custNameCtrl.text = customerData['name'] ?? '';
+        _custPhoneCtrl.text = customerData['phone'] ?? '';
+        _custAddressCtrl.text = customerData['address'] ?? '';
+      }
+    } catch (e) {
+      debugPrint('Error loading saved customer: $e');
+    }
+
+    setState(() => _isLoading = false);
+    _fetchDeliverySettings();
+    _fetchCatalog();
+    if (_activeOrderId != null) {
+      _startTrackingOrder();
+    }
+    if (_loggedInCustomer != null) {
+      _fetchHistory();
+    }
+  }
+
+  // ================= API CALLS =================
+
+  Future<void> _fetchDeliverySettings() async {
+    try {
+      final outletCode = _loggedInCustomer?['outlet_id'] ??
+          _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      if (outletCode.isEmpty) return;
+      final res = await ApiClient.get(
+          '/api/delivery/retailer/return-settings?outlet_id=$outletCode');
+      if (res['success'] == true) {
+        setState(() {
+          final data = res['data'] ?? {};
+          _minDeliveryOrderValue = double.tryParse(
+                  data['min_delivery_order_value']?.toString() ?? '0.0') ??
+              0.0;
+          _deliveryCharge =
+              double.tryParse(data['delivery_charge']?.toString() ?? '0.0') ??
+                  0.0;
+          _deliveryGstPercent = double.tryParse(
+                  data['delivery_gst_percent']?.toString() ?? '18.0') ??
+              18.0;
+          _platformFee =
+              double.tryParse(data['platform_fee']?.toString() ?? '10.0') ??
+                  10.0;
+          _platformGstPercent = double.tryParse(
+                  data['platform_gst_percent']?.toString() ?? '18.0') ??
+              18.0;
+          _otherCharges =
+              double.tryParse(data['other_charges']?.toString() ?? '0.0') ??
+                  0.0;
+          _otherChargesGstPercent = double.tryParse(
+                  data['other_charges_gst_percent']?.toString() ?? '18.0') ??
+              18.0;
+          _customCharges = List<dynamic>.from(data['custom_charges'] ?? []);
+          _coupons = List<dynamic>.from(data['coupons'] ?? []);
+          if (_appliedCoupon != null) {
+            final exists = _coupons.any((c) =>
+                c['code']?.toString().toUpperCase() ==
+                    _appliedCoupon!['code']?.toString().toUpperCase() &&
+                c['is_active'] != false);
+            if (!exists) {
+              _appliedCoupon = null;
+              _couponCodeCtrl.clear();
+            }
+          }
+          _isExchangeAvailable = data['is_exchange_available'] ?? true;
+          _isRefundAvailable = data['is_refund_available'] ?? true;
+        });
+      }
+      // Load system settings to get bill_format (only if we have an admin/user token)
+      final token = await TokenStorage.read();
+      if (token != null) {
+        try {
+          final sysRes = await ApiClient.get('/api/inventory/settings');
+          if (sysRes['data'] != null) {
+            setState(() {
+              _billFormat = sysRes['data']['bill_format']?.toString() ?? 'A4';
+            });
+          }
+        } catch (_) {
+          // Safe to ignore if not authorized as admin
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching delivery settings: $e');
+    }
+  }
+
+  Future<void> _fetchCatalog() async {
+    try {
+      final outletCode = _loggedInCustomer?['outlet_id'] ??
+          _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      if (outletCode.isEmpty) return;
+      _currentPage = 1;
+      final query =
+          'outlet_id=$outletCode&page=1&search=${Uri.encodeComponent(_searchQuery)}&category=${Uri.encodeComponent(_selectedCategory)}&limit=10&gstin=${Uri.encodeComponent(_gstin)}';
+      final res = await ApiClient.get('/api/delivery/catalog?$query');
+      if (res['success'] == true) {
+        setState(() {
+          _catalogItems = res['data'] ?? [];
+          _categories = List<String>.from(res['categories'] ?? []);
+          if (res['pagination'] != null) {
+            _totalPages = res['pagination']['totalPages'] ?? 1;
+            _currentPage = res['pagination']['currentPage'] ?? 1;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching catalog: $e');
+    }
+  }
+
+  Future<void> _loadNextPage() async {
+    final outletCode = _loggedInCustomer?['outlet_id'] ??
+        _currentUser?.outletCode ??
+        (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+    if (outletCode.isEmpty) return;
+    setState(() {
+      _isMoreLoading = true;
+    });
+    try {
+      final nextPage = _currentPage + 1;
+      final query =
+          'outlet_id=$outletCode&page=$nextPage&search=${Uri.encodeComponent(_searchQuery)}&category=${Uri.encodeComponent(_selectedCategory)}&limit=10&gstin=${Uri.encodeComponent(_gstin)}';
+      final res = await ApiClient.get('/api/delivery/catalog?$query');
+      if (res['success'] == true) {
+        setState(() {
+          final newItems = res['data'] ?? [];
+          _catalogItems.addAll(newItems);
+          if (res['pagination'] != null) {
+            _totalPages = res['pagination']['totalPages'] ?? 1;
+            _currentPage = res['pagination']['currentPage'] ?? 1;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading next page: $e');
+    } finally {
+      setState(() {
+        _isMoreLoading = false;
+      });
+    }
+  }
+
+  Future<void> _registerCustomer() async {
+    if (_regNameCtrl.text.isEmpty ||
+        _regPhoneCtrl.text.isEmpty ||
+        _regPasswordCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Please fill in Name, Phone, and Password.')),
+      );
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final outletCode = _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      final body = {
+        'outlet_id': outletCode,
+        'name': _regNameCtrl.text.trim(),
+        'phone': _regPhoneCtrl.text.trim(),
+        'password': _regPasswordCtrl.text.trim(),
+        'address': _regAddressCtrl.text.trim(),
+      };
+      final res = await ApiClient.post('/api/delivery/customer/register', body);
+      if (res['success'] == true) {
+        final customerData = res['data'];
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+              'delivery_logged_in_customer', jsonEncode(customerData));
+        } catch (e) {
+          debugPrint('Error saving registered customer data: $e');
+        }
+        setState(() {
+          _loggedInCustomer = customerData;
+          _custNameCtrl.text = _loggedInCustomer!['name'] ?? '';
+          _custPhoneCtrl.text = _loggedInCustomer!['phone'] ?? '';
+          _custAddressCtrl.text = _loggedInCustomer!['address'] ?? '';
+          _showRegisterForm = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Registered successfully! Welcome, ${_loggedInCustomer!['name']}')),
+        );
+        _fetchHistory();
+      }
+    } catch (e) {
+      debugPrint('Error registering customer: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loginCustomer() async {
+    if (_loginPhoneCtrl.text.isEmpty || _loginPasswordCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter Phone and Password.')),
+      );
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final outletCode = _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      final body = {
+        'outlet_id': outletCode,
+        'phone': _loginPhoneCtrl.text.trim(),
+        'password': _loginPasswordCtrl.text.trim(),
+      };
+      final res = await ApiClient.post('/api/delivery/customer/login', body);
+      if (res['success'] == true) {
+        final customerData = res['data'];
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+              'delivery_logged_in_customer', jsonEncode(customerData));
+        } catch (e) {
+          debugPrint('Error saving logged-in customer data: $e');
+        }
+        setState(() {
+          _loggedInCustomer = customerData;
+          _custNameCtrl.text = _loggedInCustomer!['name'] ?? '';
+          _custPhoneCtrl.text = _loggedInCustomer!['phone'] ?? '';
+          _custAddressCtrl.text = _loggedInCustomer!['address'] ?? '';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Logged in successfully! Welcome, ${_loggedInCustomer!['name']}')),
+        );
+        _fetchHistory();
+      }
+    } catch (e) {
+      debugPrint('Error logging in customer: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _logoutCustomer() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('delivery_logged_in_customer');
+    } catch (e) {
+      debugPrint('Error removing customer data on logout: $e');
+    }
+    setState(() {
+      _loggedInCustomer = null;
+      _historyOrders.clear();
+      _historySales.clear();
+      _custNameCtrl.clear();
+      _custPhoneCtrl.clear();
+      _custAddressCtrl.clear();
+      _loginPhoneCtrl.clear();
+      _loginPasswordCtrl.clear();
+      _regNameCtrl.clear();
+      _regPhoneCtrl.clear();
+      _regPasswordCtrl.clear();
+      _regAddressCtrl.clear();
+      _customerSubTabIndex = 0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Logged out successfully.')),
+    );
+  }
+
+  void _setSubTabIndex(int index) {
+    setState(() {
+      _customerSubTabIndex = index;
+    });
+    if (index == 2) {
+      _fetchHistory();
+    }
+  }
+
+  Future<void> _fetchHistory() async {
+    if (_loggedInCustomer == null) return;
+    try {
+      final phone = _loggedInCustomer!['phone'];
+      final res =
+          await ApiClient.get('/api/delivery/customer/history?phone=$phone');
+      if (res['success'] == true) {
+        setState(() {
+          _historyOrders = res['data']['onlineOrders'] ?? [];
+          _historySales = res['data']['inStoreSales'] ?? [];
+        });
+      }
+      _fetchSubscriptions();
+    } catch (e) {
+      debugPrint('Error fetching history: $e');
+    }
+  }
+
+  Future<void> _fetchSubscriptions() async {
+    if (_loggedInCustomer == null) return;
+    setState(() => _isSubscriptionsLoading = true);
+    try {
+      final phone = _loggedInCustomer!['phone'];
+      final res = await ApiClient.get(
+          '/api/sales/subscriptions/customer?customer_phone=$phone');
+      if (res['success'] == true) {
+        setState(() {
+          _subscriptions = res['data'] ?? [];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching subscriptions: $e');
+    } finally {
+      setState(() => _isSubscriptionsLoading = false);
+    }
+  }
+
+  Future<void> _placeOrder() async {
+    if (_cart.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add items to cart first.')),
+      );
+      return;
+    }
+    if (_custNameCtrl.text.isEmpty ||
+        _custPhoneCtrl.text.isEmpty ||
+        _custAddressCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill out customer details.')),
+      );
+      return;
+    }
+
+    bool hasExcessQty = false;
+    _cart.forEach((itemId, value) {
+      if (value['qty'] > 5.0) {
+        hasExcessQty = true;
+      }
+    });
+    if (hasExcessQty && _gstin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Maximum order quantity for any item is 5 without a GSTIN.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      double subTotal = 0;
+      double tax = 0;
+      final List<Map<String, dynamic>> itemsList = [];
+
+      _cart.forEach((itemId, value) {
+        final item = value['item'];
+        final qty = value['qty'];
+        final rate = _getItemPrice(item);
+        final itemTotal = rate * qty;
+        subTotal += itemTotal;
+
+        final itemTaxPercent =
+            double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+        final itemTaxAmount = itemTotal * itemTaxPercent / 100.0;
+        tax += itemTaxAmount;
+
+        itemsList.add({
+          'item_id': itemId,
+          'item_code': item['item_code'],
+          'item_name': item['item_name'],
+          'unit': item['unit'] ?? '',
+          'qty': qty,
+          'rate': rate,
+          'amount': itemTotal,
+          'tax_percent': itemTaxPercent,
+          'taxable_amount': itemTotal,
+          'tax_amount': itemTaxAmount,
+        });
+      });
+
+      double delivery =
+          (subTotal < _minDeliveryOrderValue) ? _deliveryCharge : 0.00;
+      double deliveryGst = (delivery * _deliveryGstPercent) / 100.0;
+
+      final List<Map<String, dynamic>> chargesList = [];
+      if (delivery > 0) {
+        chargesList.add({
+          'name': 'Delivery Charge',
+          'code': 'DELIVERY_CHARGE',
+          'amount': delivery,
+          'taxable': _deliveryGstPercent > 0,
+          'tax_percent': _deliveryGstPercent,
+          'tax_amount': deliveryGst,
+          'taxable_amount': delivery
+        });
+      }
+
+      double customChargesTotal = 0.0;
+      double customChargesGstTotal = 0.0;
+      for (final charge in _customCharges) {
+        final double amt =
+            double.tryParse(charge['charge']?.toString() ?? '0.0') ?? 0.0;
+        final double gstRate =
+            double.tryParse(charge['gst_percentage']?.toString() ?? '0.0') ??
+                0.0;
+        final double gstAmt = (amt * gstRate) / 100.0;
+        customChargesTotal += amt;
+        customChargesGstTotal += gstAmt;
+        if (amt > 0) {
+          chargesList.add({
+            'name': charge['name'] ?? 'Charge',
+            'code': 'CUSTOM_CHARGE',
+            'amount': amt,
+            'taxable': gstRate > 0,
+            'tax_percent': gstRate,
+            'tax_amount': gstAmt,
+            'taxable_amount': amt
+          });
+        }
+      }
+
+      double couponDiscount = _calculateCouponDiscount(subTotal);
+      if (couponDiscount > 0 && _appliedCoupon != null) {
+        chargesList.add({
+          'name': 'Coupon Discount (${_appliedCoupon!['code']})',
+          'code': 'COUPON_DISCOUNT',
+          'amount': -couponDiscount,
+          'taxable': false,
+          'tax_percent': 0.0,
+          'tax_amount': 0.0,
+          'taxable_amount': 0.0
+        });
+      }
+
+      double totalCharges = delivery + customChargesTotal;
+      double totalChargesTax = deliveryGst + customChargesGstTotal;
+      double finalTax = tax + totalChargesTax;
+      double netAmount = subTotal + finalTax + totalCharges - couponDiscount;
+      if (netAmount < 0) netAmount = 0.0;
+
+      final outletCode = _loggedInCustomer?['outlet_id'] ??
+          _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      final body = {
+        'outlet_id': outletCode,
+        'customer_name': _custNameCtrl.text.trim(),
+        'customer_phone': _custPhoneCtrl.text.trim(),
+        'customer_address': _custAddressCtrl.text.trim(),
+        'items': itemsList,
+        'sub_total': subTotal,
+        'tax_amount': finalTax,
+        'delivery_charge': totalCharges,
+        'net_amount': netAmount,
+        'payment_status': _paymentMode,
+        'payment_mode': _chosenPaymentMethod,
+        'gstin': _gstin.isEmpty ? null : _gstin,
+        'charges': chargesList,
+        'coupon_code': _appliedCoupon != null ? _appliedCoupon!['code'] : null
+      };
+
+      final res = await ApiClient.post('/api/delivery/orders', body);
+      if (res['success'] == true) {
+        final order = res['data'];
+        setState(() {
+          _activeOrderId = order['id'];
+          _cart.clear();
+          _appliedCoupon = null;
+          _couponCodeCtrl.clear();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Order #${order['id']} placed successfully!')),
+        );
+        _startTrackingOrder();
+        _fetchHistory();
+      }
+    } catch (e) {
+      debugPrint('Error placing order: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _startTrackingOrder() {
+    _trackingTimer?.cancel();
+    _fetchActiveOrderTracking();
+    _trackingTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      _fetchActiveOrderTracking();
+    });
+  }
+
+  void _stopTrackingOrder() {
+    _trackingTimer?.cancel();
+    _trackingTimer = null;
+  }
+
+  Future<void> _fetchActiveOrderTracking() async {
+    if (_activeOrderId == null) return;
+    try {
+      final res =
+          await ApiClient.get('/api/delivery/orders/$_activeOrderId/track');
+      if (res['success'] == true) {
+        setState(() {
+          _activeOrder = res['data'];
+        });
+        if (_activeOrder?['status'] == 'DELIVERED' ||
+            _activeOrder?['status'] == 'CANCELLED') {
+          _stopTrackingOrder();
+          _fetchHistory();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error tracking order: $e');
+    }
+  }
+
+  Future<void> _cancelOrderAsCustomer(dynamic orderId) async {
+    String selectedReason = 'Changed my mind';
+    final TextEditingController otherReasonCtrl = TextEditingController();
+    bool isOther = false;
+
+    final String? reason = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setStateDialog) {
+        return AlertDialog(
+          title: const Text('Cancel Order Reason'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Please select a reason for cancelling this order:',
+                    style: TextStyle(fontSize: 14)),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedReason,
+                  decoration: const InputDecoration(
+                    labelText: 'Select Reason',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    'Changed my mind',
+                    'Incorrect items ordered',
+                    'Delivery taking too long',
+                    'Found a better price',
+                    'Other'
+                  ]
+                      .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                      .toList(),
+                  onChanged: (val) {
+                    setStateDialog(() {
+                      selectedReason = val!;
+                      isOther = val == 'Other';
+                    });
+                  },
+                ),
+                if (isOther) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: otherReasonCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Write cancellation reason',
+                      hintText: 'Please specify...',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 2,
+                  ),
+                ]
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Back'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final String finalReason =
+                    isOther ? otherReasonCtrl.text.trim() : selectedReason;
+                if (isOther && finalReason.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Please write a cancellation reason.')),
+                  );
+                  return;
+                }
+                Navigator.pop(context, finalReason);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Cancel Order'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    if (reason == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient.post(
+          '/api/delivery/orders/$orderId/cancel', {'reason': reason});
+      if (res['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Order cancelled successfully.')),
+        );
+        if (_activeOrderId == orderId) {
+          setState(() {
+            _activeOrderId = null;
+            _activeOrder = null;
+          });
+          _stopTrackingOrder();
+        }
+        _fetchHistory();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? 'Failed to cancel order.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error cancelling order: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _submitFeedbackDialog(dynamic orderId) async {
+    double selectedRating = 5;
+    final TextEditingController commentCtrl = TextEditingController();
+
+    final bool? success = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setStateDialog) {
+        return AlertDialog(
+          title: const Text('Order Feedback'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Rate your order experience:',
+                    style: TextStyle(fontSize: 14)),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    final starVal = index + 1;
+                    return IconButton(
+                      icon: Icon(
+                        starVal <= selectedRating
+                            ? Icons.star
+                            : Icons.star_border,
+                        color: Colors.amber,
+                        size: 32,
+                      ),
+                      onPressed: () {
+                        setStateDialog(() {
+                          selectedRating = starVal.toDouble();
+                        });
+                      },
+                    );
+                  }),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: commentCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Comments (Optional)',
+                    hintText: 'Share your feedback with us...',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Note: Feedback is shared with the retailer for internal improvement purposes only.',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Submit'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    if (success != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final res =
+          await ApiClient.post('/api/delivery/orders/$orderId/feedback', {
+        'rating': selectedRating,
+        'comment': commentCtrl.text.trim(),
+      });
+      if (res['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Feedback submitted successfully. Thank you!')),
+        );
+        _fetchHistory();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(res['message'] ?? 'Failed to submit feedback.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error submitting feedback: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  double _calculateOrderSavings(dynamic order) {
+    double savings = 0.0;
+    final charges = order['charges'] as List?;
+    if (charges != null) {
+      for (var charge in charges) {
+        if (charge is Map && charge['code'] == 'COUPON_DISCOUNT') {
+          final amt =
+              double.tryParse(charge['amount']?.toString() ?? '0') ?? 0.0;
+          savings += amt.abs();
+        }
+      }
+    }
+    return savings;
+  }
+
+  String _formatReturnedItems(dynamic order) {
+    final returnedItems = order['returned_items'] as List?;
+    if (returnedItems != null && returnedItems.isNotEmpty) {
+      final List<String> itemsFormatted = [];
+      for (var it in returnedItems) {
+        final q = double.tryParse(it['qty']?.toString() ?? '1') ?? 1.0;
+        itemsFormatted.add('${it['item_name']} x${q.toStringAsFixed(0)}');
+      }
+      return '[${itemsFormatted.join(", ")}]';
+    }
+    if (order['return_item_name'] != null &&
+        order['return_item_name'].toString().isNotEmpty) {
+      return '[${order['return_item_name']}]';
+    }
+    return '';
+  }
+
+  Future<void> _requestReturnDialog(dynamic orderId) async {
+    final order = _historyOrders.firstWhere((o) => o['id'] == orderId,
+        orElse: () => null);
+    if (order == null) return;
+    final itemsList = order['items'] as List? ?? [];
+    if (itemsList.isEmpty) return;
+
+    final Set<Map<String, dynamic>> selectedItemsSet = {};
+    String returnType = _isRefundAvailable ? 'REFUND' : 'EXCHANGE';
+
+    final bool? submit = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Request Return / Exchange'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Select Items to Return:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...itemsList.map((it) {
+                  final itemMap = it as Map<String, dynamic>;
+                  final isChecked = selectedItemsSet
+                      .any((x) => x['item_id'] == itemMap['item_id']);
+                  final q =
+                      double.tryParse(itemMap['qty']?.toString() ?? '1') ?? 1.0;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8.0),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade50,
+                      border: Border.all(color: Colors.teal.shade200, width: 1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CheckboxListTile(
+                          activeColor: Colors.teal.shade700,
+                          title: Text(
+                            '${itemMap['item_name']} x ${q.toStringAsFixed(0)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                              'Rate: Rs. ${itemMap['rate']} • Total: Rs. ${itemMap['amount']}'),
+                          value: isChecked,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              if (val == true) {
+                                selectedItemsSet.add(itemMap);
+                              } else {
+                                selectedItemsSet.removeWhere(
+                                    (x) => x['item_id'] == itemMap['item_id']);
+                              }
+                            });
+                          },
+                        ),
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(left: 16.0, bottom: 8.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _isRefundAvailable && _isExchangeAvailable
+                                  ? 'Eligible for Refund & Exchange'
+                                  : _isRefundAvailable
+                                      ? 'Eligible for Refund'
+                                      : 'Eligible for Exchange',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal.shade800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                if (_isRefundAvailable || _isExchangeAvailable) ...[
+                  const Divider(),
+                  const Text('Choose Return Type:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  if (_isRefundAvailable)
+                    RadioListTile<String>(
+                      title: const Text('Refund'),
+                      value: 'REFUND',
+                      groupValue: returnType,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          returnType = val!;
+                        });
+                      },
+                    ),
+                  if (_isExchangeAvailable)
+                    RadioListTile<String>(
+                      title: const Text('Exchange'),
+                      value: 'EXCHANGE',
+                      groupValue: returnType,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          returnType = val!;
+                        });
+                      },
+                    ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: selectedItemsSet.isEmpty
+                  ? null
+                  : () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary),
+              child: const Text('Submit Request'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (submit != true || selectedItemsSet.isEmpty) return;
+
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+            'Confirm ${returnType == 'REFUND' ? 'Refund' : 'Exchange'} Request'),
+        content: Text(
+            'Are you sure you want to request a ${returnType.toLowerCase()} for the selected items? This request cannot be cancelled once submitted.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No, Go Back'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.primary),
+            child: const Text('Yes, Submit'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient.post('/api/delivery/orders/$orderId/return', {
+        'return_type': returnType,
+        'outlet_id': order['outlet_id'],
+        'returned_items': selectedItemsSet
+            .map((x) => {
+                  'item_id': x['item_id'],
+                  'item_code': x['item_code'],
+                  'item_name': x['item_name'],
+                  'qty': x['qty'],
+                  'rate': x['rate'],
+                  'amount': x['amount']
+                })
+            .toList(),
+      });
+      if (res['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Return request submitted successfully.')),
+        );
+        _fetchHistory();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text(res['message'] ?? 'Failed to submit return request.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error submitting return: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder) async {
+    final pdf = pw.Document();
+
+    final String customerName = record['customer_name'] ?? '--';
+    final String customerPhone = record['customer_phone'] ?? '--';
+    final String customerAddress = record['customer_address'] ?? '--';
+
+    String title = '';
+    String numberLabel = '';
+    String numberVal = '';
+    String dateVal = '';
+    List<dynamic> itemsList = [];
+    double subTotal = 0;
+    double tax = 0;
+    double delivery = 0;
+    double netTotal = 0;
+    String payMode = '';
+    String payStatus = '';
+
+    if (isOnlineOrder) {
+      title = 'Online Delivery Order';
+      numberLabel = 'ORDER ID';
+      numberVal = '#${record['id']}';
+      dateVal = record['created_at'] != null
+          ? DateFormat('dd-MMM-yyyy hh:mm a')
+              .format(DateTime.parse(record['created_at'].toString()))
+          : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+      itemsList = record['items'] as List? ?? [];
+      subTotal = double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
+      tax = double.tryParse(record['tax_amount']?.toString() ?? '0') ?? 0.0;
+      delivery =
+          double.tryParse(record['delivery_charge']?.toString() ?? '0') ?? 0.0;
+      netTotal =
+          double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
+      payMode = record['payment_status'] == 'PAID'
+          ? 'Online/UPI'
+          : 'Cash on Delivery';
+      payStatus = record['payment_status'] == 'PAID' ? 'PAID' : 'COLLECT CASH';
+    } else {
+      title = 'In-Store POS Sale';
+      numberLabel = 'INVOICE NO';
+      numberVal = record['sale_no'] ?? '--';
+      dateVal = record['sale_date'] != null
+          ? DateFormat('dd-MMM-yyyy hh:mm a')
+              .format(DateTime.parse(record['sale_date'].toString()))
+          : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+      itemsList = record['items'] as List? ?? [];
+      subTotal = double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
+      tax = double.tryParse(record['total_tax']?.toString() ?? '0') ?? 0.0;
+      delivery =
+          double.tryParse(record['charge_total']?.toString() ?? '0') ?? 0.0;
+      netTotal =
+          double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
+      payMode = record['payment_mode'] ?? 'CASH';
+      final balance =
+          double.tryParse(record['balance_due']?.toString() ?? '0') ?? 0.0;
+      payStatus =
+          balance <= 0 ? 'PAID' : 'DUE (Rs. ${balance.toStringAsFixed(2)})';
+    }
+
+    final isThermal = _billFormat.startsWith('THERMAL_');
+    final double fs = isThermal ? 8.0 : 11.0;
+    final double fsSmall = isThermal ? 7.0 : 9.5;
+    final double fsBig = isThermal ? 12.0 : 16.0;
+    final PdfPageFormat pageFormat = isThermal
+        ? (_billFormat == 'THERMAL_58'
+            ? PdfPageFormat.roll57
+            : PdfPageFormat.roll80)
+        : PdfPageFormat.a4;
+    final pw.EdgeInsets margin = isThermal
+        ? const pw.EdgeInsets.all(10)
+        : const pw.EdgeInsets.symmetric(horizontal: 48, vertical: 40);
+    final String divider = isThermal
+        ? '--------------------------------------'
+        : '─────────────────────────────────────────────────────';
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: pageFormat,
+        margin: margin,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Text(
+                  _currentUser?.propertyName.isNotEmpty == true
+                      ? _currentUser!.propertyName
+                      : 'RETAIL MART POS',
+                  style: pw.TextStyle(
+                      fontSize: fsBig, fontWeight: pw.FontWeight.bold),
+                ),
+              ),
+              pw.Center(
+                child: pw.Text(
+                  title,
+                  style: pw.TextStyle(fontSize: fs),
+                ),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
+              pw.Text('$numberLabel : $numberVal',
+                  style: pw.TextStyle(fontSize: fs)),
+              pw.Text('DATE       : $dateVal',
+                  style: pw.TextStyle(fontSize: fs)),
+              pw.Text('CUSTOMER   : $customerName',
+                  style: pw.TextStyle(fontSize: fs)),
+              pw.Text('PHONE      : $customerPhone',
+                  style: pw.TextStyle(fontSize: fs)),
+              if (customerAddress.isNotEmpty)
+                pw.Text('ADDRESS    : $customerAddress',
+                    style: pw.TextStyle(fontSize: fs)),
+              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
+              pw.Text('ITEMS SOLD:',
+                  style: pw.TextStyle(
+                      fontSize: fs, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 4),
+              ...itemsList.map((item) {
+                final qtyVal =
+                    double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
+                final rateVal =
+                    double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
+                final total = qtyVal * rateVal;
+                final taxPct =
+                    double.tryParse(item['tax_percent']?.toString() ?? '0') ??
+                        0.0;
+                final taxAmt =
+                    double.tryParse(item['tax_amount']?.toString() ?? '0') ??
+                        0.0;
+                final gstLabel = taxPct > 0
+                    ? 'GST ${taxPct % 1 == 0 ? taxPct.toInt().toString() : taxPct.toStringAsFixed(1)}%'
+                        '${taxAmt > 0 ? ' = Rs. ${taxAmt.toStringAsFixed(2)}' : ''}'
+                    : '';
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Expanded(
+                            child: pw.Text(
+                              '${item['item_name']} x${qtyVal.toStringAsFixed(0)}',
+                              style: pw.TextStyle(
+                                  fontSize: fs, fontWeight: pw.FontWeight.bold),
+                            ),
+                          ),
+                          pw.Text('Rs. ${total.toStringAsFixed(2)}',
+                              style: pw.TextStyle(
+                                  fontSize: fs,
+                                  fontWeight: pw.FontWeight.bold)),
+                        ],
+                      ),
+                      if (gstLabel.isNotEmpty)
+                        pw.Text(
+                          '  $gstLabel',
+                          style: pw.TextStyle(
+                              fontSize: fsSmall, color: PdfColors.grey700),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('SUB TOTAL', style: pw.TextStyle(fontSize: fs)),
+                  pw.Text('Rs. ${subTotal.toStringAsFixed(2)}',
+                      style: pw.TextStyle(fontSize: fs)),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('GST / TAXES', style: pw.TextStyle(fontSize: fs)),
+                  pw.Text('Rs. ${tax.toStringAsFixed(2)}',
+                      style: pw.TextStyle(fontSize: fs)),
+                ],
+              ),
+              if (record['charges'] != null &&
+                  record['charges'] is List &&
+                  (record['charges'] as List).isNotEmpty)
+                ...((record['charges'] as List).map((ch) {
+                  final String name =
+                      (ch['name'] ?? 'Charge').toString().toUpperCase();
+                  final double amt =
+                      double.tryParse(ch['amount']?.toString() ?? '0') ?? 0.0;
+                  final double tAmt =
+                      double.tryParse(ch['tax_amount']?.toString() ?? '0') ??
+                          0.0;
+                  final double tPct =
+                      double.tryParse(ch['tax_percent']?.toString() ?? '0') ??
+                          0.0;
+                  return pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text(name, style: pw.TextStyle(fontSize: fs)),
+                          pw.Text('Rs. ${amt.toStringAsFixed(2)}',
+                              style: pw.TextStyle(fontSize: fs)),
+                        ],
+                      ),
+                      if (tAmt > 0)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('  * GST (${tPct.toStringAsFixed(1)}%)',
+                                style: pw.TextStyle(fontSize: fsSmall)),
+                            pw.Text('Rs. ${tAmt.toStringAsFixed(2)}',
+                                style: pw.TextStyle(fontSize: fsSmall)),
+                          ],
+                        ),
+                    ],
+                  );
+                }).toList())
+              else if (delivery > 0)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('DELIVERY', style: pw.TextStyle(fontSize: fs)),
+                    pw.Text('Rs. ${delivery.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: fs)),
+                  ],
+                ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('NET TOTAL',
+                      style: pw.TextStyle(
+                          fontSize: fs + 1, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Rs. ${netTotal.toStringAsFixed(2)}',
+                      style: pw.TextStyle(
+                          fontSize: fs + 1, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('PAY MODE', style: pw.TextStyle(fontSize: fs)),
+                  pw.Text(payMode, style: pw.TextStyle(fontSize: fs)),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('PAY STATUS',
+                      style: pw.TextStyle(
+                          fontSize: fs, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(payStatus,
+                      style: pw.TextStyle(
+                          fontSize: fs, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
+              pw.SizedBox(height: 4),
+              pw.Center(
+                child: pw.Text(
+                  'THANK YOU FOR SHOPPING!',
+                  style: pw.TextStyle(
+                      fontSize: fs, fontWeight: pw.FontWeight.bold),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    try {
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdf.save(),
+        name:
+            '${isOnlineOrder ? "order" : "sale"}_${record['id'] ?? record['sale_no']}',
+      );
+    } catch (e) {
+      debugPrint('Error printing natively: $e');
+    }
+  }
+
+  void _showThermalReceipt(dynamic record, bool isOnlineOrder) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final String customerName = record['customer_name'] ?? '--';
+        final String customerPhone = record['customer_phone'] ?? '--';
+        final String customerAddress = record['customer_address'] ?? '--';
+
+        String title = '';
+        String numberLabel = '';
+        String numberVal = '';
+        String dateVal = '';
+        List<dynamic> itemsList = [];
+        double subTotal = 0;
+        double tax = 0;
+        double delivery = 0;
+        double netTotal = 0;
+        String payMode = '';
+        String payStatus = '';
+
+        if (isOnlineOrder) {
+          title = 'Online Delivery Order';
+          numberLabel = 'ORDER ID';
+          numberVal = '#${record['id']}';
+          dateVal = record['created_at'] != null
+              ? DateFormat('dd-MMM-yyyy hh:mm a')
+                  .format(DateTime.parse(record['created_at'].toString()))
+              : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+          itemsList = record['items'] as List? ?? [];
+          subTotal =
+              double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
+          tax = double.tryParse(record['tax_amount']?.toString() ?? '0') ?? 0.0;
+          delivery =
+              double.tryParse(record['delivery_charge']?.toString() ?? '0') ??
+                  0.0;
+          netTotal =
+              double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
+          payMode = record['payment_status'] == 'PAID'
+              ? 'Online/UPI'
+              : 'Cash on Delivery';
+          payStatus =
+              record['payment_status'] == 'PAID' ? 'PAID' : 'COLLECT CASH';
+        } else {
+          title = 'In-Store POS Sale';
+          numberLabel = 'INVOICE NO';
+          numberVal = record['sale_no'] ?? '--';
+          dateVal = record['sale_date'] != null
+              ? DateFormat('dd-MMM-yyyy hh:mm a')
+                  .format(DateTime.parse(record['sale_date'].toString()))
+              : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+          itemsList = record['items'] as List? ?? [];
+          subTotal =
+              double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
+          tax = double.tryParse(record['total_tax']?.toString() ?? '0') ?? 0.0;
+          delivery =
+              double.tryParse(record['charge_total']?.toString() ?? '0') ?? 0.0;
+          netTotal =
+              double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
+          payMode = record['payment_mode'] ?? 'CASH';
+          final balance =
+              double.tryParse(record['balance_due']?.toString() ?? '0') ?? 0.0;
+          payStatus =
+              balance <= 0 ? 'PAID' : 'DUE (Rs. ${balance.toStringAsFixed(2)})';
+        }
+
+        return AlertDialog(
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          backgroundColor: Colors.yellow.shade50,
+          title: const Column(
+            children: [
+              Icon(Icons.print_outlined, size: 44, color: Colors.black87),
+              SizedBox(height: 4),
+              Text(
+                'SIMULATED PRINT RECEIPT',
+                style: TextStyle(
+                    fontFamily: 'Courier',
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey),
+              ),
+              Divider(color: Colors.black54),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Container(
+              width: 320,
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Text(
+                      _currentUser?.propertyName.isNotEmpty == true
+                          ? _currentUser!.propertyName
+                          : 'RETAIL MART POS',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontFamily: 'Courier',
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  Center(
+                    child: Text(
+                      title,
+                      style:
+                          const TextStyle(fontFamily: 'Courier', fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('--------------------------------',
+                      style: TextStyle(fontFamily: 'Courier')),
+                  Text('$numberLabel : $numberVal',
+                      style: const TextStyle(fontFamily: 'Courier')),
+                  Text('DATE       : $dateVal',
+                      style: const TextStyle(fontFamily: 'Courier')),
+                  Text('CUSTOMER   : $customerName',
+                      style: const TextStyle(fontFamily: 'Courier')),
+                  Text('PHONE      : $customerPhone',
+                      style: const TextStyle(fontFamily: 'Courier')),
+                  if (customerAddress.isNotEmpty)
+                    Text('ADDRESS    : $customerAddress',
+                        style: const TextStyle(fontFamily: 'Courier')),
+                  const Text('--------------------------------',
+                      style: TextStyle(fontFamily: 'Courier')),
+                  const Text('ITEMS SOLD:',
+                      style: TextStyle(
+                          fontFamily: 'Courier', fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  ...itemsList.map((item) {
+                    final qtyVal =
+                        double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
+                    final rateVal =
+                        double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
+                    final total = qtyVal * rateVal;
+                    final taxPercent = double.tryParse(
+                            (item['tax_percent'] ?? 0).toString()) ??
+                        0.0;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              taxPercent <= 0
+                                  ? '${item['item_name']} x${qtyVal.toStringAsFixed(0)} (GST NILL)'
+                                  : '${item['item_name']} x${qtyVal.toStringAsFixed(0)}',
+                              style: const TextStyle(fontFamily: 'Courier'),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text('Rs. ${total.toStringAsFixed(2)}',
+                              style: const TextStyle(fontFamily: 'Courier')),
+                        ],
+                      ),
+                    );
+                  }),
+                  const Text('--------------------------------',
+                      style: TextStyle(fontFamily: 'Courier')),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('SUB TOTAL',
+                          style: TextStyle(fontFamily: 'Courier')),
+                      Text('Rs. ${subTotal.toStringAsFixed(2)}',
+                          style: const TextStyle(fontFamily: 'Courier')),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('GST (18%)',
+                          style: TextStyle(fontFamily: 'Courier')),
+                      Text('Rs. ${tax.toStringAsFixed(2)}',
+                          style: const TextStyle(fontFamily: 'Courier')),
+                    ],
+                  ),
+                  if (delivery > 0)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('DELIVERY',
+                            style: TextStyle(fontFamily: 'Courier')),
+                        Text('Rs. ${delivery.toStringAsFixed(2)}',
+                            style: const TextStyle(fontFamily: 'Courier')),
+                      ],
+                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('NET TOTAL',
+                          style: TextStyle(
+                              fontFamily: 'Courier',
+                              fontWeight: FontWeight.bold)),
+                      Text('Rs. ${netTotal.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                              fontFamily: 'Courier',
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('PAY MODE',
+                          style: TextStyle(fontFamily: 'Courier')),
+                      Text(payMode,
+                          style: const TextStyle(fontFamily: 'Courier')),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('PAY STATUS',
+                          style: TextStyle(
+                              fontFamily: 'Courier',
+                              fontWeight: FontWeight.bold)),
+                      Text(payStatus,
+                          style: const TextStyle(
+                              fontFamily: 'Courier',
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const Text('--------------------------------',
+                      style: TextStyle(fontFamily: 'Courier')),
+                  const SizedBox(height: 8),
+                  const Center(
+                    child: Text(
+                      'THANK YOU FOR SHOPPING!',
+                      style: TextStyle(
+                          fontFamily: 'Courier',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _printReceiptNative(record, isOnlineOrder);
+              },
+              icon: const Icon(Icons.print_outlined),
+              label: const Text('Print / Save PDF'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            )
+          ],
+        );
+      },
+    );
+  }
+
+  double _calculateCouponDiscount(double subTotal) {
+    if (_appliedCoupon == null) return 0.0;
+    final minPurchase =
+        double.tryParse(_appliedCoupon!['min_purchase']?.toString() ?? '0.0') ??
+            0.0;
+    if (subTotal < minPurchase) {
+      return 0.0;
+    }
+    final discountType = _appliedCoupon!['discount_type'] ?? 'FLAT';
+    final discountVal = double.tryParse(
+            _appliedCoupon!['discount_value']?.toString() ?? '0.0') ??
+        0.0;
+    if (discountType == 'FLAT') {
+      return discountVal > subTotal ? subTotal : discountVal;
+    } else if (discountType == 'PERCENTAGE') {
+      final discount = (subTotal * discountVal) / 100.0;
+      final maxDisc = double.tryParse(
+              _appliedCoupon!['max_discount']?.toString() ?? '0.0') ??
+          0.0;
+      if (maxDisc > 0 && discount > maxDisc) {
+        return maxDisc;
+      }
+      return discount;
+    }
+    return 0.0;
+  }
+
+  Widget _buildCouponSection(ThemeData theme) {
+    if (_cart.isEmpty) return const SizedBox.shrink();
+
+    double subTotal = 0;
+    _cart.forEach((itemId, value) {
+      final item = value['item'];
+      final qty = value['qty'];
+      final price = _getItemPrice(item);
+      subTotal += price * qty;
+    });
+
+    // Filter to only non-exhausted coupons visible to customer
+    final availableCoupons = _coupons.where((c) {
+      if (c['is_active'] == false) return false;
+      final maxUses = int.tryParse(c['max_uses']?.toString() ?? '0') ?? 0;
+      final usedCount = int.tryParse(c['used_count']?.toString() ?? '0') ?? 0;
+      // Hide if exhausted (max_uses > 0 and used_count >= max_uses)
+      if (maxUses > 0 && usedCount >= maxUses) return false;
+      // Hide if no code
+      if ((c['code'] ?? '').toString().trim().isEmpty) return false;
+      return true;
+    }).toList();
+
+    // If a coupon is already applied, show the applied banner
+    if (_appliedCoupon != null) {
+      final disc = _calculateCouponDiscount(subTotal);
+      final minPurchase = double.tryParse(
+              _appliedCoupon!['min_purchase']?.toString() ?? '0.0') ??
+          0.0;
+      final isStillValid = subTotal >= minPurchase;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10.0),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.green.shade300, width: 1.4),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.local_offer, color: Colors.green, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _appliedCoupon!['code'].toString(),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Colors.green,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Applied ✓',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    if (isStillValid)
+                      Text(
+                        'You save Rs. ${disc.toStringAsFixed(2)}',
+                        style: TextStyle(
+                            color: Colors.green.shade700, fontSize: 12),
+                      )
+                    else
+                      Text(
+                        'Add Rs. ${(minPurchase - subTotal).toStringAsFixed(2)} more to unlock this offer',
+                        style:
+                            const TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _appliedCoupon = null;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: Colors.red, size: 16),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // No coupons available — hide section entirely
+    if (availableCoupons.isEmpty) return const SizedBox.shrink();
+
+    // Show pre-filled coupon cards (Swiggy/Zomato style)
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_offer_outlined,
+                  size: 16, color: Colors.deepPurple),
+              const SizedBox(width: 6),
+              Text(
+                'Available Offers',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepPurple,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...availableCoupons.map((coupon) {
+            final code = coupon['code'].toString();
+            final discountType = coupon['discount_type'] ?? 'FLAT';
+            final discountVal =
+                double.tryParse(coupon['discount_value']?.toString() ?? '0') ??
+                    0.0;
+            final minPurchase =
+                double.tryParse(coupon['min_purchase']?.toString() ?? '0') ??
+                    0.0;
+            final maxDiscount =
+                double.tryParse(coupon['max_discount']?.toString() ?? '0') ??
+                    0.0;
+            final maxUses =
+                int.tryParse(coupon['max_uses']?.toString() ?? '0') ?? 0;
+            final usedCount =
+                int.tryParse(coupon['used_count']?.toString() ?? '0') ?? 0;
+            final remaining = maxUses > 0 ? maxUses - usedCount : null;
+            final meetsMinPurchase = subTotal >= minPurchase;
+
+            // Build human-readable offer description
+            String offerText;
+            if (discountType == 'FLAT') {
+              offerText = 'Rs. ${discountVal.toStringAsFixed(0)} OFF';
+            } else {
+              offerText = '${discountVal.toStringAsFixed(0)}% OFF';
+              if (maxDiscount > 0) {
+                offerText += ' (max Rs. ${maxDiscount.toStringAsFixed(0)})';
+              }
+            }
+
+            String conditionText = '';
+            if (minPurchase > 0) {
+              conditionText =
+                  'on orders above Rs. ${minPurchase.toStringAsFixed(0)}';
+            }
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: GestureDetector(
+                onTap: () {
+                  if (!meetsMinPurchase) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Add Rs. ${(minPurchase - subTotal).toStringAsFixed(2)} more to use this coupon.',
+                        ),
+                        backgroundColor: Colors.orange.shade700,
+                      ),
+                    );
+                    return;
+                  }
+                  setState(() {
+                    _appliedCoupon = coupon;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('🎉 Coupon $code applied!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: meetsMinPurchase
+                        ? Colors.deepPurple.shade50
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: meetsMinPurchase
+                          ? Colors.deepPurple.shade200
+                          : Colors.grey.shade300,
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // Coupon Code Badge
+                      Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: meetsMinPurchase
+                                  ? Colors.deepPurple
+                                  : Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              code,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ),
+                          if (remaining != null && remaining <= 20)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Text(
+                                '$remaining left',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: remaining <= 5
+                                      ? Colors.red
+                                      : Colors.orange,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(width: 12),
+                      // Offer Details
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              offerText,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: meetsMinPurchase
+                                    ? Colors.deepPurple.shade800
+                                    : Colors.grey.shade600,
+                              ),
+                            ),
+                            if (conditionText.isNotEmpty)
+                              Text(
+                                conditionText,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            if (!meetsMinPurchase && minPurchase > 0)
+                              Text(
+                                'Add Rs. ${(minPurchase - subTotal).toStringAsFixed(0)} more',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // Apply button
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: meetsMinPurchase
+                              ? Colors.deepPurple
+                              : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'APPLY',
+                          style: TextStyle(
+                            color: meetsMinPurchase
+                                ? Colors.white
+                                : Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCartSummary(ThemeData theme) {
+    double subTotal = 0;
+    double tax = 0;
+    _cart.forEach((itemId, value) {
+      final item = value['item'];
+      final qty = value['qty'];
+      final price = _getItemPrice(item);
+      subTotal += price * qty;
+
+      final itemTaxPercent =
+          double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+      tax += (price * qty) * itemTaxPercent / 100.0;
+    });
+
+    double delivery = _cart.isEmpty
+        ? 0.00
+        : ((subTotal < _minDeliveryOrderValue) ? _deliveryCharge : 0.00);
+    double deliveryGst =
+        _cart.isEmpty ? 0.00 : ((delivery * _deliveryGstPercent) / 100.0);
+
+    double customChargesTotal = 0.0;
+    double customChargesGstTotal = 0.0;
+    final List<Map<String, dynamic>> computedCustomCharges = [];
+
+    if (_cart.isNotEmpty) {
+      for (final charge in _customCharges) {
+        final double amt =
+            double.tryParse(charge['charge']?.toString() ?? '0.0') ?? 0.0;
+        final double gstRate =
+            double.tryParse(charge['gst_percentage']?.toString() ?? '0.0') ??
+                0.0;
+        final double gstAmt = (amt * gstRate) / 100.0;
+        customChargesTotal += amt;
+        customChargesGstTotal += gstAmt;
+        computedCustomCharges.add({
+          'name': charge['name'] ?? 'Charge',
+          'amount': amt,
+          'gst_amount': gstAmt,
+        });
+      }
+    }
+
+    double couponDiscount = _calculateCouponDiscount(subTotal);
+
+    double totalCharges = delivery + customChargesTotal;
+    double totalChargesGst = deliveryGst + customChargesGstTotal;
+    double finalTax = tax + totalChargesGst;
+    double netTotal = subTotal + finalTax + totalCharges - couponDiscount;
+    if (netTotal < 0) netTotal = 0.0;
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Sub-total'),
+            Text('Rs. ${subTotal.toStringAsFixed(2)}'),
+          ],
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('GST / Taxes (Items)'),
+            Text('Rs. ${tax.toStringAsFixed(2)}'),
+          ],
+        ),
+        if (delivery > 0) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Delivery Charge'),
+              Text('Rs. ${delivery.toStringAsFixed(2)}'),
+            ],
+          ),
+          if (deliveryGst > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('  • Delivery GST'),
+                Text('Rs. ${deliveryGst.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+        ],
+        for (final cc in computedCustomCharges) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(cc['name']),
+              Text('Rs. ${cc['amount'].toStringAsFixed(2)}'),
+            ],
+          ),
+          if (cc['gst_amount'] > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('  • ${cc['name']} GST'),
+                Text('Rs. ${cc['gst_amount'].toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+        ],
+        if (couponDiscount > 0)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Coupon Discount (${_appliedCoupon!['code']})',
+                  style: const TextStyle(
+                      color: Colors.green, fontWeight: FontWeight.bold)),
+              Text('-Rs. ${couponDiscount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      color: Colors.green, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Net Total',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            Text(
+              'Rs. ${netTotal.toStringAsFixed(2)}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomerTrackingView(ThemeData theme) {
+    if (_activeOrder == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final status = _activeOrder!['status'] ?? 'PENDING';
+    final riderName = _activeOrder!['partner']?['name'] ?? 'Not assigned yet';
+    final riderPhone = _activeOrder!['partner']?['phone'] ?? '--';
+
+    int activeStep = 0;
+    if (status == 'ACCEPTED') activeStep = 1;
+    if (status == 'ASSIGNED') activeStep = 2;
+    if (status == 'OUT_FOR_DELIVERY') activeStep = 3;
+    if (status == 'DELIVERED') activeStep = 4;
+
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 600),
+        padding: const EdgeInsets.all(24.0),
+        child: Card(
+          elevation: 4,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Track Order #${_activeOrder!['id']}',
+                        style: theme.textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          setState(() {
+                            _activeOrderId = null;
+                            _activeOrder = null;
+                          });
+                          _stopTrackingOrder();
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 12),
+                  Text('Customer Name: ${_activeOrder!['customer_name']}'),
+                  Text(
+                      'Delivery Address: ${_activeOrder!['customer_address']}'),
+                  Text(
+                      'Net Amount: Rs. ${double.tryParse(_activeOrder!['net_amount']?.toString() ?? '0')?.toStringAsFixed(2)}'),
+                  Text('Payment Status: ${_activeOrder!['payment_status']}'),
+                  const SizedBox(height: 20),
+                  const Text('Live Delivery Progress',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 16),
+                  _buildStepper(activeStep, theme),
+                  const SizedBox(height: 24),
+                  if (status == 'ASSIGNED' || status == 'OUT_FOR_DELIVERY') ...[
+                    Container(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            child: const Icon(Icons.person),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Assigned Rider: $riderName',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              Text('Phone: $riderPhone'),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (status == 'DELIVERED') ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle,
+                              color: Colors.green, size: 28),
+                          SizedBox(width: 8),
+                          Text(
+                            'Your order was delivered successfully!',
+                            style: TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16),
+                          )
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (status == 'PENDING' || status == 'ACCEPTED') ...[
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.cancel_outlined,
+                            color: Colors.red),
+                        label: const Text('Cancel Order',
+                            style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.red),
+                        ),
+                        onPressed: () =>
+                            _cancelOrderAsCustomer(_activeOrder!['id']),
+                      ),
+                    ),
+                  ]
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepper(int currentStep, ThemeData theme) {
+    final steps = [
+      {'title': 'Placed', 'subtitle': 'Order submitted'},
+      {'title': 'Accepted', 'subtitle': 'Creating invoice'},
+      {'title': 'Rider Assigned', 'subtitle': 'Rider is on the way'},
+      {'title': 'Out for Delivery', 'subtitle': 'Order is on the way'},
+      {'title': 'Delivered', 'subtitle': 'Enjoy your order!'},
+    ];
+
+    return Column(
+      children: List.generate(steps.length, (index) {
+        final isDone = index <= currentStep;
+        final isLast = index == steps.length - 1;
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Column(
+              children: [
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor:
+                      isDone ? theme.colorScheme.primary : Colors.grey.shade300,
+                  child: isDone
+                      ? const Icon(Icons.check, size: 14, color: Colors.white)
+                      : Text((index + 1).toString(),
+                          style: const TextStyle(fontSize: 12)),
+                ),
+                if (!isLast)
+                  Container(
+                    width: 2,
+                    height: 36,
+                    color: index < currentStep
+                        ? theme.colorScheme.primary
+                        : Colors.grey.shade300,
+                  ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  steps[index]['title']!,
+                  style: TextStyle(
+                    fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
+                    color: isDone ? Colors.black : Colors.grey,
+                  ),
+                ),
+                Text(
+                  steps[index]['subtitle']!,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            )
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildCustomerAuthView(ThemeData theme) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Card(
+            elevation: 6,
+            shadowColor: theme.colorScheme.shadow.withOpacity(0.1),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Icon(
+                    Icons.local_shipping_outlined,
+                    size: 56,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _showRegisterForm
+                        ? 'Create Customer Account'
+                        : 'Customer Login Portal',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _showRegisterForm
+                        ? 'Register to track purchases, print invoices and get home delivery.'
+                        : 'Sign in to access your previous orders and print invoices.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  if (_showRegisterForm) ...[
+                    TextField(
+                      controller: _regNameCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Full Name',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _regPhoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Mobile Number',
+                        prefixIcon: const Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _regPasswordCtrl,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _regAddressCtrl,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: 'Default Delivery Address',
+                        prefixIcon: const Icon(Icons.map_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    TextField(
+                      controller: _loginPhoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Registered Mobile Number',
+                        prefixIcon: const Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _loginPasswordCtrl,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed:
+                        _showRegisterForm ? _registerCustomer : _loginCustomer,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      _showRegisterForm ? 'Sign Up' : 'Sign In',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _showRegisterForm = !_showRegisterForm;
+                      });
+                    },
+                    child: Text(
+                      _showRegisterForm
+                          ? 'Already have an account? Sign In'
+                          : "Don't have an account? Sign Up",
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeliveryDrawer(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasCustomer = _loggedInCustomer != null;
+    return Drawer(
+      child: ListView(
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                const Text(
+                  'Customer Portal',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  hasCustomer
+                      ? 'Logged in as: ${_loggedInCustomer!['name'] ?? _loggedInCustomer!['phone']}'
+                      : 'Guest Mode',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.storefront),
+            title: const Text('Shop Catalog'),
+            selected: _customerSubTabIndex == 0,
+            onTap: () {
+              Navigator.of(context).pop();
+              _setSubTabIndex(0);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.shopping_cart),
+            title: const Text('My Cart'),
+            selected: _customerSubTabIndex == 1,
+            onTap: () {
+              Navigator.of(context).pop();
+              _setSubTabIndex(1);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.receipt_long),
+            title: Text(
+                hasCustomer ? 'My Purchases & Tracking' : 'Login / Register'),
+            selected: _customerSubTabIndex == 2,
+            onTap: () {
+              Navigator.of(context).pop();
+              _setSubTabIndex(2);
+            },
+          ),
+          if (hasCustomer) ...[
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout / Switch Account'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _logoutCustomer();
+              },
+            ),
+          ],
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.dashboard_outlined),
+            title: const Text('Exit to Dashboard'),
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductCatalogSection(ThemeData theme, bool isMobile) {
+    final int crossAxisCount = isMobile ? 1 : 2;
+    final double childAspectRatio = isMobile ? 2.2 : 1.25;
+
+    return Container(
+      color: theme.colorScheme.surfaceContainerLow,
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Retailer Shop Products',
+                style: theme.textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh Shop',
+                onPressed: () {
+                  setState(() {
+                    _currentPage = 1;
+                  });
+                  _fetchCatalog();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _custGstinCtrl,
+            decoration: InputDecoration(
+              labelText: 'GSTIN (Optional - Enter for B2B rates & bulk orders)',
+              prefixIcon: const Icon(Icons.business_outlined),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            onChanged: (val) {
+              setState(() {
+                _gstin = val.trim();
+                if (_gstin.isEmpty) {
+                  _cart.forEach((key, value) {
+                    if (value['qty'] > 5.0) {
+                      value['qty'] = 5.0;
+                    }
+                  });
+                }
+                _currentPage = 1;
+              });
+              _fetchCatalog();
+            },
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search products...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: theme.dividerColor),
+                    ),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val;
+                      _currentPage = 1;
+                    });
+                    _fetchCatalog();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  initialValue:
+                      _selectedCategory.isEmpty ? null : _selectedCategory,
+                  decoration: InputDecoration(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: theme.dividerColor),
+                    ),
+                  ),
+                  hint: const Text('Categories'),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('All'),
+                    ),
+                    ..._categories.map((cat) => DropdownMenuItem<String>(
+                          value: cat,
+                          child: Text(cat, overflow: TextOverflow.ellipsis),
+                        )),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedCategory = val ?? '';
+                      _currentPage = 1;
+                    });
+                    _fetchCatalog();
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _catalogItems.isEmpty
+                ? const Center(child: Text('No saleable products found.'))
+                : Column(
+                    children: [
+                      Expanded(
+                        child: GridView.builder(
+                          controller: _scrollController,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            childAspectRatio: childAspectRatio,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
+                          itemCount: _catalogItems.length,
+                          itemBuilder: (context, index) {
+                            final item = _catalogItems[index];
+                            final price = _getItemPrice(item);
+
+                            final int itemId = item['id'];
+                            final bool isStockable = item['stockable'] == true;
+                            final double currentStock = double.tryParse(
+                                    item['current_stock']?.toString() ?? '0') ??
+                                0.0;
+                            final bool isOutOfStock =
+                                isStockable && currentStock <= 0;
+
+                            final bool isInCart = _cart.containsKey(itemId);
+                            final double cartQty =
+                                isInCart ? _cart[itemId]!['qty'] : 0.0;
+
+                            return Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item['item_name'] ?? 'Product',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: isOutOfStock
+                                                ? Colors.red.shade50
+                                                : Colors.green.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            isOutOfStock
+                                                ? 'Out of Stock'
+                                                : 'In Stock (${currentStock.toInt()} left)',
+                                            style: TextStyle(
+                                              color: isOutOfStock
+                                                  ? Colors.red.shade700
+                                                  : Colors.green.shade700,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Rs. ${price.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            color: theme.colorScheme.primary,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        if (isOutOfStock)
+                                          const IconButton(
+                                            onPressed: null,
+                                            icon: Icon(Icons.add_shopping_cart,
+                                                size: 20),
+                                          )
+                                        else if (!isInCart)
+                                          IconButton(
+                                            onPressed: () {
+                                              setState(() {
+                                                _cart[itemId] = {
+                                                  'item': item,
+                                                  'qty': 1.0,
+                                                };
+                                              });
+                                            },
+                                            style: IconButton.styleFrom(
+                                              backgroundColor: theme
+                                                  .colorScheme.primaryContainer,
+                                              foregroundColor: theme.colorScheme
+                                                  .onPrimaryContainer,
+                                            ),
+                                            icon: const Icon(
+                                                Icons.add_shopping_cart,
+                                                size: 20),
+                                          )
+                                        else
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(
+                                                    Icons.remove_circle,
+                                                    color: Colors.redAccent,
+                                                    size: 22),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    if (cartQty > 1) {
+                                                      _cart[itemId]!['qty'] -=
+                                                          1.0;
+                                                    } else {
+                                                      _cart.remove(itemId);
+                                                    }
+                                                  });
+                                                },
+                                              ),
+                                              Text(
+                                                cartQty.toStringAsFixed(0),
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15),
+                                              ),
+                                              IconButton(
+                                                icon: Icon(Icons.add_circle,
+                                                    color: ((_gstin.isEmpty &&
+                                                                cartQty >= 5) ||
+                                                            (isStockable &&
+                                                                cartQty >=
+                                                                    currentStock))
+                                                        ? Colors.grey
+                                                        : theme.colorScheme
+                                                            .primary,
+                                                    size: 22),
+                                                onPressed: ((_gstin.isEmpty &&
+                                                            cartQty >= 5) ||
+                                                        (isStockable &&
+                                                            cartQty >=
+                                                                currentStock))
+                                                    ? null
+                                                    : () {
+                                                        setState(() {
+                                                          _cart[itemId]![
+                                                              'qty'] += 1.0;
+                                                        });
+                                                      },
+                                              ),
+                                            ],
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      if (_isMoreLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCartAndCheckoutSection(ThemeData theme, bool isMobile) {
+    return Container(
+      decoration: BoxDecoration(
+        border: isMobile
+            ? null
+            : Border(left: BorderSide(color: theme.dividerColor)),
+      ),
+      padding: const EdgeInsets.all(16.0),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Shopping Cart',
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            if (_cart.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24.0),
+                child: Center(child: Text('Your cart is empty.')),
+              )
+            else
+              Column(
+                children: _cart.entries.map((entry) {
+                  final item = entry.value['item'];
+                  final qty = entry.value['qty'];
+                  final price = _getItemPrice(item);
+
+                  final int itemId = entry.key;
+                  final bool isStockable = item['stockable'] == true;
+                  final double currentStock = double.tryParse(
+                          item['current_stock']?.toString() ?? '0') ??
+                      0.0;
+
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(item['item_name'] ?? 'Product'),
+                    subtitle: Text(
+                        'Rs. ${price.toStringAsFixed(2)} x ${qty.toStringAsFixed(0)}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: () {
+                            setState(() {
+                              if (qty > 1) {
+                                _cart[entry.key]!['qty'] -= 1.0;
+                              } else {
+                                _cart.remove(entry.key);
+                              }
+                            });
+                          },
+                        ),
+                        Text(
+                          qty.toStringAsFixed(0),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: ((_gstin.isEmpty && qty >= 5) ||
+                                  (isStockable && qty >= currentStock))
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _cart[entry.key]!['qty'] += 1.0;
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            const Divider(),
+            _buildCartSummary(theme),
+            _buildCouponSection(theme),
+            const Divider(),
+            const SizedBox(height: 12),
+            Text(
+              'Delivery Details',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _custNameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Customer Name',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _custPhoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _custAddressCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Delivery Address',
+                prefixIcon: Icon(Icons.map_outlined),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _custGstinCtrl,
+              decoration: const InputDecoration(
+                labelText: 'GSTIN (Optional for B2B)',
+                prefixIcon: Icon(Icons.business_outlined),
+              ),
+              onChanged: (val) {
+                setState(() {
+                  _gstin = val.trim();
+                  if (_gstin.isEmpty) {
+                    _cart.forEach((key, value) {
+                      if (value['qty'] > 5.0) {
+                        value['qty'] = 5.0;
+                      }
+                    });
+                  }
+                  _currentPage = 1;
+                });
+                _fetchCatalog();
+              },
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text('Payment Mode:   ',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('CASH'),
+                  selected: _chosenPaymentMethod == 'CASH',
+                  onSelected: (selected) {
+                    if (selected) setState(() => _chosenPaymentMethod = 'CASH');
+                  },
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('CARD'),
+                  selected: _chosenPaymentMethod == 'CARD',
+                  onSelected: (selected) {
+                    if (selected) setState(() => _chosenPaymentMethod = 'CARD');
+                  },
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('UPI'),
+                  selected: _chosenPaymentMethod == 'UPI',
+                  onSelected: (selected) {
+                    if (selected) setState(() => _chosenPaymentMethod = 'UPI');
+                  },
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('CREDIT'),
+                  selected: _chosenPaymentMethod == 'CREDIT',
+                  onSelected: (selected) {
+                    if (selected) setState(() => _chosenPaymentMethod = 'CREDIT');
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text('Payment Status: ',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Pay on Delivery'),
+                  selected: _paymentMode == 'UNPAID',
+                  onSelected: (selected) {
+                    if (selected) setState(() => _paymentMode = 'UNPAID');
+                  },
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Paid Online'),
+                  selected: _paymentMode == 'PAID',
+                  onSelected: (selected) {
+                    if (selected) setState(() => _paymentMode = 'PAID');
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: _placeOrder,
+                child: const Text('Place Delivery Order',
+                    style: TextStyle(fontSize: 16)),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReturnStatusBanner(dynamic order, double netAmt) {
+    Color color = Colors.grey;
+    IconData icon = Icons.info_outline;
+    String text = '';
+
+    final returnStatus = order['return_status'];
+    final returnedItems = _formatReturnedItems(order);
+    final refund = order['refund_details'];
+
+    if (returnStatus == 'RETURNED' && refund != null) {
+      color = Colors.blue;
+      icon = Icons.keyboard_return_outlined;
+      final paidAmt =
+          double.tryParse(refund['amount_paid']?.toString() ?? '0.0') ?? 0.0;
+      final pendingAmt =
+          double.tryParse(refund['amount_pending']?.toString() ?? '0.0') ?? 0.0;
+      final mode = refund['payment_mode'] ?? 'N/A';
+      final status = refund['status'] ?? 'PENDING';
+      final remarks = refund['notes'] ?? '';
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Refunded - $returnedItems',
+                    style: TextStyle(
+                        color: Colors.blue.shade900,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('• Mode: $mode',
+                      style:
+                          TextStyle(color: Colors.blue.shade800, fontSize: 12)),
+                  Text('• Refund Status: $status',
+                      style:
+                          TextStyle(color: Colors.blue.shade800, fontSize: 12)),
+                  Text(
+                      '• Refunded Amount: Rs. ${paidAmt.toStringAsFixed(2)} (Pending: Rs. ${pendingAmt.toStringAsFixed(2)})',
+                      style:
+                          TextStyle(color: Colors.blue.shade800, fontSize: 12)),
+                  if (remarks.isNotEmpty)
+                    Text('• Remark: $remarks',
+                        style: TextStyle(
+                            color: Colors.blue.shade800, fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (returnStatus == 'PENDING') {
+      color = Colors.orange;
+      icon = Icons.pending_actions_outlined;
+      text = 'Return Pending (${order['return_type']}) - $returnedItems';
+    } else if (returnStatus == 'RETURN_ACCEPTED') {
+      color = Colors.orange;
+      icon = Icons.check_circle_outline;
+      text = order['return_type'] == 'EXCHANGE'
+          ? 'Exchange Approved: Rider picking up new item from store.'
+          : 'Return Approved: Rider on the way to collect item.';
+    } else if (returnStatus == 'RETURN_PICKED_UP_FROM_STORE') {
+      color = Colors.orange;
+      icon = Icons.directions_bike;
+      text = order['return_type'] == 'EXCHANGE'
+          ? 'Exchange Approved: Rider out for delivery of replacement item.'
+          : 'Return Approved: Rider out for collection of return item.';
+    } else if (returnStatus == 'RETURN_COLLECTED') {
+      if (order['return_type'] == 'EXCHANGE') {
+        color = Colors.green;
+        icon = Icons.check_circle;
+        text = 'Exchange Completed. Replacement Delivered.';
+      } else {
+        color = Colors.orange;
+        icon = Icons.done;
+        text = 'Return Collected. Rider returning to store with item.';
+      }
+    } else if (returnStatus == 'RETURN_HANDED_OVER') {
+      if (order['return_type'] == 'EXCHANGE') {
+        color = Colors.green;
+        icon = Icons.check_circle;
+        text = 'Exchange Completed. Replacement Delivered.';
+      } else {
+        color = Colors.orange;
+        icon = Icons.airport_shuttle_outlined;
+        text = 'Return Handed Over to Store. Awaiting supplier confirmation.';
+      }
+    } else if (returnStatus == 'RETURNED') {
+      color = Colors.blue;
+      icon = Icons.keyboard_return_outlined;
+      final isPaid = order['payment_status'] == 'PAID';
+      text = isPaid
+          ? 'Refunded (Rs. ${netAmt.toStringAsFixed(2)}) - $returnedItems'
+          : 'Return Accepted - $returnedItems';
+    } else if (returnStatus == 'EXCHANGED') {
+      color = Colors.purple;
+      icon = Icons.swap_horiz_outlined;
+      text = 'Exchanged - $returnedItems';
+    } else if (returnStatus == 'REDELIVERED') {
+      color = Colors.teal;
+      icon = Icons.delivery_dining_outlined;
+      text = 'Redelivered - $returnedItems';
+    } else if (returnStatus == 'REJECTED') {
+      color = Colors.red;
+      icon = Icons.gpp_bad_outlined;
+      final remark = order['return_rejection_reason'] ?? '';
+      text = 'Return Request Rejected - $returnedItems${remark.toString().isNotEmpty ? "\nReason: $remark" : ""}';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: color == Colors.orange
+                    ? Colors.orange.shade900
+                    : color == Colors.blue
+                        ? Colors.blue.shade900
+                        : color == Colors.purple
+                            ? Colors.purple.shade900
+                            : color == Colors.teal
+                                ? Colors.teal.shade900
+                                : color == Colors.red
+                                    ? Colors.red.shade900
+                                    : Colors.grey.shade900,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryView(ThemeData theme) {
+    return RefreshIndicator(
+        onRefresh: () async {
+          await _fetchHistory();
+          await _fetchSubscriptions();
+        },
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Center(child: Text('Purchase Orders')),
+                      selected: _historySubTabIndex == 0,
+                      onSelected: (val) {
+                        if (val) setState(() => _historySubTabIndex = 0);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Center(child: Text('Daily Subscriptions')),
+                      selected: _historySubTabIndex == 1,
+                      onSelected: (val) {
+                        if (val) {
+                          setState(() => _historySubTabIndex = 1);
+                          _fetchSubscriptions();
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _historySubTabIndex == 0
+                  ? (_historyOrders.isEmpty && _historySales.isEmpty
+                      ? const Center(
+                          child: SingleChildScrollView(
+                            physics: AlwaysScrollableScrollPhysics(),
+                            child: Padding(
+                              padding: EdgeInsets.all(32.0),
+                              child: Column(
+                                children: [
+                                  Icon(Icons.receipt_long_outlined,
+                                      size: 64, color: Colors.grey),
+                                  SizedBox(height: 16),
+                                  Text(
+                                      'No purchase history found for this account.',
+                                      style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      : ListView(
+                          padding: const EdgeInsets.all(16.0),
+                          children: [
+                            _buildCustomerDashboard(theme),
+                            if (_historyOrders.isNotEmpty) ...[
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Text(
+                                  'Online Delivery Orders',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.primary),
+                                ),
+                              ),
+                              ..._historyOrders.map((order) {
+                                final netAmt = double.tryParse(
+                                        order['net_amount']?.toString() ??
+                                            '0') ??
+                                    0.0;
+                                final String status =
+                                    order['status'] ?? 'PENDING';
+                                final itemsList = order['items'] as List? ?? [];
+                                final dateStr = order['created_at'] != null
+                                    ? DateFormat('dd-MMM-yyyy, hh:mm a').format(
+                                        DateTime.parse(
+                                            order['created_at'].toString()))
+                                    : '--';
+
+                                Color statusColor = Colors.orange;
+                                if (status == 'ACCEPTED')
+                                  statusColor = Colors.blue;
+                                if (status == 'ASSIGNED')
+                                  statusColor = Colors.indigo;
+                                if (status == 'OUT_FOR_DELIVERY')
+                                  statusColor = Colors.teal;
+                                if (status == 'DELIVERED')
+                                  statusColor = Colors.green;
+                                if (status == 'CANCELLED')
+                                  statusColor = Colors.red;
+
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  elevation: 0.5,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    side: BorderSide(
+                                        color: Colors.grey.shade200, width: 1),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            CircleAvatar(
+                                              backgroundColor:
+                                                  statusColor.withOpacity(0.12),
+                                              radius: 20,
+                                              child: Icon(
+                                                status == 'DELIVERED'
+                                                    ? Icons
+                                                        .check_circle_outline_rounded
+                                                    : status == 'CANCELLED'
+                                                        ? Icons.cancel_outlined
+                                                        : status ==
+                                                                'OUT_FOR_DELIVERY'
+                                                            ? Icons
+                                                                .delivery_dining_outlined
+                                                            : Icons
+                                                                .local_shipping_outlined,
+                                                color: statusColor,
+                                                size: 20,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
+                                                    children: [
+                                                      Text(
+                                                        'Order #${order['id']}',
+                                                        style: const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 15),
+                                                      ),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 3),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: statusColor
+                                                              .withOpacity(
+                                                                  0.12),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(20),
+                                                        ),
+                                                        child: Text(
+                                                          status,
+                                                          style: TextStyle(
+                                                            color: statusColor,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 10,
+                                                            letterSpacing: 0.5,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 3),
+                                                  Text(
+                                                    dateStr,
+                                                    style: TextStyle(
+                                                        color: Colors
+                                                            .grey.shade600,
+                                                        fontSize: 12),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.print_outlined,
+                                                  size: 20),
+                                              tooltip: 'Print Invoice',
+                                              onPressed: () =>
+                                                  _showThermalReceipt(
+                                                      order, true),
+                                            ),
+                                          ],
+                                        ),
+                                        const Divider(height: 24),
+                                        if (order['received_items'] != null && (order['received_items'] as List).isNotEmpty) ...[
+                                           Row(
+                                             children: [
+                                               Icon(Icons.shopping_bag_outlined,
+                                                   size: 14,
+                                                   color: Colors.grey.shade600),
+                                               const SizedBox(width: 6),
+                                               const Text(
+                                                 'ORDERED ITEMS',
+                                                 style: TextStyle(
+                                                   fontWeight: FontWeight.bold,
+                                                   fontSize: 11,
+                                                   color: Colors.grey,
+                                                   letterSpacing: 0.8,
+                                                 ),
+                                               ),
+                                             ],
+                                           ),
+                                           const SizedBox(height: 8),
+                                           ...itemsList.map<Widget>((it) {
+                                             final amt = double.tryParse(it['amount']?.toString() ?? '0') ?? 0.0;
+                                             final q = double.tryParse(it['qty']?.toString() ?? '1') ?? 1.0;
+                                             return Padding(
+                                               padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                               child: Row(
+                                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                 children: [
+                                                   Expanded(
+                                                     child: Text(
+                                                       '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
+                                                       style: TextStyle(
+                                                           fontSize: 13,
+                                                           color: Colors.grey.shade600,
+                                                           decoration: TextDecoration.lineThrough),
+                                                       overflow: TextOverflow.ellipsis,
+                                                     ),
+                                                   ),
+                                                   const SizedBox(width: 16),
+                                                   Text(
+                                                     'Rs. ${amt.toStringAsFixed(2)}',
+                                                     style: TextStyle(
+                                                         fontSize: 13,
+                                                         color: Colors.grey.shade500,
+                                                         decoration: TextDecoration.lineThrough),
+                                                   ),
+                                                 ],
+                                               ),
+                                             );
+                                           }),
+                                           const Divider(height: 24),
+                                           Row(
+                                             children: [
+                                               Icon(Icons.check_circle_outline,
+                                                   size: 14,
+                                                   color: Colors.green.shade700),
+                                               const SizedBox(width: 6),
+                                               Text(
+                                                 'RECEIVED ITEMS (MODIFIED)',
+                                                 style: TextStyle(
+                                                   fontWeight: FontWeight.bold,
+                                                   fontSize: 11,
+                                                   color: Colors.green.shade700,
+                                                   letterSpacing: 0.8,
+                                                 ),
+                                               ),
+                                             ],
+                                           ),
+                                           const SizedBox(height: 8),
+                                           ...(order['received_items'] as List).map<Widget>((it) {
+                                             final amt = double.tryParse(it['amount']?.toString() ?? '0') ?? 0.0;
+                                             final q = double.tryParse(it['qty']?.toString() ?? '1') ?? 1.0;
+                                             return Padding(
+                                               padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                               child: Row(
+                                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                 children: [
+                                                   Expanded(
+                                                     child: Text(
+                                                       '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
+                                                       style: TextStyle(
+                                                           fontSize: 13,
+                                                           fontWeight: FontWeight.w500,
+                                                           color: Colors.grey.shade800),
+                                                       overflow: TextOverflow.ellipsis,
+                                                     ),
+                                                   ),
+                                                   const SizedBox(width: 16),
+                                                   Text(
+                                                     'Rs. ${amt.toStringAsFixed(2)}',
+                                                     style: TextStyle(
+                                                         fontSize: 13,
+                                                         fontWeight: FontWeight.bold,
+                                                         color: Colors.grey.shade800),
+                                                   ),
+                                                 ],
+                                               ),
+                                             );
+                                           }),
+                                         ] else ...[
+                                           ...itemsList.map<Widget>((it) {
+                                             final amt = double.tryParse(
+                                                     it['amount']?.toString() ??
+                                                         '0') ??
+                                                 0.0;
+                                             final q = double.tryParse(
+                                                     it['qty']?.toString() ??
+                                                         '1') ??
+                                                 1.0;
+                                             return Padding(
+                                               padding: const EdgeInsets.symmetric(
+                                                   vertical: 4.0),
+                                               child: Row(
+                                                 mainAxisAlignment:
+                                                     MainAxisAlignment
+                                                         .spaceBetween,
+                                                 children: [
+                                                   Expanded(
+                                                     child: Text(
+                                                       '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
+                                                       style: TextStyle(
+                                                           fontSize: 13,
+                                                           color: Colors
+                                                               .grey.shade800),
+                                                       overflow:
+                                                           TextOverflow.ellipsis,
+                                                     ),
+                                                   ),
+                                                   const SizedBox(width: 16),
+                                                   Text(
+                                                     'Rs. ${amt.toStringAsFixed(2)}',
+                                                     style: TextStyle(
+                                                         fontSize: 13,
+                                                         fontWeight:
+                                                             FontWeight.w500,
+                                                         color:
+                                                             Colors.grey.shade800),
+                                                   ),
+                                                 ],
+                                               ),
+                                             );
+                                           }),
+                                         ],
+                                        const Divider(height: 20),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Total Amount:',
+                                              style: TextStyle(
+                                                  color: Colors.grey.shade600,
+                                                  fontSize: 13),
+                                            ),
+                                            Text(
+                                              'Rs. ${netAmt.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15),
+                                            ),
+                                          ],
+                                        ),
+                                         if (order['modification_reason'] != null && order['modification_reason'].toString().isNotEmpty) ...[
+                                           const SizedBox(height: 12),
+                                           Container(
+                                             width: double.infinity,
+                                             padding: const EdgeInsets.all(10.0),
+                                             decoration: BoxDecoration(
+                                               color: Colors.amber.shade50,
+                                               borderRadius: BorderRadius.circular(12),
+                                               border: Border.all(color: Colors.amber.shade200),
+                                             ),
+                                             child: Row(
+                                               children: [
+                                                 Icon(Icons.info_outline, size: 18, color: Colors.amber.shade800),
+                                                 const SizedBox(width: 8),
+                                                 Expanded(
+                                                   child: Text(
+                                                     'Correction Reason: ${order['modification_reason']}',
+                                                     style: TextStyle(fontSize: 13, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                                                   ),
+                                                 ),
+                                               ],
+                                             ),
+                                           ),
+                                         ],
+                                         if (order['original_net_amount'] != null) ...[
+                                            (() {
+                                              final origAmt = double.tryParse(order['original_net_amount'].toString()) ?? 0.0;
+                                              final diff = netAmt - origAmt;
+                                              if (diff.abs() > 0.01) {
+                                                final isRefund = diff < 0;
+                                                final isPrepaid = order['is_prepaid'] == true || order['is_prepaid'] == 1;
+                                                final isRefunded = order['refund_status']?.toString() == 'REFUNDED';
+                                                
+                                                String label = '';
+                                                Color boxColor;
+                                                Color textColor;
+                                                Color borderColor;
+
+                                                if (isPrepaid) {
+                                                  if (isRefund) {
+                                                    if (isRefunded) {
+                                                      final refundPaidAtRaw = order['refund_paid_at'] ?? order['updated_at'];
+                                                      final refundPaidAtStr = refundPaidAtRaw != null
+                                                          ? DateFormat('dd-MMM-yyyy, hh:mm a').format(DateTime.parse(refundPaidAtRaw.toString()).toLocal())
+                                                          : '';
+                                                      final refundMethod = order['refund_payment_mode'] ?? order['payment_mode'] ?? 'UPI';
+                                                      label = 'Refund Paid via $refundMethod at $refundPaidAtStr:';
+                                                      boxColor = Colors.blue.shade50;
+                                                      borderColor = Colors.blue.shade200;
+                                                      textColor = Colors.blue.shade800;
+                                                    } else {
+                                                      label = 'Amount to Refund:';
+                                                      boxColor = Colors.green.shade50;
+                                                      borderColor = Colors.green.shade200;
+                                                      textColor = Colors.green.shade800;
+                                                    }
+                                                  } else {
+                                                    label = 'Extra Amount Charged:';
+                                                    boxColor = Colors.red.shade50;
+                                                    borderColor = Colors.red.shade200;
+                                                    textColor = Colors.red.shade800;
+                                                  }
+                                                } else {
+                                                  // COD Order
+                                                  if (isRefund) {
+                                                    label = 'Amount Reduced:';
+                                                    boxColor = Colors.green.shade50;
+                                                    borderColor = Colors.green.shade200;
+                                                    textColor = Colors.green.shade800;
+                                                  } else {
+                                                    label = 'Extra Amount to Pay:';
+                                                    boxColor = Colors.red.shade50;
+                                                    borderColor = Colors.red.shade200;
+                                                    textColor = Colors.red.shade800;
+                                                  }
+                                                }
+
+                                                return Padding(
+                                                  padding: const EdgeInsets.only(top: 12.0),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                    decoration: BoxDecoration(
+                                                      color: boxColor,
+                                                      borderRadius: BorderRadius.circular(12),
+                                                      border: Border.all(color: borderColor),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                      children: [
+                                                        Expanded(
+                                                          child: Text(
+                                                            label,
+                                                            style: TextStyle(
+                                                              fontSize: 13,
+                                                              color: textColor,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          'Rs. ${diff.abs().toStringAsFixed(2)}',
+                                                          style: TextStyle(
+                                                            fontSize: 13,
+                                                            color: textColor,
+                                                            fontWeight: FontWeight.w900,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                              return const SizedBox.shrink();
+                                            })(),
+                                          ],
+                                          if (status == 'CANCELLED' && (order['is_prepaid'] == true || order['is_prepaid'] == 1) && order['refund_status'] != null) ...[
+                                            (() {
+                                              final isRefunded = order['refund_status']?.toString() == 'REFUNDED';
+                                              final refundPaidAtRaw = order['refund_paid_at'] ?? order['updated_at'];
+                                              final refundPaidAtStr = refundPaidAtRaw != null
+                                                  ? DateFormat('dd-MMM-yyyy, hh:mm a').format(DateTime.parse(refundPaidAtRaw.toString()).toLocal())
+                                                  : '';
+                                              final refundMethod = order['refund_payment_mode'] ?? order['payment_mode'] ?? 'UPI';
+                                              
+                                              final label = isRefunded
+                                                  ? 'Refund Paid via $refundMethod at $refundPaidAtStr:'
+                                                  : 'Refund Pending:';
+
+                                              return Padding(
+                                                padding: const EdgeInsets.only(top: 12.0),
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: isRefunded ? Colors.blue.shade50 : Colors.amber.shade50,
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    border: Border.all(
+                                                      color: isRefunded ? Colors.blue.shade200 : Colors.amber.shade200,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          label,
+                                                          style: TextStyle(
+                                                            fontSize: 13,
+                                                            color: isRefunded ? Colors.blue.shade800 : Colors.amber.shade900,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        'Rs. ${netAmt.toStringAsFixed(2)}',
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          color: isRefunded ? Colors.blue.shade800 : Colors.amber.shade900,
+                                                          fontWeight: FontWeight.w900,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            })(),
+                                          ],
+                                        if (status == 'PENDING' ||
+                                            status == 'ACCEPTED' ||
+                                            status == 'ASSIGNED' ||
+                                            status == 'OUT_FOR_DELIVERY') ...[
+                                          const SizedBox(height: 12),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                      (status == 'PENDING' ||
+                                                              status ==
+                                                                  'ACCEPTED')
+                                                          ? Icons.info_outline
+                                                          : Icons
+                                                              .delivery_dining_outlined,
+                                                      color: (status ==
+                                                                  'PENDING' ||
+                                                              status ==
+                                                                  'ACCEPTED')
+                                                          ? Colors
+                                                              .orange.shade700
+                                                          : Colors
+                                                              .blue.shade700,
+                                                      size: 16),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    (status == 'PENDING' ||
+                                                            status ==
+                                                                'ACCEPTED')
+                                                        ? 'Order placed. Processing...'
+                                                        : 'Order shipped / out for delivery',
+                                                    style: TextStyle(
+                                                        color: (status ==
+                                                                    'PENDING' ||
+                                                                status ==
+                                                                    'ACCEPTED')
+                                                            ? Colors
+                                                                .orange.shade700
+                                                            : Colors
+                                                                .blue.shade700,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                        fontSize: 13),
+                                                  ),
+                                                ],
+                                              ),
+                                              Wrap(
+                                                spacing: 8,
+                                                children: [
+                                                  if (status == 'PENDING' ||
+                                                      status == 'ACCEPTED')
+                                                    OutlinedButton.icon(
+                                                      onPressed: () =>
+                                                          _cancelOrderAsCustomer(
+                                                              order['id']),
+                                                      icon: const Icon(
+                                                          Icons.cancel_outlined,
+                                                          color: Colors.red,
+                                                          size: 16),
+                                                      label: const Text(
+                                                          'Cancel',
+                                                          style: TextStyle(
+                                                              color: Colors.red,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold)),
+                                                      style: OutlinedButton
+                                                          .styleFrom(
+                                                        side: const BorderSide(
+                                                            color: Colors.red),
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 0),
+                                                        shape:
+                                                            RoundedRectangleBorder(
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            8)),
+                                                      ),
+                                                    ),
+                                                  ElevatedButton.icon(
+                                                    onPressed: () {
+                                                      setState(() {
+                                                        _activeOrderId =
+                                                            order['id'];
+                                                        _activeOrder = order;
+                                                      });
+                                                      _startTrackingOrder();
+                                                    },
+                                                    icon: const Icon(
+                                                        Icons
+                                                            .location_on_outlined,
+                                                        size: 16),
+                                                    label: const Text('Track'),
+                                                    style: ElevatedButton
+                                                        .styleFrom(
+                                                      backgroundColor: theme
+                                                          .colorScheme.primary,
+                                                      foregroundColor: theme
+                                                          .colorScheme
+                                                          .onPrimary,
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 0),
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          8)),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ] else if (status == 'CANCELLED') ...[
+                                          const SizedBox(height: 12),
+                                          Row(
+                                            children: [
+                                              Icon(Icons.cancel_outlined,
+                                                  color: Colors.red.shade700,
+                                                  size: 16),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  'Cancelled: ${order['cancellation_reason'] ?? 'No reason provided'}',
+                                                  style: TextStyle(
+                                                      color:
+                                                          Colors.red.shade700,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      fontSize: 13),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ] else ...[
+                                          if (order['return_status'] !=
+                                              null) ...[
+                                            const SizedBox(height: 12),
+                                            _buildReturnStatusBanner(
+                                                order, netAmt),
+                                          ] else ...[
+                                            const SizedBox(height: 12),
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child:
+                                                      order['return_eligible'] !=
+                                                              false
+                                                          ? Row(
+                                                              children: [
+                                                                const Icon(
+                                                                    Icons
+                                                                        .assignment_return_outlined,
+                                                                    color: Colors
+                                                                        .green,
+                                                                    size: 16),
+                                                                const SizedBox(
+                                                                    width: 6),
+                                                                Expanded(
+                                                                  child: Text(
+                                                                    'Return window open (${order['return_days_remaining'] != null ? double.parse(order['return_days_remaining'].toString()).toStringAsFixed(0) : 7}d remaining)',
+                                                                    style: TextStyle(
+                                                                        color: Colors
+                                                                            .green
+                                                                            .shade700,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w500,
+                                                                        fontSize:
+                                                                            13),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            )
+                                                          : Row(
+                                                              children: [
+                                                                const Icon(
+                                                                    Icons
+                                                                        .lock_clock_outlined,
+                                                                    color: Colors
+                                                                        .red,
+                                                                    size: 16),
+                                                                const SizedBox(
+                                                                    width: 6),
+                                                                Expanded(
+                                                                  child: Text(
+                                                                    'Return Window Closed (${order['return_window_days'] ?? 7}d)',
+                                                                    style: TextStyle(
+                                                                        color: Colors
+                                                                            .red
+                                                                            .shade600,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w500,
+                                                                        fontSize:
+                                                                            13),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                ),
+                                                if (order['return_eligible'] !=
+                                                        false &&
+                                                    (_isRefundAvailable ||
+                                                        _isExchangeAvailable))
+                                                  FilledButton.icon(
+                                                    onPressed: () =>
+                                                        _requestReturnDialog(
+                                                            order['id']),
+                                                    icon: const Icon(
+                                                        Icons
+                                                            .assignment_return_outlined,
+                                                        size: 16),
+                                                    label: const Text(
+                                                        'Return / Exchange'),
+                                                    style:
+                                                        FilledButton.styleFrom(
+                                                      backgroundColor: theme
+                                                          .colorScheme
+                                                          .secondary,
+                                                      foregroundColor: theme
+                                                          .colorScheme
+                                                          .onSecondary,
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          8)),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                          if (order['feedback'] != null) ...[
+                                            const SizedBox(height: 12),
+                                            Container(
+                                              width: double.infinity,
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: Colors.amber.shade50
+                                                    .withOpacity(0.5),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                    color:
+                                                        Colors.amber.shade200),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
+                                                    children: [
+                                                      Row(
+                                                        children: [
+                                                          const Icon(Icons.star,
+                                                              color:
+                                                                  Colors.amber,
+                                                              size: 16),
+                                                          const SizedBox(
+                                                              width: 4),
+                                                          Text(
+                                                            'Your Feedback: ${order['feedback']['rating']}/5',
+                                                            style: const TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                fontSize: 13),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 6,
+                                                                vertical: 2),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: Colors
+                                                              .grey.shade200,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(4),
+                                                        ),
+                                                        child: const Text(
+                                                          'Internal Purpose Only',
+                                                          style: TextStyle(
+                                                              fontSize: 10,
+                                                              color:
+                                                                  Colors.grey,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  if (order['feedback']
+                                                              ['comment'] !=
+                                                          null &&
+                                                      order['feedback']
+                                                              ['comment']
+                                                          .toString()
+                                                          .isNotEmpty) ...[
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      '"${order['feedback']['comment']}"',
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontStyle:
+                                                              FontStyle.italic,
+                                                          color: Colors
+                                                              .grey.shade700),
+                                                    ),
+                                                  ],
+                                                  if (order['feedback']
+                                                          ['reply'] !=
+                                                      null) ...[
+                                                    const Divider(height: 16),
+                                                    Row(
+                                                      children: [
+                                                        const Icon(Icons.reply,
+                                                            color: Colors.blue,
+                                                            size: 14),
+                                                        const SizedBox(
+                                                            width: 6),
+                                                        Expanded(
+                                                          child: Text(
+                                                            'Retailer Reply: "${order['feedback']['reply']}"',
+                                                            style: const TextStyle(
+                                                                fontSize: 12,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500,
+                                                                color: Colors
+                                                                    .blue),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ] else ...[
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      'Awaiting reply from retailer...',
+                                                      style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: Colors
+                                                              .grey.shade500,
+                                                          fontStyle:
+                                                              FontStyle.italic),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            const SizedBox(height: 8),
+                                            OutlinedButton.icon(
+                                              onPressed: () =>
+                                                  _submitFeedbackDialog(
+                                                      order['id']),
+                                              icon: const Icon(
+                                                  Icons.rate_review_outlined,
+                                                  size: 16),
+                                              label:
+                                                  const Text('Submit Feedback'),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor:
+                                                    theme.colorScheme.primary,
+                                                side: BorderSide(
+                                                    color: theme
+                                                        .colorScheme.primary),
+                                                shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8)),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                            if (_historySales.isNotEmpty) ...[
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Text(
+                                  'In-Store POS Purchases',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue.shade900),
+                                ),
+                              ),
+                              ..._historySales.map((sale) {
+                                final netAmt = double.tryParse(
+                                        sale['net_amount']?.toString() ??
+                                            '0') ??
+                                    0.0;
+                                final dateStr = sale['sale_date'] != null
+                                    ? DateFormat('dd-MMM-yyyy, hh:mm a').format(
+                                        DateTime.parse(
+                                            sale['sale_date'].toString()))
+                                    : '--';
+                                final itemsList = sale['items'] as List? ?? [];
+
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  elevation: 0.5,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    side: BorderSide(
+                                        color: Colors.grey.shade200, width: 1),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            CircleAvatar(
+                                              backgroundColor:
+                                                  Colors.blue.shade50,
+                                              radius: 20,
+                                              child: Icon(
+                                                  Icons.storefront_outlined,
+                                                  color: Colors.blue.shade700,
+                                                  size: 20),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
+                                                    children: [
+                                                      Text(
+                                                        sale['sale_no'] ??
+                                                            'Invoice',
+                                                        style: const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 15),
+                                                      ),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 3),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: Colors
+                                                              .blue.shade50,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(20),
+                                                        ),
+                                                        child: Text(
+                                                          sale['payment_mode'] ??
+                                                              'PAID',
+                                                          style: TextStyle(
+                                                            color: Colors
+                                                                .blue.shade700,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 10,
+                                                            letterSpacing: 0.5,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 3),
+                                                  Text(
+                                                    dateStr,
+                                                    style: TextStyle(
+                                                        color: Colors
+                                                            .grey.shade600,
+                                                        fontSize: 12),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.print_outlined,
+                                                  size: 20),
+                                              tooltip: 'Print Invoice',
+                                              onPressed: () =>
+                                                  _showThermalReceipt(
+                                                      sale, false),
+                                            ),
+                                          ],
+                                        ),
+                                        const Divider(height: 24),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.shopping_bag_outlined,
+                                                size: 14,
+                                                color: Colors.grey.shade600),
+                                            const SizedBox(width: 6),
+                                            const Text(
+                                              'ITEMS',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11,
+                                                color: Colors.grey,
+                                                letterSpacing: 0.8,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        ...itemsList.map<Widget>((it) {
+                                          final amt = double.tryParse(
+                                                  it['amount']?.toString() ??
+                                                      '0') ??
+                                              0.0;
+                                          final q = double.tryParse(
+                                                  it['qty']?.toString() ??
+                                                      '1') ??
+                                              1.0;
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 4.0),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
+                                                    style: TextStyle(
+                                                        fontSize: 13,
+                                                        color: Colors
+                                                            .grey.shade800),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 16),
+                                                Text(
+                                                  'Rs. ${amt.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color:
+                                                          Colors.grey.shade800),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ],
+                        ))
+                  : ListView(
+                      padding: const EdgeInsets.all(16.0),
+                      children: [
+                        _buildSubscriptionsView(theme),
+                      ],
+                    ),
+            ),
+          ],
+        ));
+  }
+
+  Widget _buildCustomerDashboard(ThemeData theme) {
+    double totalSpent = 0.0;
+    double totalSavings = 0.0;
+    int deliveredCount = 0;
+    int cancelledCount = 0;
+    int returnedCount = 0;
+    int refundCount = 0;
+    int exchangeCount = 0;
+
+    for (var order in _historyOrders) {
+      final status = order['status']?.toString().toUpperCase() ?? 'PENDING';
+      final netAmt =
+          double.tryParse(order['net_amount']?.toString() ?? '0') ?? 0.0;
+      final retStatus = order['return_status'];
+      final retType = order['return_type']?.toString().toUpperCase();
+
+      if (status == 'DELIVERED') {
+        deliveredCount++;
+        totalSpent += netAmt;
+        totalSavings += _calculateOrderSavings(order);
+      } else if (status == 'CANCELLED') {
+        cancelledCount++;
+      }
+
+      if (retStatus != null) {
+        returnedCount++;
+        if (retType == 'REFUND') {
+          refundCount++;
+        } else if (retType == 'EXCHANGE') {
+          exchangeCount++;
+        }
+      }
+    }
+
+    for (var sale in _historySales) {
+      final netAmt =
+          double.tryParse(sale['net_amount']?.toString() ?? '0') ?? 0.0;
+      totalSpent += netAmt;
+      final discount =
+          double.tryParse(sale['discount_amount']?.toString() ?? '0') ?? 0.0;
+      totalSavings += discount;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.primaryContainer.withOpacity(0.4),
+            theme.colorScheme.surface
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Your Purchase Summary',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: theme.colorScheme.primary),
+              ),
+              Icon(Icons.analytics_outlined,
+                  color: theme.colorScheme.primary, size: 20),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
+                  'Total Spend',
+                  'Rs. ${totalSpent.toStringAsFixed(2)}',
+                  Colors.indigo.shade800,
+                  Icons.account_balance_wallet_outlined,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricCard(
+                  'Total Savings',
+                  'Rs. ${totalSavings.toStringAsFixed(2)}',
+                  Colors.green.shade800,
+                  Icons.savings_outlined,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildCountBadge('Delivered', deliveredCount, Colors.green,
+                    Icons.check_circle_outline),
+                const SizedBox(width: 8),
+                _buildCountBadge('Cancelled', cancelledCount, Colors.red,
+                    Icons.cancel_outlined),
+                const SizedBox(width: 8),
+                _buildCountBadge('Returned', returnedCount, Colors.orange,
+                    Icons.keyboard_return_outlined),
+                const SizedBox(width: 8),
+                _buildCountBadge('Refunded', refundCount, Colors.blue,
+                    Icons.monetization_on_outlined),
+                const SizedBox(width: 8),
+                _buildCountBadge('Exchanged', exchangeCount, Colors.purple,
+                    Icons.swap_horiz_outlined),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(
+      String label, String value, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                      color: color.withOpacity(0.8),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                      color: color, fontSize: 15, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountBadge(String label, int count, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 4),
+          Text(
+            '$label: ',
+            style: TextStyle(
+                color: Colors.grey.shade800,
+                fontSize: 11,
+                fontWeight: FontWeight.bold),
+          ),
+          Text(
+            '$count',
+            style: TextStyle(
+                color: color, fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionsView(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Milk & Daily Subscriptions',
+                style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary),
+              ),
+              FilledButton.icon(
+                onPressed: _showSubscribeDialog,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Subscribe'),
+                style: FilledButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (_isSubscriptionsLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (_subscriptions.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                children: [
+                  Icon(Icons.calendar_today_outlined,
+                      size: 48, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Text(
+                    'No active subscriptions. Tap "Subscribe" to start one!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._subscriptions.map((sub) {
+            final double consumed = double.tryParse(
+                    sub['advance_consumed_qty']?.toString() ?? '0.0') ??
+                0.0;
+            final double original = double.tryParse(
+                    sub['advance_original_qty']?.toString() ?? '0.0') ??
+                0.0;
+            final double remaining = double.tryParse(
+                    sub['advance_remaining_qty']?.toString() ?? '0.0') ??
+                0.0;
+            final double progress =
+                original > 0 ? (consumed / original).clamp(0.0, 1.0) : 0.0;
+            final status = sub['status'] ?? 'ACTIVE';
+            final isActive = sub['active_subscription'] == true;
+
+            final startDateVal = sub['start_date'] != null
+                ? DateFormat('dd-MMM-yyyy')
+                    .format(DateTime.parse(sub['start_date'].toString()))
+                : '--';
+            final endDateVal = sub['end_date'] != null
+                ? DateFormat('dd-MMM-yyyy')
+                    .format(DateTime.parse(sub['end_date'].toString()))
+                : '--';
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            sub['item_name'] ?? 'Milk Service',
+                            style: theme.textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? Colors.green.shade50
+                                : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isActive ? 'ACTIVE' : status,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isActive
+                                  ? Colors.green.shade700
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Daily Limit: ${sub['daily_allowed_qty']} Ltr',
+                            style: TextStyle(color: Colors.grey.shade700)),
+                        Text('Agreed Rate: Rs. ${sub['advance_rate'] ?? '0.0'}',
+                            style: TextStyle(color: Colors.grey.shade700)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Start: $startDateVal',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey)),
+                        Text('End: $endDateVal',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Consumption Progress',
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          '${consumed.toStringAsFixed(1)} / ${original.toStringAsFixed(1)} Qty',
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            theme.colorScheme.primary),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Remaining Balance: ${remaining.toStringAsFixed(1)} Ltr',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Future<void> _showSubscribeDialog() async {
+    if (_loggedInCustomer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text('Please log in first to subscribe to milk services.')),
+      );
+      return;
+    }
+
+    if (_catalogItems.isEmpty) {
+      await _fetchCatalog();
+    }
+
+    dynamic selectedItem =
+        _catalogItems.isNotEmpty ? _catalogItems.first : null;
+    double dailyAllowedQty = 1.0;
+    int durationDays = 30;
+    DateTime startDate = DateTime.now();
+    String paymentMode = 'UPI';
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSt) {
+            final rate = selectedItem != null
+                ? double.tryParse((selectedItem['retail_sale_price'] ??
+                            selectedItem['rate'] ??
+                            '0')
+                        .toString()) ??
+                    0.0
+                : 0.0;
+            final totalQty = dailyAllowedQty * durationDays;
+            final totalCost = totalQty * rate;
+            final endDate = startDate.add(Duration(days: durationDays));
+
+            return AlertDialog(
+              title: const Text('Subscribe to Milk/Daily Services'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select Service/Product:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    _catalogItems.isEmpty
+                        ? const Text('Loading catalog...')
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<dynamic>(
+                                isExpanded: true,
+                                value: selectedItem,
+                                items: _catalogItems.map((item) {
+                                  return DropdownMenuItem<dynamic>(
+                                    value: item,
+                                    child: Text(
+                                        '${item['item_name']} (Rs. ${item['retail_sale_price'] ?? item['rate']}/unit)'),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  setSt(() => selectedItem = val);
+                                },
+                              ),
+                            ),
+                          ),
+                    const SizedBox(height: 12),
+                    const Text('Daily Quantity (Ltr/Units):',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: dailyAllowedQty > 0.5
+                              ? () => setSt(() => dailyAllowedQty -= 0.5)
+                              : null,
+                          icon: const Icon(Icons.remove_circle_outline),
+                        ),
+                        Text(
+                          dailyAllowedQty.toStringAsFixed(1),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        IconButton(
+                          onPressed: () => setSt(() => dailyAllowedQty += 0.5),
+                          icon: const Icon(Icons.add_circle_outline),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Duration:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          isExpanded: true,
+                          value: durationDays,
+                          items: const [
+                            DropdownMenuItem(
+                                value: 15, child: Text('15 Days (Short Term)')),
+                            DropdownMenuItem(
+                                value: 30, child: Text('30 Days (Monthly)')),
+                            DropdownMenuItem(
+                                value: 60, child: Text('60 Days (2 Months)')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setSt(() => durationDays = val);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Start Date:',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13)),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: startDate,
+                              firstDate: DateTime.now()
+                                  .subtract(const Duration(days: 1)),
+                              lastDate:
+                                  DateTime.now().add(const Duration(days: 30)),
+                            );
+                            if (picked != null) {
+                              setSt(() => startDate = picked);
+                            }
+                          },
+                          icon: const Icon(Icons.calendar_month, size: 16),
+                          label:
+                              Text(DateFormat('dd-MMM-yyyy').format(startDate)),
+                        )
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Payment Mode:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          value: paymentMode,
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'UPI', child: Text('UPI / Net Banking')),
+                            DropdownMenuItem(
+                                value: 'CASH', child: Text('Cash Advance')),
+                            DropdownMenuItem(
+                                value: 'CARD',
+                                child: Text('Credit/Debit Card')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setSt(() => paymentMode = val);
+                          },
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('End Date:',
+                            style: TextStyle(color: Colors.grey)),
+                        Text(DateFormat('dd-MMM-yyyy').format(endDate),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total Qty:',
+                            style: TextStyle(color: Colors.grey)),
+                        Text('${totalQty.toStringAsFixed(1)} units',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total Cost:',
+                            style: TextStyle(color: Colors.grey)),
+                        Text('Rs. ${totalCost.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: selectedItem == null
+                      ? null
+                      : () => Navigator.pop(ctx, {
+                            'item_id': selectedItem['id'],
+                            'item_name': selectedItem['item_name'],
+                            'start_date':
+                                DateFormat('yyyy-MM-dd').format(startDate),
+                            'end_date':
+                                DateFormat('yyyy-MM-dd').format(endDate),
+                            'daily_allowed_qty': dailyAllowedQty,
+                            'total_payment_amount': totalCost,
+                            'payment_mode': paymentMode,
+                            'customer_name': _loggedInCustomer!['name'],
+                            'customer_phone': _loggedInCustomer!['phone'],
+                            'customer_address':
+                                _loggedInCustomer!['address'] ?? '',
+                          }),
+                  child: const Text('Subscribe Now'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient.post('/api/sales/subscriptions', result);
+      if (res['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('🎉 Subscribed to services successfully!')),
+        );
+        _fetchSubscriptions();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text(res['message'] ?? 'Failed to subscribe to service.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error subscribing: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bool isMobile = MediaQuery.of(context).size.width < 768;
+
+    // ── LOGIN GATE ──────────────────────────────────────────────
+    // Block all sections until customer has logged in / registered
+    if (_loggedInCustomer == null && !_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Customer Shopping App'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Logo / Icon
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.storefront_outlined,
+                            size: 44,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          _showRegisterForm ? 'Create Account' : 'Welcome Back',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _showRegisterForm
+                              ? 'Register to shop, track orders & get delivery'
+                              : 'Sign in to access your orders & shopping cart',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+
+                        // ── Register Fields ──
+                        if (_showRegisterForm) ...[
+                          TextField(
+                            controller: _regNameCtrl,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Full Name',
+                              prefixIcon: const Icon(Icons.person_outline),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _regPhoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Mobile Number',
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _regPasswordCtrl,
+                            obscureText: true,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _regAddressCtrl,
+                            maxLines: 2,
+                            textInputAction: TextInputAction.done,
+                            decoration: InputDecoration(
+                              labelText: 'Default Delivery Address',
+                              prefixIcon: const Icon(Icons.map_outlined),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ]
+                        // ── Login Fields ──
+                        else ...[
+                          TextField(
+                            controller: _loginPhoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Registered Mobile Number',
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _loginPasswordCtrl,
+                            obscureText: true,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _loginCustomer(),
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 24),
+
+                        // ── Primary action button ──
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _isLoading
+                                ? null
+                                : (_showRegisterForm
+                                    ? _registerCustomer
+                                    : _loginCustomer),
+                            icon: _isLoading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Icon(_showRegisterForm
+                                    ? Icons.how_to_reg
+                                    : Icons.login),
+                            label: Text(
+                              _showRegisterForm ? 'Create Account' : 'Sign In',
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+
+                        // ── Toggle login/register ──
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _showRegisterForm = !_showRegisterForm;
+                          }),
+                          child: Text(
+                            _showRegisterForm
+                                ? 'Already have an account? Sign In'
+                                : "Don't have an account? Sign Up",
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    // ── END LOGIN GATE ──────────────────────────────────────────
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _currentUser?.propertyName.isNotEmpty == true
+              ? _currentUser!.propertyName
+              : 'Customer Shopping App',
+        ),
+        actions: [
+          // Logged-in customer chip
+          if (_loggedInCustomer != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: TextButton.icon(
+                  onPressed: () => _setSubTabIndex(2),
+                  icon: const Icon(Icons.account_circle, size: 18),
+                  label: Text(
+                    _loggedInCustomer!['name']?.toString().split(' ').first ??
+                        'Account',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      drawer: _buildDeliveryDrawer(context),
+      body: _isLoading && _catalogItems.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : (_activeOrderId != null
+              ? _buildCustomerTrackingView(theme)
+              : (isMobile
+                  ? IndexedStack(
+                      index: _customerSubTabIndex,
+                      children: [
+                        _buildProductCatalogSection(theme, true),
+                        _buildCartAndCheckoutSection(theme, true),
+                        _buildHistoryView(theme),
+                      ],
+                    )
+                  : IndexedStack(
+                      index: _customerSubTabIndex,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _buildProductCatalogSection(theme, false),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: _buildCartAndCheckoutSection(theme, false),
+                            ),
+                          ],
+                        ),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 800),
+                            child: Card(
+                              margin: const EdgeInsets.all(16),
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                              child: _buildCartAndCheckoutSection(theme, true),
+                            ),
+                          ),
+                        ),
+                        _buildHistoryView(theme),
+                      ],
+                    ))),
+      bottomNavigationBar: (_activeOrderId == null)
+          ? BottomNavigationBar(
+              currentIndex: _customerSubTabIndex,
+              onTap: _setSubTabIndex,
+              items: [
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.storefront),
+                  label: 'Shop',
+                ),
+                BottomNavigationBarItem(
+                  icon: Badge(
+                    label: Text(_cart.length.toString()),
+                    isLabelVisible: _cart.isNotEmpty,
+                    child: const Icon(Icons.shopping_cart),
+                  ),
+                  label: 'Cart',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.receipt_long),
+                  label: 'My Orders',
+                ),
+              ],
+            )
+          : null,
+      floatingActionButton:
+          (isMobile && _customerSubTabIndex == 0 && _cart.isNotEmpty)
+              ? FloatingActionButton.extended(
+                  onPressed: () {
+                    _setSubTabIndex(1);
+                  },
+                  icon: const Icon(Icons.shopping_cart),
+                  label: Text('View Cart (${_cart.length})'),
+                )
+              : null,
+    );
+  }
+}

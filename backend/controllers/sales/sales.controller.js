@@ -2007,6 +2007,24 @@ async function recordSalePayment({
             transaction
         });
     }
+
+    if (!hasUsableSplit && balanceDue > 0) {
+        await createLedgerEntry({
+            db: req.propertyDb,
+            outlet_id: req.user.outlet_id,
+            txn_date: header.sale_date,
+            transaction_type: 'SALE_CREDIT',
+            reference_type: 'SALE',
+            reference_id: sale.id,
+            reference_no: sale.sale_no,
+            party_name: header.customer_name || header.customer_phone || 'Walk-in Customer',
+            payment_method: 'CREDIT',
+            amount_in: 0,
+            notes: `Sale ${sale.sale_no} created with outstanding ${balanceDue.toFixed(2)}`,
+            created_by,
+            transaction
+        });
+    }
 }
 
 async function recordSaleBenefitExpenseEntries({
@@ -2091,7 +2109,9 @@ async function createSaleVersion({
     const amountPaid = toAmount(
         header.amount_paid ?? (paymentMode === 'CREDIT' ? 0 : netAmount)
     );
-    const changeAmount = paymentMode === 'CASH' ? Math.max(amountPaid - netAmount, 0) : 0;
+    const changeAmount = header.change_amount != null
+        ? Math.max(toAmount(header.change_amount), 0)
+        : (paymentMode === 'CASH' ? Math.max(amountPaid - netAmount, 0) : 0);
     const balanceDue = Math.max(netAmount - Math.min(amountPaid, netAmount), 0);
     const outlet_id = req.user.outlet_id;
     const created_by = req.user.id;
@@ -2340,8 +2360,9 @@ async function createSaleVersion({
                 roundOffAmount -
                 invoiceDiscount
         );
-    const effectiveChangeAmount =
-        paymentMode === 'CASH' ? Math.max(amountPaid - derivedNetAmount, 0) : 0;
+    const effectiveChangeAmount = header.change_amount != null
+        ? Math.max(toAmount(header.change_amount), 0)
+        : (paymentMode === 'CASH' ? Math.max(amountPaid - derivedNetAmount, 0) : 0);
     const effectiveBalanceDue = Math.max(
         derivedNetAmount - Math.min(amountPaid, derivedNetAmount),
         0
@@ -2968,6 +2989,20 @@ exports.createSale = async (req, res) => {
 
         await t.commit();
 
+        // Trigger WhatsApp Checkout Billing alert asynchronously
+        if (status === 'COMPLETED' && referenceSale.customer_phone) {
+            try {
+                const { queueUtilityInvoiceAlert } = require('../../services/whatsappQueue.service');
+                queueUtilityInvoiceAlert(req.propertyDb, referenceSale.id, req.user.outlet_id, referenceSale.customer_phone, {
+                    customer_name: referenceSale.customer_name || 'Customer',
+                    sale_no: referenceSale.sale_no,
+                    net_amount: referenceSale.net_amount
+                }).catch(qErr => console.error('[WHATSAPP QUEUE ALERT TRIGGER FAIL]', qErr.message));
+            } catch (err) {
+                console.error('[WHATSAPP QUEUE SERVICE REQUIRE FAIL]', err.message);
+            }
+        }
+
         res.json({
             success: true,
             sale_id: referenceSale.id,
@@ -3022,6 +3057,11 @@ exports.modifySale = async (req, res) => {
                 message: 'At least one sale item is required to modify a bill'
             });
         }
+
+        require('fs').appendFileSync(
+            require('path').join(__dirname, '../../debug.log'),
+            `[${new Date().toISOString()}] DEBUG modifySale: saleId=${saleId}, userOutlet=${req.user?.outlet_id}, storeOutlet=${require('../../utils/context').contextStorage.getStore()?.get('outlet_id')}\n`
+        );
 
         const currentSale = await req.propertyDb.models.sales_headers.findOne({
             where: {
@@ -3082,6 +3122,10 @@ exports.modifySale = async (req, res) => {
                     message: voucherCheck.message
                 });
             }
+        }
+
+        if (currentSale.notes && currentSale.notes.includes('Auto-generated from delivery order #')) {
+            headerForModify.notes = currentSale.notes;
         }
 
         const saleItems = status === 'COMPLETED' && !itemsPreSplit
@@ -3185,6 +3229,51 @@ exports.modifySale = async (req, res) => {
             type: 'WARNING',
             entity_id: newSale.id
         }, { transaction: t });
+
+        // Sync with customer order if this sale is generated from a delivery order
+        const orderIdMatch = String(currentSale.notes || '').match(/Auto-generated from delivery order #(\d+)/);
+        if (orderIdMatch) {
+            const orderId = Number(orderIdMatch[1]);
+            const customerOrder = await req.propertyDb.models.customer_orders.findOne({
+                where: { id: orderId, outlet_id: req.user.outlet_id },
+                transaction: t
+            });
+            if (customerOrder) {
+                // Initialize original_net_amount if not set
+                if (customerOrder.original_net_amount === null || customerOrder.original_net_amount === undefined) {
+                    customerOrder.original_net_amount = customerOrder.net_amount;
+                }
+
+                // Map items into customer order format
+                const mappedReceivedItems = advanceAllocation.items.map(item => ({
+                    item_id: item.item_id,
+                    item_code: item.item_code,
+                    item_name: item.item_name,
+                    qty: item.qty,
+                    rate: item.rate,
+                    amount: item.amount || (toAmount(item.qty) * toAmount(item.rate))
+                }));
+
+                customerOrder.received_items = mappedReceivedItems;
+                customerOrder.modification_reason = headerForModify.modification_note || 'Order modified by supplier';
+                
+                // Update totals
+                customerOrder.sub_total = newSale.sub_total;
+                customerOrder.tax_amount = newSale.total_tax;
+                customerOrder.net_amount = newSale.net_amount;
+
+                // Handle payment status adjustments
+                const origAmt = toAmount(customerOrder.original_net_amount);
+                const newAmt = toAmount(newSale.net_amount);
+                if (customerOrder.payment_status === 'PAID') {
+                    if (newAmt < origAmt) {
+                        customerOrder.refund_status = 'PENDING';
+                    }
+                }
+
+                await customerOrder.save({ transaction: t });
+            }
+        }
 
         await t.commit();
 
@@ -3367,6 +3456,25 @@ exports.updateSalePaymentMode = async (req, res) => {
                 notes: balanceDue > 0
                     ? `Sale ${sale.sale_no} payment updated with outstanding ${balanceDue.toFixed(2)}`
                     : `Payment updated for sale ${sale.sale_no}`,
+                created_by: req.user.id,
+                transaction: t
+            });
+        }
+
+        const hasNonCredit = nonCreditLines.some(row => row.amount > 0);
+        if (!hasNonCredit && balanceDue > 0) {
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                txn_date: sale.sale_date || new Date(),
+                transaction_type: 'SALE_CREDIT',
+                reference_type: 'SALE',
+                reference_id: sale.id,
+                reference_no: sale.sale_no,
+                party_name: sale.customer_name || sale.customer_phone || 'Walk-in Customer',
+                payment_method: 'CREDIT',
+                amount_in: 0,
+                notes: `Sale ${sale.sale_no} payment updated with outstanding ${balanceDue.toFixed(2)}`,
                 created_by: req.user.id,
                 transaction: t
             });
@@ -3781,7 +3889,8 @@ exports.getSaleDetails = async (req, res) => {
                 },
                 {
                     model: req.propertyDb.models.customer_repayments,
-                    as: 'repayments'
+                    as: 'repayments',
+                    required: false
                 }
             ]
         });

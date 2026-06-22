@@ -541,14 +541,42 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   child: const Text('Cancel')),
               FilledButton(
                 onPressed: () async {
+                  final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                  bool adjustExtra = false;
+
+                  if (amount > bill.outstanding) {
+                    final proceed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Adjust Excess Payment?'),
+                        content: Text(
+                            'The entered amount Rs. ${amount.toStringAsFixed(2)} exceeds this bill\'s outstanding balance of Rs. ${bill.outstanding.toStringAsFixed(2)}.\n\nWould you like to automatically adjust the extra Rs. ${(amount - bill.outstanding).toStringAsFixed(2)} towards other outstanding credit bills or customer advance?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false), // Cancel
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(ctx, true), // Yes, Adjust
+                            child: const Text('Adjust Excess'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (proceed != true) return; // User cancelled
+                    adjustExtra = true;
+                  }
+
                   await ctrl.saveRepayment(
                     repaymentId: payment?.id,
                     saleId: bill.saleId,
                     paymentDate: paymentDate,
-                    amount: double.tryParse(amountCtrl.text.trim()) ?? 0,
+                    amount: amount,
                     paymentMode: paymentMode,
                     referenceNo: refCtrl.text.trim(),
                     note: noteCtrl.text.trim(),
+                    adjustExtra: adjustExtra,
                   );
                   if (!mounted) return;
                   Navigator.pop(context);
@@ -558,6 +586,139 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       customer: creditSearchCtrl.text);
                 },
                 child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showBulkRepaymentDialog(
+      CreditCustomerReport customer, List<CreditBill> bills) async {
+    if (bills.isEmpty) return;
+
+    final amountCtrl = TextEditingController(
+        text: customer.totalOutstanding.toStringAsFixed(2));
+    final refCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    DateTime paymentDate = DateTime.now();
+    String paymentMode = 'CASH';
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Bulk Repayment (Settle All)'),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      customer.customerName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                        'Total Outstanding: ${_money(customer.totalOutstanding)}\nAdvance Balance: ${_money(customer.totalAdvance)}'),
+                  ),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Repayment Amount',
+                      hintText: 'Enter amount to settle',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: paymentMode,
+                    items: const ['CASH', 'CARD', 'UPI', 'BANK', 'WAIVEOFF']
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(e == 'WAIVEOFF' ? 'Waive Off' : e),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => paymentMode = value ?? 'CASH'),
+                    decoration:
+                        const InputDecoration(labelText: 'Payment Mode'),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Payment Date'),
+                    subtitle: Text(_fmtDate(paymentDate)),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: paymentDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null)
+                        setDialogState(() => paymentDate = picked);
+                    },
+                  ),
+                  TextField(
+                      controller: refCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'Reference No')),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: noteCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(labelText: 'Note')),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () async {
+                  final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                  if (amount <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Please enter a valid amount')),
+                    );
+                    return;
+                  }
+
+                  // Sort bills by date ascending to target the oldest bill first
+                  final sortedBills = List<CreditBill>.from(bills)
+                    ..sort((a, b) => a.billDate.compareTo(b.billDate));
+                  final oldestBill = sortedBills.first;
+
+                  await ctrl.saveRepayment(
+                    saleId: oldestBill.saleId,
+                    paymentDate: paymentDate,
+                    amount: amount,
+                    paymentMode: paymentMode,
+                    referenceNo: refCtrl.text.trim(),
+                    note: noteCtrl.text.trim().isNotEmpty 
+                        ? noteCtrl.text.trim() 
+                        : 'Bulk repayment adjusted across bills',
+                    adjustExtra: true,
+                  );
+
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  await ctrl.loadCreditReport(
+                      fromDate: fromDate,
+                      toDate: toDate,
+                      customer: creditSearchCtrl.text);
+                },
+                child: const Text('Save Repayment'),
               ),
             ],
           );
@@ -1738,131 +1899,162 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     subtitle: Text(
                       '${customer.customerPhone} - Outstanding ${_money(customer.totalOutstanding)} - Advance ${_money(customer.totalAdvance)}',
                     ),
-                    children: bills
-                        .map(
-                          (bill) => Container(
-                            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFD),
-                              borderRadius: BorderRadius.circular(18),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Outstanding Bills (${bills.length})',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                              ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 10,
-                                  runSpacing: 10,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          bill.billNo,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${_fmtDate(bill.billDate)} - ${_money(bill.amount)}',
-                                        ),
-                                      ],
-                                    ),
-                                    _statusChip(bill.paymentStatus),
-                                    FilledButton.tonal(
-                                      onPressed: () => _showRepaymentDialog(bill),
-                                      child: const Text('Repayment'),
-                                    ),
-                                    FilledButton.tonal(
-                                      onPressed: bill.outstanding > 0.009
-                                          ? () => _showWaiveOffDialog(bill)
-                                          : null,
-                                      child: const Text('Waive Off'),
-                                    ),
-                                  ],
+                            if (customer.totalOutstanding > 0.009)
+                              FilledButton.icon(
+                                onPressed: () => _showBulkRepaymentDialog(customer, bills),
+                                icon: const Icon(Icons.account_balance_wallet_outlined, size: 16),
+                                label: const Text('Bulk Repay'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.blue.shade700,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
-                                const SizedBox(height: 14),
-                                Wrap(
-                                  spacing: 16,
-                                  runSpacing: 12,
-                                  children: [
-                                    _summaryCard(
-                                      'Initial Paid',
-                                      _money(bill.initialPaid),
-                                      Colors.blueGrey,
-                                    ),
-                                    _summaryCard(
-                                      'Repaid',
-                                      _money(bill.repaymentTotal),
-                                      Colors.green,
-                                    ),
-                                    _summaryCard(
-                                      'Total Paid',
-                                      _money(bill.totalPaid),
-                                      Colors.blue,
-                                    ),
-                                    _summaryCard(
-                                      'Outstanding',
-                                      _money(bill.outstanding),
-                                      Colors.red,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
-                                if (bill.payments.isEmpty)
-                                  const Text('No repayment transactions yet.')
-                                else
-                                  ...bill.payments.map(
-                                    (payment) => Container(
-                                      margin: const EdgeInsets.only(bottom: 10),
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(
-                                          color: Colors.black12,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                      ...bills.map(
+                        (bill) => Container(
+                          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFD),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        bill.billNo,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
                                         ),
                                       ),
-                                      child: Wrap(
-                                        alignment: WrapAlignment.spaceBetween,
-                                        runSpacing: 8,
-                                        children: [
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
+                                      Text(
+                                        '${_fmtDate(bill.billDate)} - ${_money(bill.amount)}',
+                                      ),
+                                    ],
+                                  ),
+                                  _statusChip(bill.paymentStatus),
+                                  FilledButton.tonal(
+                                    onPressed: () => _showRepaymentDialog(bill),
+                                    child: const Text('Repayment'),
+                                  ),
+                                  FilledButton.tonal(
+                                    onPressed: bill.outstanding > 0.009
+                                        ? () => _showWaiveOffDialog(bill)
+                                        : null,
+                                    child: const Text('Waive Off'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 12,
+                                children: [
+                                  _summaryCard(
+                                    'Initial Paid',
+                                    _money(bill.initialPaid),
+                                    Colors.blueGrey,
+                                  ),
+                                  _summaryCard(
+                                    'Repaid',
+                                    _money(bill.repaymentTotal),
+                                    Colors.green,
+                                  ),
+                                  _summaryCard(
+                                    'Total Paid',
+                                    _money(bill.totalPaid),
+                                    Colors.blue,
+                                  ),
+                                  _summaryCard(
+                                    'Outstanding',
+                                    _money(bill.outstanding),
+                                    Colors.red,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              if (bill.payments.isEmpty)
+                                const Text('No repayment transactions yet.')
+                              else
+                                ...bill.payments.map(
+                                  (payment) => Container(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: Colors.black12,
+                                      ),
+                                    ),
+                                    child: Wrap(
+                                      alignment: WrapAlignment.spaceBetween,
+                                      runSpacing: 8,
+                                      children: [
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
                                               '${_paymentModeLabel(payment.paymentMode)} - ${_money(payment.amount)}',
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.w700,
                                               ),
                                             ),
-                                              Text(
-                                                '${_fmtDate(payment.paymentDate)} - ${payment.referenceNo}',
-                                              ),
-                                              if (payment.note.trim().isNotEmpty)
-                                                Text(payment.note),
-                                            ],
-                                          ),
-                                          IconButton(
-                                            onPressed: () => _showRepaymentDialog(
-                                              bill,
-                                              payment: payment,
+                                            Text(
+                                              '${_fmtDate(payment.paymentDate)} - ${payment.referenceNo}',
                                             ),
-                                            icon: const Icon(Icons.edit_outlined),
+                                            if (payment.note.trim().isNotEmpty)
+                                              Text(payment.note),
+                                          ],
+                                        ),
+                                        IconButton(
+                                          onPressed: () => _showRepaymentDialog(
+                                            bill,
+                                            payment: payment,
                                           ),
-                                        ],
-                                      ),
+                                          icon: const Icon(Icons.edit_outlined),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                              ],
-                            ),
+                                ),
+                            ],
                           ),
-                        )
-                        .toList(),
+                        ),
+                      ),
+                    ],
                   ),
                 );
                 },

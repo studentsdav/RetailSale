@@ -104,7 +104,16 @@ class FinanceHubController extends ChangeNotifier {
     });
   }
 
-  Future<void> saveRepayment({int? repaymentId, required int saleId, required DateTime paymentDate, required double amount, required String paymentMode, String referenceNo = '', String note = ''}) async {
+  Future<void> saveRepayment({
+    int? repaymentId,
+    required int saleId,
+    required DateTime paymentDate,
+    required double amount,
+    required String paymentMode,
+    String referenceNo = '',
+    String note = '',
+    bool adjustExtra = false,
+  }) async {
     final body = {
       'sale_id': saleId,
       'payment_date': DateFormat('yyyy-MM-dd').format(paymentDate),
@@ -112,6 +121,7 @@ class FinanceHubController extends ChangeNotifier {
       'payment_mode': paymentMode,
       'reference_no': referenceNo,
       'note': note,
+      'adjust_extra': adjustExtra,
     };
     if (repaymentId == null) {
       await ApiClient.post(ApiEndpoints.financeRepayments, body);

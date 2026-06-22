@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../core/api/api_client.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/auth/permission_service.dart';
 import '../../models/inventory/sale_order_model.dart';
@@ -134,10 +135,32 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   }
 
   Future<void> _printSelected() async {
-    if (_selectedOrder == null) return;
+    if (_selectedOrder == null || _selectedDetails == null) return;
     final paymentInfo = _paymentInfoText();
+
+    // Always use the CURRENT system bill_format setting for reprints,
+    // not the historical format saved on the original sale.
+    String currentBillFormat = _selectedOrder!.billFormat;
+    try {
+      final sysRes = await ApiClient.get('/api/inventory/settings');
+      if (sysRes['data'] != null) {
+        currentBillFormat =
+            sysRes['data']['bill_format']?.toString() ?? currentBillFormat;
+      }
+    } catch (_) {}
+
+    // Rebuild SaleOrder with the current bill_format substituted in
+    final reprintJson =
+        Map<String, dynamic>.from(_selectedDetails!['details'] ?? _selectedDetails!);
+    reprintJson['bill_format'] = currentBillFormat;
+    // Preserve items from the original details map
+    if (_selectedDetails!['items'] != null) {
+      reprintJson['items'] = _selectedDetails!['items'];
+    }
+    final reprintOrder = SaleOrder.fromJson(reprintJson);
+
     await PosInvoicePrinter.printSaleInvoice(
-      order: _selectedOrder!,
+      order: reprintOrder,
       property: propertyCtrl.data,
       termsAndConditions: paymentInfo,
     );

@@ -19,6 +19,13 @@ exports.getDamageReport = async (req, res) => {
             }
         };
 
+        // 🔒 Enforce user isolation if the user is not an ADMIN
+        if (req.user.role !== 'ADMIN') {
+            whereHeader.created_by = req.user.id;
+        } else if (req.query.created_by) {
+            whereHeader.created_by = req.query.created_by;
+        }
+
         const whereItem = {};
         if (item_id) {
             whereItem.item_id = item_id;

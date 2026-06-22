@@ -253,22 +253,27 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text("To,",
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text(supplier.supplierName),
-                  pw.Text(supplier.address ?? ""),
-                  pw.Text("GSTIN: ${supplier.gstin ?? ""}"),
-                ],
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("To,",
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    pw.Text(supplier.supplierName),
+                    pw.Text(supplier.address ?? ""),
+                    pw.Text("GSTIN: ${supplier.gstin ?? ""}"),
+                  ],
+                ),
               ),
+              pw.SizedBox(width: 20),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text("PO No: ${po.poNo}"),
                   pw.Text(
-                      "Date: ${DateFormat('dd-MMM-yyyy').format(po.poDate)}"),
+                      "Date: ${DateFormat('dd-MMM-yyyy').format(po.createdAt ?? po.poDate)}"),
+                  pw.Text(
+                      "Time: ${DateFormat('hh:mm a').format(po.createdAt ?? DateTime.now())}"),
                 ],
               ),
             ],

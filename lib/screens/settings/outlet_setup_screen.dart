@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:retailpos/screens/auth/inventorylogin.dart';
+import 'package:retailpos/screens/auth/login_screen.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -1129,7 +1129,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => const InventoryLoginScreen()),
+                    builder: (context) => const LoginScreen()),
                 (route) => false,
               );
             },
@@ -1160,7 +1160,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => const InventoryLoginScreen()),
+                    builder: (context) => const LoginScreen()),
                 (route) => false,
               );
             },
@@ -1316,7 +1316,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                               context,
                               MaterialPageRoute(
                                   builder: (context) =>
-                                      const InventoryLoginScreen()))
+                                      const LoginScreen()))
                           : null,
                       icon: const Icon(Icons.check_circle_outline),
                       label: const Text("Continue"),

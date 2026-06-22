@@ -7,7 +7,8 @@ exports.insertLedger = async ({
     ref_no,
     qty_in = 0,
     qty_out = 0,
-    transaction
+    transaction,
+    allow_negative = false
 }) => {
     // 1️⃣ Get last balance
     const last = await db.models.stock_ledger.findOne({
@@ -46,6 +47,7 @@ exports.insertLedger = async ({
     });
 
     if (
+        !allow_negative &&
         !settings?.allow_negative_stock &&
         newBalance < 0
     ) {

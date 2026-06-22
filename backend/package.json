@@ -25,6 +25,7 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.4",
+    "pdfkit": "^0.19.1",
     "pg": "^8.20.0",
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.7",

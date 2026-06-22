@@ -5,7 +5,7 @@ import '../core/config/app_config.dart';
 import '../core/config/server_check.dart';
 import '../core/navigation/home_route_helper.dart';
 import '../models/auth/permission_service.dart';
-import 'auth/inventorylogin.dart';
+import 'auth/login_screen.dart';
 import 'dashboard/server_config_screen.dart';
 import 'recovery/auto_reinstall_screen.dart';
 import 'recovery/config_recovery_screen.dart';
@@ -80,7 +80,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!hasOutlet) {
       _navigate(const OutletSetupScreen());
     } else if (token == null) {
-      _navigate(const InventoryLoginScreen());
+      _navigate(const LoginScreen());
     } else {
       _navigate(await HomeRouteHelper.resolve());
     }

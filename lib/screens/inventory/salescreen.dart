@@ -6,7 +6,7 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:excel/excel.dart' as exc;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:retailpos/screens/inventory/receiving.dart';
+import 'package:retailpos/screens/inventory/goods_receiving_screen.dart';
 import 'package:retailpos/screens/modify/sales_reprint_modify_screen.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -32,8 +32,8 @@ import '../../models/inventory/sale_scheme_model.dart';
 import '../../models/inventory/tax_breakdown_model.dart';
 import 'customer_list_screen.dart';
 import '../reports/sales_report_screen.dart';
-import '../settings/settinginv.dart';
-import 'itemmasterinv.dart';
+import '../settings/settings_screen.dart';
+import 'item_master_screen.dart';
 import 'subscription_screen.dart';
 
 class SaleScreen extends StatefulWidget {
@@ -192,7 +192,7 @@ class _SaleScreenState extends State<SaleScreen> {
       _orderType = order.orderType;
       _billingCountry = order.billingCountry;
       _taxMode = order.billingTaxMode;
-      _billFormat = order.billFormat;
+      _billFormat = settingsCtrl.settings?.billFormat ?? order.billFormat;
       _paymentMode = order.paymentMode;
       _paymentRef.text = order.paymentReference ?? '';
       _amountPaid.text = order.amountPaid.toStringAsFixed(2);
@@ -399,13 +399,28 @@ class _SaleScreenState extends State<SaleScreen> {
 
   double get _balanceDueAmount => _currentPaymentState.balanceDue;
 
-  _PaymentSummary get _currentPaymentState =>
-      _summarizePayments(_resolvedPaymentEntries);
+  _PaymentSummary get _currentPaymentState {
+    final state = _summarizePayments(_resolvedPaymentEntries, _payableInvoiceTotal - _pendingAdvanceApplied);
+    return _PaymentSummary(
+      primaryMode: state.primaryMode,
+      collectedAmount: state.collectedAmount,
+      rawCollectedAmount: state.rawCollectedAmount,
+      cashAmount: state.cashAmount,
+      creditAmount: state.creditAmount,
+      refundAmount: state.refundAmount,
+      balanceDue: state.balanceDue,
+      hasInvalidRefund: state.hasInvalidRefund,
+      previousAdjustmentAmount: _pendingPreviousAdjustment,
+      advanceAppliedAmount: _pendingAdvanceApplied,
+      advanceCreatedAmount: _pendingAdvanceCreated,
+      refundEnabled: state.refundEnabled,
+    );
+  }
 
   List<_PaymentLine> get _resolvedPaymentEntries {
     final normalized = _normalizePaymentEntries(
       _paymentEntries,
-      invoiceTotal: _payableInvoiceTotal,
+      invoiceTotal: _payableInvoiceTotal - _pendingAdvanceApplied,
       fallbackMode: _paymentMode,
       fallbackPaid: double.tryParse(_amountPaid.text.trim()),
     );
@@ -414,6 +429,17 @@ class _SaleScreenState extends State<SaleScreen> {
 
   List<_PaymentLine> _paymentDialogSeedEntries() {
     final payableAfterAdvance = _payableInvoiceTotal;
+    
+    // Default to CASH ON DELIVERY for unpaid delivery CASH (CoD) orders
+    if (_orderType == 'DELIVERY' && _paymentMode != 'CREDIT') {
+      final paidVal = double.tryParse(_amountPaid.text.trim()) ?? 0.0;
+      if (paidVal <= 0.009) {
+        return <_PaymentLine>[
+          _PaymentLine(method: 'CASH ON DELIVERY', amount: 0),
+        ];
+      }
+    }
+
     final normalized = _resolvedPaymentEntries
         .map(
             (entry) => _PaymentLine(method: entry.method, amount: entry.amount))
@@ -1130,38 +1156,58 @@ class _SaleScreenState extends State<SaleScreen> {
     String? fallbackMode,
     double? fallbackPaid,
   }) {
-    final seedEntries = rawEntries.isEmpty
+    final mode = (fallbackMode ?? _paymentMode).trim().toUpperCase();
+    final paid = fallbackPaid ?? (double.tryParse(_amountPaid.text.trim()) ?? 0.0);
+    final isCodOrder = _orderType == 'DELIVERY' && mode != 'CREDIT' && paid <= 0.009;
+
+    var seedEntries = rawEntries.isEmpty
         ? (invoiceTotal <= 0.009
             ? <_PaymentLine>[]
             : [
                 _PaymentLine(
-                  method: (fallbackMode ?? _paymentMode).trim().toUpperCase(),
-                  amount: fallbackPaid ??
-                      (fallbackMode == 'CREDIT'
-                          ? 0
-                          : (double.tryParse(_amountPaid.text.trim()) ??
-                              invoiceTotal)),
+                  method: mode,
+                  amount: mode == 'CREDIT'
+                      ? 0
+                      : paid,
                 ),
               ])
         : rawEntries;
+
+    if (isCodOrder) {
+      final hasOtherPayments = seedEntries.any((e) =>
+          e.method != 'CASH' &&
+          e.method != 'CASH ON DELIVERY' &&
+          e.amount > 0.009);
+      if (!hasOtherPayments) {
+        seedEntries = [
+          const _PaymentLine(method: 'CASH ON DELIVERY', amount: 0),
+        ];
+      }
+    }
 
     final buckets = <String, double>{};
     for (final entry in seedEntries) {
       final method = entry.method.trim().toUpperCase();
       double amount = _roundCurrency(entry.amount < 0 ? 0 : entry.amount);
-      if (amount <= 0.009 && method != 'CREDIT') continue;
+      if (amount <= 0.009 && method != 'CREDIT' && method != 'CASH ON DELIVERY') continue;
       buckets.update(method, (value) => value + amount, ifAbsent: () => amount);
     }
 
+    final hasCod = buckets.containsKey('CASH ON DELIVERY');
+
     final nonCreditTotal = _roundCurrency(buckets.entries
-        .where((entry) => entry.key != 'CREDIT')
+        .where((entry) => entry.key != 'CREDIT' && entry.key != 'CASH ON DELIVERY')
         .fold<double>(0, (sum, entry) => sum + entry.value));
     final payableInvoiceTotal = _normalizeRetailAmount(invoiceTotal);
     double expectedCredit =
         _positiveDelta(payableInvoiceTotal - nonCreditTotal);
     double finalCredit = expectedCredit;
     if (finalCredit > 0.009) {
-      buckets['CREDIT'] = _roundCurrency(finalCredit);
+      if (hasCod) {
+        buckets['CASH ON DELIVERY'] = 0;
+      } else {
+        buckets['CREDIT'] = _roundCurrency(finalCredit);
+      }
     } else {
       buckets.remove('CREDIT');
     }
@@ -1173,25 +1219,26 @@ class _SaleScreenState extends State<SaleScreen> {
           .compareTo(_paymentMethodOrder(b.method)));
     return _NormalizedPaymentEntries(
       entries: entries,
-      summary: _summarizePayments(entries),
+      summary: _summarizePayments(entries, payableInvoiceTotal),
     );
   }
 
-  _PaymentSummary _summarizePayments(List<_PaymentLine> entries) {
+  _PaymentSummary _summarizePayments(List<_PaymentLine> entries, [double? invoiceTotalOverride]) {
     double cash = 0;
     double nonCredit = 0;
     double credit = 0;
+    final hasCod = entries.any((entry) => entry.method == 'CASH ON DELIVERY');
     for (final entry in entries) {
       final method = entry.method.trim().toUpperCase();
       if (method == 'CASH') cash += entry.amount;
       if (method == 'CREDIT') {
         credit += entry.amount;
-      } else {
+      } else if (method != 'CASH ON DELIVERY') {
         nonCredit += entry.amount;
       }
     }
 
-    final invoiceTotal = _payableInvoiceTotal;
+    final invoiceTotal = invoiceTotalOverride ?? _payableInvoiceTotal;
     double overpay = _positiveDelta(nonCredit - invoiceTotal);
     double refund = cash >= overpay ? overpay : 0;
     final invalidRefund = overpay > cash;
@@ -1199,7 +1246,7 @@ class _SaleScreenState extends State<SaleScreen> {
     double balanceDue = _positiveDelta(invoiceTotal - collectedApplied);
     final primaryMode = entries
         .firstWhere(
-          (entry) => entry.method != 'CREDIT',
+          (entry) => entry.method != 'CREDIT' && entry.method != 'CASH ON DELIVERY',
           orElse: () => entries.isNotEmpty
               ? entries.first
               : const _PaymentLine(method: 'CASH', amount: 0),
@@ -1207,12 +1254,13 @@ class _SaleScreenState extends State<SaleScreen> {
         .method;
 
     return _PaymentSummary(
-      primaryMode:
-          balanceDue > 0 && collectedApplied <= 0 ? 'CREDIT' : primaryMode,
+      primaryMode: hasCod
+          ? 'CASH'
+          : (balanceDue > 0 && collectedApplied <= 0 ? 'CREDIT' : primaryMode),
       collectedAmount: collectedApplied,
       rawCollectedAmount: nonCredit,
       cashAmount: cash,
-      creditAmount: credit > balanceDue ? credit : balanceDue,
+      creditAmount: hasCod ? 0 : (credit > balanceDue ? credit : balanceDue),
       refundAmount: refund,
       balanceDue: balanceDue,
       hasInvalidRefund: invalidRefund,
@@ -1295,6 +1343,7 @@ class _SaleScreenState extends State<SaleScreen> {
     final value = query.trim().toLowerCase();
     if (value.isEmpty) return null;
     for (final item in ctrl.items) {
+      if (!item.isSaleable) continue;
       if (item.barcode.toLowerCase() == value ||
           item.itemCode.toLowerCase() == value ||
           item.itemName.toLowerCase() == value) {
@@ -1302,6 +1351,7 @@ class _SaleScreenState extends State<SaleScreen> {
       }
     }
     for (final item in ctrl.items) {
+      if (!item.isSaleable) continue;
       if (item.barcode.toLowerCase().contains(value) ||
           item.itemCode.toLowerCase().contains(value) ||
           item.itemName.toLowerCase().contains(value)) {
@@ -1315,6 +1365,7 @@ class _SaleScreenState extends State<SaleScreen> {
     final value = query.trim().toLowerCase();
     if (value.isEmpty) return null;
     for (final item in ctrl.items) {
+      if (!item.isSaleable) continue;
       if (item.barcode.toLowerCase() == value ||
           item.itemCode.toLowerCase() == value) {
         return item;
@@ -1323,6 +1374,7 @@ class _SaleScreenState extends State<SaleScreen> {
     // Handle scanner bursts where the same barcode is appended repeatedly:
     // keep matching against suffix chunks so the last scanned code still works.
     for (final item in ctrl.items) {
+      if (!item.isSaleable) continue;
       final barcode = item.barcode.toLowerCase().trim();
       final itemCode = item.itemCode.toLowerCase().trim();
       if (barcode.isNotEmpty && value.endsWith(barcode)) return item;
@@ -1333,8 +1385,9 @@ class _SaleScreenState extends State<SaleScreen> {
 
   List<Item> _suggestedItems(String query) {
     final value = query.trim().toLowerCase();
-    if (value.isEmpty) return ctrl.items.take(10).toList();
-    return ctrl.items
+    final saleableItems = ctrl.items.where((item) => item.isSaleable).toList();
+    if (value.isEmpty) return saleableItems.take(10).toList();
+    return saleableItems
         .where((item) {
           return item.itemCode.toLowerCase().contains(value) ||
               item.itemName.toLowerCase().contains(value) ||
@@ -1630,6 +1683,14 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   void _syncAmountPaidWithInvoice() {
+    final isCod = _orderType == 'DELIVERY' &&
+        (_paymentMode == 'CASH ON DELIVERY' ||
+            (_paymentMode != 'CREDIT' && (double.tryParse(_amountPaid.text.trim()) ?? 0.0) <= 0.009));
+    if (isCod) {
+      _amountPaid.text = '0';
+      return;
+    }
+
     if (_paymentEntries.isNotEmpty) return;
     if (_paymentMode == 'CREDIT') {
       _amountPaid.text = '0';
@@ -3752,6 +3813,7 @@ class _SaleScreenState extends State<SaleScreen> {
             .toList();
         bool refundEnabled = false;
         bool adjustPreviousCredit = previousOutstanding > 0;
+        bool adjustAdvance = availableAdvance > 0 && _subscriptionItemAdvanceDiscount == 0;
 
         double readLineAmount(_EditablePaymentLine line) =>
             double.tryParse(line.amountCtrl.text.trim()) ?? 0;
@@ -3768,15 +3830,18 @@ class _SaleScreenState extends State<SaleScreen> {
           );
         }
 
-        void autoBalanceCash() {
-          final payableAfterAdvance = _payableInvoiceTotal;
+        void autoBalanceCash({bool force = false}) {
+          final payableAfterAdvance = adjustAdvance
+              ? (_payableInvoiceTotal - math.min(availableAdvance, _payableInvoiceTotal))
+              : _payableInvoiceTotal;
           final cashLines =
               lines.where((line) => line.method == 'CASH').toList();
           if (cashLines.isEmpty) return;
           final nonCashNonCredit = lines
-              .where((line) => line.method != 'CASH' && line.method != 'CREDIT')
+              .where((line) => line.method != 'CASH' && line.method != 'CREDIT' && line.method != 'CASH ON DELIVERY')
               .fold<double>(0, (sum, line) => sum + readLineAmount(line));
-          final shouldAutoAdjust = cashLines.length > 1 ||
+          final shouldAutoAdjust = force ||
+              cashLines.length > 1 ||
               nonCashNonCredit > _retailRoundingTolerance;
           if (!shouldAutoAdjust) return;
           final primaryCash = cashLines.first;
@@ -3785,21 +3850,26 @@ class _SaleScreenState extends State<SaleScreen> {
           }
           final otherNonCredit = lines
               .where((line) =>
-                  !identical(line, primaryCash) && line.method != 'CREDIT')
+                  !identical(line, primaryCash) && line.method != 'CREDIT' && line.method != 'CASH ON DELIVERY')
               .fold<double>(0, (sum, line) => sum + readLineAmount(line));
           final remainingCash = payableAfterAdvance - otherNonCredit;
           setLineAmount(primaryCash, remainingCash > 0 ? remainingCash : 0);
         }
 
-        autoBalanceCash();
+        autoBalanceCash(force: true);
 
         _NormalizedPaymentEntries preview() {
-          final payableAfterAdvance = _payableInvoiceTotal;
+          final appliedAdvance = adjustAdvance
+              ? math.min(availableAdvance, _payableInvoiceTotal)
+              : 0.0;
+          final payableAfterAdvance = _payableInvoiceTotal - appliedAdvance;
           final raw = lines
               .map(
                 (line) => _PaymentLine(
                   method: line.method,
-                  amount: double.tryParse(line.amountCtrl.text.trim()) ?? 0,
+                  amount: line.method == 'CASH ON DELIVERY'
+                      ? 0
+                      : (double.tryParse(line.amountCtrl.text.trim()) ?? 0),
                 ),
               )
               .toList();
@@ -3840,7 +3910,7 @@ class _SaleScreenState extends State<SaleScreen> {
                       !_hasCustomerContext) ||
                   (!_hasCustomerContext && refundBase > 0 && !refundEnabled),
               previousAdjustmentAmount: previousAdjust,
-              advanceAppliedAmount: 0,
+              advanceAppliedAmount: appliedAdvance,
               advanceCreatedAmount: advanceCreated,
               refundEnabled: refundEnabled,
             ),
@@ -3893,12 +3963,13 @@ class _SaleScreenState extends State<SaleScreen> {
                               Expanded(
                                 child: DropdownButtonFormField<String>(
                                   initialValue: line.method,
-                                  items: const [
+                                  items: [
                                     'CASH',
                                     'CARD',
                                     'UPI',
                                     'BANK',
-                                    'CREDIT'
+                                    'CREDIT',
+                                    if (_orderType == 'DELIVERY') 'CASH ON DELIVERY'
                                   ]
                                       .map(
                                         (method) => DropdownMenuItem(
@@ -3910,6 +3981,9 @@ class _SaleScreenState extends State<SaleScreen> {
                                   onChanged: (value) {
                                     setDialogState(() {
                                       line.method = value ?? 'CASH';
+                                      if (line.method == 'CASH ON DELIVERY') {
+                                        line.amountCtrl.text = '';
+                                      }
                                       autoBalanceCash();
                                     });
                                   },
@@ -3920,6 +3994,7 @@ class _SaleScreenState extends State<SaleScreen> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: TextField(
+                                  enabled: line.method != 'CASH ON DELIVERY',
                                   controller: line.amountCtrl,
                                   keyboardType:
                                       const TextInputType.numberWithOptions(
@@ -3985,6 +4060,21 @@ class _SaleScreenState extends State<SaleScreen> {
                           ),
                         ],
                       ),
+                      if (_hasCustomerContext &&
+                          availableAdvance > 0 &&
+                          _subscriptionItemAdvanceDiscount == 0)
+                        SwitchListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Apply available advance Rs. ${availableAdvance.toStringAsFixed(2)}',
+                          ),
+                          value: adjustAdvance,
+                          onChanged: (value) => setDialogState(() {
+                            adjustAdvance = value;
+                            autoBalanceCash(force: true);
+                          }),
+                        ),
                       SwitchListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
@@ -4033,8 +4123,18 @@ class _SaleScreenState extends State<SaleScreen> {
                                 'Previous Adjust Rs. ${paymentState.summary.previousAdjustmentAmount.toStringAsFixed(2)}'),
                             Text(
                                 'New Advance Rs. ${paymentState.summary.advanceCreatedAmount.toStringAsFixed(2)}'),
-                            Text(
-                                'Refund Rs. ${paymentState.summary.refundAmount.toStringAsFixed(2)}'),
+                            if (paymentState.summary.refundAmount > 0)
+                              Text(
+                                'Refund Rs. ${paymentState.summary.refundAmount.toStringAsFixed(2)} in CASH',
+                                style: const TextStyle(
+                                  color: Color(0xFF15803D),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            else
+                              Text(
+                                'Refund Rs. ${paymentState.summary.refundAmount.toStringAsFixed(2)}',
+                              ),
                             Text(_paymentSummaryText(paymentState.entries)),
                           ],
                         ),
@@ -4120,6 +4220,94 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
+  Future<String?> _showModificationReasonDialog() async {
+    final controller = TextEditingController();
+    String selectedReason = 'Item Out of stock / Insufficient stock';
+    final reasons = [
+      'Item Out of stock / Insufficient stock',
+      'Pricing correction',
+      'Quantity correction',
+      'Customer requested changes',
+      'Other'
+    ];
+    bool isOther = false;
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Reason for Modification'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Please select or specify the reason for modifying this order:'),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedReason,
+                    decoration: const InputDecoration(
+                      labelText: 'Select Reason',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: reasons
+                        .map((r) => DropdownMenuItem(
+                              value: r,
+                              child: Text(r),
+                            ))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() {
+                          selectedReason = val;
+                          isOther = val == 'Other';
+                        });
+                      }
+                    },
+                  ),
+                  if (isOther) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        labelText: 'Specify Custom Reason',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, null),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final reason = isOther ? controller.text.trim() : selectedReason;
+                    if (isOther && reason.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please specify a reason')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(dialogContext, reason);
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).then((val) {
+      controller.dispose();
+      return val;
+    });
+  }
+
   Future<void> _persistSale({
     required String status,
     required bool printAfterSave,
@@ -4173,6 +4361,14 @@ class _SaleScreenState extends State<SaleScreen> {
       setState(() {
         _affectStockOnEdit = chosen;
       });
+    }
+
+    String? modReason;
+    if (_editingSaleId != null && status == 'COMPLETED') {
+      modReason = await _showModificationReasonDialog();
+      if (modReason == null) {
+        return;
+      }
     }
 
     // Refresh catalog before save so billing uses latest current item rates.
@@ -4306,7 +4502,7 @@ class _SaleScreenState extends State<SaleScreen> {
       itemsPreSplit: true,
       notes: noteParts.isEmpty ? null : noteParts.join(' | '),
       modificationNote:
-          isEditing ? 'Sales bill updated from reprint section' : null,
+          isEditing ? (modReason ?? 'Sales bill updated from reprint section') : null,
       affectStock: !isEditing || _affectStockOnEdit,
       items: orderItems,
     );
@@ -4320,7 +4516,7 @@ class _SaleScreenState extends State<SaleScreen> {
         modifyResponse = await ctrl.modifySale(
           _editingSaleId!,
           order,
-          modificationNote: 'Sales bill updated from reprint section',
+          modificationNote: modReason ?? 'Sales bill updated from reprint section',
         );
       } else {
         saveResponse = await ctrl.createSale(order);
@@ -4600,7 +4796,7 @@ class _SaleScreenState extends State<SaleScreen> {
       _orderType = details['order_type']?.toString() ?? 'B2C';
       _billingCountry = details['billing_country']?.toString() ?? 'India';
       _taxMode = details['billing_tax_mode']?.toString() ?? 'CGST_SGST';
-      _billFormat = details['bill_format']?.toString() ?? 'A4';
+      _billFormat = settingsCtrl.settings?.billFormat ?? (details['bill_format']?.toString() ?? 'A4');
       _paymentMode = details['payment_mode']?.toString() ?? 'CASH';
       _paymentRef.text = details['payment_reference']?.toString() ?? '';
       _amountPaid.text = _jsonDouble(details['amount_paid']).toStringAsFixed(2);
@@ -4741,7 +4937,7 @@ class _SaleScreenState extends State<SaleScreen> {
       orderType: details['order_type']?.toString() ?? 'B2C',
       billingCountry: details['billing_country']?.toString() ?? 'India',
       billingTaxMode: details['billing_tax_mode']?.toString() ?? 'CGST_SGST',
-      billFormat: details['bill_format']?.toString() ?? 'A4',
+      billFormat: _billFormat, // Always use current settings format for reprints
       customerName: details['customer_name']?.toString(),
       customerPhone: details['customer_phone']?.toString(),
       customerAddress: details['customer_address']?.toString(),
@@ -5994,6 +6190,11 @@ class _SaleScreenState extends State<SaleScreen> {
           _sidebarButton(Icons.storefront,
               onTap: _goback, tooltip: 'Receiving'),
           _sidebarButton(Icons.payment, onTap: getSub, tooltip: 'Subscription'),
+          _sidebarButton(
+            Icons.receipt_long_outlined,
+            onTap: _openBillReprint,
+            tooltip: 'Bill Reprint',
+          ),
           const Spacer(),
           _sidebarButton(Icons.settings_outlined,
               onTap: _openSettings, tooltip: 'Settings'),
@@ -6011,9 +6212,17 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
+  void _openBillReprint() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const SalesReprintModifyScreen(),
+      ),
+    );
+  }
+
   void _goback() {
     Navigator.push(context,
-        MaterialPageRoute(builder: (context) => const ReceivingScreen()));
+        MaterialPageRoute(builder: (context) => const GoodsReceivingScreen()));
   }
 
   void _gobackHome() {
@@ -6054,6 +6263,7 @@ class _SaleScreenState extends State<SaleScreen> {
   List<String> get _catalogCategories {
     final categories = <String>{'ALL'};
     for (final item in ctrl.items) {
+      if (!item.isSaleable) continue;
       final value = item.itemGroup.trim().isNotEmpty
           ? item.itemGroup.trim()
           : item.subCategory.trim().isNotEmpty
@@ -6067,6 +6277,7 @@ class _SaleScreenState extends State<SaleScreen> {
   List<Item> get _catalogItems {
     final query = _barcode.text.trim().toLowerCase();
     return ctrl.items.where((item) {
+      if (!item.isSaleable) return false;
       final categoryMatch = _selectedCatalogCategory == 'ALL' ||
           item.itemGroup == _selectedCatalogCategory ||
           item.subCategory == _selectedCatalogCategory;
@@ -7167,10 +7378,23 @@ class _SaleScreenState extends State<SaleScreen> {
                   const SizedBox(height: 8),
                   Text(
                       'Collected Rs. ${paymentState.collectedAmount.toStringAsFixed(2)}'),
+                  if (paymentState.advanceAppliedAmount > 0)
+                    Text(
+                        'Advance Used Rs. ${paymentState.advanceAppliedAmount.toStringAsFixed(2)}'),
                   Text(
                       'Outstanding Rs. ${paymentState.balanceDue.toStringAsFixed(2)}'),
-                  Text(
-                      'Refund Rs. ${paymentState.refundAmount.toStringAsFixed(2)}'),
+                  if (paymentState.refundAmount > 0)
+                    Text(
+                      'Refund Rs. ${paymentState.refundAmount.toStringAsFixed(2)} in CASH',
+                      style: const TextStyle(
+                        color: Color(0xFF15803D),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    )
+                  else
+                    Text(
+                      'Refund Rs. ${paymentState.refundAmount.toStringAsFixed(2)}',
+                    ),
                   const SizedBox(height: 10),
                   FilledButton.tonalIcon(
                     onPressed: () => _showPaymentDialog().then((result) {

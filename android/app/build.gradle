@@ -44,6 +44,26 @@ android {
         versionName = flutterVersionName
     }
 
+    flavorDimensions = ["default"]
+
+    productFlavors {
+        customer {
+            dimension "default"
+            applicationId "com.retailpos.customer"
+            resValue "string", "app_name", "RetailPOS Customer"
+        }
+        rider {
+            dimension "default"
+            applicationId "com.retailpos.rider"
+            resValue "string", "app_name", "RetailPOS Rider"
+        }
+        supplier {
+            dimension "default"
+            applicationId "com.retailpos.supplier"
+            resValue "string", "app_name", "RetailPOS Supplier"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.

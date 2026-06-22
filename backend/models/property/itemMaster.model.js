@@ -72,6 +72,16 @@ module.exports = (sequelize, DataTypes) => {
                 defaultValue: 0
             },
 
+            b2b_rate: {
+                type: DataTypes.DECIMAL(12, 2),
+                defaultValue: 0
+            },
+
+            return_window_days: {
+                type: DataTypes.INTEGER,
+                defaultValue: 7
+            },
+
             tax_type: {
                 type: DataTypes.STRING(20),
                 defaultValue: 'GST'
@@ -118,6 +128,11 @@ module.exports = (sequelize, DataTypes) => {
             },
 
             stockable: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: true
+            },
+
+            is_saleable: {
                 type: DataTypes.BOOLEAN,
                 defaultValue: true
             },

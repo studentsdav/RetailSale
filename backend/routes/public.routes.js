@@ -24,4 +24,8 @@ router.post('/setup/verify-otp', verifySetupOtp);
 router.post('/verify-and-download', verifyAndRecoverConfig);
 router.post('/trigger-reinstall', triggerAutoReinstall);
 
+// Expose public sales invoice PDF downloads for Meta's servers
+const publicSalesCtrl = require('../controllers/public/publicSales.controller');
+router.get('/sales/:id/pdf', publicSalesCtrl.getInvoicePdfPublic);
+
 module.exports = router;

@@ -275,7 +275,7 @@ Standard report process:
 Common settings:
 
 - Property/Outlet information
-- Numbering settings
+- Document sequence settings
 - Stock locations
 - Loyalty master config
 - Notifications preference

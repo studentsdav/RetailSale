@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 
 class AppConfig {
   static String baseUrl = 'http://127.0.0.1:3000';
@@ -9,7 +11,14 @@ class AppConfig {
   static late String _configPath;
 
   static Future<void> init() async {
-    _configPath = p.join(Directory.current.path, 'server_config.json');
+    if (kIsWeb) {
+      _configPath = 'server_config.json';
+    } else if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      final directory = await getApplicationDocumentsDirectory();
+      _configPath = p.join(directory.path, 'server_config.json');
+    } else {
+      _configPath = p.join(Directory.current.path, 'server_config.json');
+    }
     await loadConfig();
   }
 

@@ -1968,7 +1968,344 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 43,
+    description: "Add is_saleable column to item_master",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS is_saleable BOOLEAN DEFAULT TRUE;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 44,
+    description: "Add delivery partner and customer order tables",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        CREATE TABLE IF NOT EXISTS delivery_partners (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+            name VARCHAR(100) NOT NULL,
+            phone VARCHAR(20) NOT NULL,
+            status VARCHAR(20) DEFAULT 'AVAILABLE',
+            latitude DECIMAL(10, 6) DEFAULT 0.000000,
+            longitude DECIMAL(10, 6) DEFAULT 0.000000,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS customer_orders (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+            customer_name VARCHAR(150) NOT NULL,
+            customer_phone VARCHAR(20) NOT NULL,
+            customer_address TEXT NOT NULL,
+            items JSONB NOT NULL,
+            sub_total DECIMAL(12, 2) DEFAULT 0.00,
+            tax_amount DECIMAL(12, 2) DEFAULT 0.00,
+            delivery_charge DECIMAL(12, 2) DEFAULT 0.00,
+            net_amount DECIMAL(12, 2) DEFAULT 0.00,
+            payment_status VARCHAR(20) DEFAULT 'UNPAID',
+            status VARCHAR(30) DEFAULT 'PENDING',
+            assigned_partner_id INTEGER REFERENCES delivery_partners(id) ON DELETE SET NULL,
+            assigned_at TIMESTAMP,
+            picked_up_at TIMESTAMP,
+            delivered_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_delivery_partners_outlet ON delivery_partners(outlet_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_orders_outlet ON customer_orders(outlet_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_orders_status ON customer_orders(status);
+
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 45,
+    description: "Add delivery customers table for customer login and history tracking",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        CREATE TABLE IF NOT EXISTS delivery_customers (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+            name VARCHAR(100) NOT NULL,
+            phone VARCHAR(20) NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            address TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_delivery_customers UNIQUE (outlet_id, phone)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_delivery_customers_phone ON delivery_customers(phone);
+
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 46,
+    description: "Add payment_mode, commission_amount, and commission_status to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) DEFAULT 'CASH';
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS commission_amount DECIMAL(12, 2) DEFAULT 20.00;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS commission_status VARCHAR(30) DEFAULT 'UNPAID';
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 47,
+    description: "Add return_status, return_type, and refund_status to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS return_status VARCHAR(50) DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS return_type VARCHAR(50) DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS refund_status VARCHAR(50) DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 48,
+    description: "Add return_item_id and return_item_name to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS return_item_id INTEGER DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS return_item_name VARCHAR(255) DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 49,
+    description: "Add returned_items JSONB column to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS returned_items JSONB DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 50,
+    description: "Add password_hash column to delivery_partners table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE delivery_partners ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 51,
+    description: "Add b2b_rate to item_master and gstin to customer_orders",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS b2b_rate NUMERIC(12, 2) DEFAULT 0;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS gstin VARCHAR(50) DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 52,
+    description: "Add return_window_days to item_master for per-item return window control",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS return_window_days INTEGER DEFAULT 7;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 53,
+    description: "Create outlet_settings table for store settings",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        CREATE TABLE IF NOT EXISTS outlet_settings (
+          id SERIAL PRIMARY KEY,
+          outlet_id INT NOT NULL REFERENCES outlets(id),
+          meta_data JSONB DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (outlet_id)
+        );
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 54,
+    description: "Add charges jsonb column to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS charges JSONB DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 55,
+    description: "Add notes column to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 56,
+    description: "Add cancellation_reason and feedback columns to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS cancellation_reason TEXT DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS feedback JSONB DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 57,
+    description: "Add return_rejection_reason column to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS return_rejection_reason TEXT DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 58,
+    description: "Add received_items, original_net_amount, and modification_reason to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS received_items JSONB DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS original_net_amount DECIMAL(12, 2) DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS modification_reason TEXT DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 59,
+    description: "Add refund_payment_mode, refund_paid_at, and is_prepaid to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS refund_payment_mode VARCHAR(50) DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS refund_paid_at TIMESTAMP DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS is_prepaid BOOLEAN DEFAULT FALSE;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 60,
+    description: "Create WhatsApp configuration, templates, campaigns and message logs tables",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        CREATE TABLE IF NOT EXISTS whatsapp_configurations (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          waba_id VARCHAR(255) NOT NULL,
+          phone_number_id VARCHAR(255) NOT NULL,
+          encrypted_access_token TEXT NOT NULL,
+          webhook_verify_token VARCHAR(255) NOT NULL,
+          app_secret VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(outlet_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_templates (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          template_name VARCHAR(255) NOT NULL,
+          category VARCHAR(50) NOT NULL,
+          language VARCHAR(50) NOT NULL,
+          body_text TEXT NOT NULL,
+          status VARCHAR(50) DEFAULT 'DRAFT',
+          meta_template_id VARCHAR(255),
+          header_type VARCHAR(50) DEFAULT 'NONE',
+          header_text TEXT,
+          footer_text TEXT,
+          buttons JSONB DEFAULT NULL,
+          variables JSONB DEFAULT NULL,
+          is_default_invoice_template BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(outlet_id, template_name, language)
+        );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_campaigns (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          template_id INTEGER NOT NULL REFERENCES whatsapp_templates(id) ON DELETE CASCADE,
+          campaign_name VARCHAR(255) NOT NULL,
+          total_recipients INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_logs (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          campaign_id INTEGER REFERENCES whatsapp_campaigns(id) ON DELETE SET NULL,
+          recipient_phone VARCHAR(50) NOT NULL,
+          message_type VARCHAR(50) NOT NULL,
+          delivery_status VARCHAR(50) DEFAULT 'queued',
+          meta_message_id VARCHAR(255),
+          error_message TEXT,
+          retry_count INTEGER DEFAULT 0,
+          next_retry_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          variables_mapped JSONB DEFAULT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 61,
+    description: "Add cost column to whatsapp_logs table for billing dashboard",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE whatsapp_logs ADD COLUMN IF NOT EXISTS cost DECIMAL(6, 2) DEFAULT 0.00;
+        COMMIT;
+      `);
+    }
   }
 ];
 
 module.exports = migrations;
+
+

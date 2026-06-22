@@ -27,7 +27,7 @@ This checklist verifies the sidebar features shown in UI screenshots are covered
 
 - Item Master: covered
 - Vendor Master: covered
-- Numbering Settings: covered
+- Document Sequence Settings: covered
 - Property Information: covered
 - Location: covered
 - User Management: covered

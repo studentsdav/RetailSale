@@ -38,7 +38,7 @@ class SalesController extends ChangeNotifier {
       return res['data']['number'];
     } catch (e) {
       throw Exception(
-        'Sales numbering is not configured. Please set Sales Bill No in Numbering Settings.',
+        'Sales numbering is not configured. Please set Sales Bill No in Document Sequence Settings.',
       );
     }
   }

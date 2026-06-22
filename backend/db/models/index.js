@@ -124,8 +124,21 @@ propertyDb.models.property_info =
 propertyDb.models.system_settings =
     require('../../models/property/systemSettings.model')(propertyDb, DataTypes);
 
+propertyDb.models.outlet_settings =
+    require('../../models/property/outletSettings.model')(propertyDb, DataTypes);
+
 propertyDb.models.app_branding =
     require('../../models/property/appBranding.model')(propertyDb, DataTypes);
+
+// WHATSAPP INTEGRATION
+propertyDb.models.whatsapp_configurations =
+    require('../../models/property/whatsappConfig.model')(propertyDb, DataTypes);
+propertyDb.models.whatsapp_templates =
+    require('../../models/property/whatsappTemplate.model')(propertyDb, DataTypes);
+propertyDb.models.whatsapp_campaigns =
+    require('../../models/property/whatsappCampaign.model')(propertyDb, DataTypes);
+propertyDb.models.whatsapp_logs =
+    require('../../models/property/whatsappLog.model')(propertyDb, DataTypes);
 
 
 propertyDb.models.cash_ledger =
@@ -154,6 +167,13 @@ propertyDb.models.brands =
 propertyDb.models.system_notification =
     require('../../models/property/system_notification.model')(propertyDb, DataTypes);
 
+propertyDb.models.delivery_partners =
+    require('../../models/property/deliveryPartner.model')(propertyDb, DataTypes);
+propertyDb.models.customer_orders =
+    require('../../models/property/customerOrder.model')(propertyDb, DataTypes);
+propertyDb.models.delivery_customers =
+    require('../../models/property/deliveryCustomer.model')(propertyDb, DataTypes);
+
 // BOM & ASSEMBLY
 propertyDb.models.item_boms =
     require('../../models/property/itemBom.model')(propertyDb, DataTypes);
@@ -169,4 +189,91 @@ Object.values(propertyDb.models).forEach(model => {
     }
 });
 
+// Enforce request-scoped outlet context automatically on all database queries and writes
+const { contextStorage } = require('../../utils/context');
+
+function applyOutletFilter(options, outletId) {
+    if (!options) return;
+    if (options.bypassOutletFilter) return;
+
+    if (options.model && options.model.rawAttributes && options.model.rawAttributes.outlet_id) {
+        if (!options.where) {
+            options.where = { outlet_id: outletId };
+        } else if (Array.isArray(options.where)) {
+            options.where.push({ outlet_id: outletId });
+        } else if (typeof options.where === 'object') {
+            options.where.outlet_id = outletId;
+        }
+    }
+
+    if (options.include) {
+        const includes = Array.isArray(options.include) ? options.include : [options.include];
+        includes.forEach(inc => {
+            if (typeof inc === 'object') {
+                applyOutletFilter(inc, outletId);
+            }
+        });
+    }
+}
+
+propertyDb.addHook('beforeFind', (options) => {
+    if (options.bypassOutletFilter) return;
+    const store = contextStorage.getStore();
+    const outletId = store?.get('outlet_id');
+    if (outletId) {
+        applyOutletFilter(options, outletId);
+    }
+});
+
+propertyDb.addHook('beforeCreate', (instance, options) => {
+    const store = contextStorage.getStore();
+    const outletId = store?.get('outlet_id');
+    if (outletId && instance.constructor.rawAttributes && instance.constructor.rawAttributes.outlet_id) {
+        instance.outlet_id = outletId;
+    }
+});
+
+propertyDb.addHook('beforeBulkCreate', (instances, options) => {
+    const store = contextStorage.getStore();
+    const outletId = store?.get('outlet_id');
+    if (outletId) {
+        instances.forEach(instance => {
+            if (instance.constructor.rawAttributes && instance.constructor.rawAttributes.outlet_id) {
+                instance.outlet_id = outletId;
+            }
+        });
+    }
+});
+
+propertyDb.addHook('beforeBulkUpdate', (options) => {
+    if (options.bypassOutletFilter) return;
+    const store = contextStorage.getStore();
+    const outletId = store?.get('outlet_id');
+    if (outletId && options.model && options.model.rawAttributes && options.model.rawAttributes.outlet_id) {
+        if (!options.where) {
+            options.where = { outlet_id: outletId };
+        } else if (Array.isArray(options.where)) {
+            options.where.push({ outlet_id: outletId });
+        } else if (typeof options.where === 'object') {
+            options.where.outlet_id = outletId;
+        }
+    }
+});
+
+propertyDb.addHook('beforeBulkDestroy', (options) => {
+    if (options.bypassOutletFilter) return;
+    const store = contextStorage.getStore();
+    const outletId = store?.get('outlet_id');
+    if (outletId && options.model && options.model.rawAttributes && options.model.rawAttributes.outlet_id) {
+        if (!options.where) {
+            options.where = { outlet_id: outletId };
+        } else if (Array.isArray(options.where)) {
+            options.where.push({ outlet_id: outletId });
+        } else if (typeof options.where === 'object') {
+            options.where.outlet_id = outletId;
+        }
+    }
+});
+
 module.exports = propertyDb;
+

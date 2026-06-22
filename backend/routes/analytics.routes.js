@@ -10,4 +10,9 @@ router.get('/sales-trend', analyticsCtrl.getSalesTrend);
 router.get('/market-basket', analyticsCtrl.getMarketBasket);
 router.get('/top-customer-items', analyticsCtrl.getTopCustomerItems);
 
+// Text-to-Query AI Analytics Engine Routes
+router.post('/query', analyticsCtrl.executeNaturalLanguageQuery);
+router.get('/export/csv', analyticsCtrl.exportQueryCsv);
+router.get('/export/pdf', analyticsCtrl.exportQueryPdf);
+
 module.exports = router;

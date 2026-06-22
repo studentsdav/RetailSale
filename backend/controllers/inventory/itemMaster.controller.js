@@ -144,7 +144,8 @@ exports.createItem = async (req, res) => {
             loose_item_code,
             min_level,
             max_level,
-            stockable
+            stockable,
+            is_saleable
         } = req.body;
 
         const outlet_id = req.user.outlet_id;
@@ -189,6 +190,7 @@ exports.createItem = async (req, res) => {
             min_level,
             max_level,
             stockable,
+            is_saleable: is_saleable ?? true,
             is_active: true
         });
 
@@ -336,6 +338,7 @@ exports.bulkImportItems = async (req, res) => {
                 min_level: parseInt(row.min_level) || 0,
                 max_level: parseInt(row.max_level) || 0,
                 stockable: row.stockable === true || row.stockable === 'YES',
+                is_saleable: row.is_saleable !== false && row.is_saleable !== 'NO',
                 is_active: true
             };
 

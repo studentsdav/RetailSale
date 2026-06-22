@@ -15,6 +15,13 @@ exports.getRequestReport = async (req, res) => {
 
         const where = { outlet_id };
 
+        // 🔒 Enforce user isolation if the user is not an ADMIN
+        if (req.user.role !== 'ADMIN') {
+            where.created_by = req.user.id;
+        } else if (req.query.created_by) {
+            where.created_by = req.query.created_by;
+        }
+
         // 📅 Date filter
         if (from_date && to_date) {
             where.request_date = {

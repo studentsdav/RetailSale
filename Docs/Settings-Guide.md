@@ -7,7 +7,7 @@ This guide explains how to configure system settings safely after login.
 1. Outlet Setup
 2. Property Configuration
 3. Stock Location
-4. Numbering Settings
+4. Document Sequence Settings
 5. Global Settings
 6. Loyalty Settings (if used)
 7. Server Config (terminal mapping)
@@ -58,7 +58,7 @@ Screen:
 
 - `Settings > Stock Location`
 
-## 5. Numbering Settings
+## 5. Document Sequence Settings
 
 Use this to define document number series per module.
 
@@ -84,7 +84,7 @@ Tip:
 
 Screen:
 
-- `Settings > Numbering Settings`
+- `Settings > Document Sequence Settings`
 
 ## 6. Global Settings (Main Settings Screen)
 
@@ -155,12 +155,12 @@ After changing settings:
 2. Logout/login once for role/theme consistency.
 3. Create one test transaction.
 4. Print one test invoice.
-5. Verify report totals and numbering format.
+5. Verify report totals and document sequence number format.
 6. Trigger sync/backup and confirm success.
 
 ## 10. Common Mistakes to Avoid
 
-1. Editing numbering without defining prefix/postfix.
+1. Editing document sequence without defining prefix/postfix.
 2. Enabling direct print without selecting a default printer.
 3. Changing outlet/server config on one machine but not others.
 4. Running transaction clear without a verified latest backup.

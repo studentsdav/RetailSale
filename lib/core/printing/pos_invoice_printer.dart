@@ -399,13 +399,13 @@ class PosInvoicePrinter {
           _thermalMetaRow(
             'Payment',
             order.paymentMode,
-            'Refund',
-            _money((data.changeDue ?? 0)),
+            (data.changeDue ?? order.changeAmount) > 0 ? 'Refund (CASH)' : 'Refund',
+            _money((data.changeDue ?? order.changeAmount)),
           ),
-          if ((data.amountReceived ?? 0) > 0)
+          if ((data.amountReceived ?? order.amountPaid) > 0)
             _thermalMetaRow(
               'Received',
-              _money(data.amountReceived!),
+              _money(data.amountReceived ?? order.amountPaid),
               '',
               '',
             ),
@@ -820,8 +820,8 @@ class PosInvoicePrinter {
           _money(_displayRate(item)),
           _money(item.lineDiscount),
           _money(_taxableAmountForItem(item)),
-          '${_taxRate(order, item, 'CGST')} / ${_money(_taxAmount(order, item, 'CGST'))}',
-          '${_taxRate(order, item, 'SGST')} / ${_money(_taxAmount(order, item, 'SGST'))}',
+          item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'CGST')} / ${_money(_taxAmount(order, item, 'CGST'))}',
+          item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'SGST')} / ${_money(_taxAmount(order, item, 'SGST'))}',
           _money(item.lineTotal),
         ];
       }
@@ -899,6 +899,17 @@ class PosInvoicePrinter {
           if (roundOff.abs() > 0.0009) _a4AmountRow('Round Off', roundOff),
           pw.Divider(height: 10),
           _a4AmountRow('Grand Total', order.netAmount, bold: true),
+          if (order.amountPaid > 0) ...[
+            pw.Divider(height: 10),
+            _a4AmountRow(
+              order.paymentMode.isNotEmpty
+                  ? 'Received (${order.paymentMode})'
+                  : 'Received',
+              order.amountPaid,
+            ),
+          ],
+          if (order.changeAmount > 0)
+            _a4AmountRow('Refund (CASH)', order.changeAmount),
         ],
       ),
     );
@@ -985,7 +996,11 @@ class PosInvoicePrinter {
       qtyUnitRate,
       if (item.isSchemeFree) 'FREE',
       if (item.taxPercent > 0)
-        '${item.taxType.toUpperCase()} ${_formatTaxPercent(item.taxPercent)}%',
+        // Show plain "GST 18% = Rs. X.XX" so customer clearly sees rate + amount
+        'GST ${_formatTaxPercent(item.taxPercent)}%'
+            '${item.taxAmount > 0 ? ' = ${_money(item.taxAmount)}' : ''}'
+      else
+        'GST NILL',
       if (item.lineDiscount > 0) 'Disc ${_money(item.lineDiscount)}',
     ];
 

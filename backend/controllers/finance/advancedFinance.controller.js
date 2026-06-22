@@ -652,48 +652,238 @@ exports.createRepayment = async (req, res) => {
         if (amount <= 0) throw new Error('Repayment amount must be greater than 0');
 
         const sale = await getSaleOrFail(req, sale_id, t);
-        await ensureRepaymentDuplicateFree({ req, sale_id, payment_date, amount, payment_mode, reference_no, transaction: t });
         const waiveOff = isWaiveOffMode(payment_mode);
 
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id, transaction: t });
         const initialPaid = toAmount(sale.initial_amount_paid ?? sale.amount_paid);
         const available = Math.max(0, toAmount(sale.net_amount) - initialPaid - repaymentTotal);
-        if (amount > available + 0.009) throw new Error(`Repayment exceeds outstanding balance. Available amount is ${available.toFixed(2)}`);
 
-        const repayment = await req.propertyDb.models.customer_repayments.create({
-            outlet_id: req.user.outlet_id,
-            sale_id,
-            payment_date,
-            amount,
-            payment_mode,
-            reference_no,
-            note,
-            created_by: req.user.id,
-            updated_by: req.user.id
-        }, { transaction: t });
+        // Always auto-adjust excess payment against other outstanding bills first, then advance
+        const adjustExtra = true;
 
-        await createLedgerEntry({
-            db: req.propertyDb,
-            outlet_id: req.user.outlet_id,
-            txn_date: payment_date,
-            transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
-            reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
-            reference_id: repayment.id,
-            reference_no: sale.sale_no,
-            party_name: getCustomerLabel(sale),
-            payment_method: payment_mode,
-            amount_in: waiveOff ? 0 : amount,
-            amount_out: waiveOff ? amount : 0,
-            notes: note || (waiveOff
-                ? `Waive off applied for ${sale.sale_no}`
-                : `Repayment received for ${sale.sale_no}`),
-            created_by: req.user.id,
-            transaction: t
-        });
+        let currentBillRepayment = null;
+        let balance = 0;
 
-        const balance = await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
-        await t.commit();
-        res.json({ success: true, data: { repayment, balance } });
+        if (amount > available + 0.009 && adjustExtra) {
+            const applyToCurrent = available;
+            let extraAmount = roundAmount(amount - applyToCurrent);
+
+            if (applyToCurrent > 0) {
+                await ensureRepaymentDuplicateFree({ req, sale_id, payment_date, amount: applyToCurrent, payment_mode, reference_no, transaction: t });
+
+                currentBillRepayment = await req.propertyDb.models.customer_repayments.create({
+                    outlet_id: req.user.outlet_id,
+                    sale_id,
+                    payment_date,
+                    amount: applyToCurrent,
+                    payment_mode,
+                    reference_no,
+                    note,
+                    created_by: req.user.id,
+                    updated_by: req.user.id
+                }, { transaction: t });
+
+                await createLedgerEntry({
+                    db: req.propertyDb,
+                    outlet_id: req.user.outlet_id,
+                    txn_date: payment_date,
+                    transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                    reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                    reference_id: currentBillRepayment.id,
+                    reference_no: sale.sale_no,
+                    party_name: getCustomerLabel(sale),
+                    payment_method: payment_mode,
+                    amount_in: waiveOff ? 0 : applyToCurrent,
+                    amount_out: waiveOff ? applyToCurrent : 0,
+                    notes: note || (waiveOff
+                        ? `Waive off applied for ${sale.sale_no}`
+                        : `Repayment received for ${sale.sale_no}`),
+                    created_by: req.user.id,
+                    transaction: t
+                });
+
+                balance = await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
+            } else {
+                balance = 0;
+            }
+
+            // Find details of the customer to match other credit bills
+            const customer_phone = sale.customer_phone;
+            const customer_name = sale.customer_name;
+            const customer_gstin = sale.customer_gstin;
+
+            const orConditions = [];
+            if (customer_phone) orConditions.push({ customer_phone: String(customer_phone).trim() });
+            if (customer_gstin) orConditions.push({ customer_gstin: String(customer_gstin).trim().toUpperCase() });
+            if (customer_name) orConditions.push({ customer_name: String(customer_name).trim() });
+
+            let otherSales = [];
+            if (orConditions.length > 0) {
+                otherSales = await req.propertyDb.models.sales_headers.findAll({
+                    where: {
+                        id: { [Op.ne]: sale_id },
+                        outlet_id: req.user.outlet_id,
+                        status: 'COMPLETED',
+                        is_latest: true,
+                        is_deleted: false,
+                        balance_due: { [Op.gt]: 0 },
+                        [Op.or]: orConditions
+                    },
+                    order: [['sale_date', 'ASC'], ['id', 'ASC']],
+                    transaction: t
+                });
+            }
+
+            const otherRepaymentsCreated = [];
+            for (const otherSale of otherSales) {
+                if (extraAmount <= 0) break;
+
+                const otherOutstanding = toAmount(otherSale.balance_due);
+                if (otherOutstanding <= 0) continue;
+
+                // Exclude delivery orders that are not credit payment
+                if (otherSale.order_type === 'DELIVERY' && otherSale.payment_mode !== 'CREDIT') {
+                    continue;
+                }
+
+                const applyAmount = Math.min(extraAmount, otherOutstanding);
+
+                await ensureRepaymentDuplicateFree({
+                    req,
+                    sale_id: otherSale.id,
+                    payment_date,
+                    amount: applyAmount,
+                    payment_mode,
+                    reference_no,
+                    transaction: t
+                });
+
+                const otherRepayment = await req.propertyDb.models.customer_repayments.create({
+                    outlet_id: req.user.outlet_id,
+                    sale_id: otherSale.id,
+                    payment_date,
+                    amount: applyAmount,
+                    payment_mode,
+                    reference_no,
+                    note: note || `Excess repayment adjusted from ${sale.sale_no}`,
+                    created_by: req.user.id,
+                    updated_by: req.user.id
+                }, { transaction: t });
+
+                otherRepaymentsCreated.push(otherRepayment);
+
+                await createLedgerEntry({
+                    db: req.propertyDb,
+                    outlet_id: req.user.outlet_id,
+                    txn_date: payment_date,
+                    transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                    reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                    reference_id: otherRepayment.id,
+                    reference_no: otherSale.sale_no,
+                    party_name: getCustomerLabel(otherSale),
+                    payment_method: payment_mode,
+                    amount_in: waiveOff ? 0 : applyAmount,
+                    amount_out: waiveOff ? applyAmount : 0,
+                    notes: note || (waiveOff
+                        ? `Waive off applied for ${otherSale.sale_no}`
+                        : `Excess repayment adjusted from ${sale.sale_no} for ${otherSale.sale_no}`),
+                    created_by: req.user.id,
+                    transaction: t
+                });
+
+                await refreshSaleOutstanding({ db: req.propertyDb, sale: otherSale, transaction: t });
+                extraAmount = roundAmount(extraAmount - applyAmount);
+            }
+
+            let advanceCreated = null;
+            if (extraAmount > 0) {
+                const identity = {
+                    customer_name: customer_name || null,
+                    customer_phone: customer_phone || null,
+                    customer_gstin: customer_gstin || null
+                };
+
+                advanceCreated = await req.propertyDb.models.customer_advances.create({
+                    outlet_id: req.user.outlet_id,
+                    source_sale_id: null,
+                    customer_name: identity.customer_name,
+                    customer_phone: identity.customer_phone,
+                    customer_gstin: identity.customer_gstin,
+                    advance_date: payment_date,
+                    original_amount: extraAmount,
+                    available_amount: extraAmount,
+                    payment_mode,
+                    reference_no,
+                    note: note || `Excess repayment surplus from ${sale.sale_no}`,
+                    created_by: req.user.id,
+                    updated_by: req.user.id
+                }, { transaction: t });
+
+                await createLedgerEntry({
+                    db: req.propertyDb,
+                    outlet_id: req.user.outlet_id,
+                    txn_date: payment_date,
+                    transaction_type: 'CUSTOMER_ADVANCE',
+                    reference_type: 'ADVANCE',
+                    reference_id: advanceCreated.id,
+                    reference_no,
+                    party_name: getCustomerLabelFromIdentity(identity),
+                    payment_method: payment_mode,
+                    amount_in: extraAmount,
+                    notes: note || `Excess repayment surplus from ${sale.sale_no} received from ${getCustomerLabelFromIdentity(identity)}`,
+                    created_by: req.user.id,
+                    transaction: t
+                });
+            }
+
+            await t.commit();
+            res.json({
+                success: true,
+                data: {
+                    repayment: currentBillRepayment || (otherRepaymentsCreated.length > 0 ? otherRepaymentsCreated[0] : null),
+                    balance,
+                    adjusted_other_bills_count: otherRepaymentsCreated.length,
+                    excess_advance: advanceCreated
+                }
+            });
+        } else {
+            await ensureRepaymentDuplicateFree({ req, sale_id, payment_date, amount, payment_mode, reference_no, transaction: t });
+
+            const repayment = await req.propertyDb.models.customer_repayments.create({
+                outlet_id: req.user.outlet_id,
+                sale_id,
+                payment_date,
+                amount,
+                payment_mode,
+                reference_no,
+                note,
+                created_by: req.user.id,
+                updated_by: req.user.id
+            }, { transaction: t });
+
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                txn_date: payment_date,
+                transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                reference_id: repayment.id,
+                reference_no: sale.sale_no,
+                party_name: getCustomerLabel(sale),
+                payment_method: payment_mode,
+                amount_in: waiveOff ? 0 : amount,
+                amount_out: waiveOff ? amount : 0,
+                notes: note || (waiveOff
+                    ? `Waive off applied for ${sale.sale_no}`
+                    : `Repayment received for ${sale.sale_no}`),
+                created_by: req.user.id,
+                transaction: t
+            });
+
+            balance = await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
+            await t.commit();
+            res.json({ success: true, data: { repayment, balance } });
+        }
     } catch (error) {
         await t.rollback();
         res.status(400).json({ success: false, error: error.message });
@@ -1247,7 +1437,7 @@ exports.getCreditReport = async (req, res) => {
 
         const sales = await req.propertyDb.models.sales_headers.findAll({
             where,
-            include: [{ model: req.propertyDb.models.customer_repayments, as: 'repayments' }],
+            include: [{ model: req.propertyDb.models.customer_repayments, as: 'repayments', required: false }],
             order: [['sale_date', 'DESC'], ['id', 'DESC']]
         });
         const advanceWhere = {
@@ -1273,6 +1463,11 @@ exports.getCreditReport = async (req, res) => {
             const balanceDue = Math.max(0, toAmount(sale.net_amount) - totalPaid);
             const isCreditBill = balanceDue > 0.009;
             if (!isCreditBill) continue;
+
+            // Exclude delivery orders that are not credit payment
+            if (sale.order_type === 'DELIVERY' && sale.payment_mode !== 'CREDIT') {
+                continue;
+            }
 
             totalCreditBills += 1;
             totalOutstanding += balanceDue;
@@ -1506,3 +1701,163 @@ exports.getExpiryReport = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+exports.adjustBulkRepayment = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+
+    try {
+        const { customer_name, customer_phone, customer_gstin, payment_date, payment_mode, reference_no, note } = req.body;
+        const totalAmount = toAmount(req.body.amount);
+        const paymentDate = dateKey(payment_date || new Date());
+        const paymentMode = String(payment_mode || 'CASH').trim().toUpperCase();
+        const referenceNo = String(reference_no || '').trim() || null;
+        const repaymentNote = String(note || '').trim() || null;
+
+        if (totalAmount <= 0) {
+            throw new Error('Repayment amount must be greater than 0');
+        }
+
+        if (!customer_phone && !customer_gstin && !customer_name) {
+            throw new Error('Customer identification (phone, GSTIN, or name) is required');
+        }
+
+        const orConditions = [];
+        if (customer_phone) orConditions.push({ customer_phone: String(customer_phone).trim() });
+        if (customer_gstin) orConditions.push({ customer_gstin: String(customer_gstin).trim().toUpperCase() });
+        if (customer_name) orConditions.push({ customer_name: String(customer_name).trim() });
+
+        const sales = await req.propertyDb.models.sales_headers.findAll({
+            where: {
+                outlet_id: req.user.outlet_id,
+                status: 'COMPLETED',
+                is_latest: true,
+                is_deleted: false,
+                balance_due: { [Op.gt]: 0 },
+                [Op.or]: orConditions
+            },
+            order: [['sale_date', 'ASC'], ['id', 'ASC']],
+            transaction: t
+        });
+
+        let remainingAmount = totalAmount;
+        const repaymentsCreated = [];
+
+        for (const sale of sales) {
+            if (remainingAmount <= 0) break;
+
+            const outstanding = toAmount(sale.balance_due);
+            if (outstanding <= 0) continue;
+
+            // Exclude delivery orders that are not credit payment
+            if (sale.order_type === 'DELIVERY' && sale.payment_mode !== 'CREDIT') {
+                continue;
+            }
+
+            const applyAmount = Math.min(remainingAmount, outstanding);
+
+            await ensureRepaymentDuplicateFree({
+                req,
+                sale_id: sale.id,
+                payment_date: paymentDate,
+                amount: applyAmount,
+                payment_mode: paymentMode,
+                reference_no: referenceNo,
+                transaction: t
+            });
+
+            const waiveOff = isWaiveOffMode(paymentMode);
+
+            const repayment = await req.propertyDb.models.customer_repayments.create({
+                outlet_id: req.user.outlet_id,
+                sale_id: sale.id,
+                payment_date: paymentDate,
+                amount: applyAmount,
+                payment_mode: paymentMode,
+                reference_no: referenceNo,
+                note: repaymentNote,
+                created_by: req.user.id,
+                updated_by: req.user.id
+            }, { transaction: t });
+
+            repaymentsCreated.push(repayment);
+
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                txn_date: paymentDate,
+                transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
+                reference_id: repayment.id,
+                reference_no: sale.sale_no,
+                party_name: getCustomerLabel(sale),
+                payment_method: paymentMode,
+                amount_in: waiveOff ? 0 : applyAmount,
+                amount_out: waiveOff ? applyAmount : 0,
+                notes: repaymentNote || (waiveOff
+                    ? `Waive off applied for ${sale.sale_no}`
+                    : `Bulk repayment received for ${sale.sale_no}`),
+                created_by: req.user.id,
+                transaction: t
+            });
+
+            await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
+
+            remainingAmount = roundAmount(remainingAmount - applyAmount);
+        }
+
+        let advanceCreated = null;
+        if (remainingAmount > 0) {
+            const identity = {
+                customer_name: customer_name || null,
+                customer_phone: customer_phone || null,
+                customer_gstin: customer_gstin || null
+            };
+
+            advanceCreated = await req.propertyDb.models.customer_advances.create({
+                outlet_id: req.user.outlet_id,
+                source_sale_id: null,
+                customer_name: identity.customer_name,
+                customer_phone: identity.customer_phone,
+                customer_gstin: identity.customer_gstin,
+                advance_date: paymentDate,
+                original_amount: remainingAmount,
+                available_amount: remainingAmount,
+                payment_mode: paymentMode,
+                reference_no: referenceNo,
+                note: repaymentNote || 'Excess bulk repayment auto-advance',
+                created_by: req.user.id,
+                updated_by: req.user.id
+            }, { transaction: t });
+
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                txn_date: paymentDate,
+                transaction_type: 'CUSTOMER_ADVANCE',
+                reference_type: 'ADVANCE',
+                reference_id: advanceCreated.id,
+                reference_no: referenceNo,
+                party_name: getCustomerLabelFromIdentity(identity),
+                payment_method: paymentMode,
+                amount_in: remainingAmount,
+                notes: repaymentNote || `Excess bulk repayment auto-advance received from ${getCustomerLabelFromIdentity(identity)}`,
+                created_by: req.user.id,
+                transaction: t
+            });
+        }
+
+        await t.commit();
+        res.json({
+            success: true,
+            message: `Bulk repayment of ${totalAmount.toFixed(2)} processed successfully.`,
+            settled_bills_count: repaymentsCreated.length,
+            repayments: repaymentsCreated,
+            excess_advance: advanceCreated
+        });
+
+    } catch (error) {
+        await t.rollback();
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+

@@ -37,7 +37,7 @@ exports.getStockInReport = async (req, res) => {
       FROM goods_receipts gr
         JOIN goods_receipt_items gri ON gri.grn_id = gr.id
       JOIN supplier_master sm ON sm.id = gr.supplier_id
-      JOIN item_master im ON im.item_code = gri.item_code
+      JOIN item_master im ON im.item_code = gri.item_code AND im.outlet_id = gr.outlet_id
       LEFT JOIN supplier_bills sb
         ON sb.outlet_id = gr.outlet_id
        AND sb.supplier_id = gr.supplier_id

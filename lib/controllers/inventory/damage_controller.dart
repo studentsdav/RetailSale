@@ -15,7 +15,7 @@ class DamageController extends ChangeNotifier {
       return res['data'];
     } catch (_) {
       showErrorSnackbar(
-        'Damage numbering is not configured. Please set Damage No in Numbering Settings.',
+        'Damage numbering is not configured. Please set Damage No in Document Sequence Settings.',
       );
       return {'next_no': 0, 'damage_no': '0'};
     }

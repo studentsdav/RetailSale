@@ -35,7 +35,7 @@ class RequestController extends ChangeNotifier {
       return res['data'];
     } catch (_) {
       showErrorSnackbar(
-        'Request numbering is not configured. Please set Request No in Numbering Settings.',
+        'Request numbering is not configured. Please set Request No in Document Sequence Settings.',
       );
       return '0';
     }

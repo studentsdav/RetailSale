@@ -171,7 +171,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                   border: pw.Border.all(),
                 ),
                 child: pw.Text(
-                  "STOCK ISSUE SLIP",
+                  "STOCK DISPATCH SLIP",
                   style: pw.TextStyle(
                     fontWeight: pw.FontWeight.bold,
                   ),
@@ -186,18 +186,21 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text("Issue No: ${issue['issue_no']}"),
-                  pw.Text(
-                    "Date: ${DateFormat('dd-MMM-yyyy').format(issueDate)}",
-                  ),
-                  pw.Text(
-                    "Department: ${selectedDepartment?.locationName ?? issue['department']}",
-                  ),
-                ],
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("Issue No: ${issue['issue_no']}"),
+                    pw.Text(
+                      "Date: ${DateFormat('dd-MMM-yyyy').format(issueDate)}",
+                    ),
+                    pw.Text(
+                      "Department: ${selectedDepartment?.locationName ?? issue['department']}",
+                    ),
+                  ],
+                ),
               ),
+              pw.SizedBox(width: 20),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -335,7 +338,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
     return Scaffold(
       backgroundColor: const Color(0xffF5F7FB),
       appBar: AppBar(
-        title: const Text("Modify Issue"),
+        title: const Text("Modify Stock Dispatch"),
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
@@ -651,7 +654,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                     ),
                   if (_canReprint)
                     Tooltip(
-                      message: 'Print stock out slip',
+                      message: 'Print stock dispatch slip',
                       child: SizedBox(
                         width: 140,
                         height: 44,
@@ -664,7 +667,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                     ),
                   if (_canModify)
                     Tooltip(
-                      message: 'Save stock out changes',
+                      message: 'Save stock dispatch changes',
                       child: SizedBox(
                         width: 140,
                         height: 44,

@@ -50,6 +50,8 @@ const TRANSACTION_TABLES = [
     'customer_advances',
     'customer_item_advances',
     'sales_refunds',
+    'sales_credit_notes',
+    'customer_orders',
     'sales_headers',
 
     // 12. Miscellaneous/Independent tables
@@ -60,6 +62,7 @@ const TRANSACTION_TABLES = [
     'expense_entries',
     'daily_opening_balances',
     'stock_ledger',
+    'system_notifications',
     'audit_logs'
 ];
 

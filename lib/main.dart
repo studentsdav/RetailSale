@@ -48,7 +48,8 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final Widget? homeWidget;
+  const MyApp({super.key, this.homeWidget});
 
   @override
   Widget build(BuildContext context) {
@@ -294,7 +295,7 @@ class MyApp extends StatelessWidget {
           ),
         );
       },
-      home: const SplashScreen(),
+      home: homeWidget ?? const SplashScreen(),
     );
   }
 }
