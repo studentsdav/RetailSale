@@ -214,6 +214,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             subCategory: item.subCategory.trim().isEmpty
                 ? 'Uncategorized'
                 : item.subCategory.trim(),
+            brand: item.brand.trim().isEmpty
+                ? 'No Brand'
+                : item.brand.trim(),
             hsnSacCode: item.hsnSacCode.trim(),
             quantity: item.qty,
             unit: item.unit.trim(),
@@ -245,6 +248,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       return row.itemDescription.toLowerCase().contains(query) ||
           row.itemGroup.toLowerCase().contains(query) ||
           row.subCategory.toLowerCase().contains(query) ||
+          row.brand.toLowerCase().contains(query) ||
           row.hsnSacCode.toLowerCase().contains(query) ||
           row.invoiceNumber.toLowerCase().contains(query);
     }).toList();
@@ -270,6 +274,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       final key = switch (_groupBy) {
         'GROUP' => row.itemGroup,
         'SUBCATEGORY' => row.subCategory,
+        'BRAND' => row.brand,
         _ => '${row.itemDescription}|${row.hsnSacCode}|${row.unit}',
       };
       final current = grouped[key];
@@ -279,9 +284,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               ? row.itemGroup
               : _groupBy == 'SUBCATEGORY'
                   ? row.subCategory
-                  : row.itemDescription,
+                  : _groupBy == 'BRAND'
+                      ? row.brand
+                      : row.itemDescription,
           itemGroup: row.itemGroup,
           subCategory: row.subCategory,
+          brand: row.brand,
           hsnSacCode: row.hsnSacCode,
           unit: row.unit,
           quantity: row.quantity,
@@ -1617,6 +1625,10 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                   value: 'SUBCATEGORY',
                   child: Text('Subcategory Wise'),
                 ),
+                DropdownMenuItem(
+                  value: 'BRAND',
+                  child: Text('Brand Wise'),
+                ),
               ],
               onChanged: (value) {
                 setState(() => _groupBy = value ?? 'ITEM');
@@ -2476,7 +2488,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Rows: ${groupedRows.length} | Group By: ${_groupBy == 'ITEM' ? 'Item Wise' : _groupBy == 'GROUP' ? 'Group Wise' : 'Subcategory Wise'} | Sales: ${_gstFilter == 'ALL' ? 'All Sales' : _gstFilter == 'B2B_ONLY' ? 'B2B Only' : 'B2C Only'}',
+            'Rows: ${groupedRows.length} | Group By: ${_groupBy == 'ITEM' ? 'Item Wise' : _groupBy == 'GROUP' ? 'Group Wise' : _groupBy == 'BRAND' ? 'Brand Wise' : 'Subcategory Wise'} | Sales: ${_gstFilter == 'ALL' ? 'All Sales' : _gstFilter == 'B2B_ONLY' ? 'B2B Only' : 'B2C Only'}',
             style: const TextStyle(color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 12),
@@ -2510,22 +2522,24 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                               ),
                               dataRowMinHeight: 52,
                               dataRowMaxHeight: 68,
-                              columns: const [
-                                DataColumn(label: Text('Label')),
-                                DataColumn(label: Text('HSN/SAC')),
-                                DataColumn(label: Text('Rows')),
-                                DataColumn(label: Text('Qty')),
-                                DataColumn(label: Text('Unit')),
-                                DataColumn(label: Text('Payment')),
-                                DataColumn(label: Text('Subtotal')),
-                                DataColumn(label: Text('Discount')),
-                                DataColumn(label: Text('Taxed Sales')),
-                                DataColumn(label: Text('Non-Tax Sales')),
-                                DataColumn(label: Text('Taxable Value')),
-                                DataColumn(label: Text('CGST')),
-                                DataColumn(label: Text('SGST')),
-                                DataColumn(label: Text('IGST')),
-                                DataColumn(label: Text('Total Sales')),
+                              columns: [
+                                const DataColumn(label: Text('Label')),
+                                if (_groupBy == 'ITEM')
+                                  const DataColumn(label: Text('Brand')),
+                                const DataColumn(label: Text('HSN/SAC')),
+                                const DataColumn(label: Text('Rows')),
+                                const DataColumn(label: Text('Qty')),
+                                const DataColumn(label: Text('Unit')),
+                                const DataColumn(label: Text('Payment')),
+                                const DataColumn(label: Text('Subtotal')),
+                                const DataColumn(label: Text('Discount')),
+                                const DataColumn(label: Text('Taxed Sales')),
+                                const DataColumn(label: Text('Non-Tax Sales')),
+                                const DataColumn(label: Text('Taxable Value')),
+                                const DataColumn(label: Text('CGST')),
+                                const DataColumn(label: Text('SGST')),
+                                const DataColumn(label: Text('IGST')),
+                                const DataColumn(label: Text('Total Sales')),
                               ],
                               rows: [
                                 ...groupedRows.map(
@@ -2541,6 +2555,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                           ),
                                         ),
                                       ),
+                                      if (_groupBy == 'ITEM')
+                                        DataCell(Text(row.brand)),
                                       DataCell(Text(row.hsnSacCode)),
                                       DataCell(Text('${row.lineCount}')),
                                       DataCell(Text(_formatQty(row.quantity))),
@@ -2579,6 +2595,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                         ),
                                       ),
                                     ),
+                                    if (_groupBy == 'ITEM')
+                                      const DataCell(Text('')),
                                     const DataCell(Text('')),
                                     DataCell(
                                       Text(
@@ -3216,6 +3234,7 @@ class _GstSalesRow {
   final String itemDescription;
   final String itemGroup;
   final String subCategory;
+  final String brand;
   final String hsnSacCode;
   final double quantity;
   final String unit;
@@ -3240,6 +3259,7 @@ class _GstSalesRow {
     required this.itemDescription,
     required this.itemGroup,
     required this.subCategory,
+    required this.brand,
     required this.hsnSacCode,
     required this.quantity,
     required this.unit,
@@ -3261,6 +3281,7 @@ class _GroupedSalesRow {
   final String label;
   final String itemGroup;
   final String subCategory;
+  final String brand;
   final String hsnSacCode;
   final int lineCount;
   final double quantity;
@@ -3280,6 +3301,7 @@ class _GroupedSalesRow {
     required this.label,
     required this.itemGroup,
     required this.subCategory,
+    required this.brand,
     required this.hsnSacCode,
     required this.lineCount,
     required this.quantity,
@@ -3314,6 +3336,7 @@ class _GroupedSalesRow {
       label: label,
       itemGroup: itemGroup,
       subCategory: subCategory,
+      brand: brand,
       hsnSacCode: hsnSacCode,
       lineCount: lineCount ?? this.lineCount,
       quantity: quantity ?? this.quantity,

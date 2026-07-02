@@ -15,6 +15,10 @@ class SystemSettings {
   String billFormat;
   List<BillingCharge> defaultCharges;
   bool isCloudEnabled;
+  /// When true, daily subscription home-delivery orders are auto-accepted
+  /// and appear directly in the retailer console. When false, they are
+  /// created as DRAFT bills in the sale screen for manual confirmation.
+  bool enableAppSubscription;
 
   SystemSettings({
     required this.autoReorder,
@@ -31,6 +35,7 @@ class SystemSettings {
     required this.billFormat,
     required this.defaultCharges,
     required this.isCloudEnabled,
+    required this.enableAppSubscription,
   });
 
   factory SystemSettings.fromJson(Map<String, dynamic> json) {
@@ -49,6 +54,7 @@ class SystemSettings {
       billingTaxMode: json['billing_tax_mode'] ?? 'CGST_SGST',
       billFormat: json['bill_format'] ?? 'A4',
       isCloudEnabled: json['is_cloud_enabled'] ?? false,
+      enableAppSubscription: json['enable_app_subscription'] ?? false,
       defaultCharges: rawCharges is List
           ? rawCharges
               .map((e) => BillingCharge.fromJson(Map<String, dynamic>.from(e)))
@@ -107,7 +113,8 @@ class SystemSettings {
       'bill_format': billFormat,
       'default_charges':
           defaultCharges.map((charge) => charge.toJson()).toList(),
-      'is_cloud_enabled': isCloudEnabled
+      'is_cloud_enabled': isCloudEnabled,
+      'enable_app_subscription': enableAppSubscription,
     };
   }
 }

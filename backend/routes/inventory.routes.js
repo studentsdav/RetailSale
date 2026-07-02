@@ -3,6 +3,8 @@ const auth = require('../middlewares/auth.middleware');
 const license = require('../middlewares/license.middleware');
 const ctrlprop = require('../controllers/public/propertyInfo.controller');
 const itemCtrl = require('../controllers/inventory/itemMaster.controller');
+const attributeCtrl = require('../controllers/inventory/attribute.controller');
+const templateCtrl = require('../controllers/inventory/productTemplate.controller');
 const bomCtrl = require('../controllers/inventory/bom.controller');
 const assemblyCtrl = require('../controllers/inventory/assembly.controller');
 const locationCtrl = require('../controllers/inventory/stockLocation.controller');
@@ -34,6 +36,13 @@ console.log({
 
 router.get('/property-info', ctrlprop.getPropertyInfo);
 router.post('/property-info', ctrlprop.savePropertyInfo);
+
+// ATTRIBUTES & TEMPLATES
+router.get('/attributes', attributeCtrl.getAttributes);
+router.post('/attributes', attributeCtrl.createAttribute);
+router.post('/attributes/:id/values', attributeCtrl.createAttributeValue);
+router.get('/product-templates', templateCtrl.getProductTemplates);
+router.post('/product-templates', templateCtrl.createProductTemplate);
 
 // ITEM MASTER
 router.get('/items/can-import', itemCtrl.canImportItems);

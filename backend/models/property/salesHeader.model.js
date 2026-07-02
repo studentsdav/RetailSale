@@ -7,6 +7,8 @@ module.exports = (sequelize, DataTypes) => {
         customer_phone: DataTypes.STRING,
         customer_address: DataTypes.TEXT,
         customer_gstin: DataTypes.STRING,
+        doctor_name: DataTypes.STRING,
+        patient_name: DataTypes.STRING,
         payment_mode: DataTypes.STRING,
         payment_reference: DataTypes.TEXT,
 

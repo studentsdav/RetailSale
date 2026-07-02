@@ -54,6 +54,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   _SchemeDraft _schemeDraft = const _SchemeDraft();
   double _lastAutoPaymentAmount = 0;
   List<Map<String, dynamic>> _subscriptions = const [];
+  String _deliveryType = 'PICKUP';
 
   @override
   void initState() {
@@ -605,6 +606,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       'payment_mode': firstMode,
       'bonus_qty': 0,
       'selected_schemes': renewalSchemes,
+      'delivery_type': (subscription['delivery_type'] ?? 'PICKUP').toString(),
     };
 
     final saved = await _ctrl.createSubscription(payload);
@@ -935,6 +937,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       'bonus_qty': bonusQty,
       'selected_schemes': selectedSchemes,
       'payment_mode': firstMode,
+      'delivery_type': _deliveryType,
     };
 
     final saved = await _ctrl.createSubscription(payload);
@@ -2585,6 +2588,30 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                                   _endDate = _dateOnly(picked));
                                               _syncSuggestedPaymentAmount(
                                                   force: true);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: compactFieldWidth,
+                                        child: DropdownButtonFormField<String>(
+                                          value: _deliveryType,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Delivery Type',
+                                          ),
+                                          items: const [
+                                            DropdownMenuItem(
+                                              value: 'PICKUP',
+                                              child: Text('Store Pickup'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'HOME',
+                                              child: Text('Home Delivery'),
+                                            ),
+                                          ],
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              setState(() => _deliveryType = val);
                                             }
                                           },
                                         ),

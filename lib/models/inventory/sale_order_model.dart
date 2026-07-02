@@ -13,6 +13,8 @@ class SaleOrder {
   final String billFormat;
   final String? customerName;
   final String? customerPhone;
+  final String? doctorName;
+  final String? patientName;
   final double amountPaid;
   final double changeAmount;
   final double balanceDue;
@@ -66,6 +68,8 @@ class SaleOrder {
     required this.billFormat,
     this.customerName,
     this.customerPhone,
+    this.doctorName,
+    this.patientName,
     required this.amountPaid,
     required this.changeAmount,
     required this.balanceDue,
@@ -120,6 +124,8 @@ class SaleOrder {
         'bill_format': billFormat,
         'customer_name': customerName,
         'customer_phone': customerPhone,
+        'doctor_name': doctorName,
+        'patient_name': patientName,
         'customer_address': customerAddress,
         'customer_gstin': customerGstin,
         'payment_mode': paymentMode,
@@ -180,6 +186,8 @@ class SaleOrder {
       billFormat: json['bill_format']?.toString() ?? 'A4',
       customerName: json['customer_name']?.toString(),
       customerPhone: json['customer_phone']?.toString(),
+      doctorName: json['doctor_name']?.toString(),
+      patientName: json['patient_name']?.toString(),
       customerAddress: json['customer_address']?.toString(),
       customerGstin: json['customer_gstin']?.toString(),
       paymentMode: json['payment_mode']?.toString() ?? 'CASH',

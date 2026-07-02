@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/config/app_config.dart';
 import '../dashboard/rider_console_screen.dart';
+import '../dashboard/server_config_screen.dart';
 import 'rider_auth_screen.dart';
 
 class RiderAppSplashScreen extends StatefulWidget {
@@ -22,6 +24,20 @@ class _RiderAppSplashScreenState extends State<RiderAppSplashScreen> {
     await Future.delayed(const Duration(seconds: 2));
 
     try {
+      bool hasConfig = await AppConfig.configExists();
+      if (!hasConfig) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ServerConfigScreen(
+              nextScreen: RiderAppSplashScreen(),
+            ),
+          ),
+        );
+        return;
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final riderDataStr = prefs.getString('delivery_logged_in_rider');
 

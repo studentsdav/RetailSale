@@ -32,6 +32,7 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
   final _gstNo = TextEditingController();
   final _panNo = TextEditingController();
   final _fssaiNo = TextEditingController();
+  final _drugLicenseNo = TextEditingController();
   String? _logoPath;
 
   bool _active = true;
@@ -63,6 +64,7 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
         _gstNo.text = d.gstNo;
         _panNo.text = d.panNo;
         _fssaiNo.text = d.fssaiNo;
+        _drugLicenseNo.text = d.drugLicenseNo;
         _logoPath = d.logoPath;
         _active = d.isActive;
       });
@@ -70,7 +72,7 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
   }
 
   Future<void> _pickLogo() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
     );
@@ -110,6 +112,7 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
         gstNo: _gstNo.text,
         panNo: _panNo.text,
         fssaiNo: _fssaiNo.text,
+        drugLicenseNo: _drugLicenseNo.text,
         logoPath: _logoPath,
         isActive: _active,
       );
@@ -214,6 +217,8 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                           prefixIcon: Icons.credit_card),
                       _field(_fssaiNo, 'FSSAI License (Optional)',
                           required: false, prefixIcon: Icons.verified_user),
+                      _field(_drugLicenseNo, 'Drug License Number (Optional)',
+                          required: false, prefixIcon: Icons.medical_services_outlined),
                     ],
                   ),
                   _sectionCard(

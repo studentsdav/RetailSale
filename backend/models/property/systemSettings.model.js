@@ -78,6 +78,10 @@ module.exports = (sequelize, DataTypes) => {
         voucher_rules: {
             type: DataTypes.JSONB,
             defaultValue: []
+        },
+        enable_app_subscription: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         }
     }, {
         tableName: 'system_settings',

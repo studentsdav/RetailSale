@@ -61,6 +61,7 @@ import '../reports/loyalty_report_screen.dart';
 import '../reports/subscription_report_screen.dart';
 import '../reports/sales_report_screen.dart';
 import '../reports/store_analysis_screen.dart';
+import '../reports/brand_analysis_screen.dart';
 import '../reports/ai_query_analytics_screen.dart';
 import '../reports/stock_ledger_report_screen.dart';
 import '../reports/supplier_payments_report_screen.dart';
@@ -150,7 +151,19 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   String _userRole = '';
 
   String get _businessType => (user?.outletType ?? '').toUpperCase();
-  bool get _isRetailBusiness => _businessType == 'RETAIL';
+  bool get _isRetailBusiness =>
+      _businessType == 'RETAIL' ||
+      const {
+        'KIRANA',
+        'MEDICAL',
+        'PARTS',
+        'MACHINERY',
+        'PETS',
+        'CLOTHES',
+        'SOFTWARE',
+        'SHOES',
+        'MART'
+      }.contains(_businessType);
   bool get _isWarehouseBusiness => _businessType == 'WAREHOUSE';
   bool get _isHospitalityBusiness =>
       const {'HOTEL', 'RESTAURANT', 'CAFE', 'BAR'}.contains(_businessType);
@@ -1475,6 +1488,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
               columns: const [
                 DataColumn(label: Text('Item')),
+                DataColumn(label: Text('Brand')),
                 DataColumn(label: Text('Morning')),
                 DataColumn(label: Text('Afternoon')),
                 DataColumn(label: Text('Evening')),
@@ -1486,6 +1500,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     (item) => DataRow(
                       cells: [
                         DataCell(Text(item.itemName)),
+                        DataCell(Text(item.brand.isNotEmpty ? item.brand : '—')),
                         DataCell(_heatCell(item.zones['MORNING']?.sales ?? 0)),
                         DataCell(
                             _heatCell(item.zones['AFTERNOON']?.sales ?? 0)),
@@ -1687,17 +1702,17 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               }),
             if (_showRetailSalesSection) ...[
               _drawerItem(Icons.shopping_bag_outlined, 'Customer App (Delivery)',
-                  permission: 'RETAIL_SALES', onTap: () {
+                  permission: 'RETAIL_SALES', isBeta: true, onTap: () {
                 Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const CustomerAppScreen()));
               }),
               _drawerItem(Icons.admin_panel_settings_outlined, 'Supplier / Retailer Console',
-                  permission: 'RETAIL_SALES', onTap: () {
+                  permission: 'RETAIL_SALES', isBeta: true, onTap: () {
                 Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const RetailerConsoleScreen()));
               }),
               _drawerItem(Icons.delivery_dining_outlined, 'Rider Delivery Portal',
-                  permission: 'RETAIL_SALES', onTap: () {
+                  permission: 'RETAIL_SALES', isBeta: true, onTap: () {
                 Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const RiderConsoleScreen()));
               }),
@@ -1945,7 +1960,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                       builder: (_) => const LoyaltyMasterConfigScreen()));
             }),
             _drawerItem(Icons.chat_bubble_outline, 'WhatsApp Integration',
-                permission: 'SETTINGS', onTap: () {
+                permission: 'SETTINGS', isBeta: true, onTap: () {
               Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -2046,8 +2061,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   MaterialPageRoute(
                       builder: (_) => const StoreAnalysisScreen()));
             }),
-            _drawerItem(Icons.auto_awesome, 'AI Query Analytics',
+            _drawerItem(Icons.analytics_outlined, 'Brand Analysis',
                 permission: 'REPORTS', onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const BrandAnalysisScreen()));
+            }),
+            _drawerItem(Icons.auto_awesome, 'AI Query Analytics',
+                permission: 'REPORTS', isBeta: true, onTap: () {
               Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -2189,14 +2211,70 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     String label, {
     VoidCallback? onTap,
     String? permission,
+    bool isBeta = false,
+    bool isNew = false,
+    bool isDeprecated = false,
+    bool isFutureUpdate = false,
   }) {
     if (permission != null && !PermissionService.can(permission)) {
       return const SizedBox();
     }
 
+    InlineSpan? badge;
+    if (isBeta) {
+      badge = const TextSpan(
+        text: ' (Beta)',
+        style: TextStyle(
+          color: Colors.red,
+          fontStyle: FontStyle.italic,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    } else if (isNew) {
+      badge = const TextSpan(
+        text: ' (New)',
+        style: TextStyle(
+          color: Colors.green,
+          fontStyle: FontStyle.italic,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    } else if (isDeprecated) {
+      badge = const TextSpan(
+        text: ' (Deprecated)',
+        style: TextStyle(
+          color: Colors.grey,
+          fontStyle: FontStyle.italic,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    } else if (isFutureUpdate) {
+      badge = const TextSpan(
+        text: ' (Future Update)',
+        style: TextStyle(
+          color: Colors.orange,
+          fontStyle: FontStyle.italic,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    }
+
     return ListTile(
       leading: Icon(ic),
-      title: Text(label),
+      title: badge != null
+          ? Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: label),
+                  badge,
+                ],
+              ),
+            )
+          : Text(label),
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: onTap ?? () => Navigator.of(context).pop(),
     );

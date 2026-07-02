@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +15,12 @@ import '../../controllers/dashboard/dashboard_controller.dart'
 import '../../models/security/app_user_model.dart';
 import 'retailer_console_screen.dart';
 import 'rider_console_screen.dart';
+import '../../core/printing/pos_invoice_printer.dart';
+import '../../models/inventory/sale_order_model.dart';
+import '../../models/inventory/sale_item_model.dart';
+import '../../models/inventory/billing_charge_model.dart';
+import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/notification_services.dart';
 
 class CustomerAppScreen extends StatefulWidget {
   const CustomerAppScreen({super.key});
@@ -28,6 +35,36 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   // --- Customer Tab State ---
   List<dynamic> _catalogItems = [];
+  List<dynamic> get _groupedCatalogItems {
+    final List<dynamic> representatives = [];
+    final Set<int> templateIdsAdded = {};
+
+    for (var item in _catalogItems) {
+      final int? templateId = item['product_template_id'];
+      if (templateId == null) {
+        representatives.add(item);
+      } else {
+        if (!templateIdsAdded.contains(templateId)) {
+          representatives.add(item);
+          templateIdsAdded.add(templateId);
+        }
+      }
+    }
+    return representatives;
+  }
+
+  double _getGroupedCartQty(int? templateId, int itemId) {
+    if (templateId != null) {
+      double sum = 0.0;
+      _cart.forEach((key, value) {
+        if (value['item'] != null && value['item']['product_template_id'] == templateId) {
+          sum += double.tryParse(value['qty'].toString()) ?? 0.0;
+        }
+      });
+      return sum;
+    }
+    return _cart.containsKey(itemId) ? double.tryParse(_cart[itemId]!['qty'].toString()) ?? 0.0 : 0.0;
+  }
   final Map<int, Map<String, dynamic>> _cart =
       {}; // item_id -> { 'item': Map, 'qty': double }
   final TextEditingController _custNameCtrl = TextEditingController();
@@ -54,6 +91,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   int _historySubTabIndex = 0; // 0 for Orders, 1 for Subscriptions
   Map<String, dynamic>? _activeOrder;
   Timer? _trackingTimer;
+  Timer? _notificationTimer;
+  final Set<int> _shownNotificationIds = {};
 
   // Search, Category, and Pagination state
   int _currentPage = 1;
@@ -104,6 +143,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     _custGstinCtrl.dispose();
     _couponCodeCtrl.dispose();
     _stopTrackingOrder();
+    _notificationTimer?.cancel();
     super.dispose();
   }
 
@@ -152,7 +192,32 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     }
     if (_loggedInCustomer != null) {
       _fetchHistory();
+      _startCustomerNotificationTimer();
     }
+  }
+
+  void _startCustomerNotificationTimer() {
+    _notificationTimer?.cancel();
+    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+      if (!mounted) return;
+      final phone = _loggedInCustomer?['phone'];
+      if (phone == null) return;
+      try {
+        final outletCode = _loggedInCustomer?['outlet_id'] ??
+            _currentUser?.outletCode ??
+            (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+        final res = await ApiClient.get(
+            '/api/delivery/customer/notifications?customer_phone=${Uri.encodeComponent(phone)}&outlet_id=$outletCode');
+        final data = (res['data'] as List? ?? []);
+        for (final n in data) {
+          final id = n['id'] as int? ?? 0;
+          if (id > 0 && n['is_read'] == false && !_shownNotificationIds.contains(id)) {
+            _shownNotificationIds.add(id);
+            NotificationService.show(id, n['title']?.toString() ?? 'Notification', n['message']?.toString() ?? '');
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   // ================= API CALLS =================
@@ -325,6 +390,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   'Registered successfully! Welcome, ${_loggedInCustomer!['name']}')),
         );
         _fetchHistory();
+        _startCustomerNotificationTimer();
       }
     } catch (e) {
       debugPrint('Error registering customer: $e');
@@ -371,6 +437,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   'Logged in successfully! Welcome, ${_loggedInCustomer!['name']}')),
         );
         _fetchHistory();
+        _startCustomerNotificationTimer();
       }
     } catch (e) {
       debugPrint('Error logging in customer: $e');
@@ -438,8 +505,11 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     setState(() => _isSubscriptionsLoading = true);
     try {
       final phone = _loggedInCustomer!['phone'];
+      final outletCode = _loggedInCustomer?['outlet_id'] ??
+          _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
       final res = await ApiClient.get(
-          '/api/sales/subscriptions/customer?customer_phone=$phone');
+          '/api/sales/subscriptions/customer?customer_phone=$phone&outlet_id=$outletCode');
       if (res['success'] == true) {
         setState(() {
           _subscriptions = res['data'] ?? [];
@@ -488,6 +558,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     try {
       double subTotal = 0;
       double tax = 0;
+      double subscriptionDiscount = 0.0;
+      double subscriptionTaxDiscount = 0.0;
       final List<Map<String, dynamic>> itemsList = [];
 
       _cart.forEach((itemId, value) {
@@ -501,6 +573,17 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
         final itemTaxAmount = itemTotal * itemTaxPercent / 100.0;
         tax += itemTaxAmount;
+
+        final sub = _subscriptions.firstWhere(
+          (s) => s['item_id'] == itemId && (s['active_subscription'] == true || s['status'] == 'ACTIVE'),
+          orElse: () => null,
+        );
+        if (sub != null) {
+          final double remainingQty = double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0;
+          final double coveredQty = qty < remainingQty ? qty : remainingQty;
+          subscriptionDiscount += rate * coveredQty;
+          subscriptionTaxDiscount += (rate * coveredQty) * itemTaxPercent / 100.0;
+        }
 
         itemsList.add({
           'item_id': itemId,
@@ -570,10 +653,23 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         });
       }
 
+      if (subscriptionDiscount > 0) {
+        chargesList.add({
+          'name': 'Subscription Discount',
+          'code': 'SUBSCRIPTION_DISCOUNT',
+          'amount': -subscriptionDiscount,
+          'taxable': false,
+          'tax_percent': 0.0,
+          'tax_amount': -subscriptionTaxDiscount,
+          'taxable_amount': -subscriptionDiscount
+        });
+      }
+
       double totalCharges = delivery + customChargesTotal;
       double totalChargesTax = deliveryGst + customChargesGstTotal;
-      double finalTax = tax + totalChargesTax;
-      double netAmount = subTotal + finalTax + totalCharges - couponDiscount;
+      double finalTax = (tax - subscriptionTaxDiscount) + totalChargesTax;
+      if (finalTax < 0) finalTax = 0.0;
+      double netAmount = subTotal + finalTax + totalCharges - couponDiscount - subscriptionDiscount;
       if (netAmount < 0) netAmount = 0.0;
 
       final outletCode = _loggedInCustomer?['outlet_id'] ??
@@ -1094,548 +1190,132 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     }
   }
 
-  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder) async {
-    final pdf = pw.Document();
+  SaleOrder _mapRecordToSaleOrder(dynamic record) {
+    double parseNum(dynamic value) =>
+        double.tryParse(value?.toString() ?? '') ?? 0.0;
 
-    final String customerName = record['customer_name'] ?? '--';
-    final String customerPhone = record['customer_phone'] ?? '--';
-    final String customerAddress = record['customer_address'] ?? '--';
+    final rawItems = record['received_items'] as List? ?? record['items'] as List? ?? [];
+    List<SaleItem> saleItems = [];
+    double calculatedSubTotal = 0.0;
+    double calculatedTotalQty = 0.0;
+    
+    for (var it in rawItems) {
+      final qty = parseNum(it['qty'] ?? 1.0);
+      final rate = parseNum(it['rate'] ?? 0.0);
+      final lineTaxPercent = parseNum(it['tax_percent'] ?? 0.0);
+      
+      final total = qty * rate;
+      final taxAmt = parseNum(it['tax_amount'] ?? (total * lineTaxPercent / 100.0));
+      final taxableAmt = parseNum(it['taxable_amount'] ?? (total - taxAmt));
+      final lineTotal = parseNum(it['line_total'] ?? total);
 
-    String title = '';
-    String numberLabel = '';
-    String numberVal = '';
-    String dateVal = '';
-    List<dynamic> itemsList = [];
-    double subTotal = 0;
-    double tax = 0;
-    double delivery = 0;
-    double netTotal = 0;
-    String payMode = '';
-    String payStatus = '';
+      calculatedSubTotal += total;
+      calculatedTotalQty += qty;
 
-    if (isOnlineOrder) {
-      title = 'Online Delivery Order';
-      numberLabel = 'ORDER ID';
-      numberVal = '#${record['id']}';
-      dateVal = record['created_at'] != null
-          ? DateFormat('dd-MMM-yyyy hh:mm a')
-              .format(DateTime.parse(record['created_at'].toString()))
-          : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
-      itemsList = record['items'] as List? ?? [];
-      subTotal = double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
-      tax = double.tryParse(record['tax_amount']?.toString() ?? '0') ?? 0.0;
-      delivery =
-          double.tryParse(record['delivery_charge']?.toString() ?? '0') ?? 0.0;
-      netTotal =
-          double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
-      payMode = record['payment_status'] == 'PAID'
-          ? 'Online/UPI'
-          : 'Cash on Delivery';
-      payStatus = record['payment_status'] == 'PAID' ? 'PAID' : 'COLLECT CASH';
-    } else {
-      title = 'In-Store POS Sale';
-      numberLabel = 'INVOICE NO';
-      numberVal = record['sale_no'] ?? '--';
-      dateVal = record['sale_date'] != null
-          ? DateFormat('dd-MMM-yyyy hh:mm a')
-              .format(DateTime.parse(record['sale_date'].toString()))
-          : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
-      itemsList = record['items'] as List? ?? [];
-      subTotal = double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
-      tax = double.tryParse(record['total_tax']?.toString() ?? '0') ?? 0.0;
-      delivery =
-          double.tryParse(record['charge_total']?.toString() ?? '0') ?? 0.0;
-      netTotal =
-          double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
-      payMode = record['payment_mode'] ?? 'CASH';
-      final balance =
-          double.tryParse(record['balance_due']?.toString() ?? '0') ?? 0.0;
-      payStatus =
-          balance <= 0 ? 'PAID' : 'DUE (Rs. ${balance.toStringAsFixed(2)})';
+      saleItems.add(SaleItem(
+        itemId: int.tryParse(it['item_id']?.toString() ?? '') ?? 0,
+        itemCode: it['item_code']?.toString() ?? '',
+        itemName: it['item_name']?.toString() ?? '',
+        barcode: it['barcode']?.toString() ?? '',
+        unit: it['unit']?.toString() ?? 'Pcs',
+        qty: qty,
+        rate: rate,
+        taxPercent: lineTaxPercent,
+        taxAmount: taxAmt,
+        taxableAmount: taxableAmt,
+        lineTotal: lineTotal,
+      ));
     }
 
-    final isThermal = _billFormat.startsWith('THERMAL_');
-    final double fs = isThermal ? 8.0 : 11.0;
-    final double fsSmall = isThermal ? 7.0 : 9.5;
-    final double fsBig = isThermal ? 12.0 : 16.0;
-    final PdfPageFormat pageFormat = isThermal
-        ? (_billFormat == 'THERMAL_58'
-            ? PdfPageFormat.roll57
-            : PdfPageFormat.roll80)
-        : PdfPageFormat.a4;
-    final pw.EdgeInsets margin = isThermal
-        ? const pw.EdgeInsets.all(10)
-        : const pw.EdgeInsets.symmetric(horizontal: 48, vertical: 40);
-    final String divider = isThermal
-        ? '--------------------------------------'
-        : '─────────────────────────────────────────────────────';
+    List<BillingCharge> billingCharges = [];
+    final rawCharges = record['charges'] as List?;
+    if (rawCharges != null) {
+      for (var ch in rawCharges) {
+        billingCharges.add(BillingCharge.fromJson(Map<String, dynamic>.from(ch)));
+      }
+    }
+    
+    final delivery = parseNum(record['delivery_charge'] ?? record['charge_total'] ?? 0.0);
+    final hasDeliveryCharge = billingCharges.any((c) => c.code == 'DELIVERY' || c.name.toUpperCase() == 'DELIVERY');
+    if (delivery > 0 && !hasDeliveryCharge) {
+      billingCharges.add(BillingCharge(
+        name: 'DELIVERY',
+        code: 'DELIVERY',
+        amount: delivery,
+        taxable: false,
+        autoApply: false,
+        isEnabled: true,
+        taxType: 'GST',
+        taxPercent: 0.0,
+      ));
+    }
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: pageFormat,
-        margin: margin,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Center(
-                child: pw.Text(
-                  _currentUser?.propertyName.isNotEmpty == true
-                      ? _currentUser!.propertyName
-                      : 'RETAIL MART POS',
-                  style: pw.TextStyle(
-                      fontSize: fsBig, fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-              pw.Center(
-                child: pw.Text(
-                  title,
-                  style: pw.TextStyle(fontSize: fs),
-                ),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Text('$numberLabel : $numberVal',
-                  style: pw.TextStyle(fontSize: fs)),
-              pw.Text('DATE       : $dateVal',
-                  style: pw.TextStyle(fontSize: fs)),
-              pw.Text('CUSTOMER   : $customerName',
-                  style: pw.TextStyle(fontSize: fs)),
-              pw.Text('PHONE      : $customerPhone',
-                  style: pw.TextStyle(fontSize: fs)),
-              if (customerAddress.isNotEmpty)
-                pw.Text('ADDRESS    : $customerAddress',
-                    style: pw.TextStyle(fontSize: fs)),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Text('ITEMS SOLD:',
-                  style: pw.TextStyle(
-                      fontSize: fs, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 4),
-              ...itemsList.map((item) {
-                final qtyVal =
-                    double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
-                final rateVal =
-                    double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
-                final total = qtyVal * rateVal;
-                final taxPct =
-                    double.tryParse(item['tax_percent']?.toString() ?? '0') ??
-                        0.0;
-                final taxAmt =
-                    double.tryParse(item['tax_amount']?.toString() ?? '0') ??
-                        0.0;
-                final gstLabel = taxPct > 0
-                    ? 'GST ${taxPct % 1 == 0 ? taxPct.toInt().toString() : taxPct.toStringAsFixed(1)}%'
-                        '${taxAmt > 0 ? ' = Rs. ${taxAmt.toStringAsFixed(2)}' : ''}'
-                    : '';
-                return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Expanded(
-                            child: pw.Text(
-                              '${item['item_name']} x${qtyVal.toStringAsFixed(0)}',
-                              style: pw.TextStyle(
-                                  fontSize: fs, fontWeight: pw.FontWeight.bold),
-                            ),
-                          ),
-                          pw.Text('Rs. ${total.toStringAsFixed(2)}',
-                              style: pw.TextStyle(
-                                  fontSize: fs,
-                                  fontWeight: pw.FontWeight.bold)),
-                        ],
-                      ),
-                      if (gstLabel.isNotEmpty)
-                        pw.Text(
-                          '  $gstLabel',
-                          style: pw.TextStyle(
-                              fontSize: fsSmall, color: PdfColors.grey700),
-                        ),
-                    ],
-                  ),
-                );
-              }),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('SUB TOTAL', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text('Rs. ${subTotal.toStringAsFixed(2)}',
-                      style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('GST / TAXES', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text('Rs. ${tax.toStringAsFixed(2)}',
-                      style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              if (record['charges'] != null &&
-                  record['charges'] is List &&
-                  (record['charges'] as List).isNotEmpty)
-                ...((record['charges'] as List).map((ch) {
-                  final String name =
-                      (ch['name'] ?? 'Charge').toString().toUpperCase();
-                  final double amt =
-                      double.tryParse(ch['amount']?.toString() ?? '0') ?? 0.0;
-                  final double tAmt =
-                      double.tryParse(ch['tax_amount']?.toString() ?? '0') ??
-                          0.0;
-                  final double tPct =
-                      double.tryParse(ch['tax_percent']?.toString() ?? '0') ??
-                          0.0;
-                  return pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(name, style: pw.TextStyle(fontSize: fs)),
-                          pw.Text('Rs. ${amt.toStringAsFixed(2)}',
-                              style: pw.TextStyle(fontSize: fs)),
-                        ],
-                      ),
-                      if (tAmt > 0)
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('  * GST (${tPct.toStringAsFixed(1)}%)',
-                                style: pw.TextStyle(fontSize: fsSmall)),
-                            pw.Text('Rs. ${tAmt.toStringAsFixed(2)}',
-                                style: pw.TextStyle(fontSize: fsSmall)),
-                          ],
-                        ),
-                    ],
-                  );
-                }).toList())
-              else if (delivery > 0)
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('DELIVERY', style: pw.TextStyle(fontSize: fs)),
-                    pw.Text('Rs. ${delivery.toStringAsFixed(2)}',
-                        style: pw.TextStyle(fontSize: fs)),
-                  ],
-                ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('NET TOTAL',
-                      style: pw.TextStyle(
-                          fontSize: fs + 1, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Rs. ${netTotal.toStringAsFixed(2)}',
-                      style: pw.TextStyle(
-                          fontSize: fs + 1, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-              pw.SizedBox(height: 4),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('PAY MODE', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text(payMode, style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('PAY STATUS',
-                      style: pw.TextStyle(
-                          fontSize: fs, fontWeight: pw.FontWeight.bold)),
-                  pw.Text(payStatus,
-                      style: pw.TextStyle(
-                          fontSize: fs, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.SizedBox(height: 4),
-              pw.Center(
-                child: pw.Text(
-                  'THANK YOU FOR SHOPPING!',
-                  style: pw.TextStyle(
-                      fontSize: fs, fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+    final netAmt = parseNum(record['net_amount'] ?? 0.0);
+    final taxAmt = parseNum(record['tax_amount'] ?? record['total_tax'] ?? 0.0);
+
+    return SaleOrder(
+      saleNo: record['sale_no']?.toString() ?? record['id']?.toString() ?? '',
+      saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
+      status: record['status']?.toString() ?? 'COMPLETED',
+      orderType: 'B2C',
+      billingCountry: 'India',
+      billingTaxMode: 'CGST_SGST',
+      billFormat: _billFormat,
+      customerName: record['customer_name']?.toString(),
+      customerPhone: record['customer_phone']?.toString(),
+      customerAddress: record['customer_address']?.toString(),
+      customerGstin: record['gstin']?.toString() ?? record['customer_gstin']?.toString(),
+      paymentMode: record['payment_mode']?.toString() ?? 'CASH',
+      amountPaid: record['payment_status'] == 'PAID' ? netAmt : 0.0,
+      changeAmount: 0.0,
+      balanceDue: record['payment_status'] == 'PAID' ? 0.0 : netAmt,
+      subTotal: parseNum(record['sub_total'] ?? calculatedSubTotal),
+      totalQty: calculatedTotalQty,
+      taxPercent: 0.0,
+      schemeDiscount: 0.0,
+      manualDiscountValue: 0.0,
+      manualDiscountAmount: 0.0,
+      taxableAmount: parseNum(record['sub_total'] ?? calculatedSubTotal) - taxAmt,
+      cgstAmount: taxAmt / 2,
+      sgstAmount: taxAmt / 2,
+      igstAmount: 0.0,
+      totalTax: taxAmt,
+      taxBreakup: [],
+      charges: billingCharges,
+      chargeTotal: delivery,
+      chargeTaxTotal: 0.0,
+      totalDiscount: 0.0,
+      roundOffAmount: 0.0,
+      netAmount: netAmt,
+      items: saleItems,
     );
+  }
 
+  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder) async {
+    setState(() => _isLoading = true);
     try {
-      await Printing.layoutPdf(
-        onLayout: (format) async => pdf.save(),
-        name:
-            '${isOnlineOrder ? "order" : "sale"}_${record['id'] ?? record['sale_no']}',
+      final propertyCtrl = PropertyInfoController();
+      await propertyCtrl.load();
+
+      final order = _mapRecordToSaleOrder(record);
+
+      await PosInvoicePrinter.printSaleInvoice(
+        order: order,
+        property: propertyCtrl.data,
+        cashierName: 'System',
+        termsAndConditions: 'Goods once sold will not be taken back. Subject to local jurisdiction.',
+        thankYouMessage: 'Thank you for shopping with us. Please visit again.',
+        authorizedSignatureLabel: 'Authorized Signature',
       );
     } catch (e) {
-      debugPrint('Error printing natively: $e');
+      debugPrint('Error printing receipt: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
   void _showThermalReceipt(dynamic record, bool isOnlineOrder) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final String customerName = record['customer_name'] ?? '--';
-        final String customerPhone = record['customer_phone'] ?? '--';
-        final String customerAddress = record['customer_address'] ?? '--';
-
-        String title = '';
-        String numberLabel = '';
-        String numberVal = '';
-        String dateVal = '';
-        List<dynamic> itemsList = [];
-        double subTotal = 0;
-        double tax = 0;
-        double delivery = 0;
-        double netTotal = 0;
-        String payMode = '';
-        String payStatus = '';
-
-        if (isOnlineOrder) {
-          title = 'Online Delivery Order';
-          numberLabel = 'ORDER ID';
-          numberVal = '#${record['id']}';
-          dateVal = record['created_at'] != null
-              ? DateFormat('dd-MMM-yyyy hh:mm a')
-                  .format(DateTime.parse(record['created_at'].toString()))
-              : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
-          itemsList = record['items'] as List? ?? [];
-          subTotal =
-              double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
-          tax = double.tryParse(record['tax_amount']?.toString() ?? '0') ?? 0.0;
-          delivery =
-              double.tryParse(record['delivery_charge']?.toString() ?? '0') ??
-                  0.0;
-          netTotal =
-              double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
-          payMode = record['payment_status'] == 'PAID'
-              ? 'Online/UPI'
-              : 'Cash on Delivery';
-          payStatus =
-              record['payment_status'] == 'PAID' ? 'PAID' : 'COLLECT CASH';
-        } else {
-          title = 'In-Store POS Sale';
-          numberLabel = 'INVOICE NO';
-          numberVal = record['sale_no'] ?? '--';
-          dateVal = record['sale_date'] != null
-              ? DateFormat('dd-MMM-yyyy hh:mm a')
-                  .format(DateTime.parse(record['sale_date'].toString()))
-              : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
-          itemsList = record['items'] as List? ?? [];
-          subTotal =
-              double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
-          tax = double.tryParse(record['total_tax']?.toString() ?? '0') ?? 0.0;
-          delivery =
-              double.tryParse(record['charge_total']?.toString() ?? '0') ?? 0.0;
-          netTotal =
-              double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
-          payMode = record['payment_mode'] ?? 'CASH';
-          final balance =
-              double.tryParse(record['balance_due']?.toString() ?? '0') ?? 0.0;
-          payStatus =
-              balance <= 0 ? 'PAID' : 'DUE (Rs. ${balance.toStringAsFixed(2)})';
-        }
-
-        return AlertDialog(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          backgroundColor: Colors.yellow.shade50,
-          title: const Column(
-            children: [
-              Icon(Icons.print_outlined, size: 44, color: Colors.black87),
-              SizedBox(height: 4),
-              Text(
-                'SIMULATED PRINT RECEIPT',
-                style: TextStyle(
-                    fontFamily: 'Courier',
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey),
-              ),
-              Divider(color: Colors.black54),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Container(
-              width: 320,
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Text(
-                      _currentUser?.propertyName.isNotEmpty == true
-                          ? _currentUser!.propertyName
-                          : 'RETAIL MART POS',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontFamily: 'Courier',
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  Center(
-                    child: Text(
-                      title,
-                      style:
-                          const TextStyle(fontFamily: 'Courier', fontSize: 13),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('--------------------------------',
-                      style: TextStyle(fontFamily: 'Courier')),
-                  Text('$numberLabel : $numberVal',
-                      style: const TextStyle(fontFamily: 'Courier')),
-                  Text('DATE       : $dateVal',
-                      style: const TextStyle(fontFamily: 'Courier')),
-                  Text('CUSTOMER   : $customerName',
-                      style: const TextStyle(fontFamily: 'Courier')),
-                  Text('PHONE      : $customerPhone',
-                      style: const TextStyle(fontFamily: 'Courier')),
-                  if (customerAddress.isNotEmpty)
-                    Text('ADDRESS    : $customerAddress',
-                        style: const TextStyle(fontFamily: 'Courier')),
-                  const Text('--------------------------------',
-                      style: TextStyle(fontFamily: 'Courier')),
-                  const Text('ITEMS SOLD:',
-                      style: TextStyle(
-                          fontFamily: 'Courier', fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  ...itemsList.map((item) {
-                    final qtyVal =
-                        double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
-                    final rateVal =
-                        double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
-                    final total = qtyVal * rateVal;
-                    final taxPercent = double.tryParse(
-                            (item['tax_percent'] ?? 0).toString()) ??
-                        0.0;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              taxPercent <= 0
-                                  ? '${item['item_name']} x${qtyVal.toStringAsFixed(0)} (GST NILL)'
-                                  : '${item['item_name']} x${qtyVal.toStringAsFixed(0)}',
-                              style: const TextStyle(fontFamily: 'Courier'),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text('Rs. ${total.toStringAsFixed(2)}',
-                              style: const TextStyle(fontFamily: 'Courier')),
-                        ],
-                      ),
-                    );
-                  }),
-                  const Text('--------------------------------',
-                      style: TextStyle(fontFamily: 'Courier')),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('SUB TOTAL',
-                          style: TextStyle(fontFamily: 'Courier')),
-                      Text('Rs. ${subTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(fontFamily: 'Courier')),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('GST (18%)',
-                          style: TextStyle(fontFamily: 'Courier')),
-                      Text('Rs. ${tax.toStringAsFixed(2)}',
-                          style: const TextStyle(fontFamily: 'Courier')),
-                    ],
-                  ),
-                  if (delivery > 0)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('DELIVERY',
-                            style: TextStyle(fontFamily: 'Courier')),
-                        Text('Rs. ${delivery.toStringAsFixed(2)}',
-                            style: const TextStyle(fontFamily: 'Courier')),
-                      ],
-                    ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('NET TOTAL',
-                          style: TextStyle(
-                              fontFamily: 'Courier',
-                              fontWeight: FontWeight.bold)),
-                      Text('Rs. ${netTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                              fontFamily: 'Courier',
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('PAY MODE',
-                          style: TextStyle(fontFamily: 'Courier')),
-                      Text(payMode,
-                          style: const TextStyle(fontFamily: 'Courier')),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('PAY STATUS',
-                          style: TextStyle(
-                              fontFamily: 'Courier',
-                              fontWeight: FontWeight.bold)),
-                      Text(payStatus,
-                          style: const TextStyle(
-                              fontFamily: 'Courier',
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const Text('--------------------------------',
-                      style: TextStyle(fontFamily: 'Courier')),
-                  const SizedBox(height: 8),
-                  const Center(
-                    child: Text(
-                      'THANK YOU FOR SHOPPING!',
-                      style: TextStyle(
-                          fontFamily: 'Courier',
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            OutlinedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _printReceiptNative(record, isOnlineOrder);
-              },
-              icon: const Icon(Icons.print_outlined),
-              label: const Text('Print / Save PDF'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            )
-          ],
-        );
-      },
-    );
+    _printReceiptNative(record, isOnlineOrder);
   }
 
   double _calculateCouponDiscount(double subTotal) {
@@ -1990,6 +1670,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   Widget _buildCartSummary(ThemeData theme) {
     double subTotal = 0;
     double tax = 0;
+    double subscriptionDiscount = 0.0;
+    double subscriptionTaxDiscount = 0.0;
+
     _cart.forEach((itemId, value) {
       final item = value['item'];
       final qty = value['qty'];
@@ -1998,7 +1681,19 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
       final itemTaxPercent =
           double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-      tax += (price * qty) * itemTaxPercent / 100.0;
+      final itemTax = (price * qty) * itemTaxPercent / 100.0;
+      tax += itemTax;
+
+      final sub = _subscriptions.firstWhere(
+        (s) => s['item_id'] == itemId && (s['active_subscription'] == true || s['status'] == 'ACTIVE'),
+        orElse: () => null,
+      );
+      if (sub != null) {
+        final double remainingQty = double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0;
+        final double coveredQty = qty < remainingQty ? qty : remainingQty;
+        subscriptionDiscount += price * coveredQty;
+        subscriptionTaxDiscount += (price * coveredQty) * itemTaxPercent / 100.0;
+      }
     });
 
     double delivery = _cart.isEmpty
@@ -2033,8 +1728,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
     double totalCharges = delivery + customChargesTotal;
     double totalChargesGst = deliveryGst + customChargesGstTotal;
-    double finalTax = tax + totalChargesGst;
-    double netTotal = subTotal + finalTax + totalCharges - couponDiscount;
+    double finalTax = (tax - subscriptionTaxDiscount) + totalChargesGst;
+    if (finalTax < 0) finalTax = 0.0;
+    double netTotal = subTotal + finalTax + totalCharges - couponDiscount - subscriptionDiscount;
     if (netTotal < 0) netTotal = 0.0;
 
     return Column(
@@ -2097,6 +1793,30 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   style: const TextStyle(
                       color: Colors.green, fontWeight: FontWeight.bold)),
               Text('-Rs. ${couponDiscount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      color: Colors.green, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        if (subscriptionDiscount > 0)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Subscription Discount',
+                  style: TextStyle(
+                      color: Colors.green, fontWeight: FontWeight.bold)),
+              Text('-Rs. ${subscriptionDiscount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      color: Colors.green, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        if (subscriptionTaxDiscount > 0)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Subscription Tax Adjustment',
+                  style: TextStyle(
+                      color: Colors.green, fontWeight: FontWeight.bold)),
+              Text('-Rs. ${subscriptionTaxDiscount.toStringAsFixed(2)}',
                   style: const TextStyle(
                       color: Colors.green, fontWeight: FontWeight.bold)),
             ],
@@ -2560,14 +2280,20 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               },
             ),
           ],
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.dashboard_outlined),
-            title: const Text('Exit to Dashboard'),
-            onTap: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
+          Visibility(
+            visible: !Platform.isAndroid && !Platform.isIOS,
+            child: const Divider(),
+          ),
+          Visibility(
+            visible: !Platform.isAndroid && !Platform.isIOS,
+            child: ListTile(
+              leading: const Icon(Icons.dashboard_outlined),
+              title: const Text('Exit to Dashboard'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+            ),
           ),
         ],
       ),
@@ -2660,6 +2386,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue:
                       _selectedCategory.isEmpty ? null : _selectedCategory,
                   decoration: InputDecoration(
@@ -2694,7 +2421,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: _catalogItems.isEmpty
+            child: _groupedCatalogItems.isEmpty
                 ? const Center(child: Text('No saleable products found.'))
                 : Column(
                     children: [
@@ -2708,12 +2435,15 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 12,
                           ),
-                          itemCount: _catalogItems.length,
+                          itemCount: _groupedCatalogItems.length,
                           itemBuilder: (context, index) {
-                            final item = _catalogItems[index];
+                            final item = _groupedCatalogItems[index];
                             final price = _getItemPrice(item);
 
                             final int itemId = item['id'];
+                            final int? templateId = item['product_template_id'];
+                            final bool hasVariants = templateId != null;
+
                             final bool isStockable = item['stockable'] == true;
                             final double currentStock = double.tryParse(
                                     item['current_stock']?.toString() ?? '0') ??
@@ -2721,152 +2451,216 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             final bool isOutOfStock =
                                 isStockable && currentStock <= 0;
 
+                            bool isTemplateOutOfStock = false;
+                            if (hasVariants) {
+                              final siblings = _catalogItems.where((e) => e['product_template_id'] == templateId).toList();
+                              isTemplateOutOfStock = siblings.every((sib) {
+                                final bool sibStockable = sib['stockable'] == true;
+                                final double sibStock = double.tryParse(sib['current_stock']?.toString() ?? '0') ?? 0.0;
+                                return sibStockable && sibStock <= 0;
+                              });
+                            }
+
+                            final bool isDisplayOutOfStock = hasVariants ? isTemplateOutOfStock : isOutOfStock;
+
                             final bool isInCart = _cart.containsKey(itemId);
                             final double cartQty =
                                 isInCart ? _cart[itemId]!['qty'] : 0.0;
+
+                            final double displayCartQty = hasVariants ? _getGroupedCartQty(templateId, itemId) : cartQty;
+                            final bool isDisplayInCart = displayCartQty > 0;
+
+                            final String brand = (item['brand'] ?? '').toString().trim();
+                            final String baseName = hasVariants 
+                                ? (item['item_name'] ?? 'Product').toString().split(' - ').first 
+                                : (item['item_name'] ?? 'Product');
+                            final String displayName = brand.isNotEmpty ? '$brand - $baseName' : baseName;
 
                             return Card(
                               elevation: 2,
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12)),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item['item_name'] ?? 'Product',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: isOutOfStock
-                                                ? Colors.red.shade50
-                                                : Colors.green.shade50,
-                                            borderRadius:
-                                                BorderRadius.circular(6),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: hasVariants ? () => _showCustomerVariantSelector(item) : null,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            displayName,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          child: Text(
-                                            isOutOfStock
-                                                ? 'Out of Stock'
-                                                : 'In Stock (${currentStock.toInt()} left)',
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: isDisplayOutOfStock
+                                                  ? Colors.red.shade50
+                                                  : Colors.green.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              isDisplayOutOfStock
+                                                  ? 'Out of Stock'
+                                                  : (hasVariants ? 'In Stock (Options Available)' : 'In Stock (${currentStock.toInt()} left)'),
+                                              style: TextStyle(
+                                                color: isDisplayOutOfStock
+                                                    ? Colors.red.shade700
+                                                    : Colors.green.shade700,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            hasVariants ? 'Rs. ${price.toStringAsFixed(2)}+' : 'Rs. ${price.toStringAsFixed(2)}',
                                             style: TextStyle(
-                                              color: isOutOfStock
-                                                  ? Colors.red.shade700
-                                                  : Colors.green.shade700,
+                                              color: theme.colorScheme.primary,
                                               fontWeight: FontWeight.bold,
-                                              fontSize: 11,
+                                              fontSize: 16,
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Rs. ${price.toStringAsFixed(2)}',
-                                          style: TextStyle(
-                                            color: theme.colorScheme.primary,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        if (isOutOfStock)
-                                          const IconButton(
-                                            onPressed: null,
-                                            icon: Icon(Icons.add_shopping_cart,
-                                                size: 20),
-                                          )
-                                        else if (!isInCart)
-                                          IconButton(
-                                            onPressed: () {
-                                              setState(() {
-                                                _cart[itemId] = {
-                                                  'item': item,
-                                                  'qty': 1.0,
-                                                };
-                                              });
-                                            },
-                                            style: IconButton.styleFrom(
-                                              backgroundColor: theme
-                                                  .colorScheme.primaryContainer,
-                                              foregroundColor: theme.colorScheme
-                                                  .onPrimaryContainer,
-                                            ),
-                                            icon: const Icon(
-                                                Icons.add_shopping_cart,
-                                                size: 20),
-                                          )
-                                        else
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
+                                          if (isDisplayOutOfStock)
+                                            const IconButton(
+                                              onPressed: null,
+                                              icon: Icon(Icons.add_shopping_cart,
+                                                  size: 20),
+                                            )
+                                          else if (hasVariants)
+                                            if (!isDisplayInCart)
                                               IconButton(
+                                                onPressed: () => _showCustomerVariantSelector(item),
+                                                style: IconButton.styleFrom(
+                                                  backgroundColor: theme
+                                                      .colorScheme.primaryContainer,
+                                                  foregroundColor: theme.colorScheme
+                                                      .onPrimaryContainer,
+                                                ),
                                                 icon: const Icon(
-                                                    Icons.remove_circle,
-                                                    color: Colors.redAccent,
-                                                    size: 22),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    if (cartQty > 1) {
-                                                      _cart[itemId]!['qty'] -=
-                                                          1.0;
-                                                    } else {
-                                                      _cart.remove(itemId);
-                                                    }
-                                                  });
-                                                },
+                                                    Icons.add_shopping_cart,
+                                                    size: 20),
+                                              )
+                                            else
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                        Icons.remove_circle,
+                                                        color: Colors.redAccent,
+                                                        size: 22),
+                                                    onPressed: () => _showCustomerVariantSelector(item),
+                                                  ),
+                                                  Text(
+                                                    displayCartQty.toStringAsFixed(0),
+                                                    style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 15),
+                                                  ),
+                                                  IconButton(
+                                                    icon: Icon(Icons.add_circle,
+                                                        color: theme.colorScheme.primary,
+                                                        size: 22),
+                                                    onPressed: () => _showCustomerVariantSelector(item),
+                                                  ),
+                                                ],
+                                              )
+                                          else if (!isDisplayInCart)
+                                            IconButton(
+                                              onPressed: () {
+                                                setState(() {
+                                                  _cart[itemId] = {
+                                                    'item': item,
+                                                    'qty': 1.0,
+                                                  };
+                                                });
+                                              },
+                                              style: IconButton.styleFrom(
+                                                backgroundColor: theme
+                                                    .colorScheme.primaryContainer,
+                                                foregroundColor: theme.colorScheme
+                                                    .onPrimaryContainer,
                                               ),
-                                              Text(
-                                                cartQty.toStringAsFixed(0),
-                                                style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15),
-                                              ),
-                                              IconButton(
-                                                icon: Icon(Icons.add_circle,
-                                                    color: ((_gstin.isEmpty &&
-                                                                cartQty >= 5) ||
-                                                            (isStockable &&
-                                                                cartQty >=
-                                                                    currentStock))
-                                                        ? Colors.grey
-                                                        : theme.colorScheme
-                                                            .primary,
-                                                    size: 22),
-                                                onPressed: ((_gstin.isEmpty &&
-                                                            cartQty >= 5) ||
-                                                        (isStockable &&
-                                                            cartQty >=
-                                                                currentStock))
-                                                    ? null
-                                                    : () {
-                                                        setState(() {
-                                                          _cart[itemId]![
-                                                              'qty'] += 1.0;
-                                                        });
-                                                      },
-                                              ),
-                                            ],
-                                          ),
-                                      ],
-                                    ),
-                                  ],
+                                              icon: const Icon(
+                                                  Icons.add_shopping_cart,
+                                                  size: 20),
+                                            )
+                                          else
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(
+                                                      Icons.remove_circle,
+                                                      color: Colors.redAccent,
+                                                      size: 22),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      if (displayCartQty > 1) {
+                                                        _cart[itemId]!['qty'] -=
+                                                            1.0;
+                                                      } else {
+                                                        _cart.remove(itemId);
+                                                      }
+                                                    });
+                                                  },
+                                                ),
+                                                Text(
+                                                  displayCartQty.toStringAsFixed(0),
+                                                  style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 15),
+                                                ),
+                                                IconButton(
+                                                  icon: Icon(Icons.add_circle,
+                                                      color: ((_gstin.isEmpty &&
+                                                                  displayCartQty >= 5) ||
+                                                              (isStockable &&
+                                                                  displayCartQty >=
+                                                                      currentStock))
+                                                          ? Colors.grey
+                                                          : theme.colorScheme
+                                                              .primary,
+                                                      size: 22),
+                                                  onPressed: ((_gstin.isEmpty &&
+                                                              displayCartQty >= 5) ||
+                                                          (isStockable &&
+                                                              displayCartQty >=
+                                                                  currentStock))
+                                                      ? null
+                                                      : () {
+                                                          setState(() {
+                                                            _cart[itemId]![
+                                                                'qty'] += 1.0;
+                                                          });
+                                                        },
+                                                ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -2924,9 +2718,37 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                           item['current_stock']?.toString() ?? '0') ??
                       0.0;
 
+                  final sub = _subscriptions.firstWhere(
+                    (s) => s['item_id'] == itemId && (s['active_subscription'] == true || s['status'] == 'ACTIVE'),
+                    orElse: () => null,
+                  );
+                  final double remainingQty = sub != null ? (double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0) : 0.0;
+
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(item['item_name'] ?? 'Product'),
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item['item_name'] ?? 'Product'),
+                        if (sub != null && remainingQty > 0)
+                          Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Subscription Covered: max ${remainingQty.toStringAsFixed(0)} daily at Rs. 0',
+                              style: const TextStyle(
+                                color: Colors.green,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                     subtitle: Text(
                         'Rs. ${price.toStringAsFixed(2)} x ${qty.toStringAsFixed(0)}'),
                     trailing: Row(
@@ -3022,11 +2844,13 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               },
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 const Text('Payment Mode:   ',
                     style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
                 ChoiceChip(
                   label: const Text('CASH'),
                   selected: _chosenPaymentMethod == 'CASH',
@@ -3034,7 +2858,6 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     if (selected) setState(() => _chosenPaymentMethod = 'CASH');
                   },
                 ),
-                const SizedBox(width: 8),
                 ChoiceChip(
                   label: const Text('CARD'),
                   selected: _chosenPaymentMethod == 'CARD',
@@ -3042,7 +2865,6 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     if (selected) setState(() => _chosenPaymentMethod = 'CARD');
                   },
                 ),
-                const SizedBox(width: 8),
                 ChoiceChip(
                   label: const Text('UPI'),
                   selected: _chosenPaymentMethod == 'UPI',
@@ -3050,7 +2872,6 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     if (selected) setState(() => _chosenPaymentMethod = 'UPI');
                   },
                 ),
-                const SizedBox(width: 8),
                 ChoiceChip(
                   label: const Text('CREDIT'),
                   selected: _chosenPaymentMethod == 'CREDIT',
@@ -3061,11 +2882,13 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 const Text('Payment Status: ',
                     style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
                 ChoiceChip(
                   label: const Text('Pay on Delivery'),
                   selected: _paymentMode == 'UNPAID',
@@ -3073,7 +2896,6 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     if (selected) setState(() => _paymentMode = 'UNPAID');
                   },
                 ),
-                const SizedBox(width: 8),
                 ChoiceChip(
                   label: const Text('Paid Online'),
                   selected: _paymentMode == 'PAID',
@@ -3807,32 +3629,16 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                             mainAxisAlignment:
                                                 MainAxisAlignment.spaceBetween,
                                             children: [
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                      (status == 'PENDING' ||
-                                                              status ==
-                                                                  'ACCEPTED')
-                                                          ? Icons.info_outline
-                                                          : Icons
-                                                              .delivery_dining_outlined,
-                                                      color: (status ==
-                                                                  'PENDING' ||
-                                                              status ==
-                                                                  'ACCEPTED')
-                                                          ? Colors
-                                                              .orange.shade700
-                                                          : Colors
-                                                              .blue.shade700,
-                                                      size: 16),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    (status == 'PENDING' ||
-                                                            status ==
-                                                                'ACCEPTED')
-                                                        ? 'Order placed. Processing...'
-                                                        : 'Order shipped / out for delivery',
-                                                    style: TextStyle(
+                                              Expanded(
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                        (status == 'PENDING' ||
+                                                                status ==
+                                                                    'ACCEPTED')
+                                                            ? Icons.info_outline
+                                                            : Icons
+                                                                .delivery_dining_outlined,
                                                         color: (status ==
                                                                     'PENDING' ||
                                                                 status ==
@@ -3841,11 +3647,32 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                                 .orange.shade700
                                                             : Colors
                                                                 .blue.shade700,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                        fontSize: 13),
-                                                  ),
-                                                ],
+                                                        size: 16),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(
+                                                      child: Text(
+                                                        (status == 'PENDING' ||
+                                                                status ==
+                                                                    'ACCEPTED')
+                                                            ? 'Order placed. Processing...'
+                                                            : 'Order shipped / out for delivery',
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: TextStyle(
+                                                            color: (status ==
+                                                                        'PENDING' ||
+                                                                    status ==
+                                                                        'ACCEPTED')
+                                                                ? Colors
+                                                                    .orange.shade700
+                                                                : Colors
+                                                                    .blue.shade700,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            fontSize: 13),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                               Wrap(
                                                 spacing: 8,
@@ -4638,7 +4465,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       size: 48, color: Colors.grey),
                   SizedBox(height: 12),
                   Text(
-                    'No active subscriptions. Tap "Subscribe" to start one!',
+                    'No subscriptions yet. Tap "Subscribe" to start one!',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
@@ -4657,9 +4484,15 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             final double remaining = double.tryParse(
                     sub['advance_remaining_qty']?.toString() ?? '0.0') ??
                 0.0;
+            final double totalPaid = double.tryParse(
+                    sub['advance_original_amount']?.toString() ?? '0.0') ??
+                0.0;
+            final double consumedAmount = double.tryParse(
+                    sub['advance_consumed_amount']?.toString() ?? '0.0') ??
+                0.0;
             final double progress =
                 original > 0 ? (consumed / original).clamp(0.0, 1.0) : 0.0;
-            final status = sub['status'] ?? 'ACTIVE';
+            final status = sub['status']?.toString() ?? 'ACTIVE';
             final isActive = sub['active_subscription'] == true;
 
             final startDateVal = sub['start_date'] != null
@@ -4671,17 +4504,36 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     .format(DateTime.parse(sub['end_date'].toString()))
                 : '--';
 
+            // Determine badge color by status
+            Color badgeColor;
+            Color badgeBg;
+            if (isActive) {
+              badgeColor = Colors.green.shade700;
+              badgeBg = Colors.green.shade50;
+            } else if (status == 'EXPIRED') {
+              badgeColor = Colors.orange.shade700;
+              badgeBg = Colors.orange.shade50;
+            } else {
+              badgeColor = Colors.grey.shade700;
+              badgeBg = Colors.grey.shade100;
+            }
+
+            final canRenew = !isActive || remaining < (original * 0.2 + 0.001);
+
             return Card(
               margin: const EdgeInsets.only(bottom: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Colors.grey.shade200),
+                side: BorderSide(
+                    color: isActive ? theme.colorScheme.primary.withOpacity(0.3) : Colors.grey.shade200),
               ),
+              elevation: isActive ? 2 : 0,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Header row: item name + status badge
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -4696,9 +4548,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: isActive
-                                ? Colors.green.shade50
-                                : Colors.grey.shade100,
+                            color: badgeBg,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -4706,53 +4556,84 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: isActive
-                                  ? Colors.green.shade700
-                                  : Colors.grey.shade700,
+                              color: badgeColor,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
+                    // Duration row
+                    Row(
+                      children: [
+                        const Icon(Icons.date_range, size: 14, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Text('$startDateVal → $endDateVal',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Rate + daily qty
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Daily Limit: ${sub['daily_allowed_qty']} Ltr',
-                            style: TextStyle(color: Colors.grey.shade700)),
-                        Text('Agreed Rate: Rs. ${sub['advance_rate'] ?? '0.0'}',
-                            style: TextStyle(color: Colors.grey.shade700)),
+                            style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                        Text('Rate: Rs. ${sub['advance_rate'] ?? '0.0'}/unit',
+                            style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const Divider(height: 20),
+                    // Financial summary grid
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.12)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              _subStat('Total Paid', 'Rs. ${totalPaid.toStringAsFixed(2)}',
+                                  Icons.payments_outlined, Colors.blue.shade700, theme),
+                              const SizedBox(width: 8),
+                              _subStat('Consumed Amt', 'Rs. ${consumedAmount.toStringAsFixed(2)}',
+                                  Icons.shopping_bag_outlined, Colors.orange.shade700, theme),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              _subStat('Total Qty', '${original.toStringAsFixed(1)} Ltr',
+                                  Icons.inventory_2_outlined, Colors.teal.shade700, theme),
+                              const SizedBox(width: 8),
+                              _subStat('Remaining', '${remaining.toStringAsFixed(1)} Ltr',
+                                  Icons.water_drop_outlined,
+                                  remaining < 2 ? Colors.red.shade600 : Colors.green.shade700,
+                                  theme),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Progress bar
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Start: $startDateVal',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey)),
-                        Text('End: $endDateVal',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey)),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
+                        Text('Consumption',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(fontWeight: FontWeight.w600)),
                         Text(
-                          'Consumption Progress',
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          '${consumed.toStringAsFixed(1)} / ${original.toStringAsFixed(1)} Qty',
-                          style: theme.textTheme.bodyMedium
+                          '${consumed.toStringAsFixed(1)} / ${original.toStringAsFixed(1)} Ltr',
+                          style: theme.textTheme.bodySmall
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
@@ -4760,16 +4641,41 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                         minHeight: 8,
                         backgroundColor: Colors.grey.shade200,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                            theme.colorScheme.primary),
+                            progress > 0.85 ? Colors.orange : theme.colorScheme.primary),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Remaining Balance: ${remaining.toStringAsFixed(1)} Ltr',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                          fontStyle: FontStyle.italic),
+                    const SizedBox(height: 12),
+                    // Action buttons
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => _showSubscriptionTransactions(sub),
+                          icon: const Icon(Icons.receipt_long_outlined, size: 15),
+                          label: const Text('Transactions'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            textStyle: const TextStyle(fontSize: 12),
+                            foregroundColor: Colors.teal.shade700,
+                            side: BorderSide(color: Colors.teal.shade300),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                        if (canRenew)
+                          FilledButton.icon(
+                            onPressed: () => _showRenewSubscriptionDialog(sub),
+                            icon: const Icon(Icons.autorenew, size: 15),
+                            label: const Text('Renew'),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              textStyle: const TextStyle(fontSize: 12),
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -4778,6 +4684,346 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           }),
       ],
     );
+  }
+
+  Widget _subStat(String label, String value, IconData icon, Color color, ThemeData theme) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                  Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSubscriptionTransactions(dynamic subMap) async {
+    final sub = Map<String, dynamic>.from(subMap);
+    final subId = sub['id'];
+    if (subId == null) return;
+    final phone = _loggedInCustomer?['phone'] ?? '';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text('Loading transactions...'),
+          ]),
+        ),
+      ),
+    );
+
+    try {
+      final outletCode = _loggedInCustomer?['outlet_id'] ??
+          _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      final res = await ApiClient.get(
+          '/api/sales/subscriptions/$subId/ledger?customer_phone=${Uri.encodeComponent(phone)}&outlet_id=$outletCode');
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      if (res['success'] == true) {
+        final data = Map<String, dynamic>.from(res['data'] ?? {});
+        final entries = (data['consumptions'] as List? ?? []);
+        final summary = Map<String, dynamic>.from(data['financial_summary'] ?? {});
+        _showTransactionLedgerDialog(sub, entries, summary);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message']?.toString() ?? 'Failed to load transactions.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  void _showTransactionLedgerDialog(Map<String, dynamic> sub, List<dynamic> entries, Map<String, dynamic> summary) {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.receipt_long, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Transactions — ${sub['item_name'] ?? 'Subscription'}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              // Summary strip
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                color: theme.colorScheme.primary.withOpacity(0.06),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _ledgerStat('Total Paid', 'Rs. ${(double.tryParse(summary['prepaid_value']?.toString() ?? '0') ?? 0.0).toStringAsFixed(2)}', Colors.blue.shade700),
+                    _ledgerStat('Consumed', '${(double.tryParse(summary['consumed_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} Ltr', Colors.orange.shade700),
+                    _ledgerStat('Remaining', '${(double.tryParse(sub['advance_remaining_qty']?.toString() ?? sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} Ltr', Colors.green.shade700),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: entries.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: Text('No delivery transactions found.', style: TextStyle(color: Colors.grey))),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        itemCount: entries.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final e = entries[i];
+                          final date = e['delivery_date'] != null
+                              ? DateFormat('dd-MMM-yy').format(DateTime.parse(e['delivery_date'].toString()))
+                              : '--';
+                          final qty = double.tryParse(e['qty']?.toString() ?? '0') ?? 0.0;
+                          final amt = double.tryParse(e['amount']?.toString() ?? '0') ?? 0.0;
+                          return ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                            leading: CircleAvatar(
+                              radius: 14,
+                              backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                              child: Icon(Icons.water_drop, size: 14, color: theme.colorScheme.primary),
+                            ),
+                            title: Text(date, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                            subtitle: Text(e['description']?.toString() ?? 'Delivery', style: const TextStyle(fontSize: 11)),
+                            trailing: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('${qty.toStringAsFixed(1)} Ltr', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                Text('Rs. ${amt.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _ledgerStat(String label, String value, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: color)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Future<void> _showRenewSubscriptionDialog(dynamic subMap) async {
+    final sub = Map<String, dynamic>.from(subMap);
+    final rate = double.tryParse(sub['advance_rate']?.toString() ?? '0') ?? 0.0;
+    final dailyQty = double.tryParse(sub['daily_allowed_qty']?.toString() ?? '1') ?? 1.0;
+    int durationDays = 30;
+    String paymentMode = 'UPI';
+    DateTime startDate = DateTime.now();
+
+    // Suggest start from subscription end date if it's in the future
+    try {
+      final endDate = sub['end_date'] != null ? DateTime.parse(sub['end_date'].toString()) : DateTime.now();
+      if (endDate.isAfter(DateTime.now())) startDate = endDate.add(const Duration(days: 1));
+    } catch (_) {}
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
+        final totalQty = dailyQty * durationDays;
+        final totalCost = totalQty * rate;
+        final endDate = startDate.add(Duration(days: durationDays));
+        return AlertDialog(
+          title: const Row(children: [
+            Icon(Icons.autorenew, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Renew Subscription'),
+          ]),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Item: ${sub['item_name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text('Daily: ${dailyQty.toStringAsFixed(1)} Ltr  |  Rate: Rs. ${rate.toStringAsFixed(2)}/unit',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                const Divider(height: 20),
+                const Text('Duration:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<int>(
+                      isExpanded: true,
+                      value: durationDays,
+                      items: const [
+                        DropdownMenuItem(value: 15, child: Text('15 Days')),
+                        DropdownMenuItem(value: 30, child: Text('30 Days (Monthly)')),
+                        DropdownMenuItem(value: 60, child: Text('60 Days')),
+                      ],
+                      onChanged: (v) { if (v != null) setSt(() => durationDays = v); },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text('Start Date:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  TextButton.icon(
+                    icon: const Icon(Icons.calendar_today, size: 14),
+                    label: Text(DateFormat('dd-MMM-yyyy').format(startDate)),
+                    onPressed: () async {
+                      final p = await showDatePicker(
+                        context: context,
+                        initialDate: startDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (p != null) setSt(() => startDate = p);
+                    },
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                const Text('Payment Mode:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                Wrap(spacing: 8, children: ['UPI', 'CASH', 'CARD'].map((m) => ChoiceChip(
+                  label: Text(m),
+                  selected: paymentMode == m,
+                  onSelected: (_) => setSt(() => paymentMode = m),
+                )).toList()),
+                const Divider(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(10)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Total Qty: ${totalQty.toStringAsFixed(1)} Ltr', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text('End Date: ${DateFormat('dd-MMM-yyyy').format(endDate)}', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text('Total Advance: Rs. ${totalCost.toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
+                  ]),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop({
+                'item_id': sub['item_id'],
+                'daily_allowed_qty': dailyQty,
+                'duration_days': durationDays,
+                'start_date': startDate.toIso8601String().split('T')[0],
+                'advance_rate': rate,
+                'payment_mode': paymentMode,
+              }),
+              style: FilledButton.styleFrom(backgroundColor: Colors.green.shade700),
+              child: const Text('Renew'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    if (result == null || !mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final phone = _loggedInCustomer!['phone'];
+      final outletCode = _loggedInCustomer?['outlet_id'] ??
+          _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      final res = await ApiClient.post('/api/sales/subscriptions', {
+        ...result,
+        'customer_phone': phone,
+        'outlet_id': outletCode,
+      });
+      if (mounted) {
+        if (res['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Subscription renewed successfully! ✅'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _fetchSubscriptions();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(res['message']?.toString() ?? 'Failed to renew.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _showSubscribeDialog() async {
@@ -5036,7 +5282,14 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final res = await ApiClient.post('/api/sales/subscriptions', result);
+      final outletCode = _loggedInCustomer?['outlet_id'] ??
+          _currentUser?.outletCode ??
+          (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      final payload = {
+        ...result,
+        'outlet_id': outletCode,
+      };
+      final res = await ApiClient.post('/api/sales/subscriptions', payload);
       if (res['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -5373,6 +5626,247 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   label: Text('View Cart (${_cart.length})'),
                 )
               : null,
+    );
+  }
+
+  void _showCustomerVariantSelector(Map<String, dynamic> templateRep) {
+    final int? templateId = templateRep['product_template_id'];
+    if (templateId == null) return;
+
+    final siblings = _catalogItems.where((e) => e['product_template_id'] == templateId).toList();
+    if (siblings.isEmpty) return;
+
+    // Collect all unique attribute names
+    final List<String> attributeNames = siblings
+        .expand((v) {
+          final vals = v['attribute_values'] as List? ?? [];
+          return vals.map((av) => (av['attribute'] != null ? av['attribute']['name']?.toString() : null) ?? '');
+        })
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList();
+
+    // Collect all unique choice values for each attribute name
+    final Map<String, List<String>> attributeChoices = {};
+    for (var name in attributeNames) {
+      final choices = siblings
+          .expand((v) => v['attribute_values'] as List? ?? [])
+          .where((av) => (av['attribute'] != null ? av['attribute']['name']?.toString() : null) == name)
+          .map((av) => av['value']?.toString() ?? '')
+          .toSet()
+          .toList();
+      attributeChoices[name] = choices;
+    }
+
+    // Default select first available combination if possible
+    final Map<String, String> selectedOptions = {};
+    if (siblings.isNotEmpty) {
+      for (var name in attributeNames) {
+        final vals = siblings.first['attribute_values'] as List? ?? [];
+        final matches = vals.where((av) => (av['attribute'] != null ? av['attribute']['name']?.toString() : null) == name);
+        if (matches.isNotEmpty) {
+          selectedOptions[name] = matches.first['value']?.toString() ?? '';
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Map<String, dynamic>? matchingItem;
+            bool selectionComplete = selectedOptions.length == attributeNames.length;
+            if (selectionComplete) {
+              for (var sibling in siblings) {
+                bool isMatch = true;
+                final vals = sibling['attribute_values'] as List? ?? [];
+                for (var entry in selectedOptions.entries) {
+                  final hasMatch = vals.any(
+                    (av) => (av['attribute'] != null ? av['attribute']['name']?.toString() : null) == entry.key && av['value'] == entry.value,
+                  );
+                  if (!hasMatch) {
+                    isMatch = false;
+                    break;
+                  }
+                }
+                if (isMatch) {
+                  matchingItem = sibling;
+                  break;
+                }
+              }
+            }
+
+            final price = matchingItem != null
+                ? (double.tryParse(matchingItem['retail_sale_price']?.toString() ?? '') ?? 
+                   double.tryParse(matchingItem['rate']?.toString() ?? '') ?? 0.0)
+                : 0.0;
+            
+            final bool isStockable = matchingItem?['stockable'] == true;
+            final double currentStock = double.tryParse(
+                    matchingItem?['current_stock']?.toString() ?? '0') ??
+                0.0;
+            final bool isOutOfStock = isStockable && currentStock <= 0;
+
+            final int? matchingItemId = matchingItem?['id'];
+            final double cartQty = (matchingItemId != null && _cart.containsKey(matchingItemId))
+                ? _cart[matchingItemId]!['qty']
+                : 0.0;
+
+            final String brand = (templateRep['brand'] ?? '').toString().trim();
+            final templateName = (templateRep['item_name'] ?? 'Product').toString().split(' - ').first;
+            final fullTitle = brand.isNotEmpty ? '$brand - $templateName' : templateName;
+
+            return AlertDialog(
+              title: Text(fullTitle),
+              content: SizedBox(
+                width: 450,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...attributeNames.map((attrName) {
+                      final choices = attributeChoices[attrName] ?? [];
+                      final selectedVal = selectedOptions[attrName];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            attrName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: choices.map((choice) {
+                              final isSelected = selectedVal == choice;
+                              return ChoiceChip(
+                                label: Text(choice),
+                                selected: isSelected,
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setDialogState(() {
+                                      selectedOptions[attrName] = choice;
+                                    });
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+                      );
+                    }),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    if (matchingItem != null) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isOutOfStock ? 'Out of Stock' : 'In Stock (${currentStock.toInt()} left)',
+                                style: TextStyle(
+                                  color: isOutOfStock ? Colors.red : Colors.green,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if (cartQty > 0)
+                                Text(
+                                  'In Cart: ${cartQty.toInt()}',
+                                  style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                            ],
+                          ),
+                          Text(
+                            'Rs. ${price.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const Text(
+                        'This combination is unavailable.',
+                        style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                if (matchingItem != null && !isOutOfStock)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (cartQty > 0)
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 24),
+                          onPressed: () {
+                            setDialogState(() {
+                              setState(() {
+                                if (cartQty > 1) {
+                                  _cart[matchingItemId]!['qty'] -= 1.0;
+                                } else {
+                                  _cart.remove(matchingItemId);
+                                }
+                              });
+                            });
+                          },
+                        ),
+                      if (cartQty > 0)
+                        Text(
+                          cartQty.toStringAsFixed(0),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.add_circle,
+                          color: ((_gstin.isEmpty && cartQty >= 5) || (isStockable && cartQty >= currentStock))
+                              ? Colors.grey
+                              : Theme.of(context).colorScheme.primary,
+                          size: 24,
+                        ),
+                        onPressed: ((_gstin.isEmpty && cartQty >= 5) || (isStockable && cartQty >= currentStock))
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  setState(() {
+                                    if (cartQty > 0) {
+                                      _cart[matchingItemId]!['qty'] += 1.0;
+                                    } else {
+                                      _cart[matchingItemId!] = {
+                                        'item': matchingItem,
+                                        'qty': 1.0,
+                                      };
+                                    }
+                                  });
+                                });
+                              },
+                      ),
+                    ],
+                  )
+                else
+                  const FilledButton(
+                    onPressed: null,
+                    child: Text('Out of Stock'),
+                  ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

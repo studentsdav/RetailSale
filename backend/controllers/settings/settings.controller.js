@@ -100,7 +100,8 @@ exports.getSettings = async (req, res) => {
                     bill_format: 'A4',
                     default_charges: [],
                     voucher_rules: [],
-                    is_cloud_enabled: false
+                    is_cloud_enabled: false,
+                    enable_app_subscription: false
                 }
             });
         }
@@ -136,6 +137,7 @@ exports.saveSettings = async (req, res) => {
             enable_audit_log: req.body.enable_audit_log,
             auto_print_on_save: req.body.auto_print_on_save,
             enable_item_images_in_sales: req.body.enable_item_images_in_sales,
+            enable_app_subscription: req.body.enable_app_subscription ?? false,
             print_mode: req.body.print_mode || 'PRINT_DIALOG',
             default_printer_name: req.body.default_printer_name || '',
             default_printer_url: req.body.default_printer_url || '',

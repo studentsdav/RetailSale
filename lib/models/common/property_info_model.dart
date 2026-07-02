@@ -11,6 +11,7 @@ class PropertyInfo {
   final String gstNo;
   final String panNo;
   final String fssaiNo;
+  final String drugLicenseNo;
   final String? logoPath;
   final bool isActive;
 
@@ -27,6 +28,7 @@ class PropertyInfo {
     required this.gstNo,
     required this.panNo,
     required this.fssaiNo,
+    this.drugLicenseNo = '',
     this.logoPath,
     required this.isActive,
   });
@@ -45,6 +47,7 @@ class PropertyInfo {
       gstNo: json['gst_no'] ?? '',
       panNo: json['pan_no'] ?? '',
       fssaiNo: json['fssai_no'] ?? '',
+      drugLicenseNo: json['drug_license_no'] ?? json['drugLicenseNo'] ?? '',
       logoPath: json['logo_path'],
       isActive: json['is_active'] ?? true,
     );
@@ -64,6 +67,7 @@ class PropertyInfo {
       'gst_no': gstNo,
       'pan_no': panNo,
       'fssai_no': fssaiNo,
+      'drug_license_no': drugLicenseNo,
       'logo_path': logoPath,
       'is_active': isActive,
     };

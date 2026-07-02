@@ -21,9 +21,11 @@ class ApiClient {
   // ---------------- COMMON HEADERS ----------------
   static Future<Map<String, String>> _headers() async {
     final token = await TokenStorage.read();
+    final outletCode = AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '';
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
+      if (outletCode.isNotEmpty) 'x-outlet-code': outletCode,
     };
   }
 

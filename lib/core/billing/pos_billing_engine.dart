@@ -11,13 +11,18 @@ class PosBillingEngine {
     required double schemeDiscountAmount,
     required double manualDiscountAmount,
     required List<BillingCharge> charges,
+    int? schemeItemId,
   }) {
     final subTotal = items.fold<double>(0, (sum, item) => sum + item.amount);
     final totalQty = items.fold<double>(0, (sum, item) => sum + item.qty);
 
-    final schemeEligibleTotal = items
-        .where((item) => item.schemeApplicable)
-        .fold<double>(0, (sum, item) => sum + item.amount);
+    final schemeEligibleTotal = schemeItemId != null
+        ? items
+            .where((item) => item.itemId == schemeItemId && item.schemeApplicable)
+            .fold<double>(0, (sum, item) => sum + item.amount)
+        : items
+            .where((item) => item.schemeApplicable)
+            .fold<double>(0, (sum, item) => sum + item.amount);
     final discountEligibleTotal = items
         .where((item) => item.discountApplicable)
         .fold<double>(0, (sum, item) => sum + item.amount);
@@ -27,7 +32,9 @@ class PosBillingEngine {
 
     for (final item in items) {
       final gross = item.amount;
-      final schemeShare = schemeEligibleTotal > 0 && item.schemeApplicable
+      final schemeShare = schemeEligibleTotal > 0 &&
+              item.schemeApplicable &&
+              (schemeItemId == null || item.itemId == schemeItemId)
           ? (gross / schemeEligibleTotal) * schemeDiscountAmount
           : 0.0;
       final manualShare = discountEligibleTotal > 0 && item.discountApplicable

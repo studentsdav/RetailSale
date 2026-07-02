@@ -147,6 +147,7 @@ class SalesController extends ChangeNotifier {
         ? ApiEndpoints.salesSubscriptions
         : '${ApiEndpoints.salesSubscriptions}?${params.join('&')}';
     final res = await ApiClient.get(query);
+    debugPrint('[DEBUG listSubscriptions] Query: $query, Response: $res');
     return (res['data'] as List? ?? const [])
         .map((e) => Map<String, dynamic>.from(e))
         .toList();

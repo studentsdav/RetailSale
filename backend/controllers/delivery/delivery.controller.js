@@ -56,7 +56,7 @@ exports.listCatalogProducts = async (req, res) => {
         const replacements = { outletId, limit, offset };
 
         if (search) {
-            queryConditions += ` AND im.item_name ILIKE :search`;
+            queryConditions += ` AND (im.item_name ILIKE :search OR im.brand ILIKE :search)`;
             replacements.search = `%${search}%`;
         }
 
@@ -97,16 +97,36 @@ exports.listCatalogProducts = async (req, res) => {
         const totalPages = Math.ceil(totalCount / limit);
 
         const hasGstin = !!(req.query.gstin);
-        const processedItems = items.map(item => {
-            if (hasGstin && Number(item.b2b_rate) > 0) {
-                return {
-                    ...item,
-                    rate: item.b2b_rate,
-                    retail_sale_price: item.b2b_rate
-                };
+        const processedItems = [];
+        for (const item of items) {
+            const dbItem = await req.propertyDb.models.item_master.findByPk(item.id, {
+                include: [
+                    {
+                        model: req.propertyDb.models.attribute_values,
+                        as: 'attribute_values',
+                        required: false,
+                        include: [
+                            {
+                                model: req.propertyDb.models.attributes,
+                                as: 'attribute',
+                                required: false
+                            }
+                        ]
+                    }
+                ]
+            });
+            const itemJson = dbItem ? dbItem.toJSON() : {};
+            const mergedItem = {
+                ...itemJson,
+                current_stock: item.current_stock
+            };
+
+            if (hasGstin && Number(mergedItem.b2b_rate) > 0) {
+                mergedItem.rate = mergedItem.b2b_rate;
+                mergedItem.retail_sale_price = mergedItem.b2b_rate;
             }
-            return item;
-        });
+            processedItems.push(mergedItem);
+        }
 
         res.json({
             success: true,
@@ -322,12 +342,22 @@ exports.placeOrder = async (req, res) => {
             charges: charges || null
         }, { transaction: t });
 
-        // Add low stock notification or new order notification
-        await req.propertyDb.models.system_notification.create({
+        // Retailer notification: new order received
+        await req.propertyDb.models.system_notifications.create({
             outlet_id: actualOutletId,
             module: 'DELIVERY',
             title: 'New Customer Order',
             message: `New order #${order.id} received from ${customer_name} (Rs. ${toAmount(net_amount).toFixed(2)})`,
+            type: 'SUCCESS',
+            entity_id: order.id
+        }, { transaction: t });
+
+        // Customer notification: order confirmed
+        await req.propertyDb.models.system_notifications.create({
+            outlet_id: actualOutletId,
+            module: 'CUSTOMER',
+            title: 'Order Placed! 🎉',
+            message: `Your order #${order.id} (Rs. ${toAmount(net_amount).toFixed(2)}) has been placed and is awaiting confirmation.`,
             type: 'SUCCESS',
             entity_id: order.id
         }, { transaction: t });
@@ -675,13 +705,30 @@ exports.acceptOrder = async (req, res) => {
 
         const saleNo = resolved.number;
 
-        // 2. Prepare POS Sale parameters
-        const isPrepaid = order.payment_status === 'PAID';
-        const isCredit = order.payment_mode === 'CREDIT';
-        const netAmt = toAmount(order.net_amount);
-        const amountPaid = isPrepaid ? netAmt : 0;
-        const balanceDue = isPrepaid ? 0 : netAmt;
-        const paymentMode = isPrepaid ? 'UPI' : (isCredit ? 'CREDIT' : 'CASH');
+        // 1.5 Apply Milk Subscription Coverage if applicable
+        const salesController = require('../sales/sales.controller');
+        const subscriptionAllocation = await salesController.allocateMilkSubscriptionCoverage({
+            req,
+            header: {
+                customer_name: order.customer_name,
+                customer_phone: order.customer_phone,
+                customer_gstin: order.gstin,
+                sale_date: new Date()
+            },
+            items: order.items.map(item => ({
+                item_id: item.item_id,
+                item_code: item.item_code,
+                item_name: item.item_name,
+                qty: Number(item.qty),
+                rate: Number(item.rate),
+                tax_percent: Number(item.tax_percent || 0),
+                unit: item.unit
+            })),
+            transaction: t
+        });
+
+        const finalItems = subscriptionAllocation.items;
+        const derivedSubTotal = finalItems.reduce((sum, item) => sum + (toAmount(item.qty) * toAmount(item.rate)), 0);
 
         // 3. Local tax calculation helpers
         const taxSummary = new Map();
@@ -759,9 +806,17 @@ exports.acceptOrder = async (req, res) => {
         }
 
         // Process items tax breakup
-        for (const item of order.items) {
-            const itemTaxPercent = parseFloat(item.tax_percent || 0.0);
-            const itemTaxableAmount = parseFloat(item.taxable_amount || (toAmount(item.qty) * toAmount(item.rate)) || 0.0);
+        let itemsTaxTotal = 0.0;
+        for (const item of finalItems) {
+            const itemQty = toAmount(item.qty);
+            const itemRate = toAmount(item.rate);
+            const itemAmount = itemQty * itemRate;
+            const itemTaxPercent = item._subscription_free ? 0.0 : parseFloat(item.tax_percent || 0.0);
+            const itemTaxableAmount = item._subscription_free ? 0.0 : parseFloat(item.taxable_amount || itemAmount || 0.0);
+            const itemTaxAmount = item._subscription_free ? 0.0 : parseFloat(item.tax_amount || (itemTaxableAmount * itemTaxPercent / 100) || 0.0);
+
+            itemsTaxTotal += itemTaxAmount;
+
             const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemTaxableAmount);
             addTaxBreakup(itemBreakup);
         }
@@ -781,6 +836,16 @@ exports.acceptOrder = async (req, res) => {
             .filter((tax) => tax.code === 'IGST')
             .reduce((sum, tax) => sum + tax.taxAmount, 0);
 
+        const finalTaxAmount = itemsTaxTotal + chargeTaxTotal;
+        const derivedNetAmount = toAmount(derivedSubTotal) + toAmount(finalTaxAmount) + toAmount(chargeSubtotal);
+
+        // 2. Prepare POS Sale parameters
+        const isPrepaid = order.payment_status === 'PAID';
+        const isCredit = order.payment_mode === 'CREDIT';
+        const amountPaid = isPrepaid ? derivedNetAmount : 0;
+        const balanceDue = isPrepaid ? 0 : derivedNetAmount;
+        const paymentMode = isPrepaid ? 'UPI' : (isCredit ? 'CREDIT' : 'CASH');
+
         // 3. Create POS sales_headers entry
         const saleHeader = await req.propertyDb.models.sales_headers.create({
             outlet_id,
@@ -799,20 +864,20 @@ exports.acceptOrder = async (req, res) => {
             billing_tax_mode: 'CGST_SGST',
             bill_format: 'A4',
             tax_percent: 0,
-            total_qty: order.items.reduce((sum, item) => sum + toAmount(item.qty), 0),
-            sub_total: order.sub_total,
-            taxable_amount: toAmount(order.sub_total) + toAmount(chargeSubtotal),
+            total_qty: finalItems.reduce((sum, item) => sum + toAmount(item.qty), 0),
+            sub_total: derivedSubTotal,
+            taxable_amount: toAmount(derivedSubTotal) + toAmount(chargeSubtotal),
             cgst_amount: derivedCgstAmount,
             sgst_amount: derivedSgstAmount,
             igst_amount: derivedIgstAmount,
             tax_breakup: derivedTaxBreakup,
-            total_tax: order.tax_amount,
+            total_tax: finalTaxAmount,
             charges: order.charges || [],
             charge_total: toAmount(chargeSubtotal),
             charge_tax_total: toAmount(chargeTaxTotal),
-            total_discount: 0,
+            total_discount: subscriptionAllocation.totalCoveredAmount,
             round_off_amount: 0,
-            net_amount: netAmt,
+            net_amount: derivedNetAmount,
             status: 'COMPLETED',
             created_by: userId,
             is_latest: true,
@@ -821,18 +886,43 @@ exports.acceptOrder = async (req, res) => {
             notes: `Auto-generated from delivery order #${order.id}`
         }, { transaction: t });
 
+        // 3.5 Persist milk subscription consumptions and deduct advances if covered
+        await salesController.persistMilkSubscriptionConsumptions({
+            req,
+            transaction: t,
+            sale: saleHeader,
+            consumptions: subscriptionAllocation.consumptions
+        });
+        if (subscriptionAllocation.totalCoveredAmount > 0) {
+            const coverageAdvance = await salesController.findSubscriptionItemAdvance(
+                req,
+                subscriptionAllocation.subscriptionId,
+                subscriptionAllocation.subscriptionItemId,
+                t
+            );
+            if (coverageAdvance) {
+                await salesController.consumeSubscriptionItemAdvance(
+                    req,
+                    subscriptionAllocation.subscriptionId,
+                    subscriptionAllocation.subscriptionItemId,
+                    subscriptionAllocation.totalCoveredQty,
+                    t
+                );
+            }
+        }
+
         // 4. Create POS sales_items entries and deduct stock
-        for (const item of order.items) {
+        for (const item of finalItems) {
             const itemQty = toAmount(item.qty);
             const itemRate = toAmount(item.rate);
             const itemAmount = itemQty * itemRate;
-            const itemTaxPercent = parseFloat(item.tax_percent || 0.0);
-            const itemTaxableAmount = parseFloat(item.taxable_amount || itemAmount || 0.0);
-            const itemTaxAmount = parseFloat(item.tax_amount || 0.0);
+            const itemTaxPercent = item._subscription_free ? 0.0 : parseFloat(item.tax_percent || 0.0);
+            const itemTaxableAmount = item._subscription_free ? 0.0 : parseFloat(item.taxable_amount || itemAmount || 0.0);
+            const itemTaxAmount = item._subscription_free ? 0.0 : parseFloat(item.tax_amount || (itemTaxableAmount * itemTaxPercent / 100) || 0.0);
             const itemLineTotal = itemTaxableAmount + itemTaxAmount;
             const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemTaxableAmount);
 
-            // Fetch unit from item master if it is not sent in the order items payload (e.g. for backward compatibility)
+            // Fetch unit from item master if it is not sent in the order items payload
             let resolvedUnit = item.unit;
             if (!resolvedUnit) {
                 const itemMaster = await req.propertyDb.models.item_master.findByPk(item.item_id, { transaction: t });
@@ -857,6 +947,7 @@ exports.acceptOrder = async (req, res) => {
                 tax_breakup: itemBreakup,
                 net_amount: itemLineTotal
             }, { transaction: t });
+
 
             // Deduct the parent item stock
             await insertLedger({
@@ -906,6 +997,72 @@ exports.acceptOrder = async (req, res) => {
             }
         }
 
+        // 4.5 Persist milk subscription consumptions if any subscription coverage occurred
+        if (subscriptionAllocation.consumptions.length > 0) {
+            await salesController.persistMilkSubscriptionConsumptions({
+                req,
+                transaction: t,
+                sale: saleHeader,
+                consumptions: subscriptionAllocation.consumptions
+            });
+
+            if (subscriptionAllocation.totalCoveredAmount > 0) {
+                const coverageAdvance = await salesController.findSubscriptionItemAdvance(
+                    req,
+                    subscriptionAllocation.subscriptionId,
+                    subscriptionAllocation.subscriptionItemId,
+                    t
+                );
+                if (coverageAdvance) {
+                    await salesController.consumeSubscriptionItemAdvance(
+                        req,
+                        subscriptionAllocation.subscriptionId,
+                        subscriptionAllocation.subscriptionItemId,
+                        subscriptionAllocation.totalCoveredQty,
+                        t
+                    );
+                }
+
+                const subscriptionCashAdvance = await salesController.findSubscriptionCustomerAdvance(
+                    req,
+                    subscriptionAllocation.subscriptionId,
+                    t
+                );
+                let appliedCashAdvanceAmount = 0;
+                if (subscriptionCashAdvance) {
+                    appliedCashAdvanceAmount = Math.min(
+                        toAmount(subscriptionCashAdvance.available_amount),
+                        toAmount(subscriptionAllocation.totalCoveredAmount)
+                    );
+                    await salesController.consumeSubscriptionCustomerAdvance(
+                        req,
+                        subscriptionAllocation.subscriptionId,
+                        appliedCashAdvanceAmount,
+                        t
+                    );
+                }
+
+                if (appliedCashAdvanceAmount > 0) {
+                    const { createLedgerEntry } = require('../../services/cashLedger.service');
+                    await createLedgerEntry({
+                        db: req.propertyDb,
+                        outlet_id,
+                        txn_date: saleHeader.sale_date || new Date(),
+                        transaction_type: 'ADVANCE_APPLY',
+                        reference_type: 'SUBSCRIPTION',
+                        reference_id: subscriptionAllocation.subscriptionId,
+                        reference_no: saleHeader.sale_no,
+                        party_name: order.customer_name || order.customer_phone || 'Subscription Customer',
+                        payment_method: 'SUBSCRIPTION',
+                        amount_out: appliedCashAdvanceAmount,
+                        notes: `Advance adjusted for subscription item consumption in delivery order #${order.id}`,
+                        created_by: userId,
+                        transaction: t
+                    });
+                }
+            }
+        }
+
         // 5. Try to assign delivery partner automatically or manually
         let assigned = false;
         if (rider_id && rider_id !== 'AUTO' && rider_id !== '') {
@@ -926,12 +1083,33 @@ exports.acceptOrder = async (req, res) => {
                 partner.status = 'BUSY';
                 await partner.save({ transaction: t });
 
-                await req.propertyDb.models.system_notification.create({
+                // Retailer notification
+                await req.propertyDb.models.system_notifications.create({
                     outlet_id,
                     module: 'DELIVERY',
                     title: 'Order Assigned',
                     message: `Order #${order.id} for ${order.customer_name} assigned to rider ${partner.name}.`,
                     type: 'INFO',
+                    entity_id: order.id
+                }, { transaction: t });
+
+                // Rider notification
+                await req.propertyDb.models.system_notifications.create({
+                    outlet_id,
+                    module: 'RIDER',
+                    title: 'New Delivery Assigned 🛵',
+                    message: `Order #${order.id} for ${order.customer_name} at ${order.delivery_address || 'customer address'} has been assigned to you.`,
+                    type: 'INFO',
+                    entity_id: partner.id
+                }, { transaction: t });
+
+                // Customer notification
+                await req.propertyDb.models.system_notifications.create({
+                    outlet_id,
+                    module: 'CUSTOMER',
+                    title: 'Order Confirmed & Rider Assigned ✅',
+                    message: `Your order #${order.id} is confirmed. Rider ${partner.name} will deliver it to you.`,
+                    type: 'SUCCESS',
                     entity_id: order.id
                 }, { transaction: t });
 
@@ -967,7 +1145,7 @@ exports.acceptOrder = async (req, res) => {
                 reference_no: saleHeader.sale_no,
                 party_name: saleHeader.customer_name || saleHeader.customer_phone || 'Walk-in Customer',
                 payment_method: paymentMode,
-                amount_in: netAmt,
+                amount_in: derivedNetAmount,
                 notes: `Prepaid delivery order #${order.id} checkout`,
                 created_by: userId,
                 transaction: t
@@ -1134,6 +1312,43 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid status update. Must be OUT_FOR_DELIVERY or DELIVERED' });
         }
 
+        // Notifications for customer and retailer
+        if (status === 'OUT_FOR_DELIVERY') {
+            await req.propertyDb.models.system_notifications.create({
+                outlet_id: order.outlet_id,
+                module: 'CUSTOMER',
+                title: 'Your Order is On the Way! 🛵',
+                message: `Your order #${order.id} is out for delivery and will arrive soon!`,
+                type: 'INFO',
+                entity_id: order.id
+            }, { transaction: t });
+            await req.propertyDb.models.system_notifications.create({
+                outlet_id: order.outlet_id,
+                module: 'DELIVERY',
+                title: 'Order Out for Delivery',
+                message: `Order #${order.id} for ${order.customer_name} is out for delivery.`,
+                type: 'INFO',
+                entity_id: order.id
+            }, { transaction: t });
+        } else if (status === 'DELIVERED') {
+            await req.propertyDb.models.system_notifications.create({
+                outlet_id: order.outlet_id,
+                module: 'CUSTOMER',
+                title: 'Order Delivered! ✅',
+                message: `Your order #${order.id} has been delivered. Thank you for shopping with us!`,
+                type: 'SUCCESS',
+                entity_id: order.id
+            }, { transaction: t });
+            await req.propertyDb.models.system_notifications.create({
+                outlet_id: order.outlet_id,
+                module: 'DELIVERY',
+                title: 'Order Delivered',
+                message: `Order #${order.id} for ${order.customer_name} has been successfully delivered.`,
+                type: 'SUCCESS',
+                entity_id: order.id
+            }, { transaction: t });
+        }
+
         await t.commit();
 
         // Trigger processing of any other pending orders since rider became available
@@ -1192,12 +1407,33 @@ async function autoAssignOrder(req, order, transaction) {
         partner.status = 'BUSY';
         await partner.save({ transaction });
 
-        await req.propertyDb.models.system_notification.create({
+        // Retailer notification
+        await req.propertyDb.models.system_notifications.create({
             outlet_id: order.outlet_id,
             module: 'DELIVERY',
             title: 'Order Auto-Assigned',
             message: `Order #${order.id} for ${order.customer_name} auto-assigned to rider ${partner.name}.`,
             type: 'INFO',
+            entity_id: order.id
+        }, { transaction });
+
+        // Rider notification
+        await req.propertyDb.models.system_notifications.create({
+            outlet_id: order.outlet_id,
+            module: 'RIDER',
+            title: 'New Delivery Assigned 🛵',
+            message: `Order #${order.id} for ${order.customer_name} has been assigned to you. Please pick it up.`,
+            type: 'INFO',
+            entity_id: partner.id
+        }, { transaction });
+
+        // Customer notification
+        await req.propertyDb.models.system_notifications.create({
+            outlet_id: order.outlet_id,
+            module: 'CUSTOMER',
+            title: 'Order Confirmed & Rider Assigned ✅',
+            message: `Your order #${order.id} is confirmed. Rider ${partner.name} is on the way.`,
+            type: 'SUCCESS',
             entity_id: order.id
         }, { transaction });
 
@@ -3425,3 +3661,58 @@ exports.replyToOrderFeedback = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/delivery/customer/notifications?customer_phone=...&outlet_id=...
+ * Returns unread CUSTOMER module notifications for the outlet.
+ * The customer app polls this every minute to show local notifications.
+ */
+exports.getCustomerNotifications = async (req, res) => {
+    try {
+        const { outlet_id } = req.query;
+        if (!outlet_id) return res.status(400).json({ success: false, message: 'outlet_id required' });
+
+        let actualOutletId = outlet_id;
+        if (typeof outlet_id === 'string' && outlet_id.startsWith('OUTLET')) {
+            const outlet = await req.propertyDb.models.outlets.findOne({ where: { outlet_code: outlet_id } });
+            if (outlet) actualOutletId = outlet.id;
+        }
+
+        const rows = await req.propertyDb.models.system_notifications.findAll({
+            where: { outlet_id: actualOutletId, module: 'CUSTOMER', is_read: false },
+            order: [['created_at', 'DESC']],
+            limit: 20
+        });
+
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * GET /api/delivery/rider/notifications?rider_id=...&outlet_id=...
+ * Returns unread RIDER module notifications for the given rider.
+ * entity_id in the notification stores the rider's ID.
+ */
+exports.getRiderNotifications = async (req, res) => {
+    try {
+        const { outlet_id, rider_id } = req.query;
+        if (!outlet_id || !rider_id) return res.status(400).json({ success: false, message: 'outlet_id and rider_id required' });
+
+        let actualOutletId = outlet_id;
+        if (typeof outlet_id === 'string' && outlet_id.startsWith('OUTLET')) {
+            const outlet = await req.propertyDb.models.outlets.findOne({ where: { outlet_code: outlet_id } });
+            if (outlet) actualOutletId = outlet.id;
+        }
+
+        const rows = await req.propertyDb.models.system_notifications.findAll({
+            where: { outlet_id: actualOutletId, module: 'RIDER', entity_id: Number(rider_id), is_read: false },
+            order: [['created_at', 'DESC']],
+            limit: 20
+        });
+
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

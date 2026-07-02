@@ -250,15 +250,17 @@ class _SupplierOtpLoginScreenState extends State<SupplierOtpLoginScreen> {
             "Enter your business Outlet ID and registered email to receive a secure login key.",
             style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.4),
           ),
-          const SizedBox(height: 24),
-          TextFormField(
-            controller: _outletCtrl,
-            decoration: InputDecoration(
-              labelText: "Outlet Code / ID",
-              prefixIcon: const Icon(Icons.storefront_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          Visibility(
+            visible: false,
+            child: TextFormField(
+              controller: _outletCtrl,
+              decoration: InputDecoration(
+                labelText: "Outlet Code / ID",
+                prefixIcon: const Icon(Icons.storefront_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              validator: (value) => value == null || value.trim().isEmpty ? "Enter your outlet code" : null,
             ),
-            validator: (value) => value == null || value.trim().isEmpty ? "Enter your outlet code" : null,
           ),
           const SizedBox(height: 16),
           TextFormField(

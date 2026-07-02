@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/config/app_config.dart';
 import '../dashboard/customer_app_screen.dart';
+import '../dashboard/server_config_screen.dart';
 import 'customer_auth_screen.dart';
 
 class CustomerAppSplashScreen extends StatefulWidget {
@@ -23,6 +24,20 @@ class _CustomerAppSplashScreenState extends State<CustomerAppSplashScreen> {
     await Future.delayed(const Duration(seconds: 2));
 
     try {
+      bool hasConfig = await AppConfig.configExists();
+      if (!hasConfig) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ServerConfigScreen(
+              nextScreen: CustomerAppSplashScreen(),
+            ),
+          ),
+        );
+        return;
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final customerDataStr = prefs.getString('delivery_logged_in_customer');
 

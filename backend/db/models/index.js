@@ -21,6 +21,14 @@ propertyDb.models.outlets =
 
 propertyDb.models.item_master =
     require('../../models/property/itemMaster.model')(propertyDb, DataTypes);
+propertyDb.models.product_templates =
+    require('../../models/property/productTemplate.model')(propertyDb, DataTypes);
+propertyDb.models.attributes =
+    require('../../models/property/attribute.model')(propertyDb, DataTypes);
+propertyDb.models.attribute_values =
+    require('../../models/property/attributeValue.model')(propertyDb, DataTypes);
+propertyDb.models.variant_attribute_values =
+    require('../../models/property/variantAttributeValue.model')(propertyDb, DataTypes);
 
 propertyDb.models.stock_locations =
     require('../../models/property/stockLocation.model')(propertyDb, DataTypes);

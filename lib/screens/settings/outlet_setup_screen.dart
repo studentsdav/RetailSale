@@ -466,7 +466,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
   }
 
   Future<void> _pickRestoreEncFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['enc'],
       withData: true,
@@ -875,7 +875,9 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                             title: Text(name,
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold)),
-                            subtitle: Text("Code: $code"),
+                            subtitle: (Platform.isAndroid || Platform.isIOS)
+                                ? null
+                                : Text("Code: $code"),
                             value: selectedIndex == index,
                             onChanged: (bool? value) {
                               if (value == true) {
@@ -1065,7 +1067,16 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
         DropdownMenuItem(value: 'WAREHOUSE', child: Text('Warehouse')),
         DropdownMenuItem(value: 'RETAIL', child: Text('Retail')),
         DropdownMenuItem(value: 'CAFE', child: Text('Cafe')),
-        DropdownMenuItem(value: 'BAR', child: Text('Bar'))
+        DropdownMenuItem(value: 'BAR', child: Text('Bar')),
+        DropdownMenuItem(value: 'KIRANA', child: Text('Kirana Shop')),
+        DropdownMenuItem(value: 'MEDICAL', child: Text('Medical Shop')),
+        DropdownMenuItem(value: 'PARTS', child: Text('Parts Seller')),
+        DropdownMenuItem(value: 'MACHINERY', child: Text('Machinery Seller')),
+        DropdownMenuItem(value: 'PETS', child: Text('Pet Items Seller')),
+        DropdownMenuItem(value: 'CLOTHES', child: Text('Clothes Seller')),
+        DropdownMenuItem(value: 'SOFTWARE', child: Text('Software Seller')),
+        DropdownMenuItem(value: 'SHOES', child: Text('Shoes Seller')),
+        DropdownMenuItem(value: 'MART', child: Text('Store Mart')),
       ],
       onChanged: (v) => setState(() => _outletType = v!),
     );

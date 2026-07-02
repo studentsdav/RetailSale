@@ -2,7 +2,9 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/config/app_config.dart';
 import '../../core/navigation/home_route_helper.dart';
+import '../dashboard/server_config_screen.dart';
 import 'supplier_otp_login_screen.dart';
 
 class SupplierAppSplashScreen extends StatefulWidget {
@@ -23,6 +25,20 @@ class _SupplierAppSplashScreenState extends State<SupplierAppSplashScreen> {
     await Future.delayed(const Duration(seconds: 2));
 
     try {
+      bool hasConfig = await AppConfig.configExists();
+      if (!hasConfig) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ServerConfigScreen(
+              nextScreen: SupplierAppSplashScreen(),
+            ),
+          ),
+        );
+        return;
+      }
+
       if (!kIsWeb && Platform.isWindows) {
         // Bypass login on Windows for testing!
         final nextWidget = await HomeRouteHelper.resolve();

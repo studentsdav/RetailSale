@@ -41,7 +41,7 @@ dependencies:
   jwt_decode: ^0.3.1
   shared_preferences: ^2.5.4
   http: ^1.6.0
-  file_picker: ^10.3.10
+  file_picker: ^11.0.2
   excel: ^4.0.6
   path_provider: ^2.1.5
   dropdown_search: ^6.0.2

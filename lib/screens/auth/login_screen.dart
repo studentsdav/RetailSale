@@ -372,45 +372,48 @@ class _LoginScreenState extends State<LoginScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedOutlet,
-                  decoration: const InputDecoration(
-                    labelText: 'Outlet Code',
-                    prefixIcon: Icon(Icons.storefront),
+          Visibility(
+            visible: !Platform.isAndroid && !Platform.isIOS,
+            child: Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedOutlet,
+                    decoration: const InputDecoration(
+                      labelText: 'Outlet Code',
+                      prefixIcon: Icon(Icons.storefront),
+                    ),
+                    items: AppConfig.outlets
+                        .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                        .toList(),
+                    onChanged: (v) {
+                      setState(() => _selectedOutlet = v);
+                      _loadOutletLogo();
+                    },
+                    validator: (v) => v == null ? 'Required' : null,
                   ),
-                  items: AppConfig.outlets
-                      .map((o) => DropdownMenuItem(value: o, child: Text(o)))
-                      .toList(),
-                  onChanged: (v) {
-                    setState(() => _selectedOutlet = v);
-                    _loadOutletLogo();
-                  },
-                  validator: (v) => v == null ? 'Required' : null,
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const OutletSetupScreen()),
-                  ).then((_) {
-                    setState(() {
-                      if (AppConfig.outlets.isNotEmpty) {
-                        _selectedOutlet = AppConfig.outlets.first;
-                      }
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const OutletSetupScreen()),
+                    ).then((_) {
+                      setState(() {
+                        if (AppConfig.outlets.isNotEmpty) {
+                          _selectedOutlet = AppConfig.outlets.first;
+                        }
+                      });
+                      _loadOutletLogo();
                     });
-                    _loadOutletLogo();
-                  });
-                },
-                icon: const Icon(Icons.add_circle_outline),
-                tooltip: 'Add new Outlet',
-              )
-            ],
+                  },
+                  icon: const Icon(Icons.add_circle_outline),
+                  tooltip: 'Add new Outlet',
+                )
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           TextFormField(
@@ -766,14 +769,17 @@ class _LoginScreenState extends State<LoginScreen>
                                       color: Colors.blue, fontSize: 13)),
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
-                              initialValue: _selectedOutlet,
-                              readOnly: true,
-                              decoration: const InputDecoration(
-                                  labelText: 'Outlet Code',
-                                  filled: true,
-                                  fillColor: Color(0xFFF1F5F9),
-                                  border: OutlineInputBorder()),
+                            Visibility(
+                              visible: !Platform.isAndroid && !Platform.isIOS,
+                              child: TextFormField(
+                                initialValue: _selectedOutlet,
+                                readOnly: true,
+                                decoration: const InputDecoration(
+                                    labelText: 'Outlet Code',
+                                    filled: true,
+                                    fillColor: Color(0xFFF1F5F9),
+                                    border: OutlineInputBorder()),
+                              ),
                             ),
                             const SizedBox(height: 16),
                             TextFormField(

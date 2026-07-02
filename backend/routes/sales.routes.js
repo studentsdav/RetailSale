@@ -1,12 +1,14 @@
-const router = require('express').Router();
+﻿const router = require('express').Router();
 const auth = require('../middlewares/auth.middleware');
 const license = require('../middlewares/license.middleware');
 const ctrl = require('../controllers/sales/sales.controller');
 const loyaltyCtrl = require('../controllers/sales/loyalty.controller');
+const { getSubscriptionDraftOrdersToday } = require('../jobs/subscriptionDeliveryJob');
 
 router.use(auth, license('INVENTORY'));
 
 router.get('/next-sale-no', ctrl.getNextSaleNo);
+router.get('/subscription-drafts-today', getSubscriptionDraftOrdersToday);
 router.get('/customers', ctrl.listCustomers);
 router.post('/customers', ctrl.createCustomer);
 router.put('/customers/:id', ctrl.updateCustomer);

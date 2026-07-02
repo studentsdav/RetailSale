@@ -1,16 +1,20 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/auth/token_storage.dart';
 import '../../controllers/dashboard/dashboard_controller.dart' as UserProfiledata;
 import '../../models/security/app_user_model.dart';
+import '../../core/printing/pos_invoice_printer.dart';
+import '../../models/inventory/sale_order_model.dart';
+import '../../models/inventory/sale_item_model.dart';
+import '../../models/inventory/billing_charge_model.dart';
+import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/notification_services.dart';
 
 class RiderConsoleScreen extends StatefulWidget {
   const RiderConsoleScreen({super.key});
@@ -35,6 +39,9 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
   bool _showRegisterForm = false;
   String _billFormat = 'A4'; // loaded from system settings
 
+  Timer? _notificationTimer;
+  final Set<int> _shownNotificationIds = {};
+
   final TextEditingController _loginPhoneCtrl = TextEditingController();
   final TextEditingController _loginPasswordCtrl = TextEditingController();
 
@@ -50,6 +57,7 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
 
   @override
   void dispose() {
+    _notificationTimer?.cancel();
     _loginPhoneCtrl.dispose();
     _loginPasswordCtrl.dispose();
     _regNameCtrl.dispose();
@@ -89,10 +97,32 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
           _selectedRiderId = _loggedInRider!['id'];
         });
         await _fetchRiderTasks();
+        _startRiderNotificationTimer();
       }
     } catch (e) {
       debugPrint('Error loading rider session: $e');
     }
+  }
+
+  void _startRiderNotificationTimer() {
+    _notificationTimer?.cancel();
+    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+      if (!mounted) return;
+      final riderId = _loggedInRider?['id'];
+      if (riderId == null) return;
+      try {
+        final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+        final res = await ApiClient.get('/api/delivery/rider/notifications?rider_id=$riderId&outlet_id=$outletCode');
+        final data = (res['data'] as List? ?? []);
+        for (final n in data) {
+          final id = n['id'] as int? ?? 0;
+          if (id > 0 && n['is_read'] == false && !_shownNotificationIds.contains(id)) {
+            _shownNotificationIds.add(id);
+            NotificationService.show(id, n['title']?.toString() ?? 'Notification', n['message']?.toString() ?? '');
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   void _logoutRider() async {
@@ -144,9 +174,10 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
           _selectedRiderId = _loggedInRider!['id'];
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logged in successfully! Welcome, ${_loggedInRider!['name']}')),
+          SnackBar(content: Text('Logged in successfully! Welcome, ${_loggedInRider!["name"]}')),
         );
         await _fetchRiderTasks();
+        _startRiderNotificationTimer();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(res['message'] ?? 'Login failed.')),
@@ -309,232 +340,127 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
   }
 
   // Native PDF Printing
-  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder) async {
-    final pdf = pw.Document();
+  SaleOrder _mapRecordToSaleOrder(dynamic record) {
+    double parseNum(dynamic value) =>
+        double.tryParse(value?.toString() ?? '') ?? 0.0;
 
-    final String customerName = record['customer_name'] ?? '--';
-    final String customerPhone = record['customer_phone'] ?? '--';
-    final String customerAddress = record['customer_address'] ?? '--';
+    final rawItems = record['received_items'] as List? ?? record['items'] as List? ?? [];
+    List<SaleItem> saleItems = [];
+    double calculatedSubTotal = 0.0;
+    double calculatedTotalQty = 0.0;
+    
+    for (var it in rawItems) {
+      final qty = parseNum(it['qty'] ?? 1.0);
+      final rate = parseNum(it['rate'] ?? 0.0);
+      final lineTaxPercent = parseNum(it['tax_percent'] ?? 0.0);
+      
+      final total = qty * rate;
+      final taxAmt = parseNum(it['tax_amount'] ?? (total * lineTaxPercent / 100.0));
+      final taxableAmt = parseNum(it['taxable_amount'] ?? (total - taxAmt));
+      final lineTotal = parseNum(it['line_total'] ?? total);
 
-    String title = '';
-    String numberLabel = '';
-    String numberVal = '';
-    String dateVal = '';
-    List<dynamic> itemsList = [];
-    double subTotal = 0;
-    double tax = 0;
-    double delivery = 0;
-    double netTotal = 0;
-    String payMode = '';
-    String payStatus = '';
+      calculatedSubTotal += total;
+      calculatedTotalQty += qty;
 
-    if (isOnlineOrder) {
-      title = 'Online Delivery Order';
-      numberLabel = 'ORDER ID';
-      numberVal = '#${record['id']}';
-      dateVal = record['created_at'] != null 
-          ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(record['created_at'].toString()))
-          : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
-      itemsList = record['received_items'] as List? ?? record['items'] as List? ?? [];
-      subTotal = double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
-      tax = double.tryParse(record['tax_amount']?.toString() ?? '0') ?? 0.0;
-      delivery = double.tryParse(record['delivery_charge']?.toString() ?? '0') ?? 0.0;
-      netTotal = double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
-      payMode = record['payment_status'] == 'PAID' ? 'Online/UPI' : 'Cash on Delivery';
-      payStatus = record['payment_status'] == 'PAID' ? 'PAID' : 'COLLECT CASH';
-    } else {
-      title = 'In-Store POS Sale';
-      numberLabel = 'INVOICE NO';
-      numberVal = record['sale_no'] ?? '--';
-      dateVal = record['sale_date'] != null 
-          ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(record['sale_date'].toString()))
-          : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
-      itemsList = record['items'] as List? ?? [];
-      subTotal = double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
-      tax = double.tryParse(record['total_tax']?.toString() ?? '0') ?? 0.0;
-      delivery = double.tryParse(record['charge_total']?.toString() ?? '0') ?? 0.0;
-      netTotal = double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
-      payMode = record['payment_mode'] ?? 'CASH';
-      final balance = double.tryParse(record['balance_due']?.toString() ?? '0') ?? 0.0;
-      payStatus = balance <= 0 ? 'PAID' : 'DUE (Rs. ${balance.toStringAsFixed(2)})';
+      saleItems.add(SaleItem(
+        itemId: int.tryParse(it['item_id']?.toString() ?? '') ?? 0,
+        itemCode: it['item_code']?.toString() ?? '',
+        itemName: it['item_name']?.toString() ?? '',
+        barcode: it['barcode']?.toString() ?? '',
+        unit: it['unit']?.toString() ?? 'Pcs',
+        qty: qty,
+        rate: rate,
+        taxPercent: lineTaxPercent,
+        taxAmount: taxAmt,
+        taxableAmount: taxableAmt,
+        lineTotal: lineTotal,
+      ));
     }
 
-    final isThermal = _billFormat.startsWith('THERMAL_');
-    final double fs = isThermal ? 8.0 : 11.0;
-    final double fsSmall = isThermal ? 7.0 : 9.5;
-    final double fsBig = isThermal ? 12.0 : 16.0;
-    final PdfPageFormat pageFormat = isThermal
-        ? (_billFormat == 'THERMAL_58' ? PdfPageFormat.roll57 : PdfPageFormat.roll80)
-        : PdfPageFormat.a4;
-    final pw.EdgeInsets margin = isThermal
-        ? const pw.EdgeInsets.all(10)
-        : const pw.EdgeInsets.symmetric(horizontal: 48, vertical: 40);
-    final String divider = isThermal
-        ? '--------------------------------------'
-        : '─────────────────────────────────────────────────────';
+    List<BillingCharge> billingCharges = [];
+    final rawCharges = record['charges'] as List?;
+    if (rawCharges != null) {
+      for (var ch in rawCharges) {
+        billingCharges.add(BillingCharge.fromJson(Map<String, dynamic>.from(ch)));
+      }
+    }
+    
+    final delivery = parseNum(record['delivery_charge'] ?? record['charge_total'] ?? 0.0);
+    final hasDeliveryCharge = billingCharges.any((c) => c.code == 'DELIVERY' || c.name.toUpperCase() == 'DELIVERY');
+    if (delivery > 0 && !hasDeliveryCharge) {
+      billingCharges.add(BillingCharge(
+        name: 'DELIVERY',
+        code: 'DELIVERY',
+        amount: delivery,
+        taxable: false,
+        autoApply: false,
+        isEnabled: true,
+        taxType: 'GST',
+        taxPercent: 0.0,
+      ));
+    }
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: pageFormat,
-        margin: margin,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Center(
-                child: pw.Text(
-                  _currentUser?.propertyName.isNotEmpty == true
-                      ? _currentUser!.propertyName
-                      : 'RETAIL MART POS',
-                  style: pw.TextStyle(fontSize: fsBig, fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-              pw.Center(
-                child: pw.Text(
-                  title,
-                  style: pw.TextStyle(fontSize: fs),
-                ),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Text('$numberLabel : $numberVal', style: pw.TextStyle(fontSize: fs)),
-              pw.Text('DATE       : $dateVal', style: pw.TextStyle(fontSize: fs)),
-              pw.Text('CUSTOMER   : $customerName', style: pw.TextStyle(fontSize: fs)),
-              pw.Text('PHONE      : $customerPhone', style: pw.TextStyle(fontSize: fs)),
-              if (customerAddress.isNotEmpty)
-                pw.Text('ADDRESS    : $customerAddress', style: pw.TextStyle(fontSize: fs)),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Text('ITEMS SOLD:', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 4),
-              ...itemsList.map((item) {
-                final qtyVal = double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
-                final rateVal = double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
-                final total = qtyVal * rateVal;
-                final taxPct = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-                final taxAmt = double.tryParse(item['tax_amount']?.toString() ?? '0') ?? 0.0;
-                final gstLabel = taxPct > 0
-                    ? 'GST ${taxPct % 1 == 0 ? taxPct.toInt().toString() : taxPct.toStringAsFixed(1)}%'
-                        '${taxAmt > 0 ? ' = Rs. ${taxAmt.toStringAsFixed(2)}' : ''}'
-                    : '';
-                return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Expanded(
-                            child: pw.Text(
-                              '${item['item_name']} x${qtyVal.toStringAsFixed(0)}',
-                              style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold),
-                            ),
-                          ),
-                          pw.Text('Rs. ${total.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold)),
-                        ],
-                      ),
-                      if (gstLabel.isNotEmpty)
-                        pw.Text(
-                          '  $gstLabel',
-                          style: pw.TextStyle(fontSize: fsSmall, color: PdfColors.grey700),
-                        ),
-                    ],
-                  ),
-                );
-              }),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('SUB TOTAL', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text('Rs. ${subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('GST / TAXES', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text('Rs. ${tax.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              if (record['charges'] != null && record['charges'] is List && (record['charges'] as List).isNotEmpty)
-                ...((record['charges'] as List).map((ch) {
-                  final String name = (ch['name'] ?? 'Charge').toString().toUpperCase();
-                  final double amt = double.tryParse(ch['amount']?.toString() ?? '0') ?? 0.0;
-                  final double tAmt = double.tryParse(ch['tax_amount']?.toString() ?? '0') ?? 0.0;
-                  final double tPct = double.tryParse(ch['tax_percent']?.toString() ?? '0') ?? 0.0;
-                  return pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(name, style: pw.TextStyle(fontSize: fs)),
-                          pw.Text('Rs. ${amt.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs)),
-                        ],
-                      ),
-                      if (tAmt > 0)
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('  * GST (${tPct.toStringAsFixed(1)}%)', style: pw.TextStyle(fontSize: fsSmall)),
-                            pw.Text('Rs. ${tAmt.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fsSmall)),
-                          ],
-                        ),
-                    ],
-                  );
-                }).toList())
-              else if (delivery > 0)
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('DELIVERY', style: pw.TextStyle(fontSize: fs)),
-                    pw.Text('Rs. ${delivery.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs)),
-                  ],
-                ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('NET TOTAL', style: pw.TextStyle(fontSize: fs + 1, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Rs. ${netTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs + 1, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-              pw.SizedBox(height: 4),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('PAY MODE', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text(payMode, style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('PAY STATUS', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold)),
-                  pw.Text(payStatus, style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.SizedBox(height: 4),
-              pw.Center(
-                child: pw.Text(
-                  'THANK YOU FOR SHOPPING!',
-                  style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+    final netAmt = parseNum(record['net_amount'] ?? 0.0);
+    final taxAmt = parseNum(record['tax_amount'] ?? record['total_tax'] ?? 0.0);
+
+    return SaleOrder(
+      saleNo: record['sale_no']?.toString() ?? record['id']?.toString() ?? '',
+      saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
+      status: record['status']?.toString() ?? 'COMPLETED',
+      orderType: 'B2C',
+      billingCountry: 'India',
+      billingTaxMode: 'CGST_SGST',
+      billFormat: _billFormat,
+      customerName: record['customer_name']?.toString(),
+      customerPhone: record['customer_phone']?.toString(),
+      customerAddress: record['customer_address']?.toString(),
+      customerGstin: record['gstin']?.toString() ?? record['customer_gstin']?.toString(),
+      paymentMode: record['payment_mode']?.toString() ?? 'CASH',
+      amountPaid: record['payment_status'] == 'PAID' ? netAmt : 0.0,
+      changeAmount: 0.0,
+      balanceDue: record['payment_status'] == 'PAID' ? 0.0 : netAmt,
+      subTotal: parseNum(record['sub_total'] ?? calculatedSubTotal),
+      totalQty: calculatedTotalQty,
+      taxPercent: 0.0,
+      schemeDiscount: 0.0,
+      manualDiscountValue: 0.0,
+      manualDiscountAmount: 0.0,
+      taxableAmount: parseNum(record['sub_total'] ?? calculatedSubTotal) - taxAmt,
+      cgstAmount: taxAmt / 2,
+      sgstAmount: taxAmt / 2,
+      igstAmount: 0.0,
+      totalTax: taxAmt,
+      taxBreakup: [],
+      charges: billingCharges,
+      chargeTotal: delivery,
+      chargeTaxTotal: 0.0,
+      totalDiscount: 0.0,
+      roundOffAmount: 0.0,
+      netAmount: netAmt,
+      items: saleItems,
     );
+  }
 
+  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder) async {
+    setState(() => _isLoading = true);
     try {
-      await Printing.layoutPdf(
-        onLayout: (format) async => pdf.save(),
-        name: '${isOnlineOrder ? "order" : "sale"}_${record['id'] ?? record['sale_no']}',
+      final propertyCtrl = PropertyInfoController();
+      await propertyCtrl.load();
+
+      final order = _mapRecordToSaleOrder(record);
+
+      await PosInvoicePrinter.printSaleInvoice(
+        order: order,
+        property: propertyCtrl.data,
+        cashierName: 'System',
+        termsAndConditions: 'Goods once sold will not be taken back. Subject to local jurisdiction.',
+        thankYouMessage: 'Thank you for shopping with us. Please visit again.',
+        authorizedSignatureLabel: 'Authorized Signature',
       );
     } catch (e) {
-      debugPrint('Error printing natively: $e');
+      debugPrint('Error printing receipt: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -1232,7 +1158,11 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Delivery Partner Profile', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Text('Delivery Partner Profile',
+                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: _logoutRider,
                 icon: const Icon(Icons.logout),
@@ -1364,14 +1294,20 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
               });
             },
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.dashboard_outlined),
-            title: const Text('Exit to Dashboard'),
-            onTap: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
+          Visibility(
+            visible: !Platform.isAndroid && !Platform.isIOS,
+            child: const Divider(),
+          ),
+          Visibility(
+            visible: !Platform.isAndroid && !Platform.isIOS,
+            child: ListTile(
+              leading: const Icon(Icons.dashboard_outlined),
+              title: const Text('Exit to Dashboard'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+            ),
           ),
         ],
       ),

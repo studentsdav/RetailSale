@@ -247,6 +247,7 @@ CREATE TABLE IF NOT EXISTS property_info (
   gst_no VARCHAR(20),
   pan_no VARCHAR(20),
   fssai_no VARCHAR(30),
+  drug_license_no VARCHAR(50),
 
   logo_path TEXT,
 
@@ -2303,9 +2304,305 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 62,
+    description: "Create product templates, attributes, and variant mapping tables",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        -- 1. Create product_templates table
+        CREATE TABLE IF NOT EXISTS product_templates (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+            name VARCHAR(150) NOT NULL,
+            item_group VARCHAR(100) NOT NULL,
+            sub_category VARCHAR(100) NOT NULL,
+            brand VARCHAR(100),
+            hsn_sac_code VARCHAR(30),
+            tax_type VARCHAR(20) DEFAULT 'GST',
+            tax_percent DECIMAL(7, 2) DEFAULT 0.00,
+            discount_applicable BOOLEAN DEFAULT TRUE,
+            scheme_applicable BOOLEAN DEFAULT TRUE,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 2. Create attributes table
+        CREATE TABLE IF NOT EXISTS attributes (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+            name VARCHAR(50) NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_outlet_attribute_name UNIQUE (outlet_id, name)
+        );
+
+        -- 3. Create attribute_values table
+        CREATE TABLE IF NOT EXISTS attribute_values (
+            id SERIAL PRIMARY KEY,
+            attribute_id INTEGER NOT NULL REFERENCES attributes(id) ON DELETE CASCADE,
+            value VARCHAR(100) NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_attribute_value UNIQUE (attribute_id, value)
+        );
+
+        -- 4. Add product_template_id column to item_master
+        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS product_template_id INTEGER REFERENCES product_templates(id) ON DELETE SET NULL;
+
+        -- 5. Create variant_attribute_values join table
+        CREATE TABLE IF NOT EXISTS variant_attribute_values (
+            id SERIAL PRIMARY KEY,
+            item_id INTEGER NOT NULL REFERENCES item_master(id) ON DELETE CASCADE,
+            attribute_value_id INTEGER NOT NULL REFERENCES attribute_values(id) ON DELETE CASCADE,
+            CONSTRAINT uq_variant_attribute UNIQUE (item_id, attribute_value_id)
+        );
+
+        -- 6. Create indexes
+        CREATE INDEX IF NOT EXISTS idx_product_templates_outlet ON product_templates(outlet_id);
+        CREATE INDEX IF NOT EXISTS idx_attributes_outlet ON attributes(outlet_id);
+        CREATE INDEX IF NOT EXISTS idx_variant_attribute_values_item ON variant_attribute_values(item_id);
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 56,
+    description: "Add cancellation_reason and feedback columns to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS cancellation_reason TEXT DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS feedback JSONB DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 57,
+    description: "Add return_rejection_reason column to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS return_rejection_reason TEXT DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 58,
+    description: "Add received_items, original_net_amount, and modification_reason to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS received_items JSONB DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS original_net_amount DECIMAL(12, 2) DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS modification_reason TEXT DEFAULT NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 59,
+    description: "Add refund_payment_mode, refund_paid_at, and is_prepaid to customer_orders table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS refund_payment_mode VARCHAR(50) DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS refund_paid_at TIMESTAMP DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS is_prepaid BOOLEAN DEFAULT FALSE;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 60,
+    description: "Create WhatsApp configuration, templates, campaigns and message logs tables",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        CREATE TABLE IF NOT EXISTS whatsapp_configurations (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          waba_id VARCHAR(255) NOT NULL,
+          phone_number_id VARCHAR(255) NOT NULL,
+          encrypted_access_token TEXT NOT NULL,
+          webhook_verify_token VARCHAR(255) NOT NULL,
+          app_secret VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(outlet_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_templates (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          template_name VARCHAR(255) NOT NULL,
+          category VARCHAR(50) NOT NULL,
+          language VARCHAR(50) NOT NULL,
+          body_text TEXT NOT NULL,
+          status VARCHAR(50) DEFAULT 'DRAFT',
+          meta_template_id VARCHAR(255),
+          header_type VARCHAR(50) DEFAULT 'NONE',
+          header_text TEXT,
+          footer_text TEXT,
+          buttons JSONB DEFAULT NULL,
+          variables JSONB DEFAULT NULL,
+          is_default_invoice_template BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(outlet_id, template_name, language)
+        );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_campaigns (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          template_id INTEGER NOT NULL REFERENCES whatsapp_templates(id) ON DELETE CASCADE,
+          campaign_name VARCHAR(255) NOT NULL,
+          total_recipients INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_logs (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          campaign_id INTEGER REFERENCES whatsapp_campaigns(id) ON DELETE SET NULL,
+          recipient_phone VARCHAR(50) NOT NULL,
+          message_type VARCHAR(50) NOT NULL,
+          delivery_status VARCHAR(50) DEFAULT 'queued',
+          meta_message_id VARCHAR(255),
+          error_message TEXT,
+          retry_count INTEGER DEFAULT 0,
+          next_retry_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          variables_mapped JSONB DEFAULT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 61,
+    description: "Add cost column to whatsapp_logs table for billing dashboard",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE whatsapp_logs ADD COLUMN IF NOT EXISTS cost DECIMAL(6, 2) DEFAULT 0.00;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 62,
+    description: "Create product templates, attributes, and variant mapping tables",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        -- 1. Create product_templates table
+        CREATE TABLE IF NOT EXISTS product_templates (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+            name VARCHAR(150) NOT NULL,
+            item_group VARCHAR(100) NOT NULL,
+            sub_category VARCHAR(100) NOT NULL,
+            brand VARCHAR(100),
+            hsn_sac_code VARCHAR(30),
+            tax_type VARCHAR(20) DEFAULT 'GST',
+            tax_percent DECIMAL(7, 2) DEFAULT 0.00,
+            discount_applicable BOOLEAN DEFAULT TRUE,
+            scheme_applicable BOOLEAN DEFAULT TRUE,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 2. Create attributes table
+        CREATE TABLE IF NOT EXISTS attributes (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+            name VARCHAR(50) NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_outlet_attribute_name UNIQUE (outlet_id, name)
+        );
+
+        -- 3. Create attribute_values table
+        CREATE TABLE IF NOT EXISTS attribute_values (
+            id SERIAL PRIMARY KEY,
+            attribute_id INTEGER NOT NULL REFERENCES attributes(id) ON DELETE CASCADE,
+            value VARCHAR(100) NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_attribute_value UNIQUE (attribute_id, value)
+        );
+
+        -- 4. Add product_template_id column to item_master
+        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS product_template_id INTEGER REFERENCES product_templates(id) ON DELETE SET NULL;
+
+        -- 5. Create variant_attribute_values join table
+        CREATE TABLE IF NOT EXISTS variant_attribute_values (
+            id SERIAL PRIMARY KEY,
+            item_id INTEGER NOT NULL REFERENCES item_master(id) ON DELETE CASCADE,
+            attribute_value_id INTEGER NOT NULL REFERENCES attribute_values(id) ON DELETE CASCADE,
+            CONSTRAINT uq_variant_attribute UNIQUE (item_id, attribute_value_id)
+        );
+
+        -- 6. Create indexes
+        CREATE INDEX IF NOT EXISTS idx_product_templates_outlet ON product_templates(outlet_id);
+        CREATE INDEX IF NOT EXISTS idx_attributes_outlet ON attributes(outlet_id);
+        CREATE INDEX IF NOT EXISTS idx_variant_attribute_values_item ON variant_attribute_values(item_id);
+
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 63,
+    description: "Add drug_license_no column to property_info table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE property_info ADD COLUMN IF NOT EXISTS drug_license_no VARCHAR(50);
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 64,
+    description: "Add doctor_name and patient_name columns to sales_headers table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS doctor_name VARCHAR(150);
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS patient_name VARCHAR(150);
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 65,
+    description: "Add delivery_type to milk_subscriptions and enable_app_subscription to system_settings",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE milk_subscriptions ADD COLUMN IF NOT EXISTS delivery_type VARCHAR(20) DEFAULT 'PICKUP';
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS enable_app_subscription BOOLEAN DEFAULT FALSE;
+        COMMIT;
+      `);
+    }
   }
 ];
 
 module.exports = migrations;
-
 

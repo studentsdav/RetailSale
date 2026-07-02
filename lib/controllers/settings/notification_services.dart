@@ -13,8 +13,14 @@ class NotificationService {
       guid: '12345678-1234-1234-1234-123456789012',
     );
 
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
     const InitializationSettings settings =
-        InitializationSettings(windows: windowsSettings);
+        InitializationSettings(
+      windows: windowsSettings,
+      android: androidSettings,
+    );
 
     await _notifications.initialize(
       settings: settings,
@@ -26,14 +32,36 @@ class NotificationService {
         }
       },
     );
+
+    // Request notification permission on Android 13+ (API 33+).
+    // This shows the OS permission dialog on first launch for all apps
+    // that use this service (retail, customer, rider).
+    final androidImpl = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      await androidImpl.requestNotificationsPermission();
+    }
   }
 
   static Future<void> show(int id, String title, String body) async {
     const WindowsNotificationDetails windowsDetails =
         WindowsNotificationDetails();
 
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'default_channel_id',
+      'Default Channel',
+      channelDescription: 'Standard notification channel',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
     const NotificationDetails details =
-        NotificationDetails(windows: windowsDetails);
+        NotificationDetails(
+      windows: windowsDetails,
+      android: androidDetails,
+    );
 
     await _notifications.show(
       id: id,

@@ -386,7 +386,6 @@ async function getConsumedSingleUseSchemeIds(req, identity) {
     const rows = await req.propertyDb.models.sales_scheme_customers.findAll({
         where: {
             outlet_id: req.user.outlet_id,
-            is_active: true,
             is_consumed: true,
             usage_type: 'single_use',
             ...scope
@@ -1223,8 +1222,8 @@ async function buildSubscriptionLedgerResponse(req, subscriptionId) {
             outlet_id: req.user.outlet_id
         },
         include: [
-            { model: req.propertyDb.models.item_master, as: 'item' },
-            { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes' }
+            { model: req.propertyDb.models.item_master, as: 'item', required: false },
+            { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes', required: false }
         ]
     });
 
@@ -1985,8 +1984,18 @@ async function recordSalePayment({
         ? nonCreditSplit
         : [{ method: paymentMode, amount: Math.min(amountPaid, netAmount) }];
 
+    const changeAmount = toAmount(header.change_amount || sale?.change_amount || 0);
+    let remainingChange = changeAmount;
+
     for (const line of paymentLines) {
-        if (line.amount <= 0) continue;
+        let lineAmount = line.amount;
+        if (line.method === 'CASH' && remainingChange > 0) {
+            const deduct = Math.min(lineAmount, remainingChange);
+            lineAmount = toAmount(lineAmount - deduct);
+            remainingChange = toAmount(remainingChange - deduct);
+        }
+        if (lineAmount <= 0) continue;
+
         await createLedgerEntry({
             db: req.propertyDb,
             outlet_id: req.user.outlet_id,
@@ -1999,7 +2008,7 @@ async function recordSalePayment({
             reference_no: sale.sale_no,
             party_name: header.customer_name || header.customer_phone || 'Walk-in Customer',
             payment_method: line.method,
-            amount_in: line.amount,
+            amount_in: lineAmount,
             notes: balanceDue > 0
                 ? `Sale ${sale.sale_no} created with outstanding ${balanceDue.toFixed(2)}`
                 : `Payment received for sale ${sale.sale_no}`,
@@ -3883,7 +3892,7 @@ exports.getSaleDetails = async (req, res) => {
                         {
                             model: req.propertyDb.models.item_master,
                             as: 'item',
-                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent']
+                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand']
                         }
                     ]
                 },
@@ -4325,20 +4334,27 @@ exports.listSubscriptions = async (req, res) => {
         const search = String(req.query.search || '').trim().toLowerCase();
         const status = String(req.query.status || '').trim().toUpperCase();
 
+        console.log("[DEBUG listSubscriptions] Received request. Query:", req.query);
+        console.log("[DEBUG listSubscriptions] User resolved:", req.user);
+
         const where = { outlet_id: req.user.outlet_id };
         if (status === 'ACTIVE' || status === 'EXPIRED' || status === 'SETTLED' || status === 'CANCELLED') {
             where.status = status;
         }
 
+        console.log("[DEBUG listSubscriptions] Where clause:", where);
+
         const subscriptions = await req.propertyDb.models.milk_subscriptions.findAll({
             where,
             include: [
-                { model: req.propertyDb.models.item_master, as: 'item' },
-                { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes' },
-                { model: req.propertyDb.models.milk_subscription_consumptions, as: 'consumptions' }
+                { model: req.propertyDb.models.item_master, as: 'item', required: false },
+                { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes', required: false },
+                { model: req.propertyDb.models.milk_subscription_consumptions, as: 'consumptions', required: false }
             ],
             order: [['created_at', 'DESC'], ['id', 'DESC']]
         });
+
+        console.log("[DEBUG listSubscriptions] Found subscriptions count:", subscriptions.length);
 
         const data = [];
         for (const subscription of subscriptions) {
@@ -4396,17 +4412,11 @@ exports.listCustomerSubscriptions = async (req, res) => {
         const subscriptions = await req.propertyDb.models.milk_subscriptions.findAll({
             where: {
                 outlet_id: req.user.outlet_id,
-                ...scope,
-                status: 'ACTIVE',
-                active_subscription: true,
-                [Op.and]: [
-                    sqlWhere(fn('DATE', col('milk_subscriptions.start_date')), { [Op.lte]: asOfDay }),
-                    sqlWhere(fn('DATE', col('milk_subscriptions.end_date')), { [Op.gte]: asOfDay })
-                ]
+                ...scope
             },
             include: [
-                { model: req.propertyDb.models.item_master, as: 'item' },
-                { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes' }
+                { model: req.propertyDb.models.item_master, as: 'item', required: false },
+                { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes', required: false }
             ],
             order: [['start_date', 'DESC'], ['id', 'DESC']]
         });
@@ -4575,6 +4585,7 @@ exports.createSubscription = async (req, res) => {
             scheme_discount_amount: schemeTotals.scheme_discount_amount,
             bonus_qty: schemeTotals.bonus_qty + bonusQty,
             selected_schemes: selectedSchemes,
+            delivery_type: String(req.body.delivery_type || 'PICKUP').trim().toUpperCase(),
             status: 'ACTIVE',
             active_subscription: true,
             created_by: req.user.id,
@@ -5567,6 +5578,9 @@ exports.deleteSubscription = async (req, res) => {
     const t = await req.propertyDb.transaction();
     try {
         const subscriptionId = Number(req.params.id);
+        console.log("[DEBUG deleteSubscription] Called with ID:", subscriptionId);
+        console.log("[DEBUG deleteSubscription] User resolved:", req.user);
+
         if (!Number.isFinite(subscriptionId) || subscriptionId <= 0) {
             await t.rollback();
             return res.status(400).json({ success: false, message: 'Invalid subscription id' });
@@ -5579,6 +5593,8 @@ exports.deleteSubscription = async (req, res) => {
             },
             transaction: t
         });
+
+        console.log("[DEBUG deleteSubscription] Found subscription database record:", subscription ? subscription.toJSON() : null);
 
         if (!subscription) {
             await t.rollback();
@@ -6104,3 +6120,11 @@ exports.payRefund = async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+exports.allocateMilkSubscriptionCoverage = allocateMilkSubscriptionCoverage;
+exports.persistMilkSubscriptionConsumptions = persistMilkSubscriptionConsumptions;
+exports.findSubscriptionItemAdvance = findSubscriptionItemAdvance;
+exports.consumeSubscriptionItemAdvance = consumeSubscriptionItemAdvance;
+exports.findSubscriptionCustomerAdvance = findSubscriptionCustomerAdvance;
+exports.consumeSubscriptionCustomerAdvance = consumeSubscriptionCustomerAdvance;
+

@@ -398,6 +398,25 @@ exports.getItems = async (req, res) => {
 
         const items = await req.propertyDb.models.item_master.findAll({
             where,
+            include: [
+                {
+                    model: req.propertyDb.models.product_templates,
+                    as: 'product_template',
+                    required: false
+                },
+                {
+                    model: req.propertyDb.models.attribute_values,
+                    as: 'attribute_values',
+                    required: false,
+                    include: [
+                        {
+                            model: req.propertyDb.models.attributes,
+                            as: 'attribute',
+                            required: false
+                        }
+                    ]
+                }
+            ],
             order: [['item_name', 'ASC']]
         });
 
@@ -414,7 +433,26 @@ exports.getItemById = async (req, res) => {
         const outlet_id = req.user.outlet_id;
 
         const item = await req.propertyDb.models.item_master.findOne({
-            where: { id, outlet_id }
+            where: { id, outlet_id },
+            include: [
+                {
+                    model: req.propertyDb.models.product_templates,
+                    as: 'product_template',
+                    required: false
+                },
+                {
+                    model: req.propertyDb.models.attribute_values,
+                    as: 'attribute_values',
+                    required: false,
+                    include: [
+                        {
+                            model: req.propertyDb.models.attributes,
+                            as: 'attribute',
+                            required: false
+                        }
+                    ]
+                }
+            ]
         });
 
         if (!item) {

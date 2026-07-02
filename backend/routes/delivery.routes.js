@@ -15,6 +15,7 @@ router.get('/customer/history', ctrl.getCustomerHistory);
 router.post('/orders/:id/return', ctrl.requestOrderReturn);
 router.post('/orders/:id/cancel', ctrl.cancelOrderAsCustomer);
 router.post('/orders/:id/feedback', ctrl.submitOrderFeedback);
+router.get('/customer/notifications', ctrl.getCustomerNotifications);
 
 // Rider app endpoints (accessible from Rider App)
 router.post('/rider/register', ctrl.registerRiderFromApp);
@@ -22,6 +23,7 @@ router.post('/rider/login', ctrl.loginRider);
 router.put('/rider/orders/:id/status', ctrl.updateOrderDeliveryStatus);
 router.put('/rider/orders/:id/handover-return', ctrl.handoverReturn);
 router.put('/rider/status', ctrl.updateRiderStatus);
+router.get('/rider/notifications', ctrl.getRiderNotifications);
 
 // Retailer dashboard endpoints (Require admin auth and inventory license)
 router.get('/retailer/orders', adminAuth, ctrl.listOrders);

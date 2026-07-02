@@ -51,6 +51,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: 'ACTIVE'
         },
+        delivery_type: {
+            type: DataTypes.STRING(20),
+            allowNull: false,
+            defaultValue: 'PICKUP'
+        },
         active_subscription: {
             type: DataTypes.BOOLEAN,
             allowNull: false,

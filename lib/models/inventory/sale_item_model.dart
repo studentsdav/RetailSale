@@ -23,6 +23,7 @@ class SaleItem {
   final double taxAmount;
   final double lineTotal;
   final List<TaxBreakdown> taxBreakup;
+  final String? brand;
 
   SaleItem({
     required this.itemId,
@@ -47,6 +48,7 @@ class SaleItem {
     this.taxAmount = 0,
     double? lineTotal,
     this.taxBreakup = const [],
+    this.brand,
   })  : originalQty = originalQty ?? qty,
         referenceRate = referenceRate ?? rate,
         taxableAmount = taxableAmount ?? ((qty * rate) - lineDiscount),
@@ -74,6 +76,7 @@ class SaleItem {
     double? taxAmount,
     double? lineTotal,
     List<TaxBreakdown>? taxBreakup,
+    String? brand,
   }) {
     return SaleItem(
       itemId: itemId,
@@ -98,6 +101,7 @@ class SaleItem {
       taxAmount: taxAmount ?? this.taxAmount,
       lineTotal: lineTotal ?? this.lineTotal,
       taxBreakup: taxBreakup ?? this.taxBreakup,
+      brand: brand ?? this.brand,
     );
   }
 
@@ -127,6 +131,7 @@ class SaleItem {
       'tax_breakup': taxBreakup.map((entry) => entry.toJson()).toList(),
       'amount': amount,
       'net_amount': netAmount,
+      'brand': brand,
     };
   }
 
@@ -175,6 +180,7 @@ class SaleItem {
           .map((entry) =>
               TaxBreakdown.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),
+      brand: json['brand'] ?? (json['item'] is Map ? json['item']['brand']?.toString() : null),
     );
   }
 }

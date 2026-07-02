@@ -1,3 +1,5 @@
+import 'attribute_model.dart';
+
 class Item {
   final int id;
   final String itemCode;
@@ -22,6 +24,8 @@ class Item {
   final int maxLevel;
   final bool stockable;
   final bool isSaleable;
+  final int? productTemplateId;
+  final List<AttributeValue> attributeValues;
 
   Item({
     required this.id,
@@ -47,18 +51,25 @@ class Item {
     required this.maxLevel,
     required this.stockable,
     required this.isSaleable,
+    this.productTemplateId,
+    this.attributeValues = const [],
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
+    var rawValues = json['attribute_values'] as List?;
+    List<AttributeValue> vals = rawValues != null
+        ? rawValues.map((e) => AttributeValue.fromJson(e)).toList()
+        : [];
+
     return Item(
       id: json['id'],
-      itemCode: json['item_code'],
-      itemName: json['item_name'],
+      itemCode: json['item_code'] ?? '',
+      itemName: json['item_name'] ?? '',
       hsnSacCode: json['hsn_sac_code'] ?? json['hsn_code'] ?? json['hsn'] ?? '',
-      itemGroup: json['item_group'],
-      subCategory: json['sub_category'],
-      brand: json['brand'],
-      unit: json['unit'],
+      itemGroup: json['item_group'] ?? '',
+      subCategory: json['sub_category'] ?? '',
+      brand: json['brand'] ?? '',
+      unit: json['unit'] ?? '',
       barcode: json['barcode'] ?? '',
       imagePath: json['image_path'] ?? '',
       rate: double.tryParse(json['rate'].toString()) ?? 0.0,
@@ -75,11 +86,14 @@ class Item {
       maxLevel: json['max_level'] ?? 0,
       stockable: json['stockable'] ?? true,
       isSaleable: json['is_saleable'] ?? true,
+      productTemplateId: json['product_template_id'],
+      attributeValues: vals,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'item_code': itemCode,
       'item_name': itemName,
       'hsn_sac_code': hsnSacCode,
@@ -102,6 +116,8 @@ class Item {
       'max_level': maxLevel,
       'stockable': stockable,
       'is_saleable': isSaleable,
+      'product_template_id': productTemplateId,
+      'attribute_values': attributeValues.map((e) => e.toJson()).toList(),
     };
   }
 }

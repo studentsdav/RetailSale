@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -9,6 +10,12 @@ import '../../core/config/app_config.dart';
 import '../../controllers/dashboard/dashboard_controller.dart' as UserProfiledata;
 import '../../models/security/app_user_model.dart';
 import '../inventory/salescreen.dart';
+import '../../core/printing/pos_invoice_printer.dart';
+import '../../models/inventory/sale_order_model.dart';
+import '../../models/inventory/sale_item_model.dart';
+import '../../models/inventory/billing_charge_model.dart';
+import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/notification_services.dart';
 
 
 class RetailerConsoleScreen extends StatefulWidget {
@@ -77,18 +84,22 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   bool _todayOnly = true;
 
   Timer? _refreshTimer;
+  Timer? _notificationTimer;
   int? _maxOrderIdSeen;
+  final Set<int> _shownNotificationIds = {};
 
   @override
   void initState() {
     super.initState();
     _loadUserAndData();
     _startRefreshTimer();
+    _startNotificationTimer();
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _notificationTimer?.cancel();
     _riderNameCtrl.dispose();
     _riderPhoneCtrl.dispose();
     _riderPasswordCtrl.dispose();
@@ -131,6 +142,23 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       if (mounted && !_isLoading) {
         _fetchRetailerData(isBackground: true);
       }
+    });
+  }
+
+  void _startNotificationTimer() {
+    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+      if (!mounted) return;
+      try {
+        final res = await ApiClient.get('/api/notifications');
+        final data = (res['data'] as List? ?? []);
+        for (final n in data) {
+          final id = n['id'] as int? ?? 0;
+          if (id > 0 && n['is_read'] == false && !_shownNotificationIds.contains(id)) {
+            _shownNotificationIds.add(id);
+            NotificationService.show(id, n['title']?.toString() ?? 'Notification', n['message']?.toString() ?? '');
+          }
+        }
+      } catch (_) {}
     });
   }
 
@@ -929,234 +957,127 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   }
 
   // Native PDF Printing
-  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder) async {
-    final pdf = pw.Document();
+  SaleOrder _mapRecordToSaleOrder(dynamic record) {
+    double parseNum(dynamic value) =>
+        double.tryParse(value?.toString() ?? '') ?? 0.0;
 
-    final String customerName = record['customer_name'] ?? '--';
-    final String customerPhone = record['customer_phone'] ?? '--';
-    final String customerAddress = record['customer_address'] ?? '--';
+    final rawItems = record['received_items'] as List? ?? record['items'] as List? ?? [];
+    List<SaleItem> saleItems = [];
+    double calculatedSubTotal = 0.0;
+    double calculatedTotalQty = 0.0;
+    
+    for (var it in rawItems) {
+      final qty = parseNum(it['qty'] ?? 1.0);
+      final rate = parseNum(it['rate'] ?? 0.0);
+      final lineTaxPercent = parseNum(it['tax_percent'] ?? 0.0);
+      
+      final total = qty * rate;
+      final taxAmt = parseNum(it['tax_amount'] ?? (total * lineTaxPercent / 100.0));
+      final taxableAmt = parseNum(it['taxable_amount'] ?? (total - taxAmt));
+      final lineTotal = parseNum(it['line_total'] ?? total);
 
-    String title = '';
-    String numberLabel = '';
-    String numberVal = '';
-    String dateVal = '';
-    List<dynamic> itemsList = [];
-    double subTotal = 0;
-    double tax = 0;
-    double delivery = 0;
-    double netTotal = 0;
-    String payMode = '';
-    String payStatus = '';
+      calculatedSubTotal += total;
+      calculatedTotalQty += qty;
 
-    if (isOnlineOrder) {
-      title = 'Online Delivery Order';
-      numberLabel = 'ORDER ID';
-      numberVal = '#${record['id']}';
-      dateVal = record['created_at'] != null 
-          ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(record['created_at'].toString()))
-          : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
-      itemsList = record['items'] as List? ?? [];
-      subTotal = double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
-      tax = double.tryParse(record['tax_amount']?.toString() ?? '0') ?? 0.0;
-      delivery = double.tryParse(record['delivery_charge']?.toString() ?? '0') ?? 0.0;
-      netTotal = double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
-      final isCredit = record['payment_mode'] == 'CREDIT';
-      payMode = isCredit ? 'Credit Payment' : (record['payment_status'] == 'PAID' ? 'Online/UPI' : 'Cash on Delivery');
-      payStatus = isCredit ? 'CREDIT (DUE)' : (record['payment_status'] == 'PAID' ? 'PAID' : 'COLLECT CASH');
-    } else {
-      title = 'In-Store POS Sale';
-      numberLabel = 'INVOICE NO';
-      numberVal = record['sale_no'] ?? '--';
-      dateVal = record['sale_date'] != null 
-          ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(record['sale_date'].toString()))
-          : DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
-      itemsList = record['items'] as List? ?? [];
-      subTotal = double.tryParse(record['sub_total']?.toString() ?? '0') ?? 0.0;
-      tax = double.tryParse(record['total_tax']?.toString() ?? '0') ?? 0.0;
-      delivery = double.tryParse(record['charge_total']?.toString() ?? '0') ?? 0.0;
-      netTotal = double.tryParse(record['net_amount']?.toString() ?? '0') ?? 0.0;
-      payMode = record['payment_mode'] ?? 'CASH';
-      final balance = double.tryParse(record['balance_due']?.toString() ?? '0') ?? 0.0;
-      payStatus = balance <= 0 ? 'PAID' : 'DUE (Rs. ${balance.toStringAsFixed(2)})';
+      saleItems.add(SaleItem(
+        itemId: int.tryParse(it['item_id']?.toString() ?? '') ?? 0,
+        itemCode: it['item_code']?.toString() ?? '',
+        itemName: it['item_name']?.toString() ?? '',
+        barcode: it['barcode']?.toString() ?? '',
+        unit: it['unit']?.toString() ?? 'Pcs',
+        qty: qty,
+        rate: rate,
+        taxPercent: lineTaxPercent,
+        taxAmount: taxAmt,
+        taxableAmount: taxableAmt,
+        lineTotal: lineTotal,
+      ));
     }
 
-    final isThermal = _billFormat.startsWith('THERMAL_');
-    // Font scale: thermal uses compact 8pt, A4 uses readable 11pt
-    final double fs = isThermal ? 8.0 : 11.0;
-    final double fsSmall = isThermal ? 7.0 : 9.5;
-    final double fsBig = isThermal ? 12.0 : 16.0;
-    final PdfPageFormat pageFormat = isThermal
-        ? (_billFormat == 'THERMAL_58' ? PdfPageFormat.roll57 : PdfPageFormat.roll80)
-        : PdfPageFormat.a4;
-    final pw.EdgeInsets margin = isThermal
-        ? const pw.EdgeInsets.all(10)
-        : const pw.EdgeInsets.symmetric(horizontal: 48, vertical: 40);
-    final String divider = isThermal
-        ? '--------------------------------------'
-        : '─────────────────────────────────────────────────────';
+    List<BillingCharge> billingCharges = [];
+    final rawCharges = record['charges'] as List?;
+    if (rawCharges != null) {
+      for (var ch in rawCharges) {
+        billingCharges.add(BillingCharge.fromJson(Map<String, dynamic>.from(ch)));
+      }
+    }
+    
+    final delivery = parseNum(record['delivery_charge'] ?? record['charge_total'] ?? 0.0);
+    final hasDeliveryCharge = billingCharges.any((c) => c.code == 'DELIVERY' || c.name.toUpperCase() == 'DELIVERY');
+    if (delivery > 0 && !hasDeliveryCharge) {
+      billingCharges.add(BillingCharge(
+        name: 'DELIVERY',
+        code: 'DELIVERY',
+        amount: delivery,
+        taxable: false,
+        autoApply: false,
+        isEnabled: true,
+        taxType: 'GST',
+        taxPercent: 0.0,
+      ));
+    }
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: pageFormat,
-        margin: margin,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Center(
-                child: pw.Text(
-                  _currentUser?.propertyName.isNotEmpty == true
-                      ? _currentUser!.propertyName
-                      : 'RETAIL MART POS',
-                  style: pw.TextStyle(fontSize: fsBig, fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-              pw.Center(
-                child: pw.Text(
-                  title,
-                  style: pw.TextStyle(fontSize: fs),
-                ),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Text('$numberLabel : $numberVal', style: pw.TextStyle(fontSize: fs)),
-              pw.Text('DATE       : $dateVal', style: pw.TextStyle(fontSize: fs)),
-              pw.Text('CUSTOMER   : $customerName', style: pw.TextStyle(fontSize: fs)),
-              pw.Text('PHONE      : $customerPhone', style: pw.TextStyle(fontSize: fs)),
-              if (customerAddress.isNotEmpty)
-                pw.Text('ADDRESS    : $customerAddress', style: pw.TextStyle(fontSize: fs)),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Text('ITEMS SOLD:', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 4),
-              ...itemsList.map((item) {
-                final qtyVal = double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
-                final rateVal = double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
-                final total = qtyVal * rateVal;
-                final taxPct = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-                final taxAmt = double.tryParse(item['tax_amount']?.toString() ?? '0') ?? 0.0;
-                final gstLabel = taxPct > 0
-                    ? 'GST ${taxPct % 1 == 0 ? taxPct.toInt().toString() : taxPct.toStringAsFixed(1)}%'
-                        '${taxAmt > 0 ? ' = Rs. ${taxAmt.toStringAsFixed(2)}' : ''}'
-                    : '';
-                return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Expanded(
-                            child: pw.Text(
-                              '${item['item_name']} x${qtyVal.toStringAsFixed(0)}',
-                              style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold),
-                            ),
-                          ),
-                          pw.Text('Rs. ${total.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold)),
-                        ],
-                      ),
-                      if (gstLabel.isNotEmpty)
-                        pw.Text(
-                          '  $gstLabel',
-                          style: pw.TextStyle(fontSize: fsSmall, color: PdfColors.grey700),
-                        ),
-                    ],
-                  ),
-                );
-              }),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('SUB TOTAL', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text('Rs. ${subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('GST / TAXES', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text('Rs. ${tax.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              if (record['charges'] != null && record['charges'] is List && (record['charges'] as List).isNotEmpty)
-                ...((record['charges'] as List).map((ch) {
-                  final String name = (ch['name'] ?? 'Charge').toString().toUpperCase();
-                  final double amt = double.tryParse(ch['amount']?.toString() ?? '0') ?? 0.0;
-                  final double tAmt = double.tryParse(ch['tax_amount']?.toString() ?? '0') ?? 0.0;
-                  final double tPct = double.tryParse(ch['tax_percent']?.toString() ?? '0') ?? 0.0;
-                  return pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(name, style: pw.TextStyle(fontSize: fs)),
-                          pw.Text('Rs. ${amt.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs)),
-                        ],
-                      ),
-                      if (tAmt > 0)
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('  * GST (${tPct.toStringAsFixed(1)}%)', style: pw.TextStyle(fontSize: fsSmall)),
-                            pw.Text('Rs. ${tAmt.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fsSmall)),
-                          ],
-                        ),
-                    ],
-                  );
-                }).toList())
-              else if (delivery > 0)
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('DELIVERY', style: pw.TextStyle(fontSize: fs)),
-                    pw.Text('Rs. ${delivery.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs)),
-                  ],
-                ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('NET TOTAL', style: pw.TextStyle(fontSize: fs + 1, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Rs. ${netTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fs + 1, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-              pw.SizedBox(height: 4),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('PAY MODE', style: pw.TextStyle(fontSize: fs)),
-                  pw.Text(payMode, style: pw.TextStyle(fontSize: fs)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('PAY STATUS', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold)),
-                  pw.Text(payStatus, style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-              pw.Text(divider, style: pw.TextStyle(fontSize: fsSmall)),
-              pw.SizedBox(height: 4),
-              pw.Center(
-                child: pw.Text(
-                  'THANK YOU FOR SHOPPING!',
-                  style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+    final netAmt = parseNum(record['net_amount'] ?? 0.0);
+    final taxAmt = parseNum(record['tax_amount'] ?? record['total_tax'] ?? 0.0);
+
+    return SaleOrder(
+      saleNo: record['sale_no']?.toString() ?? record['id']?.toString() ?? '',
+      saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
+      status: record['status']?.toString() ?? 'COMPLETED',
+      orderType: 'B2C',
+      billingCountry: 'India',
+      billingTaxMode: 'CGST_SGST',
+      billFormat: _billFormat,
+      customerName: record['customer_name']?.toString(),
+      customerPhone: record['customer_phone']?.toString(),
+      customerAddress: record['customer_address']?.toString(),
+      customerGstin: record['gstin']?.toString() ?? record['customer_gstin']?.toString(),
+      paymentMode: record['payment_mode']?.toString() ?? 'CASH',
+      amountPaid: record['payment_status'] == 'PAID' ? netAmt : 0.0,
+      changeAmount: 0.0,
+      balanceDue: record['payment_status'] == 'PAID' ? 0.0 : netAmt,
+      subTotal: parseNum(record['sub_total'] ?? calculatedSubTotal),
+      totalQty: calculatedTotalQty,
+      taxPercent: 0.0,
+      schemeDiscount: 0.0,
+      manualDiscountValue: 0.0,
+      manualDiscountAmount: 0.0,
+      taxableAmount: parseNum(record['sub_total'] ?? calculatedSubTotal) - taxAmt,
+      cgstAmount: taxAmt / 2,
+      sgstAmount: taxAmt / 2,
+      igstAmount: 0.0,
+      totalTax: taxAmt,
+      taxBreakup: [],
+      charges: billingCharges,
+      chargeTotal: delivery,
+      chargeTaxTotal: 0.0,
+      totalDiscount: 0.0,
+      roundOffAmount: 0.0,
+      netAmount: netAmt,
+      items: saleItems,
     );
+  }
 
+  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder) async {
+    setState(() => _isLoading = true);
     try {
-      await Printing.layoutPdf(
-        onLayout: (format) async => pdf.save(),
-        name: '${isOnlineOrder ? "order" : "sale"}_${record['id'] ?? record['sale_no']}',
+      final propertyCtrl = PropertyInfoController();
+      await propertyCtrl.load();
+
+      final order = _mapRecordToSaleOrder(record);
+
+      await PosInvoicePrinter.printSaleInvoice(
+        order: order,
+        property: propertyCtrl.data,
+        cashierName: 'System',
+        termsAndConditions: 'Goods once sold will not be taken back. Subject to local jurisdiction.',
+        thankYouMessage: 'Thank you for shopping with us. Please visit again.',
+        authorizedSignatureLabel: 'Authorized Signature',
       );
     } catch (e) {
-      debugPrint('Error printing natively: $e');
+      debugPrint('Error printing receipt: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -1465,12 +1386,37 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   // Open / Edit order in POS Sales Billing screen
 
   Future<void> _editOrderInPOS(dynamic order) async {
+    // Editing invoices is only supported on the Windows Desktop Application
+    if (Platform.isAndroid || Platform.isIOS) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.desktop_windows, color: Colors.amber),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Invoice editing can only be done on your Windows Desktop Application.',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.blueGrey.shade800,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
     int? saleId = order['sale_id'];
     if (saleId == null) {
       setState(() => _isLoading = true);
       try {
         final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
-        final body = { 'rider_id': null, 'outlet_id': outletCode, 'for_edit': true }; // auto/none initially
+        final body = { 'rider_id': null, 'outlet_id': outletCode, 'for_edit': true };
         final res = await ApiClient.post('/api/delivery/retailer/orders/${order['id']}/accept', body);
         if (res['success'] == true) {
           saleId = res['data']['sale_id'];
@@ -1482,7 +1428,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
         setState(() => _isLoading = false);
       }
     }
-    
+
     if (saleId != null && mounted) {
       Navigator.push(
         context,
@@ -2420,41 +2366,100 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Incoming Customer Orders', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                padding: const EdgeInsets.all(2),
-                child: Row(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 600;
+              if (isMobile) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSubTabButton(
-                      label: 'Dashboard',
-                      isSelected: _ordersSubTab == 0,
-                      onTap: () => setState(() => _ordersSubTab = 0),
-                      icon: Icons.dashboard_outlined,
-                      theme: theme,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text('Incoming Customer Orders',
+                              style: theme.textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed: _fetchRetailerData,
+                        ),
+                      ],
                     ),
-                    _buildSubTabButton(
-                      label: 'Orders List',
-                      isSelected: _ordersSubTab == 1,
-                      onTap: () => setState(() => _ordersSubTab = 1),
-                      icon: Icons.list_alt_outlined,
-                      theme: theme,
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      padding: const EdgeInsets.all(2),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildSubTabButton(
+                              label: 'Dashboard',
+                              isSelected: _ordersSubTab == 0,
+                              onTap: () => setState(() => _ordersSubTab = 0),
+                              icon: Icons.dashboard_outlined,
+                              theme: theme,
+                            ),
+                          ),
+                          Expanded(
+                            child: _buildSubTabButton(
+                              label: 'Orders List',
+                              isSelected: _ordersSubTab == 1,
+                              onTap: () => setState(() => _ordersSubTab = 1),
+                              icon: Icons.list_alt_outlined,
+                              theme: theme,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _fetchRetailerData,
-              )
-            ],
+                );
+              } else {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Incoming Customer Orders', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      padding: const EdgeInsets.all(2),
+                      child: Row(
+                        children: [
+                          _buildSubTabButton(
+                            label: 'Dashboard',
+                            isSelected: _ordersSubTab == 0,
+                            onTap: () => setState(() => _ordersSubTab = 0),
+                            icon: Icons.dashboard_outlined,
+                            theme: theme,
+                          ),
+                          _buildSubTabButton(
+                            label: 'Orders List',
+                            isSelected: _ordersSubTab == 1,
+                            onTap: () => setState(() => _ordersSubTab = 1),
+                            icon: Icons.list_alt_outlined,
+                            theme: theme,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _fetchRetailerData,
+                    )
+                  ],
+                );
+              }
+            },
           ),
           const SizedBox(height: 12),
           _buildFilterBar(theme),
@@ -3190,143 +3195,139 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                     })(),
                                   ],
                                   const Divider(),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  // Status label
+                                  Text(
+                                    status == 'PENDING'
+                                        ? 'Pending Action'
+                                        : (status == 'ACCEPTED'
+                                            ? 'Auto-Assignment: Rider Unavailable'
+                                            : (status == 'ASSIGNED'
+                                                ? 'Assigned to $riderName'
+                                                : (status == 'OUT_FOR_DELIVERY'
+                                                    ? 'Out for Delivery via $riderName'
+                                                    : (status == 'DELIVERED'
+                                                        ? 'Delivered'
+                                                        : 'Cancelled')))),
+                                    style: TextStyle(
+                                      fontStyle: FontStyle.italic,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Action buttons wrapped so they never overflow
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    alignment: WrapAlignment.start,
                                     children: [
-                                      Expanded(
-                                        child: Text(
-                                          status == 'PENDING'
-                                              ? 'Pending Action'
-                                              : (status == 'ACCEPTED'
-                                                  ? 'Auto-Assignment: Rider Unavailable'
-                                                  : (status == 'ASSIGNED'
-                                                      ? 'Assigned to $riderName'
-                                                      : (status == 'OUT_FOR_DELIVERY'
-                                                          ? 'Out for Delivery via $riderName'
-                                                          : (status == 'DELIVERED'
-                                                              ? 'Delivered'
-                                                              : 'Cancelled')))),
-                                          style: TextStyle(
-                                            fontStyle: FontStyle.italic,
-                                            color: Colors.grey.shade600,
+                                      if (order['refund_status']?.toString() == 'PENDING' && !isCod) ...[
+                                        (() {
+                                          final origAmt = double.tryParse(order['original_net_amount']?.toString() ?? '') ?? 0.0;
+                                          final curAmt = double.tryParse(order['net_amount']?.toString() ?? '') ?? 0.0;
+                                          final refundDue = origAmt > 0 ? origAmt - curAmt : 0.0;
+                                          return FilledButton.icon(
+                                            onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
+                                            icon: const Icon(Icons.currency_rupee, size: 16),
+                                            label: Text(refundDue > 0
+                                                ? 'Mark Refund Paid (Rs. ${refundDue.toStringAsFixed(2)})'
+                                                : 'Mark Refund Paid'),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: Colors.green.shade700,
+                                              foregroundColor: Colors.white,
+                                            ),
+                                          );
+                                        })(),
+                                      ] else if (order['return_status'] == 'PENDING') ...[
+                                        OutlinedButton.icon(
+                                          onPressed: () => _handleReturnRequest(order['id'], 'REJECT'),
+                                          icon: const Icon(Icons.close, size: 16),
+                                          label: const Text('Reject Return'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.red.shade700,
+                                            side: BorderSide(color: Colors.red.shade300),
                                           ),
                                         ),
-                                      ),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 4,
-                                        alignment: WrapAlignment.end,
-                                        children: [
-                                          if (order['refund_status']?.toString() == 'PENDING' && !isCod) ...[
-                                            (() {
-                                              final origAmt = double.tryParse(order['original_net_amount']?.toString() ?? '') ?? 0.0;
-                                              final curAmt = double.tryParse(order['net_amount']?.toString() ?? '') ?? 0.0;
-                                              final refundDue = origAmt > 0 ? origAmt - curAmt : 0.0;
-                                              return FilledButton.icon(
-                                                onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
-                                                icon: const Icon(Icons.currency_rupee, size: 16),
-                                                label: Text(refundDue > 0
-                                                    ? 'Mark Refund Paid (Rs. ${refundDue.toStringAsFixed(2)})'
-                                                    : 'Mark Refund Paid'),
-                                                style: FilledButton.styleFrom(
-                                                  backgroundColor: Colors.green.shade700,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                              );
-                                            })(),
-                                          ] else if (order['return_status'] == 'PENDING') ...[
-                                            OutlinedButton.icon(
-                                              onPressed: () => _handleReturnRequest(order['id'], 'REJECT'),
-                                              icon: const Icon(Icons.close, size: 16),
-                                              label: const Text('Reject Return'),
-                                              style: OutlinedButton.styleFrom(
-                                                foregroundColor: Colors.red.shade700,
-                                                side: BorderSide(color: Colors.red.shade300),
-                                              ),
+                                        FilledButton.icon(
+                                          onPressed: () => _handleReturnRequest(order['id'], 'ACCEPT'),
+                                          icon: const Icon(Icons.check, size: 16),
+                                          label: Text(order['return_type'] == 'REFUND' ? 'Accept & Refund' : 'Accept & Exchange'),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: Colors.green.shade700,
+                                            foregroundColor: Colors.white,
+                                          ),
+                                        ),
+                                      ] else if (order['return_status'] == 'RETURN_HANDED_OVER' || order['return_status'] == 'RETURN_ACCEPTED') ...[
+                                        OutlinedButton.icon(
+                                          onPressed: () => _showReceiptDialog(order),
+                                          icon: const Icon(Icons.receipt_long, size: 16),
+                                          label: const Text('Receipt'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.teal.shade700,
+                                            side: BorderSide(color: Colors.teal.shade300),
+                                          ),
+                                        ),
+                                        FilledButton.icon(
+                                          onPressed: () => _handleFinalReceiveReturn(order['id']),
+                                          icon: const Icon(Icons.check_circle_outline, size: 16),
+                                          label: const Text('Final Receive'),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: Colors.blue.shade700,
+                                            foregroundColor: Colors.white,
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        if (status != 'DELIVERED' && status != 'CANCELLED')
+                                          OutlinedButton.icon(
+                                            onPressed: () => _cancelOrder(order),
+                                            icon: const Icon(Icons.cancel, size: 16),
+                                            label: const Text('Cancel'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.red.shade700,
+                                              side: BorderSide(color: Colors.red.shade300),
                                             ),
-                                            FilledButton.icon(
-                                              onPressed: () => _handleReturnRequest(order['id'], 'ACCEPT'),
-                                              icon: const Icon(Icons.check, size: 16),
-                                              label: Text(order['return_type'] == 'REFUND' ? 'Accept & Refund' : 'Accept & Exchange'),
-                                              style: FilledButton.styleFrom(
-                                                backgroundColor: Colors.green.shade700,
-                                                foregroundColor: Colors.white,
-                                              ),
+                                          ),
+                                        if (status != 'CANCELLED') ...[
+                                          OutlinedButton.icon(
+                                            onPressed: () => _showReceiptDialog(order),
+                                            icon: const Icon(Icons.receipt_long, size: 16),
+                                            label: const Text('Receipt'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.teal.shade700,
+                                              side: BorderSide(color: Colors.teal.shade300),
                                             ),
-                                          ] else if (order['return_status'] == 'RETURN_HANDED_OVER' || order['return_status'] == 'RETURN_ACCEPTED') ...[
-                                            OutlinedButton.icon(
-                                              onPressed: () => _showReceiptDialog(order),
-                                              icon: const Icon(Icons.receipt_long, size: 16),
-                                              label: const Text('Receipt'),
-                                              style: OutlinedButton.styleFrom(
-                                                foregroundColor: Colors.teal.shade700,
-                                                side: BorderSide(color: Colors.teal.shade300),
-                                              ),
+                                          ),
+                                          OutlinedButton.icon(
+                                            onPressed: () => _editOrderInPOS(order),
+                                            icon: const Icon(Icons.edit, size: 16),
+                                            label: const Text('Edit Invoice'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.blue.shade700,
+                                              side: BorderSide(color: Colors.blue.shade300),
                                             ),
-                                            FilledButton.icon(
-                                              onPressed: () => _handleFinalReceiveReturn(order['id']),
-                                              icon: const Icon(Icons.check_circle_outline, size: 16),
-                                              label: const Text('Final Receive'),
-                                              style: FilledButton.styleFrom(
-                                                backgroundColor: Colors.blue.shade700,
-                                                foregroundColor: Colors.white,
-                                              ),
-                                            ),
-                                          ] else ...[
-                                            if (status != 'DELIVERED' && status != 'CANCELLED')
-                                              OutlinedButton.icon(
-                                                onPressed: () => _cancelOrder(order),
-                                                icon: const Icon(Icons.cancel, size: 16),
-                                                label: const Text('Cancel'),
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: Colors.red.shade700,
-                                                  side: BorderSide(color: Colors.red.shade300),
-                                                ),
-                                              ),
-                                            if (status != 'CANCELLED') ...[
-                                              OutlinedButton.icon(
-                                                onPressed: () => _showReceiptDialog(order),
-                                                icon: const Icon(Icons.receipt_long, size: 16),
-                                                label: const Text('Receipt'),
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: Colors.teal.shade700,
-                                                  side: BorderSide(color: Colors.teal.shade300),
-                                                ),
-                                              ),
-                                              OutlinedButton.icon(
-                                                onPressed: () => _editOrderInPOS(order),
-                                                icon: const Icon(Icons.edit, size: 16),
-                                                label: const Text('Edit Invoice'),
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: Colors.blue.shade700,
-                                                  side: BorderSide(color: Colors.blue.shade300),
-                                                ),
-                                              ),
-                                            ],
-                                            if (status == 'PENDING')
-                                              FilledButton.icon(
-                                                onPressed: () => _showAssignRiderDialog(order['id']),
-                                                icon: const Icon(Icons.check, size: 16),
-                                                label: const Text('Accept & Assign'),
-                                              ),
-                                            if (status == 'ACCEPTED' || status == 'ASSIGNED')
-                                              OutlinedButton.icon(
-                                                onPressed: () => _showReassignRiderDialog(order['id'], order['assigned_partner_id']),
-                                                icon: const Icon(Icons.person_outline, size: 16),
-                                                label: const Text('Reassign Rider'),
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: Colors.orange.shade800,
-                                                  side: BorderSide(color: Colors.orange.shade300),
-                                                ),
-                                              ),
-                                            if (status == 'ACCEPTED')
-                                              TextButton(
-                                                onPressed: _fetchRetailerData,
-                                                child: const Text('Retry Auto-Assign'),
-                                              ),
-                                          ],
+                                          ),
                                         ],
-                                      ),
+                                        if (status == 'PENDING')
+                                          FilledButton.icon(
+                                            onPressed: () => _showAssignRiderDialog(order['id']),
+                                            icon: const Icon(Icons.check, size: 16),
+                                            label: const Text('Accept & Assign'),
+                                          ),
+                                        if (status == 'ACCEPTED' || status == 'ASSIGNED')
+                                          OutlinedButton.icon(
+                                            onPressed: () => _showReassignRiderDialog(order['id'], order['assigned_partner_id']),
+                                            icon: const Icon(Icons.person_outline, size: 16),
+                                            label: const Text('Reassign Rider'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.orange.shade800,
+                                              side: BorderSide(color: Colors.orange.shade300),
+                                            ),
+                                          ),
+                                        if (status == 'ACCEPTED')
+                                          TextButton(
+                                            onPressed: _fetchRetailerData,
+                                            child: const Text('Retry Auto-Assign'),
+                                          ),
+                                      ],
                                     ],
                                   )
                                 ],
@@ -3456,7 +3457,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             children: [
               Icon(Icons.motorcycle, color: Colors.deepOrange),
               SizedBox(width: 8),
-              Text('Register Delivery Rider'),
+              Expanded(
+                child: Text('Register Delivery Rider'),
+              ),
             ],
           ),
           content: SingleChildScrollView(
@@ -3543,154 +3546,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   }
 
   void _showReceiptDialog(Map<String, dynamic> data) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final orderId = data['order_id'] ?? data['id'] ?? '--';
-        final order = _retailerOrders.firstWhere((o) => o['id'] == orderId, orElse: () => null) ?? data;
-        
-        final saleNo = order['sale_no'] ?? data['sale_no'] ?? '--';
-        final isAssigned = order['is_assigned'] == true || data['is_assigned'] == true;
-        final riderId = order['assigned_rider_id'] ?? data['assigned_rider_id'];
-        final customerName = order['customer_name'] ?? data['customer_name'] ?? '--';
-        final customerPhone = order['customer_phone'] ?? data['customer_phone'] ?? '--';
-        final customerAddress = order['customer_address'] ?? data['customer_address'] ?? '';
-        final itemsList = order['items'] as List? ?? [];
-
-        String riderName = 'None available';
-        if (isAssigned && riderId != null) {
-          final riderObj = _retailerRiders.firstWhere((r) => r['id'] == riderId, orElse: () => null);
-          if (riderObj != null) {
-            riderName = riderObj['name'];
-          }
-        }
-
-        return AlertDialog(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          backgroundColor: Colors.yellow.shade50,
-          title: Column(
-            children: [
-              const Icon(Icons.print_outlined, size: 44, color: Colors.black87),
-              const SizedBox(height: 4),
-              const Text(
-                'SIMULATED PRINT RECEIPT',
-                style: TextStyle(fontFamily: 'Courier', fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
-              ),
-              const Divider(color: Colors.black54),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Container(
-              width: 320,
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Text(
-                      _currentUser?.propertyName.isNotEmpty == true 
-                          ? _currentUser!.propertyName 
-                          : 'RETAIL MART POS',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontFamily: 'Courier', fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const Center(
-                    child: Text(
-                      'Delivery Order Invoice',
-                      style: TextStyle(fontFamily: 'Courier', fontSize: 13),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('--------------------------------', style: TextStyle(fontFamily: 'Courier')),
-                  Text('INVOICE NO : $saleNo', style: const TextStyle(fontFamily: 'Courier')),
-                  Text('ORDER ID   : #$orderId', style: const TextStyle(fontFamily: 'Courier')),
-                  Text('DATE       : ${DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now())}', style: const TextStyle(fontFamily: 'Courier')),
-                  Text('CUSTOMER   : $customerName', style: const TextStyle(fontFamily: 'Courier')),
-                  Text('PHONE      : $customerPhone', style: const TextStyle(fontFamily: 'Courier')),
-                  if (customerAddress.isNotEmpty)
-                    Text('ADDRESS    : $customerAddress', style: const TextStyle(fontFamily: 'Courier')),
-                  const Text('--------------------------------', style: TextStyle(fontFamily: 'Courier')),
-                  const Text('ITEMS SOLD:', style: TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  ...itemsList.map((item) {
-                    final rateVal = double.tryParse(item['rate']?.toString() ?? '') ?? 0.0;
-                    final qtyVal = double.tryParse(item['qty']?.toString() ?? '') ?? 0.0;
-                    final total = rateVal * qtyVal;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${item['item_name']} x${qtyVal.toStringAsFixed(0)}',
-                              style: const TextStyle(fontFamily: 'Courier'),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text('Rs. ${total.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
-                        ],
-                      ),
-                    );
-                  }),
-                  const Text('--------------------------------', style: TextStyle(fontFamily: 'Courier')),
-                  _buildReceiptSummaryRow(order),
-                  const Text('--------------------------------', style: TextStyle(fontFamily: 'Courier')),
-                  const SizedBox(height: 8),
-                  const Center(
-                    child: Text(
-                      'THANK YOU FOR SHOPPING!',
-                      style: TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.blue.shade300),
-                      color: Colors.blue.shade50,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Delivery Integration Update:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          isAssigned 
-                              ? 'Rider assigned automatically: $riderName.'
-                              : 'Auto-Assignment Pending: No available riders at the moment.',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            OutlinedButton.icon(
-              onPressed: () {
-                _printReceiptNative(order, true);
-              },
-              icon: const Icon(Icons.print_outlined),
-              label: const Text('Print / Save PDF'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            )
-          ],
-        );
-      },
-    );
+    final orderId = data['order_id'] ?? data['id'] ?? '--';
+    final order = _retailerOrders.firstWhere((o) => o['id'] == orderId, orElse: () => null) ?? data;
+    _printReceiptNative(order, true);
   }
 
   Widget _buildReceiptSummaryRow(Map<String, dynamic> order) {
@@ -4102,13 +3960,15 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                     fontWeight: FontWeight.w600),
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              subtitle: Row(
+                              subtitle: Wrap(
+                                spacing: 10,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
                                   Text('Retail: Rs. ${stdRate.toStringAsFixed(2)}',
                                       style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey.shade600)),
-                                  const SizedBox(width: 10),
                                   if (hasB2bRate)
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -4918,6 +4778,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                           Expanded(
                                                             flex: 3,
                                                             child: DropdownButtonFormField<String>(
+                                                              isExpanded: true,
                                                               value: _coupons[i]['discount_type'] ?? 'FLAT',
                                                               decoration: const InputDecoration(
                                                                 labelText: 'Type',
@@ -5503,14 +5364,20 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
               });
             },
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.dashboard_outlined),
-            title: const Text('Exit to Dashboard'),
-            onTap: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
+          Visibility(
+            visible: !Platform.isAndroid && !Platform.isIOS,
+            child: const Divider(),
+          ),
+          Visibility(
+            visible: !Platform.isAndroid && !Platform.isIOS,
+            child: ListTile(
+              leading: const Icon(Icons.dashboard_outlined),
+              title: const Text('Exit to Dashboard'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+            ),
           ),
         ],
       ),

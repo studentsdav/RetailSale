@@ -54,6 +54,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(30)
         },
 
+        drug_license_no: {
+            type: DataTypes.STRING(50)
+        },
+
         logo_path: {
             type: DataTypes.TEXT
         },

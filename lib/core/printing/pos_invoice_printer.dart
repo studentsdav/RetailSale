@@ -231,6 +231,11 @@ class PosInvoicePrinter {
                     'GSTIN: ${data.property!.gstNo}',
                     textAlign: pw.TextAlign.center,
                   ),
+                if ((data.property?.drugLicenseNo ?? '').isNotEmpty)
+                  pw.Text(
+                    'DL No: ${data.property!.drugLicenseNo}',
+                    textAlign: pw.TextAlign.center,
+                  ),
                 pw.SizedBox(height: 4),
                 pw.Text(
                   order.status == 'DRAFT'
@@ -272,6 +277,18 @@ class PosInvoicePrinter {
             ),
           if ((order.customerGstin ?? '').trim().isNotEmpty)
             _thermalMetaRow('GSTIN', order.customerGstin!.trim(), '', ''),
+          if ((order.doctorName ?? '').trim().isNotEmpty ||
+              (order.patientName ?? '').trim().isNotEmpty)
+            _thermalMetaRow(
+              'Dr. Name',
+              (order.doctorName ?? '').trim().isEmpty
+                  ? '--'
+                  : order.doctorName!.trim(),
+              'Patient',
+              (order.patientName ?? '').trim().isEmpty
+                  ? '--'
+                  : order.patientName!.trim(),
+            ),
           if (order.billingTaxMode == 'IGST' || (data.buyerState != null && data.buyerState!.isNotEmpty))
             _thermalMetaRow(
               'Place of Supply',
@@ -533,6 +550,14 @@ class PosInvoicePrinter {
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
+                    if ((data.property?.drugLicenseNo ?? '').isNotEmpty)
+                      pw.Text(
+                        'DL No: ${data.property!.drugLicenseNo}',
+                        style: pw.TextStyle(
+                          fontSize: 8.8,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
                     pw.Text(
                       'State: ${sellerState.isEmpty ? '--' : sellerState} / ${data.sellerStateCode ?? '--'}',
                       style: const pw.TextStyle(fontSize: 8.8),
@@ -630,6 +655,10 @@ class PosInvoicePrinter {
                             ? 'URD'
                             : order.customerGstin!.trim(),
                       ),
+                      if ((order.doctorName ?? '').trim().isNotEmpty)
+                        _a4MetaRow('Doctor', order.doctorName!.trim()),
+                      if ((order.patientName ?? '').trim().isNotEmpty)
+                        _a4MetaRow('Patient', order.patientName!.trim()),
                     ],
                   ),
                 ),
@@ -808,8 +837,11 @@ class PosInvoicePrinter {
     final data = order.items.asMap().entries.map((entry) {
       final index = entry.key;
       final item = entry.value;
+      final brandStr = item.brand != null && item.brand!.trim().isNotEmpty
+          ? '${item.brand!.trim()} - '
+          : '';
       final name =
-          item.isSchemeFree ? '${item.itemName} (FREE)' : item.itemName;
+          item.isSchemeFree ? '$brandStr${item.itemName} (FREE)' : '$brandStr${item.itemName}';
       if (hasTaxData) {
         return [
           '${index + 1}',
@@ -1018,8 +1050,8 @@ class PosInvoicePrinter {
               pw.Expanded(
                 child: pw.Text(
                   item.isSchemeFree
-                      ? '${item.itemName.trim()} (FREE)'
-                      : item.itemName.trim(),
+                      ? '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)'
+                      : '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}',
                   style: pw.TextStyle(
                     font: bold,
                     fontSize: 8.7,
@@ -1766,6 +1798,7 @@ class PosInvoicePrinter {
                         pw.Text(sellerAddressLines, style: const pw.TextStyle(fontSize: 8.5)),
                         if ((property?.mobile ?? '').isNotEmpty) pw.Text('Phone: ${property!.mobile}', style: const pw.TextStyle(fontSize: 8.5)),
                         if ((property?.gstNo ?? '').isNotEmpty) pw.Text('GSTIN: ${property!.gstNo}', style: const pw.TextStyle(fontSize: 8.5)),
+                        if ((property?.drugLicenseNo ?? '').isNotEmpty) pw.Text('DL No: ${property!.drugLicenseNo}', style: const pw.TextStyle(fontSize: 8.5)),
                       ],
                     ),
                   ),
@@ -2029,6 +2062,11 @@ class PosInvoicePrinter {
                 if ((property?.gstNo ?? '').isNotEmpty)
                   pw.Text(
                     'GSTIN: ${property!.gstNo}',
+                    textAlign: pw.TextAlign.center,
+                  ),
+                if ((property?.drugLicenseNo ?? '').isNotEmpty)
+                  pw.Text(
+                    'DL No: ${property!.drugLicenseNo}',
                     textAlign: pw.TextAlign.center,
                   ),
                 pw.SizedBox(height: 4),

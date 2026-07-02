@@ -65,6 +65,7 @@ exports.savePropertyInfo = async (req, res) => {
             gst_no: req.body.gst_no,
             pan_no: req.body.pan_no,
             fssai_no: req.body.fssai_no,
+            drug_license_no: req.body.drug_license_no,
             logo_path: req.body.logo_path,
             is_active: req.body.is_active
         };

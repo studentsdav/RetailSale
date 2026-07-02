@@ -124,14 +124,15 @@ exports.getInventoryDashboard = async (outletId, db) => {
     // Low stock items (calculated from stock_ledger)
     db.query(`
 SELECT
-  im.item_name
+  im.item_name,
+  im.brand
 FROM item_master im
 LEFT JOIN stock_ledger sl
   ON sl.item_code = im.item_code
   AND sl.outlet_id = :outletId
 WHERE im.outlet_id = :outletId
   AND im.is_active = TRUE
-GROUP BY im.id, im.item_name, im.min_level, im.opening_balance
+GROUP BY im.id, im.item_name, im.brand, im.min_level, im.opening_balance
 HAVING
   (
     COALESCE(im.opening_balance, 0)
@@ -659,7 +660,10 @@ FROM item_stock;
       netDebit: cashOutTotal
     },
 
-    lowStockItems: lowStockItems.map(i => i.item_name),
+    lowStockItems: lowStockItems.map(i => {
+      const brand = i.brand ? i.brand.trim() : '';
+      return brand ? `${brand} - ${i.item_name}` : i.item_name;
+    }),
     issueReceive7Days: issueReceive,
     departmentIssue,
     damageTrend7Days: damageTrend,

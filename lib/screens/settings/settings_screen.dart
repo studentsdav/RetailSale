@@ -422,6 +422,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               (v) => setState(() => s.enableItemImagesInSales = v),
             ),
                       ]),
+                      _section('Subscription Delivery', [
+            _switchTile(
+              'Enable App for Subscription Delivery',
+              'When ON: daily subscription home-delivery orders are auto-accepted and appear directly in retailer console. When OFF: orders appear as draft bills on the sale screen for manual confirmation.',
+              s.enableAppSubscription,
+              (v) => setState(() => s.enableAppSubscription = v),
+            ),
+                      ]),
                       _section('Approval Rules', [
             _switchTile(
               'Damage Approval Required',

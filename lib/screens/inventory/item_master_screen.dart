@@ -2,16 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dropdown_search/dropdown_search.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/inventory/master_controller.dart';
+import '../../controllers/inventory/attribute_controller.dart';
+import '../../controllers/inventory/product_template_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../models/inventory/item_model.dart';
+import '../../models/inventory/attribute_model.dart';
+import '../../models/inventory/product_template_model.dart';
 import '../../models/inventory/settings/master_model.dart';
 import '../../utils/inclusive_rate_helper.dart';
 import '../../widgets/entry_shortcuts.dart';
@@ -55,6 +59,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   final _search = TextEditingController();
   final ItemController itemCtrl = ItemController();
   final masterCtrl = MasterController();
+  final AttributeController _attributeCtrl = AttributeController();
+  final ProductTemplateController _templateCtrl = ProductTemplateController();
+
+  bool _hasVariants = false;
+  final Map<Attribute, List<AttributeValue>> _selectedAttributes = {};
+  List<Map<String, dynamic>> _generatedVariants = [];
 
   List<Item> _items = [];
   List<Item> _filtered = [];
@@ -165,6 +175,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     final groupsRes = await ApiClient.get('/api/inventory/groups');
     final subRes = await ApiClient.get('/api/inventory/subcategories');
     final brandRes = await ApiClient.get('/api/inventory/brands');
+    await _attributeCtrl.load();
 
     _groups = List<Map<String, dynamic>>.from(groupsRes['data'])
         .map((e) => GroupModel.fromJson(e))
@@ -341,6 +352,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _currentImagePath = null;
     _editIndex = null;
     _autoCode++;
+    _hasVariants = false;
+    _selectedAttributes.clear();
+    _generatedVariants.clear();
     _generateCode();
     setState(() {});
 
@@ -362,8 +376,35 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
     try {
       final taxPercent = double.tryParse(_taxPercent.text.trim()) ?? 0;
-      final enteredBuyRate = double.parse(_rate.text);
-      final enteredSaleRate = double.parse(_retailSalePrice.text);
+
+      if (_hasVariants && _editIndex == null) {
+        if (_generatedVariants.isEmpty) {
+          showErrorSnackbar("Please define at least one variant configuration combination.");
+          setState(() => _isSaving = false);
+          return;
+        }
+
+        await _templateCtrl.createTemplate(
+          name: _name.text.trim(),
+          itemGroup: _selectedGroup!.groupName,
+          subCategory: _selectedSubCategory!.subCategoryName ?? "",
+          brand: _selectedBrand?.brandName ?? "",
+          hsnSacCode: _hsnSac.text.trim(),
+          taxType: _taxType,
+          taxPercent: taxPercent,
+          discountApplicable: _discountApplicable,
+          schemeApplicable: _schemeApplicable,
+          unit: _unit!,
+          variants: _generatedVariants,
+        );
+
+        _clearForm();
+        await _loadItems();
+        return;
+      }
+
+      final enteredBuyRate = double.tryParse(_rate.text) ?? 0.0;
+      final enteredSaleRate = double.tryParse(_retailSalePrice.text) ?? 0.0;
       final buyRate = _useInclusiveRates &&
               (_inclusiveRateScope == 'BOTH' ||
                   _inclusiveRateScope == 'BUY_ONLY')
@@ -447,7 +488,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   }
 
   Future<void> _pickItemImage() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.image,
       allowMultiple: false,
     );
@@ -776,7 +817,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       return;
     }
 
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx'],
     );
@@ -994,7 +1035,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                _formCard(),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: _formCard(),
+                  ),
+                ),
                 const SizedBox(height: 14),
                 _searchBar(),
                 const SizedBox(height: 14),
@@ -1016,9 +1061,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       title: 'Item Information',
       child: Form(
         key: _formKey,
-        child: Wrap(
-          spacing: 14,
-          runSpacing: 14,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 14,
+              runSpacing: 14,
           children: [
             // Code is readonly, so we don't pass focus node to it.
             _text(_code, 'Item Code', readOnly: true),
@@ -1028,11 +1076,30 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             _text(_hsnSac, 'HSN / SAC Code',
                 focusNode: _hsnSacFocus,
                 prevNode: _nameFocus,
-                onSubmit: () => _barcodeFocus.requestFocus()),
-            _text(_barcode, 'Barcode / Scan Code',
-                focusNode: _barcodeFocus,
-                prevNode: _hsnSacFocus,
-                onSubmit: () => _groupFocus.requestFocus()),
+                onSubmit: () => _hasVariants
+                    ? _groupFocus.requestFocus()
+                    : _barcodeFocus.requestFocus()),
+            if (_editIndex == null)
+              SizedBox(
+                width: 220,
+                child: SwitchListTile(
+                  title: const Text('Has Variants'),
+                  subtitle: const Text('Sizes, Colors, etc.'),
+                  value: _hasVariants,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (v) {
+                    setState(() {
+                      _hasVariants = v;
+                    });
+                    _generateVariantList();
+                  },
+                ),
+              ),
+            if (!_hasVariants)
+              _text(_barcode, 'Barcode / Scan Code',
+                  focusNode: _barcodeFocus,
+                  prevNode: _hsnSacFocus,
+                  onSubmit: () => _groupFocus.requestFocus()),
             SizedBox(
               width: 220,
               child: TextFormField(
@@ -1314,157 +1381,163 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     setState(() {
                       _unit = value;
                     });
-                    _inclusiveSwitchFocus.requestFocus(); // Chaining
+                    if (_hasVariants) {
+                      _taxTypeFocus.requestFocus();
+                    } else {
+                      _inclusiveSwitchFocus.requestFocus();
+                    }
                   },
                 ),
               ),
             ),
 
-            SizedBox(
-              width: 220,
-              child: Focus(
-                focusNode: _inclusiveSwitchFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      _unitFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                      setState(() {
-                        _useInclusiveRates = !_useInclusiveRates;
-                        if (!_useInclusiveRates) {
-                          _inclusiveRateScope = 'BOTH';
-                        }
-                      });
-                      if (_useInclusiveRates) {
-                        _inclusiveScopeFocus.requestFocus();
-                      } else {
-                        _rateFocus.requestFocus();
-                      }
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      if (_useInclusiveRates) {
-                        _inclusiveScopeFocus.requestFocus();
-                      } else {
-                        _rateFocus.requestFocus();
-                      }
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: SwitchListTile(
-                  title: const Text('Get Inclusive'),
-                  value: _useInclusiveRates,
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (value) {
-                    setState(() {
-                      _useInclusiveRates = value;
-                      if (!value) {
-                        _inclusiveRateScope = 'BOTH';
-                      }
-                    });
-                    if (value) {
-                      _inclusiveScopeFocus.requestFocus();
-                    } else {
-                      _rateFocus.requestFocus();
-                    }
-                  },
-                ),
-              ),
-            ),
-            if (_useInclusiveRates)
+            if (!_hasVariants) ...[
               SizedBox(
                 width: 220,
                 child: Focus(
+                  focusNode: _inclusiveSwitchFocus,
                   onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent &&
-                        event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                      _inclusiveSwitchFocus.requestFocus();
-                      return KeyEventResult.handled;
+                    if (event is KeyDownEvent) {
+                      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                          event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                        _unitFocus.requestFocus();
+                        return KeyEventResult.handled;
+                      }
+                      if (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                        setState(() {
+                          _useInclusiveRates = !_useInclusiveRates;
+                          if (!_useInclusiveRates) {
+                            _inclusiveRateScope = 'BOTH';
+                          }
+                        });
+                        if (_useInclusiveRates) {
+                          _inclusiveScopeFocus.requestFocus();
+                        } else {
+                          _rateFocus.requestFocus();
+                        }
+                        return KeyEventResult.handled;
+                      }
+                      if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+                          event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                        if (_useInclusiveRates) {
+                          _inclusiveScopeFocus.requestFocus();
+                        } else {
+                          _rateFocus.requestFocus();
+                        }
+                        return KeyEventResult.handled;
+                      }
                     }
                     return KeyEventResult.ignored;
                   },
-                  child: DropdownButtonFormField<String>(
-                    focusNode: _inclusiveScopeFocus,
-                    initialValue: _inclusiveRateScope,
-                    decoration:
-                        const InputDecoration(labelText: 'Inclusive Apply To'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'BOTH',
-                        child: Text('Buy and Sale Rate'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'SALE_ONLY',
-                        child: Text('Sale Rate Only'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'BUY_ONLY',
-                        child: Text('Buy Rate Only'),
-                      ),
-                    ],
+                  child: SwitchListTile(
+                    title: const Text('Get Inclusive'),
+                    value: _useInclusiveRates,
+                    contentPadding: EdgeInsets.zero,
                     onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _inclusiveRateScope = value);
+                      setState(() {
+                        _useInclusiveRates = value;
+                        if (!value) {
+                          _inclusiveRateScope = 'BOTH';
+                        }
+                      });
+                      if (value) {
+                        _inclusiveScopeFocus.requestFocus();
+                      } else {
+                        _rateFocus.requestFocus();
                       }
-                      _rateFocus.requestFocus(); // Chaining
                     },
                   ),
                 ),
               ),
-            _text(
-              _rate,
-              _useInclusiveRates &&
-                      (_inclusiveRateScope == 'BOTH' ||
-                          _inclusiveRateScope == 'BUY_ONLY')
-                  ? 'Buy Rate (Inclusive)'
-                  : 'Buy Rate',
-              isDouble: true,
-              focusNode: _rateFocus,
-              prevNode: _useInclusiveRates
-                  ? _inclusiveScopeFocus
-                  : _inclusiveSwitchFocus,
-              onSubmit: () => _saleRateFocus.requestFocus(),
-              helperText: _useInclusiveRates &&
-                      (_inclusiveRateScope == 'BOTH' ||
-                          _inclusiveRateScope == 'BUY_ONLY') &&
-                      _rate.text.trim().isNotEmpty
-                  ? InclusiveRateHelper.previewText(
-                      label: 'Buy',
-                      inclusiveAmount: double.tryParse(_rate.text.trim()) ?? 0,
-                      taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
-                    )
-                  : null,
-            ),
-            _text(
-              _retailSalePrice,
-              _useInclusiveRates &&
-                      (_inclusiveRateScope == 'BOTH' ||
-                          _inclusiveRateScope == 'SALE_ONLY')
-                  ? 'Sale Rate (Inclusive)'
-                  : 'Sale Rate',
-              isDouble: true,
-              focusNode: _saleRateFocus,
-              prevNode: _rateFocus,
-              onSubmit: () => _taxTypeFocus.requestFocus(),
-              helperText: _useInclusiveRates &&
-                      (_inclusiveRateScope == 'BOTH' ||
-                          _inclusiveRateScope == 'SALE_ONLY') &&
-                      _retailSalePrice.text.trim().isNotEmpty
-                  ? InclusiveRateHelper.previewText(
-                      label: 'Sale',
-                      inclusiveAmount:
-                          double.tryParse(_retailSalePrice.text.trim()) ?? 0,
-                      taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
-                    )
-                  : null,
-            ),
+              if (_useInclusiveRates)
+                SizedBox(
+                  width: 220,
+                  child: Focus(
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                        _inclusiveSwitchFocus.requestFocus();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: DropdownButtonFormField<String>(
+                      focusNode: _inclusiveScopeFocus,
+                      initialValue: _inclusiveRateScope,
+                      decoration:
+                          const InputDecoration(labelText: 'Inclusive Apply To'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'BOTH',
+                          child: Text('Buy and Sale Rate'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'SALE_ONLY',
+                          child: Text('Sale Rate Only'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'BUY_ONLY',
+                          child: Text('Buy Rate Only'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _inclusiveRateScope = value);
+                        }
+                        _rateFocus.requestFocus(); // Chaining
+                      },
+                    ),
+                  ),
+                ),
+              _text(
+                _rate,
+                _useInclusiveRates &&
+                        (_inclusiveRateScope == 'BOTH' ||
+                            _inclusiveRateScope == 'BUY_ONLY')
+                    ? 'Buy Rate (Inclusive)'
+                    : 'Buy Rate',
+                isDouble: true,
+                focusNode: _rateFocus,
+                prevNode: _useInclusiveRates
+                    ? _inclusiveScopeFocus
+                    : _inclusiveSwitchFocus,
+                onSubmit: () => _saleRateFocus.requestFocus(),
+                helperText: _useInclusiveRates &&
+                        (_inclusiveRateScope == 'BOTH' ||
+                            _inclusiveRateScope == 'BUY_ONLY') &&
+                        _rate.text.trim().isNotEmpty
+                    ? InclusiveRateHelper.previewText(
+                        label: 'Buy',
+                        inclusiveAmount: double.tryParse(_rate.text.trim()) ?? 0,
+                        taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
+                      )
+                    : null,
+              ),
+              _text(
+                _retailSalePrice,
+                _useInclusiveRates &&
+                        (_inclusiveRateScope == 'BOTH' ||
+                            _inclusiveRateScope == 'SALE_ONLY')
+                    ? 'Sale Rate (Inclusive)'
+                    : 'Sale Rate',
+                isDouble: true,
+                focusNode: _saleRateFocus,
+                prevNode: _rateFocus,
+                onSubmit: () => _taxTypeFocus.requestFocus(),
+                helperText: _useInclusiveRates &&
+                        (_inclusiveRateScope == 'BOTH' ||
+                            _inclusiveRateScope == 'SALE_ONLY') &&
+                        _retailSalePrice.text.trim().isNotEmpty
+                    ? InclusiveRateHelper.previewText(
+                        label: 'Sale',
+                        inclusiveAmount:
+                            double.tryParse(_retailSalePrice.text.trim()) ?? 0,
+                        taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
+                      )
+                    : null,
+              ),
+            ],
             SizedBox(
               width: 220,
               child: Focus(
@@ -1501,23 +1574,25 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 isDouble: true,
                 focusNode: _taxPercentFocus,
                 prevNode: _taxTypeFocus,
-                onSubmit: () => _openingFocus.requestFocus()),
-            _text(_opening, 'Opening Balance',
-                isDouble: true,
-                readOnly: _editIndex == null ? false : true,
-                focusNode: _openingFocus,
-                prevNode: _taxPercentFocus,
-                onSubmit: () => _minFocus.requestFocus()),
-            _text(_min, 'Min Level',
-                isInt: true,
-                focusNode: _minFocus,
-                prevNode: _openingFocus,
-                onSubmit: () => _maxFocus.requestFocus()),
-            _text(_max, 'Max Level',
-                isInt: true,
-                focusNode: _maxFocus,
-                prevNode: _minFocus,
-                onSubmit: () => _discountFocus.requestFocus()),
+                onSubmit: () => _hasVariants ? _discountFocus.requestFocus() : _openingFocus.requestFocus()),
+            if (!_hasVariants) ...[
+              _text(_opening, 'Opening Balance',
+                  isDouble: true,
+                  readOnly: _editIndex == null ? false : true,
+                  focusNode: _openingFocus,
+                  prevNode: _taxPercentFocus,
+                  onSubmit: () => _minFocus.requestFocus()),
+              _text(_min, 'Min Level',
+                  isInt: true,
+                  focusNode: _minFocus,
+                  prevNode: _openingFocus,
+                  onSubmit: () => _maxFocus.requestFocus()),
+              _text(_max, 'Max Level',
+                  isInt: true,
+                  focusNode: _maxFocus,
+                  prevNode: _minFocus,
+                  onSubmit: () => _discountFocus.requestFocus()),
+            ],
 
             SizedBox(
               width: 220,
@@ -1527,7 +1602,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                   if (event is KeyDownEvent) {
                     if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
                         event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      _maxFocus.requestFocus();
+                      if (_hasVariants) {
+                        _taxPercentFocus.requestFocus();
+                      } else {
+                        _maxFocus.requestFocus();
+                      }
                       return KeyEventResult.handled;
                     }
                     if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -1680,9 +1759,330 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             ),
           ],
         ),
+        if (_hasVariants) _variantBuilderUI(),
+      ],
+    ),
+  ),
+);
+}
+
+  void _generateVariantList() {
+    if (_selectedAttributes.isEmpty) {
+      setState(() {
+        _generatedVariants = [];
+      });
+      return;
+    }
+
+    final keys = _selectedAttributes.keys.toList();
+    List<List<AttributeValue>> combinations = [[]];
+
+    for (var key in keys) {
+      final values = _selectedAttributes[key] ?? [];
+      if (values.isEmpty) continue;
+      
+      List<List<AttributeValue>> newCombinations = [];
+      for (var combination in combinations) {
+        for (var value in values) {
+          newCombinations.add([...combination, value]);
+        }
+      }
+      combinations = newCombinations;
+    }
+
+    if (combinations.isEmpty || combinations.first.isEmpty) {
+      setState(() {
+        _generatedVariants = [];
+      });
+      return;
+    }
+
+    final templateName = _name.text.trim();
+    final templateCode = _code.text.trim();
+
+    _generatedVariants = combinations.map((combination) {
+      final choicesName = combination.map((e) => e.value).join(' / ');
+      final choicesCode = combination.map((e) => e.value.replaceAll(RegExp(r'\s+'), '').toUpperCase()).join('-');
+      
+      final variantName = templateName.isNotEmpty ? '$templateName - $choicesName' : choicesName;
+      final variantCode = templateCode.isNotEmpty ? '$templateCode-$choicesCode' : choicesCode;
+
+      return {
+        'item_name': variantName,
+        'item_code': variantCode,
+        'barcode': '',
+        'rate': double.tryParse(_rate.text.trim()) ?? 0.0,
+        'retail_sale_price': double.tryParse(_retailSalePrice.text.trim()) ?? 0.0,
+        'opening_balance': double.tryParse(_opening.text.trim()) ?? 0.0,
+        'min_level': int.tryParse(_min.text.trim()) ?? 0,
+        'max_level': int.tryParse(_max.text.trim()) ?? 0,
+        'choiceIds': combination.map((e) => e.id).toList()
+      };
+    }).toList();
+
+    setState(() {});
+  }
+
+  void _showAddAttributeDialog() {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Attribute Type'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(labelText: 'e.g., Color, Size, RAM'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final name = ctrl.text.trim();
+              if (name.isNotEmpty) {
+                try {
+                  await _attributeCtrl.createAttribute(name);
+                  if (!mounted) return;
+                  Navigator.pop(ctx);
+                  setState(() {});
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Add'),
+          )
+        ],
       ),
     );
   }
+
+  void _showAddAttributeValueDialog(Attribute attr) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Add value for ${attr.name}'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(labelText: 'e.g., Red, XL, 16GB'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final val = ctrl.text.trim();
+              if (val.isNotEmpty) {
+                try {
+                  await _attributeCtrl.createAttributeValue(attr.id, val);
+                  if (!mounted) return;
+                  Navigator.pop(ctx);
+                  setState(() {});
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Add'),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _variantBuilderUI() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 32),
+        const Text(
+          'Product Variant Builder',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Add Attribute Type'),
+              onPressed: _showAddAttributeDialog,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_attributeCtrl.attributes.isEmpty && !_attributeCtrl.loading)
+          const Text('No attributes defined. Click above to add one.')
+        else
+          ..._attributeCtrl.attributes.map((attr) {
+            final selectedVals = _selectedAttributes[attr] ?? [];
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          attr.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        TextButton.icon(
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Add Value'),
+                          onPressed: () => _showAddAttributeValueDialog(attr),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: attr.values.map((val) {
+                        final isSelected = selectedVals.any((v) => v.id == val.id);
+                        return FilterChip(
+                          label: Text(val.value),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                _selectedAttributes.putIfAbsent(attr, () => []).add(val);
+                              } else {
+                                _selectedAttributes[attr]?.removeWhere((v) => v.id == val.id);
+                                if (_selectedAttributes[attr]?.isEmpty ?? false) {
+                                  _selectedAttributes.remove(attr);
+                                }
+                              }
+                            });
+                            _generateVariantList();
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        if (_generatedVariants.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const Text(
+            'Variant Combinations Config',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Variant Name')),
+                  DataColumn(label: Text('SKU Code')),
+                  DataColumn(label: Text('Barcode')),
+                  DataColumn(label: Text('Buy Rate')),
+                  DataColumn(label: Text('Sale Price')),
+                  DataColumn(label: Text('Opening Stock')),
+                  DataColumn(label: Text('Actions')),
+                ],
+                rows: _generatedVariants.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final v = entry.value;
+
+                  return DataRow(
+                    cells: [
+                      DataCell(
+                        SizedBox(
+                          width: 250,
+                          child: TextFormField(
+                            initialValue: v['item_name'],
+                            decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+                            onChanged: (val) => _generatedVariants[idx]['item_name'] = val,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 150,
+                          child: TextFormField(
+                            initialValue: v['item_code'],
+                            decoration: const InputDecoration(isDense: true),
+                            onChanged: (val) => _generatedVariants[idx]['item_code'] = val.toUpperCase(),
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 150,
+                          child: TextFormField(
+                            initialValue: v['barcode'],
+                            decoration: const InputDecoration(isDense: true, hintText: 'Auto/Scan'),
+                            onChanged: (val) => _generatedVariants[idx]['barcode'] = val,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 80,
+                          child: TextFormField(
+                            initialValue: v['rate'].toString(),
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(isDense: true),
+                            onChanged: (val) => _generatedVariants[idx]['rate'] = double.tryParse(val) ?? 0.0,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 80,
+                          child: TextFormField(
+                            initialValue: v['retail_sale_price'].toString(),
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(isDense: true),
+                            onChanged: (val) => _generatedVariants[idx]['retail_sale_price'] = double.tryParse(val) ?? 0.0,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 80,
+                          child: TextFormField(
+                            initialValue: v['opening_balance'].toString(),
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(isDense: true),
+                            onChanged: (val) => _generatedVariants[idx]['opening_balance'] = double.tryParse(val) ?? 0.0,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () {
+                            setState(() {
+                              _generatedVariants.removeAt(idx);
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ]
+      ],
+    );
+  }
+
 
   Future<void> _showEditBrandDialog() async {
     if (_selectedBrand == null) return;
@@ -2225,6 +2625,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     FocusNode? prevNode,
     TextInputAction textInputAction = TextInputAction.next,
     VoidCallback? onSubmit,
+    bool isOptional = false,
   }) {
     return SizedBox(
       width: 220,
@@ -2272,7 +2673,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
           ),
           onChanged: (_) => setState(() {}),
-          validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+          validator: (v) {
+            if (isOptional) return null;
+            return v == null || v.isEmpty ? 'Required' : null;
+          },
         ),
       ),
     );

@@ -11,6 +11,17 @@ router.post('/outlet/check', outletCtrl.checkOutlet);
 router.post('/outlet', outletCtrl.createOutlet);
 // router.post('/create-admin', outletCtrl.createAdmin);
 router.get('/property-info', ctrl.getPropertyInfo);
+router.get('/outlets', async (req, res) => {
+    try {
+        const outlets = await req.propertyDb.models.outlets.findAll({
+            where: { is_active: true },
+            attributes: ['id', 'outlet_code', 'outlet_name']
+        });
+        res.json({ success: true, data: outlets });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 router.post('/recovery/verify-pin', verifyOutletForRecovery);
 router.post('/recovery/execute', executeFullSystemRecovery);
 router.post('/recovery/request-otp', requestRecoveryOtp);

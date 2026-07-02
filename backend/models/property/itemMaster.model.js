@@ -142,6 +142,11 @@ module.exports = (sequelize, DataTypes) => {
                 defaultValue: true
             },
 
+            product_template_id: {
+                type: DataTypes.INTEGER,
+                allowNull: true
+            },
+
             created_at: {
                 type: DataTypes.DATE,
                 defaultValue: DataTypes.NOW
@@ -195,6 +200,17 @@ module.exports = (sequelize, DataTypes) => {
             as: 'damage_items'
         });
 
+        ItemMaster.belongsTo(models.product_templates, {
+            foreignKey: 'product_template_id',
+            as: 'product_template'
+        });
+
+        ItemMaster.belongsToMany(models.attribute_values, {
+            through: models.variant_attribute_values,
+            foreignKey: 'item_id',
+            otherKey: 'attribute_value_id',
+            as: 'attribute_values'
+        });
     };
 
 

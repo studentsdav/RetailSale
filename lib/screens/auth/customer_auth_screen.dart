@@ -292,15 +292,17 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
             ),
             validator: (value) => value == null || value.trim().isEmpty ? "Enter your password" : null,
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _loginOutletCtrl,
-            decoration: InputDecoration(
-              labelText: "Outlet Code",
-              prefixIcon: const Icon(Icons.storefront_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          Visibility(
+            visible: false,
+            child: TextFormField(
+              controller: _loginOutletCtrl,
+              decoration: InputDecoration(
+                labelText: "Outlet Code",
+                prefixIcon: const Icon(Icons.storefront_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              validator: (value) => value == null || value.trim().isEmpty ? "Enter outlet code" : null,
             ),
-            validator: (value) => value == null || value.trim().isEmpty ? "Enter outlet code" : null,
           ),
           const SizedBox(height: 24),
           FilledButton(
@@ -366,15 +368,17 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
             ),
             validator: (value) => value == null || value.trim().isEmpty ? "Enter delivery address" : null,
           ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _regOutletCtrl,
-            decoration: InputDecoration(
-              labelText: "Outlet Code",
-              prefixIcon: const Icon(Icons.storefront_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          Visibility(
+            visible: false,
+            child: TextFormField(
+              controller: _regOutletCtrl,
+              decoration: InputDecoration(
+                labelText: "Outlet Code",
+                prefixIcon: const Icon(Icons.storefront_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              validator: (value) => value == null || value.trim().isEmpty ? "Enter outlet code" : null,
             ),
-            validator: (value) => value == null || value.trim().isEmpty ? "Enter outlet code" : null,
           ),
           const SizedBox(height: 20),
           FilledButton(

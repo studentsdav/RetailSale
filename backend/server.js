@@ -48,6 +48,7 @@ const rootDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
 const { startBackupJob } = require("./jobs/backupJob");
 const { startLoyaltyExpiryJob } = require("./jobs/loyaltyExpiryJob");
 const { startAnalyticsRefreshJob } = require("./jobs/analyticsRefreshJob");
+const { startSubscriptionDeliveryJob } = require("./jobs/subscriptionDeliveryJob");
 const CLIENT_FILE = path.join(rootDir, "client.json");
 // body limits
 app.use(express.json({
@@ -183,6 +184,7 @@ if (!fs.existsSync(licensePath)) {
         initializeAllBackups();
         startLoyaltyExpiryJob(propertyDb);
         startAnalyticsRefreshJob(propertyDb);
+        startSubscriptionDeliveryJob(propertyDb);
         
         // Start background WhatsApp message queue worker
         const { startWhatsappQueueJob } = require('./jobs/whatsappQueueJob');

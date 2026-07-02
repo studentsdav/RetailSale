@@ -35,6 +35,7 @@ import '../reports/sales_report_screen.dart';
 import '../settings/settings_screen.dart';
 import 'item_master_screen.dart';
 import 'subscription_screen.dart';
+import '../../core/api/api_client.dart';
 
 class SaleScreen extends StatefulWidget {
   final int? editSaleId;
@@ -55,6 +56,8 @@ class _SaleScreenState extends State<SaleScreen> {
   final _customerPhone = TextEditingController();
   final _customerAddress = TextEditingController();
   final _customerGstin = TextEditingController();
+  final _doctorName = TextEditingController();
+  final _patientName = TextEditingController();
   final _paymentRef = TextEditingController();
   final _amountPaid = TextEditingController(text: '0');
   final _notes = TextEditingController();
@@ -133,6 +136,38 @@ class _SaleScreenState extends State<SaleScreen> {
   int? _editingSaleId;
   bool _affectStockOnEdit = true;
   bool _schemeManuallyRemoved = false;
+  // Subscription delivery counters for sidebar badges
+  int _subscriptionDraftCount = 0;
+  int _totalDraftCount = 0;
+  List<Map<String, dynamic>> _subscriptionDraftOrders = [];
+  final Map<int?, Set<int>> _manuallyRemovedSchemeIdsByCustomerId = {};
+  final Map<int?, Set<int>> _completedOneTimeSchemeIdsByCustomerId = {};
+
+  void _markSchemeManuallyRemoved(int schemeId) {
+    final customerId = _selectedCustomer?.id;
+    _manuallyRemovedSchemeIdsByCustomerId.putIfAbsent(customerId, () => {}).add(schemeId);
+  }
+
+  void _markSchemeManuallySelected(int schemeId) {
+    final customerId = _selectedCustomer?.id;
+    _manuallyRemovedSchemeIdsByCustomerId[customerId]?.remove(schemeId);
+    _completedOneTimeSchemeIdsByCustomerId[customerId]?.remove(schemeId);
+  }
+
+  bool _isSchemeBlockedFromAutoApply(SaleScheme scheme) {
+    final customerId = _selectedCustomer?.id;
+    final manuallyRemoved = _manuallyRemovedSchemeIdsByCustomerId[customerId]?.contains(scheme.id) ?? false;
+    if (manuallyRemoved) return true;
+
+    final isOneTime = scheme.repeatMode.toUpperCase() == 'ONCE' ||
+        scheme.usageType.toLowerCase() == 'single_use';
+    if (isOneTime) {
+      final completed = _completedOneTimeSchemeIdsByCustomerId[customerId]?.contains(scheme.id) ?? false;
+      if (completed) return true;
+    }
+    return false;
+  }
+
   bool get _showItemImages =>
       settingsCtrl.settings?.enableItemImagesInSales ?? false;
 
@@ -160,6 +195,8 @@ class _SaleScreenState extends State<SaleScreen> {
       }
 
       if (mounted) setState(() {});
+      // Load subscription delivery draft counts for sidebar badges
+      _loadSubscriptionDraftCounts();
     } catch (error) {
       _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
       if (!mounted) return;
@@ -176,6 +213,26 @@ class _SaleScreenState extends State<SaleScreen> {
     final resolved =
         (user?['name'] ?? user?['username'] ?? 'System').toString().trim();
     _cashierName = resolved.isEmpty ? 'System' : resolved;
+  }
+
+  /// Fetches today's subscription auto-draft count and total draft count
+  /// for the sidebar badge indicators.
+  Future<void> _loadSubscriptionDraftCounts() async {
+    try {
+      // Today's subscription delivery drafts
+      final subRes = await ApiClient.get('/api/sales/subscription-drafts-today');
+      final subList = (subRes['data'] as List? ?? []);
+      // Total drafts
+      final allDrafts = await ctrl.listSales(status: 'DRAFT');
+      if (!mounted) return;
+      setState(() {
+        _subscriptionDraftOrders = subList
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        _subscriptionDraftCount = subList.length;
+        _totalDraftCount = allDrafts.length;
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadExistingSaleForEdit(int saleId) async {
@@ -273,6 +330,8 @@ class _SaleScreenState extends State<SaleScreen> {
     _customerPhone.dispose();
     _customerAddress.dispose();
     _customerGstin.dispose();
+    _doctorName.dispose();
+    _patientName.dispose();
     _paymentRef.dispose();
     _amountPaid.dispose();
     _notes.dispose();
@@ -363,8 +422,18 @@ class _SaleScreenState extends State<SaleScreen> {
     if (_schemeUsageMode != 'APPLY_NOW' ||
         _selectedScheme == null ||
         !_isSchemeEligible(_selectedScheme!)) return 0;
+    
+    double baseAmount;
+    if (_selectedScheme!.itemId != null) {
+      baseAmount = _items
+          .where((item) => item.itemId == _selectedScheme!.itemId && item.schemeApplicable)
+          .fold<double>(0, (sum, item) => sum + item.amount);
+    } else {
+      baseAmount = _schemeBaseAmount;
+    }
+
     return _discountAmount(
-      baseAmount: _schemeBaseAmount,
+      baseAmount: baseAmount,
       discountType: _selectedScheme!.discountType,
       discountValue: _selectedScheme!.discountValue,
     );
@@ -538,6 +607,7 @@ class _SaleScreenState extends State<SaleScreen> {
             _voucherDiscountAmount +
             _loyaltyDiscountAmount,
         charges: _charges,
+        schemeItemId: _selectedScheme?.itemId,
       );
   double get _payableInvoiceTotal {
     double rawTotal = math.max(_invoice.netAmount, 0);
@@ -697,8 +767,22 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   bool _isSchemeEligible(SaleScheme scheme) {
-    if (!scheme.isActive || _items.isEmpty || _schemeBaseAmount <= 0)
-      return false;
+    if (!scheme.isActive || _items.isEmpty) return false;
+
+    double eligibleBaseAmount = 0;
+    double eligibleQty = 0;
+
+    if (scheme.itemId != null) {
+      final matchingItems = _items.where((item) => item.itemId == scheme.itemId && item.schemeApplicable);
+      eligibleBaseAmount = matchingItems.fold<double>(0, (sum, item) => sum + item.amount);
+      eligibleQty = matchingItems.fold<double>(0, (sum, item) => sum + item.qty);
+    } else {
+      eligibleBaseAmount = _schemeBaseAmount;
+      eligibleQty = _items.where((item) => item.schemeApplicable).fold<double>(0, (sum, item) => sum + item.qty);
+    }
+
+    if (eligibleBaseAmount <= 0) return false;
+
     if (scheme.schemeType == 'TIME') {
       if (scheme.startTime == null || scheme.endTime == null) return false;
       final now = TimeOfDay.fromDateTime(DateTime.now());
@@ -708,13 +792,11 @@ class _SaleScreenState extends State<SaleScreen> {
       return current >= start && current <= end;
     }
     if (scheme.schemeType == 'QTY') {
-      final eligibleQty = _items
-          .where((item) => item.schemeApplicable)
-          .fold<double>(0, (sum, item) => sum + item.qty);
       return eligibleQty >= scheme.minQty;
     }
-    if (scheme.schemeType == 'VALUE')
-      return _schemeBaseAmount >= scheme.minAmount;
+    if (scheme.schemeType == 'VALUE') {
+      return eligibleBaseAmount >= scheme.minAmount;
+    }
     return false;
   }
 
@@ -871,6 +953,29 @@ class _SaleScreenState extends State<SaleScreen> {
     if (_schemeManuallyRemoved) {
       return;
     }
+
+    // Auto-apply item-specific schemes when criteria met
+    for (final scheme in _availableSchemes) {
+      if (scheme.itemId != null && scheme.isActive) {
+        if (_isSchemeBlockedFromAutoApply(scheme)) {
+          continue;
+        }
+        final eligibleQty = _items
+            .where((item) => item.itemId == scheme.itemId && item.schemeApplicable)
+            .fold<double>(0, (sum, item) => sum + item.qty);
+        if (eligibleQty >= scheme.minQty && scheme.minQty > 0) {
+          if (!_isSchemeChipSelected(scheme)) {
+            _selectedSchemes.add(scheme);
+          }
+          if (scheme.schemeScope.toUpperCase() == 'ITEM') {
+            _selectedItemScheme = scheme;
+          } else {
+            _selectedScheme = scheme;
+          }
+        }
+      }
+    }
+
     SaleScheme? preferred;
     if (!_schemeManuallyRemoved && _selectedCustomer?.schemeId != null) {
       preferred = _availableSchemes.cast<SaleScheme?>().firstWhere(
@@ -882,6 +987,11 @@ class _SaleScreenState extends State<SaleScreen> {
           (scheme) => scheme?.customerLinked == true,
           orElse: () => null,
         );
+    if (preferred != null) {
+      if (_isSchemeBlockedFromAutoApply(preferred)) {
+        preferred = null;
+      }
+    }
     if (preferred != null &&
         (preferred.autoSelectOnCustomer ||
             preferred.customerLinked ||
@@ -909,6 +1019,10 @@ class _SaleScreenState extends State<SaleScreen> {
       for (final linked in _availableSchemes.where(
         (scheme) => scheme.customerLinked == true,
       )) {
+        if (_isSchemeBlockedFromAutoApply(linked)) {
+          _removeSelectedSchemeById(linked.id);
+          continue;
+        }
         if (_selectedCustomerSchemeSuppressed) {
           _removeSelectedSchemeById(linked.id);
           continue;
@@ -938,6 +1052,11 @@ class _SaleScreenState extends State<SaleScreen> {
                 orElse: () => null,
               );
       if (refreshedSelection != null) {
+        if (_isSchemeBlockedFromAutoApply(refreshedSelection)) {
+          _removeSelectedSchemeById(refreshedSelection.id);
+          _selectedItemScheme = null;
+          return;
+        }
         if (refreshedSelection.repeatMode.toUpperCase() == 'ONCE' &&
             (_selectedCustomerSchemeSuppressed ||
                 _schemeAlreadyGrantedThisCycle(refreshedSelection))) {
@@ -985,11 +1104,15 @@ class _SaleScreenState extends State<SaleScreen> {
           if (_selectedCustomer != null) {
             _suppressedSchemeCustomerIds.add(_selectedCustomer!.id);
           }
+          if (removedScheme != null) {
+            _markSchemeManuallyRemoved(removedScheme!.id);
+          }
         } else {
           _selectedCustomerSchemeSuppressed = false;
           if (_selectedCustomer != null) {
             _suppressedSchemeCustomerIds.remove(_selectedCustomer!.id);
           }
+          _markSchemeManuallySelected(scheme.id);
         }
       }
     });
@@ -1028,11 +1151,15 @@ class _SaleScreenState extends State<SaleScreen> {
           if (_selectedCustomer != null) {
             _suppressedSchemeCustomerIds.add(_selectedCustomer!.id);
           }
+          if (removedScheme != null) {
+            _markSchemeManuallyRemoved(removedScheme!.id);
+          }
         } else {
           _selectedCustomerSchemeSuppressed = false;
           if (_selectedCustomer != null) {
             _suppressedSchemeCustomerIds.remove(_selectedCustomer!.id);
           }
+          _markSchemeManuallySelected(scheme.id);
         }
       }
       _itemSchemeProgress = null;
@@ -1062,6 +1189,7 @@ class _SaleScreenState extends State<SaleScreen> {
         if (_selectedCustomer != null) {
           _suppressedSchemeCustomerIds.add(_selectedCustomer!.id);
         }
+        _markSchemeManuallyRemoved(scheme.id);
         if (_selectedScheme?.id == scheme.id) {
           _selectedScheme = _lastSelectedSchemeByScope('ORDER');
         }
@@ -1085,6 +1213,7 @@ class _SaleScreenState extends State<SaleScreen> {
         if (_selectedCustomer != null) {
           _suppressedSchemeCustomerIds.remove(_selectedCustomer!.id);
         }
+        _markSchemeManuallySelected(scheme.id);
       }
     });
     if (shouldUnlink) {
@@ -1448,6 +1577,7 @@ class _SaleScreenState extends State<SaleScreen> {
       taxPercent: seed?.taxPercent ?? item.taxPercent,
       discountApplicable: seed?.discountApplicable ?? item.discountApplicable,
       schemeApplicable: seed?.schemeApplicable ?? item.schemeApplicable,
+      brand: seed?.brand ?? item.brand,
     );
   }
 
@@ -1564,7 +1694,136 @@ class _SaleScreenState extends State<SaleScreen> {
     }
   }
 
+  DateTime? _parseExpiryDate(String value) {
+    final cleaned = value.toUpperCase().replaceAll(RegExp(r'[^\d\-\/]'), '').trim();
+    try {
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(cleaned)) {
+        return DateTime.parse(cleaned);
+      }
+    } catch (_) {}
+    try {
+      final parts = cleaned.split(RegExp(r'[\-\/]'));
+      if (parts.length == 2) {
+        final month = int.tryParse(parts[0]);
+        final year = int.tryParse(parts[1]);
+        if (month != null && year != null && month >= 1 && month <= 12) {
+          return DateTime(year, month + 1, 0);
+        }
+      }
+    } catch (_) {}
+    try {
+      final parts = cleaned.split(RegExp(r'[\-\/]'));
+      if (parts.length == 3) {
+        final first = int.tryParse(parts[0]);
+        final second = int.tryParse(parts[1]);
+        final third = int.tryParse(parts[2]);
+        if (first != null && second != null && third != null) {
+          if (third > 1000) {
+            return DateTime(third, second, first);
+          } else if (first > 1000) {
+            return DateTime(first, second, third);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  DateTime? _getItemExpiryDate(Item item) {
+    for (final attrVal in item.attributeValues) {
+      final name = (attrVal.attributeName ?? '').toLowerCase();
+      if (name.contains('exp')) {
+        final parsed = _parseExpiryDate(attrVal.value);
+        if (parsed != null) return parsed;
+      }
+    }
+    for (final attrVal in item.attributeValues) {
+      if (attrVal.value.toUpperCase().contains('EXP')) {
+        final parsed = _parseExpiryDate(attrVal.value);
+        if (parsed != null) return parsed;
+      }
+    }
+    final nameUpper = item.itemName.toUpperCase();
+    final expIndex = nameUpper.indexOf('EXP');
+    if (expIndex != -1) {
+      final sub = item.itemName.substring(expIndex);
+      final parsed = _parseExpiryDate(sub);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
   void _addOrUpdateItem(Item item, {required double qty}) {
+    final expiry = _getItemExpiryDate(item);
+    if (expiry != null && expiry.isBefore(DateTime.now())) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              SizedBox(width: 8),
+              Text('Expired Batch Warning'),
+            ],
+          ),
+          content: Text(
+            'The selected medicine batch (${item.brand.isNotEmpty ? item.brand : 'Generic'} - ${item.itemName}) has EXPIRED on ${DateFormat('dd-MM-yyyy').format(expiry)}.\n\nDo you still want to add it to the cart?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _addOrUpdateItemDirect(item, qty: qty);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('PROCEED'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (expiry != null && expiry.isBefore(DateTime.now().add(const Duration(days: 60)))) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue, size: 28),
+              SizedBox(width: 8),
+              Text('Near-Expiry Medicine Alert'),
+            ],
+          ),
+          content: Text(
+            'This batch expires soon on ${DateFormat('dd-MM-yyyy').format(expiry)} (less than 60 days).\n\nDo you want to proceed?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _addOrUpdateItemDirect(item, qty: qty);
+              },
+              child: const Text('PROCEED'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    _addOrUpdateItemDirect(item, qty: qty);
+  }
+
+  void _addOrUpdateItemDirect(Item item, {required double qty}) {
     if (qty <= 0) return;
     final existingLines =
         _items.where((line) => line.itemId == item.id).toList();
@@ -1595,6 +1854,181 @@ class _SaleScreenState extends State<SaleScreen> {
     });
   }
 
+  void _showVariantSelectorDialog(Item templateRep) {
+    final templateId = templateRep.productTemplateId;
+    if (templateId == null) return;
+
+    final siblings = ctrl.items.where((e) => e.productTemplateId == templateId).toList();
+    if (siblings.isEmpty) return;
+
+    // Collect all unique attribute names
+    final List<String> attributeNames = siblings
+        .expand((v) => v.attributeValues.map((av) => av.attributeName ?? ''))
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList();
+
+    // Collect all unique choice values for each attribute name
+    final Map<String, List<String>> attributeChoices = {};
+    for (var name in attributeNames) {
+      final choices = siblings
+          .expand((v) => v.attributeValues)
+          .where((av) => av.attributeName == name)
+          .map((av) => av.value)
+          .toSet()
+          .toList();
+      attributeChoices[name] = choices;
+    }
+
+    // Default select first available combination if possible
+    final Map<String, String> selectedOptions = {};
+    if (siblings.isNotEmpty) {
+      for (var name in attributeNames) {
+        final matches = siblings.first.attributeValues.where((av) => av.attributeName == name);
+        if (matches.isNotEmpty) {
+          selectedOptions[name] = matches.first.value;
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Find matching item based on currently selected options
+            Item? matchingItem;
+            bool selectionComplete = selectedOptions.length == attributeNames.length;
+            if (selectionComplete) {
+              for (var sibling in siblings) {
+                bool isMatch = true;
+                for (var entry in selectedOptions.entries) {
+                  final hasMatch = sibling.attributeValues.any(
+                    (av) => av.attributeName == entry.key && av.value == entry.value,
+                  );
+                  if (!hasMatch) {
+                    isMatch = false;
+                    break;
+                  }
+                }
+                if (isMatch) {
+                  matchingItem = sibling;
+                  break;
+                }
+              }
+            }
+
+            final price = matchingItem != null
+                ? (matchingItem.retailSalePrice > 0 ? matchingItem.retailSalePrice : matchingItem.rate)
+                : 0.0;
+            final stock = matchingItem != null ? 'In Stock' : 'Unavailable';
+            final code = matchingItem?.itemCode ?? '';
+
+            final templateName = templateRep.itemName.split(' - ').first;
+
+            return AlertDialog(
+              title: Text(templateName),
+              content: SizedBox(
+                width: 450,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...attributeNames.map((attrName) {
+                      final choices = attributeChoices[attrName] ?? [];
+                      final selectedVal = selectedOptions[attrName];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            attrName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: choices.map((choice) {
+                              final isSelected = selectedVal == choice;
+                              return ChoiceChip(
+                                label: Text(choice),
+                                selected: isSelected,
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setDialogState(() {
+                                      selectedOptions[attrName] = choice;
+                                    });
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+                      );
+                    }),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    if (matchingItem != null) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'SKU: $code',
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                stock,
+                                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            'Rs. ${price.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Color(0xFFD67D25),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const Text(
+                        'This combination is unavailable.',
+                        style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: matchingItem == null
+                      ? null
+                      : () {
+                          Navigator.pop(ctx);
+                          _addOrUpdateItem(matchingItem!, qty: _entryQtyValue());
+                        },
+                  icon: const Icon(Icons.add_shopping_cart),
+                  label: const Text('Add to Cart'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _updateLineQty(int index, double qty) {
     final line = _items[index];
     final isFreeLine = line.isAdvanceFree || line.isSchemeFree;
@@ -1617,6 +2051,12 @@ class _SaleScreenState extends State<SaleScreen> {
         return;
       }
 
+      // Preserve the original position of the item in the cart
+      final originalIndex = _items.indexWhere(
+        (row) => row.itemId == line.itemId && !row.isAdvanceFree && !row.isSchemeFree,
+      );
+      final insertAt = originalIndex < 0 ? 0 : originalIndex;
+
       setState(() {
         _paymentEntries = const [];
         _pendingPreviousAdjustment = 0;
@@ -1624,7 +2064,7 @@ class _SaleScreenState extends State<SaleScreen> {
         _pendingAdvanceCreated = 0;
         _items.removeWhere((row) => row.itemId == line.itemId);
         _items.insert(
-          0,
+          insertAt,
           line.copyWith(
             qty: totalQty,
             originalQty: totalQty,
@@ -4461,6 +4901,10 @@ class _SaleScreenState extends State<SaleScreen> {
       customerGstin: _customerGstin.text.trim().isEmpty
           ? null
           : _customerGstin.text.trim(),
+      doctorName:
+          _doctorName.text.trim().isEmpty ? null : _doctorName.text.trim(),
+      patientName:
+          _patientName.text.trim().isEmpty ? null : _patientName.text.trim(),
       paymentMode: paymentSummary.primaryMode,
       paymentReference: paymentReference,
       amountPaid: paymentSummary.collectedAmount,
@@ -4627,6 +5071,18 @@ class _SaleScreenState extends State<SaleScreen> {
       _pendingPreviousAdjustment = 0;
       _pendingAdvanceApplied = 0;
       _pendingAdvanceCreated = 0;
+      final customerId = _selectedCustomer?.id;
+      for (final scheme in _selectedSchemes) {
+        final isOneTime = scheme.repeatMode.toUpperCase() == 'ONCE' ||
+            scheme.usageType.toLowerCase() == 'single_use';
+        if (isOneTime) {
+          final isNextPurchaseReservation = scheme.applyTiming.toUpperCase() == 'NEXT_PURCHASE' &&
+              !scheme.customerLinked;
+          if (!isNextPurchaseReservation) {
+            _completedOneTimeSchemeIdsByCustomerId.putIfAbsent(customerId, () => {}).add(scheme.id);
+          }
+        }
+      }
       try {
         _saleNo.text = await ctrl.getNextSaleNo();
       } catch (_) {}
@@ -4693,6 +5149,8 @@ class _SaleScreenState extends State<SaleScreen> {
         _customerPhone.clear();
         _customerAddress.clear();
         _customerGstin.clear();
+        _doctorName.clear();
+        _patientName.clear();
       }
       _barcode.clear();
       _entryQty.text = '1';
@@ -4749,6 +5207,7 @@ class _SaleScreenState extends State<SaleScreen> {
         ),
       );
     }
+    _loadSubscriptionDraftCounts();
     _focusBarcodeField();
   }
 
@@ -4774,6 +5233,7 @@ class _SaleScreenState extends State<SaleScreen> {
       taxableAmount: _jsonDouble(json['taxable_amount']),
       taxAmount: _jsonDouble(json['tax_amount']),
       lineTotal: _jsonDouble(json['line_total']),
+      brand: json['brand'] ?? (json['item'] is Map ? json['item']['brand']?.toString() : null),
     );
   }
 
@@ -4810,6 +5270,8 @@ class _SaleScreenState extends State<SaleScreen> {
       _customerPhone.text = details['customer_phone']?.toString() ?? '';
       _customerAddress.text = details['customer_address']?.toString() ?? '';
       _customerGstin.text = details['customer_gstin']?.toString() ?? '';
+      _doctorName.text = details['doctor_name']?.toString() ?? '';
+      _patientName.text = details['patient_name']?.toString() ?? '';
       _notes.text = details['notes']?.toString() ?? '';
       _manualDiscountType =
           details['manual_discount_type']?.toString() ?? 'AMOUNT';
@@ -4874,6 +5336,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                 ? null
                                 : () async {
                                     await ctrl.deleteDraft(draftId);
+                                    _loadSubscriptionDraftCounts();
                                     if (!mounted) return;
                                     Navigator.pop(context);
                                     await _showDraftsDialog();
@@ -4889,6 +5352,7 @@ class _SaleScreenState extends State<SaleScreen> {
                       onTap: () async {
                         Navigator.pop(context);
                         await _loadDraft(draft);
+                        _loadSubscriptionDraftCounts();
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -5181,6 +5645,27 @@ class _SaleScreenState extends State<SaleScreen> {
                                 const InputDecoration(labelText: 'Scheme Type'),
                           ),
                           const SizedBox(height: 12),
+                          DropdownButtonFormField<int?>(
+                            value: selectedItemId,
+                            items: [
+                              const DropdownMenuItem<int?>(
+                                value: null,
+                                child: Text('All Items / Order Discount'),
+                              ),
+                              ...ctrl.items.map(
+                                (it) => DropdownMenuItem<int?>(
+                                  value: it.id,
+                                  child: Text('${it.itemName} - ${it.brand}'),
+                                ),
+                              ),
+                            ],
+                            onChanged: (value) =>
+                                setDialogState(() => selectedItemId = value),
+                            decoration: const InputDecoration(
+                              labelText: 'Target Item (Optional)',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
                             initialValue: discountType,
                             items: const [
@@ -5372,7 +5857,7 @@ class _SaleScreenState extends State<SaleScreen> {
                         minAmount: schemeScope == 'ITEM'
                             ? 0
                             : double.tryParse(_schemeMinAmount.text) ?? 0,
-                        itemId: schemeScope == 'ITEM' ? selectedItemId : null,
+                        itemId: selectedItemId,
                         requiredDailyQty: schemeScope == 'ITEM'
                             ? (double.tryParse(
                                     requiredDailyQtyCtrl.text.trim()) ??
@@ -5540,6 +6025,30 @@ class _SaleScreenState extends State<SaleScreen> {
                     },
                     decoration: const InputDecoration(labelText: 'Scheme Type'),
                   ),
+                  if (schemeType != 'CYCLE_ITEM_FREE') ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int?>(
+                      value: selectedItemId,
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('All Items / Order Discount'),
+                        ),
+                        ...ctrl.items.map(
+                          (it) => DropdownMenuItem<int?>(
+                            value: it.id,
+                            child: Text('${it.itemName} - ${it.brand}'),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() => selectedItemId = value);
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Target Item (Optional)',
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   if (schemeType == 'CYCLE_ITEM_FREE') ...[
                     DropdownButtonFormField<int>(
@@ -5789,9 +6298,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   minAmount: schemeType == 'CYCLE_ITEM_FREE'
                       ? 0
                       : double.tryParse(minAmountCtrl.text.trim()) ?? 0,
-                  itemId: schemeType == 'CYCLE_ITEM_FREE'
-                      ? selectedItemId
-                      : scheme.itemId,
+                  itemId: selectedItemId,
                   requiredDailyQty: schemeType == 'CYCLE_ITEM_FREE'
                       ? (double.tryParse(requiredDailyQtyCtrl.text.trim()) ??
                           scheme.requiredDailyQty)
@@ -6179,8 +6686,16 @@ class _SaleScreenState extends State<SaleScreen> {
               onTap: _showCustomerDialog, tooltip: 'Add customer'),
           _sidebarButton(Icons.groups_2_outlined,
               onTap: _openCustomerListScreen, tooltip: 'Customer list'),
-          _sidebarButton(Icons.drafts_outlined,
-              onTap: _showDraftsDialog, tooltip: 'Draft bills'),
+          // Draft button with count badge
+          _sidebarBadgeButton(
+            icon: Icons.drafts_outlined,
+            onTap: () async {
+              await _showDraftsDialog();
+              _loadSubscriptionDraftCounts();
+            },
+            tooltip: 'Draft bills',
+            count: _totalDraftCount,
+          ),
           _sidebarButton(Icons.inventory_2_outlined,
               onTap: _openItemMaster, tooltip: 'Item master'),
           _sidebarButton(Icons.add_card_rounded,
@@ -6195,6 +6710,15 @@ class _SaleScreenState extends State<SaleScreen> {
             onTap: _openBillReprint,
             tooltip: 'Bill Reprint',
           ),
+          // Subscription delivery icon — shown when there are pending auto-draft orders today
+          if (_subscriptionDraftCount > 0)
+            _sidebarBadgeButton(
+              icon: Icons.delivery_dining,
+              onTap: _showSubscriptionDraftsDialog,
+              tooltip: 'Today\'s Subscription Deliveries',
+              count: _subscriptionDraftCount,
+              color: const Color(0xFF10B981),
+            ),
           const Spacer(),
           _sidebarButton(Icons.settings_outlined,
               onTap: _openSettings, tooltip: 'Settings'),
@@ -6208,6 +6732,148 @@ class _SaleScreenState extends State<SaleScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const SubscriptionScreen(),
+      ),
+    );
+  }
+
+  /// A sidebar button with an optional red count badge overlay.
+  Widget _sidebarBadgeButton({
+    required IconData icon,
+    required String tooltip,
+    VoidCallback? onTap,
+    int count = 0,
+    Color color = const Color(0xFFEF4444),
+  }) {
+    final btn = _sidebarButton(icon, onTap: onTap, tooltip: tooltip);
+    if (count <= 0) return btn;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        btn,
+        Positioned(
+          top: 0,
+          right: 0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Shows today's auto-generated subscription delivery draft orders.
+  /// Tapping an order loads it as a draft bill in the cart.
+  Future<void> _showSubscriptionDraftsDialog() async {
+    if (_subscriptionDraftOrders.isEmpty) {
+      await _loadSubscriptionDraftCounts();
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.delivery_dining,
+                  color: Color(0xFF10B981), size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Today\'s Subscription Deliveries',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 580,
+          child: _subscriptionDraftOrders.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text('No pending subscription delivery orders for today.'),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _subscriptionDraftOrders.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (ctx2, idx) {
+                    final order = _subscriptionDraftOrders[idx];
+                    final draftId =
+                        int.tryParse(order['id']?.toString() ?? '') ?? 0;
+                    final customerName =
+                        order['customer_name']?.toString().trim();
+                    final amt = double.tryParse(
+                            order['net_amount']?.toString() ?? '') ??
+                        0.0;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor:
+                            const Color(0xFF10B981).withOpacity(0.12),
+                        child: const Icon(Icons.delivery_dining,
+                            color: Color(0xFF10B981), size: 18),
+                      ),
+                      title: Text(
+                        customerName?.isNotEmpty == true
+                            ? customerName!
+                            : 'Subscription Customer',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        order['sale_no']?.toString() ?? '' +
+                            '  •  Rs. ${amt.toStringAsFixed(0)}',
+                      ),
+                      trailing: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: draftId <= 0
+                            ? null
+                            : () async {
+                                Navigator.of(ctx).pop();
+                                final details =
+                                    await ctrl.getSaleDetails(draftId);
+                                if (!mounted) return;
+                                await _loadDraft(details);
+                                _loadSubscriptionDraftCounts();
+                              },
+                        icon: const Icon(Icons.receipt_long, size: 16),
+                        label: const Text('Load Bill'),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
@@ -6276,7 +6942,7 @@ class _SaleScreenState extends State<SaleScreen> {
 
   List<Item> get _catalogItems {
     final query = _barcode.text.trim().toLowerCase();
-    return ctrl.items.where((item) {
+    final allFiltered = ctrl.items.where((item) {
       if (!item.isSaleable) return false;
       final categoryMatch = _selectedCatalogCategory == 'ALL' ||
           item.itemGroup == _selectedCatalogCategory ||
@@ -6284,12 +6950,36 @@ class _SaleScreenState extends State<SaleScreen> {
       final queryMatch = query.isEmpty ||
           item.itemName.toLowerCase().contains(query) ||
           item.itemCode.toLowerCase().contains(query) ||
-          item.barcode.toLowerCase().contains(query);
+          item.barcode.toLowerCase().contains(query) ||
+          item.brand.toLowerCase().contains(query);
       return categoryMatch && queryMatch;
     }).toList();
+
+    final List<Item> representatives = [];
+    final Set<int> templateIdsAdded = {};
+
+    for (var item in allFiltered) {
+      if (item.productTemplateId == null) {
+        representatives.add(item);
+      } else {
+        if (!templateIdsAdded.contains(item.productTemplateId)) {
+          representatives.add(item);
+          templateIdsAdded.add(item.productTemplateId!);
+        }
+      }
+    }
+    return representatives;
   }
 
   double _cartQtyForItem(Item item) {
+    if (item.productTemplateId != null) {
+      double sum = 0;
+      final templateItems = ctrl.items.where((e) => e.productTemplateId == item.productTemplateId).toList();
+      for (var it in templateItems) {
+        sum += _totalCartQtyForItemId(it.id);
+      }
+      return sum;
+    }
     return _totalCartQtyForItemId(item.id);
   }
 
@@ -6596,7 +7286,13 @@ class _SaleScreenState extends State<SaleScreen> {
                   ),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () => _addOrUpdateItem(item, qty: _entryQtyValue()),
+                    onTap: () {
+                      if (item.productTemplateId != null) {
+                        _showVariantSelectorDialog(item);
+                      } else {
+                        _addOrUpdateItem(item, qty: _entryQtyValue());
+                      }
+                    },
                     child: Stack(
                       children: [
                         // --- TEXT CONTENT ---
@@ -6610,8 +7306,10 @@ class _SaleScreenState extends State<SaleScreen> {
                                 padding: const EdgeInsets.only(
                                     right:
                                         20.0), // Breathing room for long titles
-                                child: Text(
-                                  item.itemName,
+                               child: Text(
+                                  item.brand.trim().isNotEmpty
+                                      ? '${item.brand.trim()} - ${item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName}'
+                                      : (item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -6625,31 +7323,15 @@ class _SaleScreenState extends State<SaleScreen> {
                               ),
                               const SizedBox(height: 2),
 
-                              // Item Code (Gray, Italicized)
-                              Text(
-                                '#${item.itemCode}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Color(0xFF718096),
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 12,
-                                  fontStyle: FontStyle
-                                      .italic, // Matches the image style
-                                ),
-                              ),
-
-                              // HSN Code (Optional)
-                              if (item.hsnSacCode.trim().isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'HSN ${item.hsnSacCode.trim()}',
+                              if (item.productTemplateId != null) ...[
+                                const Text(
+                                  'Multiple options available',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Color(0xFF94A3B8),
+                                  style: TextStyle(
+                                    color: Color(0xFF718096),
                                     fontWeight: FontWeight.w500,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
@@ -6685,7 +7367,9 @@ class _SaleScreenState extends State<SaleScreen> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}',
+                                      item.productTemplateId != null
+                                          ? 'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}+'
+                                          : 'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
@@ -6920,8 +7604,18 @@ class _SaleScreenState extends State<SaleScreen> {
             runSpacing: 10,
             children: [
               _miniInfoCard('Sub Total', _invoice.subTotal),
-              _miniInfoCard('Discount', _invoice.totalDiscount),
-              _miniInfoCard('Tax', _invoice.totalTax),
+              _miniInfoCard(
+                _invoice.subTotal > 0 && _invoice.totalDiscount > 0
+                    ? 'Discount (${((_invoice.totalDiscount / _invoice.subTotal) * 100).toStringAsFixed(((_invoice.totalDiscount / _invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
+                    : 'Discount',
+                _invoice.totalDiscount,
+              ),
+              _miniInfoCard(
+                _invoice.taxableAmount > 0 && _invoice.totalTax > 0
+                    ? 'Tax (${((_invoice.totalTax / _invoice.taxableAmount) * 100).toStringAsFixed(((_invoice.totalTax / _invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
+                    : 'Tax',
+                _invoice.totalTax,
+              ),
               _miniInfoCard('Total', _invoice.netAmount, highlight: true),
             ],
           ),
@@ -6970,7 +7664,9 @@ class _SaleScreenState extends State<SaleScreen> {
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          line.itemName,
+                                          line.brand != null && line.brand!.trim().isNotEmpty
+                                              ? '${line.brand!.trim()} - ${line.itemName}'
+                                              : line.itemName,
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(
@@ -7209,9 +7905,19 @@ class _SaleScreenState extends State<SaleScreen> {
                   ],
                 ),
                 _summaryRow('Sub Total', invoice.subTotal),
-                _summaryRow('Discount', invoice.totalDiscount),
+                _summaryRow(
+                  invoice.subTotal > 0 && invoice.totalDiscount > 0
+                      ? 'Discount (${((invoice.totalDiscount / invoice.subTotal) * 100).toStringAsFixed(((invoice.totalDiscount / invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
+                      : 'Discount',
+                  invoice.totalDiscount,
+                ),
                 _summaryRow('Charges', invoice.chargeTotal),
-                _summaryRow('Tax', invoice.totalTax),
+                _summaryRow(
+                  invoice.taxableAmount > 0 && invoice.totalTax > 0
+                      ? 'Tax (${((invoice.totalTax / invoice.taxableAmount) * 100).toStringAsFixed(((invoice.totalTax / invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
+                      : 'Tax',
+                  invoice.totalTax,
+                ),
                 const Divider(height: 18),
                 _summaryRow('Total', _payableInvoiceTotal, emphasized: true),
               ],
@@ -8081,7 +8787,9 @@ class _SaleScreenState extends State<SaleScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  line.itemName,
+                  line.brand != null && line.brand!.trim().isNotEmpty
+                      ? '${line.brand!.trim()} - ${line.itemName}'
+                      : line.itemName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w700),
@@ -8271,11 +8979,21 @@ class _SaleScreenState extends State<SaleScreen> {
             _summaryRow(
                 'Subscription Item Discount', _subscriptionItemAdvanceDiscount),
           _summaryRow('Scheme Savings', _totalSchemeSavingsAmount),
-          _summaryRow('Discount', _manualDiscountAmount),
+          _summaryRow(
+            invoice.subTotal > 0 && invoice.totalDiscount > 0
+                ? 'Discount (${((invoice.totalDiscount / invoice.subTotal) * 100).toStringAsFixed(((invoice.totalDiscount / invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
+                : 'Discount',
+            _manualDiscountAmount,
+          ),
           if (_loyaltyDiscountAmount > 0)
             _summaryRow('Loyalty Discount', _loyaltyDiscountAmount),
           _summaryRow('Charges', invoice.chargeTotal),
-          _summaryRow('Tax', invoice.totalTax),
+          _summaryRow(
+            invoice.taxableAmount > 0 && invoice.totalTax > 0
+                ? 'Tax (${((invoice.totalTax / invoice.taxableAmount) * 100).toStringAsFixed(((invoice.totalTax / invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
+                : 'Tax',
+            invoice.totalTax,
+          ),
           const Divider(height: 24),
           _summaryRow('Total', _payableInvoiceTotal, emphasized: true),
         ],
@@ -8662,6 +9380,8 @@ class _SaleScreenState extends State<SaleScreen> {
             runSpacing: 12,
             children: [
               _compactField(_customerAddress, 'Customer Address', width: 280),
+              _compactField(_doctorName, 'Prescribed Doctor (Optional)', width: 200),
+              _compactField(_patientName, 'Patient Name (Optional)', width: 180),
               if (_orderType == 'B2B')
                 _compactField(_customerGstin, 'Customer GSTIN', width: 180),
               SizedBox(
@@ -10138,7 +10858,11 @@ class _SaleScreenState extends State<SaleScreen> {
                       color: isFree ? Colors.green.shade800 : Colors.black87,
                     ),
                     children: [
-                      TextSpan(text: line.itemName),
+                      TextSpan(
+                        text: line.brand != null && line.brand!.trim().isNotEmpty
+                            ? '${line.brand!.trim()} - ${line.itemName}'
+                            : line.itemName,
+                      ),
                       if (isFree)
                         const TextSpan(
                           text: ' (free)',
