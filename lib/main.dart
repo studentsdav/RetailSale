@@ -22,9 +22,26 @@ import 'core/config/app_config.dart';
 import 'core/config/app_brand.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/splash_screen.dart';
+import 'package:flutter/services.dart';
+import 'screens/settings/settings_screen.dart';
+import 'screens/settings/whatsapp_dashboard_screen.dart';
+import 'screens/settings/help_screen.dart';
+import 'screens/inventory/salescreen.dart';
+import 'screens/inventory/item_master_screen.dart';
+import 'screens/inventory/purchase_order_screen.dart';
+import 'screens/inventory/goods_receiving_screen.dart';
+import 'screens/inventory/damage_item_screen.dart';
+import 'screens/reports/sales_report_screen.dart';
+import 'screens/reports/brand_analysis_screen.dart';
+import 'screens/reports/cash_ledger_screen.dart';
+import 'screens/reports/stock_balance_screen.dart';
+import 'screens/reports/supplier_payments_report_screen.dart';
+import 'screens/reports/closing_report_screen.dart';
 
 final GlobalKey<ScaffoldMessengerState> globalSnackbarKey =
     GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<NavigatorState> globalNavigatorKey =
+    GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -280,18 +297,65 @@ class MyApp extends StatelessWidget {
     );
 
     return MaterialApp(
+      navigatorKey: globalNavigatorKey,
       scaffoldMessengerKey: globalSnackbarKey,
       debugShowCheckedModeBanner: false,
       title: brandingCtrl.branding.productName,
       theme: theme,
       builder: (context, child) {
-        return Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          child: GestureDetector(
+        return CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyS, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyB, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const SaleScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyI, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const ItemMasterScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyW, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const WhatsAppDashboardScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyH, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const HelpScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyP, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const PurchaseOrderScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyG, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const GoodsReceivingScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyD, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const DamageItemScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyR, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const SalesReportScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyC, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const ClosingReportScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyY, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const SupplierPaymentsReportScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyF, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const CashLedgerScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyA, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const BrandAnalysisScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyK, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const StockBalanceScreen()));
+            },
+          },
+          child: Listener(
             behavior: HitTestBehavior.translucent,
-            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-            child: child ?? const SizedBox.shrink(),
+            onPointerDown: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
         );
       },

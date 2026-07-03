@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:excel/excel.dart' as exc;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:retailpos/screens/inventory/goods_receiving_screen.dart';
 import 'package:retailpos/screens/modify/sales_reprint_modify_screen.dart';
@@ -88,6 +89,8 @@ class _SaleScreenState extends State<SaleScreen> {
   String _selectedCatalogCategory = 'ALL';
   String _lastProcessedScanValue = '';
   DateTime _lastProcessedScanAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int? _selectedCartIndex;
+  final FocusNode _salesKeyboardFocusNode = FocusNode();
   bool _skipNextSubmitAfterAutoScan = false;
   bool _isAutoScanProcessing = false;
   SaleCustomer? _selectedCustomer;
@@ -175,6 +178,9 @@ class _SaleScreenState extends State<SaleScreen> {
   void initState() {
     super.initState();
     _init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _salesKeyboardFocusNode.requestFocus();
+    });
   }
 
   Future<void> _init() async {
@@ -337,6 +343,7 @@ class _SaleScreenState extends State<SaleScreen> {
     _notes.dispose();
     _barcode.dispose();
     _barcodeFocusNode.dispose();
+    _salesKeyboardFocusNode.dispose();
     _entryQty.dispose();
     _manualDiscountValue.dispose();
     _voucherCode.dispose();
@@ -6560,7 +6567,49 @@ class _SaleScreenState extends State<SaleScreen> {
   @override
   Widget build(BuildContext context) {
     final property = propertyCtrl.data;
-    return Scaffold(
+    return Focus(
+      focusNode: _salesKeyboardFocusNode,
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.f1) {
+            _barcodeFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.f2) {
+            _openPaymentSheet(printAfterSave: false);
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.delete) {
+            if (_selectedCartIndex != null && _selectedCartIndex! < _items.length) {
+              final itemId = _items[_selectedCartIndex!].itemId;
+              _removeCartItemGroupById(itemId);
+              setState(() {
+                _selectedCartIndex = null;
+              });
+            } else if (_items.isNotEmpty) {
+              final itemId = _items.last.itemId;
+              _removeCartItemGroupById(itemId);
+            }
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.escape) {
+            _barcode.clear();
+            _barcodeFocusNode.unfocus();
+            setState(() {
+              _selectedCartIndex = null;
+            });
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          _salesKeyboardFocusNode.requestFocus();
+        },
+        child: Scaffold(
       backgroundColor: const Color(0xFFF4EEE8),
       // appBar: AppBar(
       //   title: const Text('Retail Sales'),
@@ -6636,8 +6685,10 @@ class _SaleScreenState extends State<SaleScreen> {
           );
         },
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 
   Widget _buildPosSidebar(String title) {
     return Container(
@@ -8763,110 +8814,122 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   Widget _buildCartLineTile(SaleItem line, int index) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Container(
-            height: 54,
-            width: 54,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF2E8),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(Icons.inventory_2_outlined,
-                color: Color(0xFFFF7A1A)),
+    final isSelected = _selectedCartIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedCartIndex = isSelected ? null : index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFE6F7FF) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF1890FF) : Colors.transparent,
+            width: 1.5,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  line.brand != null && line.brand!.trim().isNotEmpty
-                      ? '${line.brand!.trim()} - ${line.itemName}'
-                      : line.itemName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${line.itemCode}  |  ${line.unit}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ActionChip(
-                      label: Text(
-                        line.discountApplicable
-                            ? 'Discount On'
-                            : 'Discount Off',
+        ),
+        child: Row(
+          children: [
+            Container(
+              height: 54,
+              width: 54,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF2E8),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(Icons.inventory_2_outlined,
+                  color: Color(0xFFFF7A1A)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    line.brand != null && line.brand!.trim().isNotEmpty
+                        ? '${line.brand!.trim()} - ${line.itemName}'
+                        : line.itemName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${line.itemCode}  |  ${line.unit}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ActionChip(
+                        label: Text(
+                          line.discountApplicable
+                              ? 'Discount On'
+                              : 'Discount Off',
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _items[index] = _items[index].copyWith(
+                              discountApplicable:
+                                  !_items[index].discountApplicable,
+                            );
+                          });
+                        },
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _items[index] = _items[index].copyWith(
-                            discountApplicable:
-                                !_items[index].discountApplicable,
-                          );
-                        });
-                      },
-                    ),
-                    ActionChip(
-                      label: const Text('Edit Qty'),
-                      onPressed: () => _editQtyDialog(index),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 5),
-          Container(
-            height: 38,
-            width: 118,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8F8F9),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: IconButton(
-                    onPressed: (line.isSchemeFree || line.isAdvanceFree)
-                        ? null
-                        : () => _updateLineQty(index, line.qty - 1),
-                    icon: const Icon(Icons.remove_rounded),
-                    visualDensity: VisualDensity.compact,
+                      ActionChip(
+                        label: const Text('Edit Qty'),
+                        onPressed: () => _editQtyDialog(index),
+                      ),
+                    ],
                   ),
-                ),
-                Text(
-                  line.qty.toStringAsFixed(line.qty % 1 == 0 ? 0 : 2),
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                Expanded(
-                  child: IconButton(
-                    onPressed: (line.isSchemeFree || line.isAdvanceFree)
-                        ? null
-                        : () => _updateLineQty(index, line.qty + 1),
-                    icon: const Icon(Icons.add_rounded),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 5),
+            Container(
+              height: 38,
+              width: 118,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8F8F9),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: IconButton(
+                      onPressed: (line.isSchemeFree || line.isAdvanceFree)
+                          ? null
+                          : () => _updateLineQty(index, line.qty - 1),
+                      icon: const Icon(Icons.remove_rounded),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  Text(
+                    line.qty.toStringAsFixed(line.qty % 1 == 0 ? 0 : 2),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  Expanded(
+                    child: IconButton(
+                      onPressed: (line.isSchemeFree || line.isAdvanceFree)
+                          ? null
+                          : () => _updateLineQty(index, line.qty + 1),
+                      icon: const Icon(Icons.add_rounded),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

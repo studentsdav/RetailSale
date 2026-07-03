@@ -20,6 +20,10 @@ module.exports = (sequelize, DataTypes) => {
         total_recipients: {
             type: DataTypes.INTEGER,
             defaultValue: 0
+        },
+        scheduled_at: {
+            type: DataTypes.DATE,
+            allowNull: true
         }
     }, {
         tableName: 'whatsapp_campaigns',

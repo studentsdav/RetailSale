@@ -35,6 +35,9 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
   String _category = 'MARKETING';
   String _language = 'en_US';
   String _headerType = 'NONE';
+  final Map<String, TextEditingController> _variableControllers = {};
+  final Set<int> _expandedTemplateIds = {};
+  bool _allowAutomaticMessages = true;
 
   // Campaign wizard controllers
   final _campaignNameCtrl = TextEditingController();
@@ -42,6 +45,7 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
   final Map<String, String> _variableMappings = {}; // varIndex -> 'name' | 'phone' | 'static'
   final Map<String, TextEditingController> _variableStaticCtrls = {}; // varIndex -> controller
   final List<dynamic> _selectedAudience = [];
+  DateTime? _campaignScheduledTime;
   
   // Audience filters
   final _searchCtrl = TextEditingController();
@@ -57,7 +61,10 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
     
     // Add listener to template body text area to trigger live preview state update
     _templateBodyCtrl.addListener(() {
-      if (mounted) setState(() {});
+      if (mounted) {
+        _updateVariableControllers();
+        setState(() {});
+      }
     });
     _templateHeaderCtrl.addListener(() {
       if (mounted) setState(() {});
@@ -70,6 +77,28 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
     });
 
     _loadInitialData();
+  }
+
+  void _updateVariableControllers() {
+    final text = _templateBodyCtrl.text;
+    final regex = RegExp(r'\{\{(\d+)\}\}');
+    final matches = regex.allMatches(text);
+    final vars = matches.map((m) => m.group(1)!).toSet().toList();
+    vars.sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+
+    // Add controllers for variables we don't have
+    for (final v in vars) {
+      if (!_variableControllers.containsKey(v)) {
+        _variableControllers[v] = TextEditingController();
+      }
+    }
+    
+    // Remove controllers for variables no longer present
+    final keysToRemove = _variableControllers.keys.where((k) => !vars.contains(k)).toList();
+    for (final k in keysToRemove) {
+      _variableControllers[k]?.dispose();
+      _variableControllers.remove(k);
+    }
   }
 
   @override
@@ -88,6 +117,9 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
     _campaignNameCtrl.dispose();
     _searchCtrl.dispose();
     for (var ctrl in _variableStaticCtrls.values) {
+      ctrl.dispose();
+    }
+    for (var ctrl in _variableControllers.values) {
       ctrl.dispose();
     }
     super.dispose();
@@ -110,6 +142,7 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
         _tokenCtrl.text = _whatsappCtrl.config!['token'] ?? '';
         _verifyTokenCtrl.text = _whatsappCtrl.config!['webhook_verify_token'] ?? '';
         _appSecretCtrl.text = _whatsappCtrl.config!['app_secret'] ?? '';
+        _allowAutomaticMessages = _whatsappCtrl.config!['allow_automatic_messages'] != false;
       }
     } catch (e) {
       debugPrint('Error loading WhatsApp dashboard data: $e');
@@ -134,6 +167,7 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
         'token': _tokenCtrl.text.trim(),
         'webhook_verify_token': _verifyTokenCtrl.text.trim(),
         'app_secret': _appSecretCtrl.text.trim(),
+        'allow_automatic_messages': _allowAutomaticMessages,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -207,6 +241,10 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
     setState(() => _loading = true);
     try {
       await _whatsappCtrl.syncTemplates();
+      if (_selectedTemplate != null) {
+        final matches = _whatsappCtrl.templates.where((t) => t['id'] == _selectedTemplate['id'] && t['status'] == 'APPROVED').toList();
+        _selectedTemplate = matches.isNotEmpty ? matches.first : null;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Templates successfully synchronized.')),
@@ -238,6 +276,22 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
         });
       }
 
+      final sortedKeys = _variableControllers.keys.toList();
+      sortedKeys.sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+      
+      final bodyExamples = <String>[];
+      for (final k in sortedKeys) {
+        final val = _variableControllers[k]!.text.trim();
+        if (val.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Please enter an example value for variable {{$k}}.')),
+          );
+          setState(() => _loading = false);
+          return;
+        }
+        bodyExamples.add(val);
+      }
+
       await _whatsappCtrl.createTemplate({
         'template_name': name,
         'category': _category,
@@ -247,6 +301,7 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
         'body_text': body,
         'footer_text': _templateFooterCtrl.text.trim().isEmpty ? null : _templateFooterCtrl.text.trim(),
         'buttons': buttons.isNotEmpty ? buttons : null,
+        'body_text_examples': bodyExamples.isNotEmpty ? bodyExamples : null,
       });
 
       _templateNameCtrl.clear();
@@ -254,6 +309,11 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
       _templateHeaderCtrl.clear();
       _templateFooterCtrl.clear();
       _templateQuickReplyCtrl.clear();
+      
+      for (var ctrl in _variableControllers.values) {
+        ctrl.dispose();
+      }
+      _variableControllers.clear();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -263,6 +323,49 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
     } catch (_) {}
     finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _confirmDeleteTemplate(String templateName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Template'),
+          content: Text('Are you sure you want to delete "$templateName" from both Meta WABA and your local cache? This action is permanent and cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      setState(() => _loading = true);
+      try {
+        await _whatsappCtrl.deleteTemplate(templateName);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Template "$templateName" deleted successfully.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete template: $e')),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
     }
   }
 
@@ -382,12 +485,14 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
         name,
         _selectedTemplate['id'],
         recipients,
+        scheduledAt: _campaignScheduledTime?.toUtc().toIso8601String(),
       );
 
       _campaignNameCtrl.clear();
       _selectedAudience.clear();
       setState(() {
         _selectedTemplate = null;
+        _campaignScheduledTime = null;
       });
 
       // Reload analytics totals
@@ -396,12 +501,40 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Campaign launched and broadcasting in background!')),
+          SnackBar(content: Text(_campaignScheduledTime != null ? 'Campaign successfully scheduled!' : 'Campaign launched and broadcasting in background!')),
         );
       }
     } catch (_) {}
     finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _selectCampaignScheduleTime() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _campaignScheduledTime ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(minutes: 5)),
+      lastDate: DateTime.now().add(const Duration(days: 90)),
+    );
+
+    if (pickedDate != null) {
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(_campaignScheduledTime ?? DateTime.now()),
+      );
+
+      if (pickedTime != null) {
+        setState(() {
+          _campaignScheduledTime = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+        });
+      }
     }
   }
 
@@ -686,6 +819,32 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                         border: OutlineInputBorder(),
                       ),
                     ),
+                    if (_variableControllers.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Variable Examples (Required by Meta):',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF374151),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      ..._variableControllers.entries.map((entry) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: TextField(
+                            controller: entry.value,
+                            decoration: InputDecoration(
+                              labelText: 'Example for {{${entry.key}}}',
+                              hintText: 'e.g. John Doe / 99.99',
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: _templateFooterCtrl,
@@ -752,44 +911,213 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: templates.length,
-                            separatorBuilder: (_, __) => const Divider(),
+                            separatorBuilder: (_, __) => const SizedBox(height: 12),
                             itemBuilder: (context, idx) {
                               final t = templates[idx];
+                              final id = t['id'] as int;
+                              final isExpanded = _expandedTemplateIds.contains(id);
                               final isDefaultInvoice = t['is_default_invoice_template'] == true;
-                              return ListTile(
-                                title: Text(t['template_name'] ?? ''),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Category: ${t['category']} | Lang: ${t['language']}'),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      t['body_text'] ?? '',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                    ),
-                                  ],
+                              
+                              return Card(
+                                elevation: isExpanded ? 3 : 1,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(
+                                    color: isExpanded ? theme.primaryColor.withOpacity(0.5) : Colors.grey.shade200,
+                                    width: isExpanded ? 1.5 : 1,
+                                  ),
                                 ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    _statusBadge(t['status']),
-                                    if (t['status'] == 'APPROVED' && t['category'] == 'UTILITY') ...[
-                                      const SizedBox(height: 4),
-                                      InkWell(
-                                        onTap: () => _whatsappCtrl.toggleDefaultInvoiceTemplate(t['id']).then((_) => _whatsappCtrl.getTemplates()),
-                                        child: Text(
-                                          isDefaultInvoice ? '★ DEFAULT BILL ALERT' : '☆ Use for Bill Alert',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDefaultInvoice ? Colors.green : Colors.blue,
-                                          ),
+                                child: InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      if (isExpanded) {
+                                        _expandedTemplateIds.remove(id);
+                                      } else {
+                                        _expandedTemplateIds.add(id);
+                                      }
+                                    });
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Header Row: Template Name & Status Badge & Expand Icon
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    t['template_name'] ?? '',
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    'Category: ${t['category']} | Lang: ${t['language']}',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.grey.shade600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            _statusBadge(t['status']),
+                                            const SizedBox(width: 8),
+                                            Icon(
+                                              isExpanded ? Icons.expand_less : Icons.expand_more,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ],
                                         ),
-                                      ),
-                                    ],
-                                  ],
+                                        
+                                        // Collapsed preview / Expanded full content
+                                        const SizedBox(height: 8),
+                                        if (!isExpanded) ...[
+                                          Text(
+                                            t['body_text'] ?? '',
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                                          ),
+                                        ] else ...[
+                                          // Header details if exists
+                                          if (t['header_type'] != null && t['header_type'] != 'NONE') ...[
+                                            const Text(
+                                              'Header:',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              t['header_text'] ?? '[Media / Dynamic Header]',
+                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontStyle: FontStyle.italic),
+                                            ),
+                                            const SizedBox(height: 8),
+                                          ],
+                                          
+                                          // Full Body text
+                                          const Text(
+                                            'Body Message:',
+                                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            t['body_text'] ?? '',
+                                            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          
+                                          // Footer details if exists
+                                          if (t['footer_text'] != null && t['footer_text'].toString().isNotEmpty) ...[
+                                            const Text(
+                                              'Footer:',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              t['footer_text'],
+                                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                            ),
+                                            const SizedBox(height: 8),
+                                          ],
+                                          
+                                          // Buttons details if exists
+                                          if (t['buttons'] != null && (t['buttons'] as List).isNotEmpty) ...[
+                                            const Text(
+                                              'Buttons:',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Wrap(
+                                              spacing: 8,
+                                              children: (t['buttons'] as List).map<Widget>((btn) {
+                                                return Chip(
+                                                  label: Text(
+                                                    btn['text'] ?? 'Button',
+                                                    style: const TextStyle(fontSize: 11),
+                                                  ),
+                                                  avatar: const Icon(Icons.reply, size: 14),
+                                                  backgroundColor: Colors.grey.shade100,
+                                                  padding: EdgeInsets.zero,
+                                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                );
+                                              }).toList(),
+                                            ),
+                                            const SizedBox(height: 8),
+                                          ],
+                                          
+                                          // Rejection Details
+                                          if (t['status'] == 'REJECTED' && t['rejection_reason'] != null && t['rejection_reason'].toString().isNotEmpty) ...[
+                                            Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: Colors.red.shade50,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: Colors.red.shade200),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  const Icon(Icons.error_outline, size: 16, color: Colors.red),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      'Rejection: ${t['rejection_reason']}',
+                                                      style: const TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                          ],
+                                          
+                                          // Action Buttons
+                                          const Divider(),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              // Delete action (allowed by Meta / local cleanup)
+                                              TextButton.icon(
+                                                onPressed: () => _confirmDeleteTemplate(t['template_name']),
+                                                icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                                label: const Text(
+                                                  'Delete',
+                                                  style: TextStyle(color: Colors.red, fontSize: 12),
+                                                ),
+                                              ),
+                                              
+                                              // Default alert action
+                                              if (t['status'] == 'APPROVED' && t['category'] == 'UTILITY') ...[
+                                                TextButton.icon(
+                                                  onPressed: () => _whatsappCtrl.toggleDefaultInvoiceTemplate(t['id']).then((_) => _whatsappCtrl.getTemplates()),
+                                                  icon: Icon(
+                                                    isDefaultInvoice ? Icons.star : Icons.star_border,
+                                                    size: 16,
+                                                    color: isDefaultInvoice ? Colors.green : Colors.blue,
+                                                  ),
+                                                  label: Text(
+                                                    isDefaultInvoice ? 'Default Bill Alert' : 'Set as Bill Alert',
+                                                    style: TextStyle(
+                                                      color: isDefaultInvoice ? Colors.green : Colors.blue,
+                                                      fontSize: 12,
+                                                      fontWeight: isDefaultInvoice ? FontWeight.bold : FontWeight.normal,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               );
                             },
@@ -1038,20 +1366,25 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                       ),
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<dynamic>(
-                      value: _selectedTemplate,
+                    DropdownButtonFormField<int>(
+                      value: _selectedTemplate?['id'] as int?,
                       hint: const Text('Select Approved Template'),
                       decoration: const InputDecoration(
                         labelText: 'Templates Selection',
                         border: OutlineInputBorder(),
                       ),
                       items: approvedTemplates.map((t) {
-                        return DropdownMenuItem(
-                          value: t,
+                        return DropdownMenuItem<int>(
+                          value: t['id'] as int,
                           child: Text('${t['template_name']} (${t['category']})'),
                         );
                       }).toList(),
-                      onChanged: _onTemplateSelected,
+                      onChanged: (id) {
+                        if (id != null) {
+                          final match = approvedTemplates.firstWhere((t) => t['id'] == id);
+                          _onTemplateSelected(match);
+                        }
+                      },
                     ),
                     if (_selectedTemplate != null) ...[
                       const SizedBox(height: 16),
@@ -1284,6 +1617,69 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                       const SizedBox(height: 16),
                       Text('Selected Target Count: ${_selectedAudience.length} recipients'),
                       const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Campaign Broadcast Dispatch Mode:',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                ChoiceChip(
+                                  label: const Text('Send Immediately'),
+                                  selected: _campaignScheduledTime == null,
+                                  onSelected: (selected) {
+                                    if (selected) {
+                                      setState(() {
+                                        _campaignScheduledTime = null;
+                                      });
+                                    }
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: const Text('Schedule for Later'),
+                                  selected: _campaignScheduledTime != null,
+                                  onSelected: (selected) {
+                                    if (selected) {
+                                      _selectCampaignScheduleTime();
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            if (_campaignScheduledTime != null) ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  const Icon(Icons.access_time, size: 16, color: Colors.blue),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Scheduled at: ${DateFormat('dd MMM yyyy, hh:mm a').format(_campaignScheduledTime!)}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 12),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _selectCampaignScheduleTime,
+                                    child: const Text('Change'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                       ElevatedButton.icon(
                         onPressed: _launchCampaign,
                         icon: const Icon(Icons.rocket_launch_outlined),
@@ -1423,6 +1819,20 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                           prefixIcon: Icon(Icons.lock_outline),
                           helperText: 'Required to authenticate incoming Webhooks signatures',
                         ),
+                      ),
+                      const SizedBox(height: 16),
+                      SwitchListTile(
+                        value: _allowAutomaticMessages,
+                        title: const Text('Allow Automatic Billing Alerts'),
+                        subtitle: const Text('Automatically send invoice alert message to customer phone number on billing checkout.'),
+                        activeColor: const Color(0xFF075E54),
+                        onChanged: _isAdmin
+                            ? (val) {
+                                setState(() {
+                                  _allowAutomaticMessages = val;
+                                });
+                              }
+                            : null,
                       ),
                       const SizedBox(height: 24),
                       Row(

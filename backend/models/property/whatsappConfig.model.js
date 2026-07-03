@@ -28,6 +28,10 @@ module.exports = (sequelize, DataTypes) => {
         app_secret: {
             type: DataTypes.STRING,
             allowNull: true
+        },
+        allow_automatic_messages: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
         }
     }, {
         tableName: 'whatsapp_configurations',

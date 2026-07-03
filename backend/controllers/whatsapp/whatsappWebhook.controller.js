@@ -97,9 +97,24 @@ async function receiveWebhook(req, res) {
             
             console.log(`🛡️ [WHATSAPP WEBHOOK] Template Update: ${message_template_name} (${message_template_language}) -> ${event}`);
             
+            let rejectionReason = null;
+            if (event && event.toUpperCase() === 'REJECTED') {
+                const metaReason = value.reason || '';
+                const infoReason = value.rejection_info?.reason || '';
+                const recommendation = value.rejection_info?.recommendation || '';
+                
+                const parts = [];
+                if (metaReason) parts.push(`Code: ${metaReason}`);
+                if (infoReason) parts.push(`Detail: ${infoReason}`);
+                if (recommendation) parts.push(`Suggestion: ${recommendation}`);
+                
+                rejectionReason = parts.join(' | ') || 'Template rejected by Meta review system.';
+            }
+
             await req.propertyDb.models.whatsapp_templates.update({
                 status: event.toUpperCase(),
-                meta_template_id: message_template_id
+                meta_template_id: message_template_id,
+                rejection_reason: rejectionReason
             }, {
                 where: {
                     outlet_id: config.outlet_id,

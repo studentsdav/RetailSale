@@ -56,6 +56,10 @@ module.exports = (sequelize, DataTypes) => {
         is_default_invoice_template: {
             type: DataTypes.BOOLEAN,
             defaultValue: false
+        },
+        rejection_reason: {
+            type: DataTypes.TEXT,
+            allowNull: true
         }
     }, {
         tableName: 'whatsapp_templates',

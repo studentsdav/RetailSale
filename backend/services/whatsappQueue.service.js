@@ -19,7 +19,10 @@ async function queueUtilityInvoiceAlert(db, saleId, outletId, recipientPhone, pl
     const config = await db.models.whatsapp_configurations.findOne({
         where: { outlet_id: outletId }
     });
-    if (!config) return; // No WhatsApp integration configured
+    if (!config || config.allow_automatic_messages === false) {
+        console.log(`[WHATSAPP QUEUE] Automatic alerts are disabled or not configured for outlet: ${outletId}`);
+        return; 
+    }
 
     // 2. Fetch the approved UTILITY template marked as default for invoice alerts
     const template = await db.models.whatsapp_templates.findOne({

@@ -1,5 +1,5 @@
 const { encrypt, decrypt } = require('../../utils/crypto.util');
-const { testConnection, syncTemplatesFromMeta, submitTemplateToMeta } = require('../../services/whatsapp.service');
+const { testConnection, syncTemplatesFromMeta, submitTemplateToMeta, deleteTemplateFromMeta } = require('../../services/whatsapp.service');
 
 /**
  * Fetch WhatsApp Integration Configuration
@@ -30,7 +30,8 @@ async function getConfig(req, res) {
                 phone_number_id: rawConfig.phone_number_id,
                 webhook_verify_token: rawConfig.webhook_verify_token,
                 app_secret: rawConfig.app_secret,
-                token: maskedToken
+                token: maskedToken,
+                allow_automatic_messages: rawConfig.allow_automatic_messages !== false
             }
         });
     } catch (error) {
@@ -44,7 +45,7 @@ async function getConfig(req, res) {
 async function saveConfig(req, res) {
     try {
         const outletId = req.user.outlet_id;
-        const { waba_id, phone_number_id, token, webhook_verify_token, app_secret } = req.body;
+        const { waba_id, phone_number_id, token, webhook_verify_token, app_secret, allow_automatic_messages } = req.body;
 
         if (!waba_id || !phone_number_id || !webhook_verify_token) {
             return res.status(400).json({ success: false, message: 'WABA ID, Phone Number ID and Webhook Verify Token are required' });
@@ -72,7 +73,8 @@ async function saveConfig(req, res) {
             phone_number_id,
             encrypted_access_token: encryptedToken,
             webhook_verify_token,
-            app_secret: app_secret || null
+            app_secret: app_secret || null,
+            allow_automatic_messages: allow_automatic_messages === true
         };
 
         if (existing) {
@@ -198,7 +200,8 @@ async function syncTemplates(req, res) {
                 header_text: headerText,
                 footer_text: footerText,
                 buttons: buttons,
-                variables: variables
+                variables: variables,
+                rejection_reason: mt.rejected_reason || null
             };
 
             if (local) {
@@ -221,7 +224,7 @@ async function syncTemplates(req, res) {
 async function createTemplate(req, res) {
     try {
         const outletId = req.user.outlet_id;
-        const { template_name, category, language, header_type, header_text, body_text, footer_text, buttons } = req.body;
+        const { template_name, category, language, header_type, header_text, body_text, footer_text, buttons, body_text_examples } = req.body;
 
         if (!template_name || !category || !language || !body_text) {
             return res.status(400).json({ success: false, message: 'Template Name, Category, Language and Body Text are required' });
@@ -252,7 +255,8 @@ async function createTemplate(req, res) {
             header_text,
             body_text,
             footer_text,
-            buttons
+            buttons,
+            body_text_examples
         });
 
         // Parse placeholders
@@ -325,10 +329,18 @@ async function toggleDefaultInvoiceTemplate(req, res) {
 async function launchCampaign(req, res) {
     try {
         const outletId = req.user.outlet_id;
-        const { campaign_name, template_id, recipients } = req.body;
+        const { campaign_name, template_id, recipients, scheduled_at } = req.body;
 
         if (!campaign_name || !template_id || !Array.isArray(recipients) || recipients.length === 0) {
             return res.status(400).json({ success: false, message: 'Campaign name, template selection and recipients are required' });
+        }
+
+        let scheduledDate = null;
+        if (scheduled_at) {
+            scheduledDate = new Date(scheduled_at);
+            if (isNaN(scheduledDate.getTime())) {
+                return res.status(400).json({ success: false, message: 'Invalid scheduled_at date format' });
+            }
         }
 
         const template = await req.propertyDb.models.whatsapp_templates.findOne({
@@ -348,7 +360,8 @@ async function launchCampaign(req, res) {
             outlet_id: outletId,
             template_id,
             campaign_name,
-            total_recipients: recipients.length
+            total_recipients: recipients.length,
+            scheduled_at: scheduledDate
         });
 
         // 2. Queue logs
@@ -361,7 +374,7 @@ async function launchCampaign(req, res) {
                 message_type: 'MARKETING',
                 delivery_status: 'queued',
                 retry_count: 0,
-                next_retry_time: new Date(),
+                next_retry_time: scheduledDate || new Date(),
                 variables_mapped: {
                     template_id,
                     parameters: Array.isArray(r.variables) ? r.variables : []
@@ -371,7 +384,7 @@ async function launchCampaign(req, res) {
 
         await req.propertyDb.models.whatsapp_logs.bulkCreate(logEntries);
 
-        res.json({ success: true, message: `Campaign broadcast scheduled successfully! Processing ${recipients.length} messages in background.`, campaign_id: campaign.id });
+        res.json({ success: true, message: scheduledDate ? `Campaign broadcast scheduled for ${scheduledDate.toLocaleString()} successfully!` : `Campaign broadcast scheduled successfully! Processing ${recipients.length} messages in background.`, campaign_id: campaign.id });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -513,6 +526,49 @@ async function getBillingDashboard(req, res) {
     }
 }
 
+/**
+ * Delete a template from Meta and local DB
+ */
+async function deleteTemplate(req, res) {
+    try {
+        const outletId = req.user.outlet_id;
+        const { template_name } = req.body;
+
+        if (!template_name) {
+            return res.status(400).json({ success: false, message: 'Template Name is required' });
+        }
+
+        const config = await req.propertyDb.models.whatsapp_configurations.findOne({
+            where: { outlet_id: outletId }
+        });
+
+        if (!config) {
+            return res.status(400).json({ success: false, message: 'WhatsApp settings config is missing' });
+        }
+
+        const token = decrypt(config.encrypted_access_token);
+        
+        // 1. Delete from Meta first
+        try {
+            await deleteTemplateFromMeta(config.waba_id, token, template_name);
+        } catch (metaErr) {
+            console.warn('[WHATSAPP SERVICE] Failed to delete from Meta (might not exist there):', metaErr.message);
+        }
+
+        // 2. Delete locally
+        await req.propertyDb.models.whatsapp_templates.destroy({
+            where: {
+                outlet_id: outletId,
+                template_name
+            }
+        });
+
+        res.json({ success: true, message: 'Template deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
 module.exports = {
     getConfig,
     saveConfig,
@@ -525,5 +581,6 @@ module.exports = {
     listCampaigns,
     listLogs,
     getAudienceList,
-    getBillingDashboard
+    getBillingDashboard,
+    deleteTemplate
 };

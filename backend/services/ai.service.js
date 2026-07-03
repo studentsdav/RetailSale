@@ -4,7 +4,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // System Prompt definitions as requested in instructions
-const TEXT_TO_SQL_SYSTEM = `You are a precise Text-to-SQL/Query translator. Your only task is to convert the user's natural language question into a clean database query based on the provided schema.
+const TEXT_TO_SQL_SYSTEM = `You are a precise Text-to-SQL/Query translator. Your only task is to convert the user's natural language question into a clean PostgreSQL database query based on the provided schema.
 
 Schema definitions:
 - Table "sales_headers"
@@ -13,11 +13,27 @@ Schema definitions:
 
 - Table "sales_items"
   Columns: id (INTEGER, PK), sale_id (INTEGER, FK), item_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), qty (DECIMAL), rate (DECIMAL), line_total (DECIMAL), net_amount (DECIMAL)
-  Info: Contains items sold per transaction bill.
+  Info: Contains items sold per transaction bill. Connects to "sales_headers" via sale_id (sales_headers.id) and to "item_master" via item_id (item_master.id).
 
 - Table "item_master"
-  Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), barcode (VARCHAR), unit (VARCHAR), is_active (BOOLEAN)
-  Info: Contains the products and inventory items database list.
+  Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), barcode (VARCHAR), unit (VARCHAR), rate (DECIMAL), retail_sale_price (DECIMAL), item_group (VARCHAR), sub_category (VARCHAR), brand (VARCHAR), opening_balance (DECIMAL), is_active (BOOLEAN)
+  Info: Contains the products and inventory items database list. "rate" is the cost/purchase price, "retail_sale_price" is the selling price, "item_group" is the product category/group, and "brand" is the brand.
+
+- Table "stock_ledger"
+  Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), qty_in (DECIMAL), qty_out (DECIMAL), balance (DECIMAL), txn_date (DATEONLY), txn_type (VARCHAR)
+  Info: Tracks movements of items. Current stock quantity (qty) for an item in "item_master" is calculated as: (COALESCE(item_master.opening_balance, 0) + COALESCE((SELECT SUM(qty_in - qty_out) FROM stock_ledger WHERE stock_ledger.item_code = item_master.item_code AND stock_ledger.outlet_id = item_master.outlet_id), 0)).
+
+- Table "goods_receipts"
+  Columns: id (INTEGER, PK), outlet_id (INTEGER), grn_no (VARCHAR), supplier_id (INTEGER), receipt_date (DATEONLY), total_amount (DECIMAL), net_amount (DECIMAL), status (VARCHAR)
+  Info: Purchase bills / goods receipt notes received from suppliers.
+
+- Table "goods_receipt_items"
+  Columns: id (INTEGER, PK), grn_id (INTEGER, FK), item_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), brand (VARCHAR), unit (VARCHAR), qty (DECIMAL), rate (DECIMAL), amount (DECIMAL), expiry_date (DATEONLY)
+  Info: Items inside a goods receipt (GRN) which contain item expiry dates (expiry_date). Connects to "goods_receipts" via grn_id (goods_receipts.id).
+
+- Table "supplier_master"
+  Columns: id (INTEGER, PK), outlet_id (INTEGER), supplier_code (VARCHAR), supplier_name (VARCHAR), phone (VARCHAR), gstin (VARCHAR), is_active (BOOLEAN)
+  Info: Database of vendors / suppliers. Connects to "goods_receipts" via supplier_id (supplier_master.id).
 
 - Table "delivery_customers"
   Columns: id (INTEGER, PK), outlet_id (INTEGER), first_name (VARCHAR), last_name (VARCHAR), phone (VARCHAR), email (VARCHAR), address (TEXT)
@@ -28,10 +44,21 @@ Schema definitions:
   Info: Contains WhatsApp message log dispatches history (message_type can be 'UTILITY' or 'MARKETING').
 
 CRITICAL RULES:
-1. You must ALWAYS filter all queries by "outlet_id = :outletId" or map the filter constraints accordingly to prevent cross-tenant leaks.
-2. Use parameter binding replacements syntax like ":outletId" for binding parameters.
-3. Return nothing but the executable query code wrapped in a clean JSON object like: {"query": "SELECT * FROM sales_headers WHERE outlet_id = :outletId"}.
-4. Return raw JSON ONLY. Do not wrap the JSON object in markdown formatting or quotes.`;
+1. The database dialect is PostgreSQL. You must generate PostgreSQL-compatible SQL.
+   - Do NOT use SQLite functions like STRFTIME or date('now').
+   - For date and time comparisons or parts, use:
+     * EXTRACT(YEAR FROM sale_date) or date_part('year', sale_date)
+     * EXTRACT(MONTH FROM sale_date) or date_part('month', sale_date)
+     * CURRENT_DATE, CURRENT_TIMESTAMP, or NOW()
+     * Intervals: sale_date >= NOW() - INTERVAL '30 days'
+     * TO_CHAR(sale_date, 'YYYY-MM-DD') for formatting
+   - To match current year: EXTRACT(YEAR FROM sale_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+   - To match current month: EXTRACT(MONTH FROM sale_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM sale_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+2. You must ALWAYS filter all queries by "outlet_id = :outletId" or map the filter constraints accordingly to prevent cross-tenant leaks.
+   - Make sure that when joining multiple tables, the query uses "outlet_id = :outletId" on the appropriate tables.
+3. Use parameter binding replacements syntax like ":outletId" for binding parameters.
+4. Return nothing but the executable query code wrapped in a clean JSON object like: {"query": "SELECT * FROM sales_headers WHERE outlet_id = :outletId"}.
+5. Return raw JSON ONLY. Do not wrap the JSON object in markdown formatting or quotes.`;
 
 const NARRATIVE_ANALYST_SYSTEM = `You are an expert data analyst. You will receive a JSON dataset containing up to 100 sample rows from a user's database execution, alongside the original question they asked.
 

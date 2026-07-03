@@ -9,7 +9,7 @@ const PDFDocument = require('pdfkit');
 function generateAnalyticsReportPdf(summaryText, rows) {
     return new Promise((resolve, reject) => {
         try {
-            const doc = new PDFDocument({ size: 'A4', margin: 40 });
+            const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
             const buffers = [];
 
             doc.on('data', buffers.push.bind(buffers));

@@ -101,6 +101,21 @@ class WhatsAppController extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteTemplate(String templateName) async {
+    _setLoading(true);
+    try {
+      await ApiClient.post('${ApiEndpoints.whatsappTemplates}/delete', {
+        'template_name': templateName,
+      });
+      await getTemplates();
+    } catch (e) {
+      debugPrint('[WHATSAPP CONTROLLER] Delete template error: $e');
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> toggleDefaultInvoiceTemplate(int templateId) async {
     _setLoading(true);
     try {
@@ -131,13 +146,14 @@ class WhatsAppController extends ChangeNotifier {
     }
   }
 
-  Future<void> launchCampaign(String name, int templateId, List<Map<String, dynamic>> recipients) async {
+  Future<void> launchCampaign(String name, int templateId, List<Map<String, dynamic>> recipients, {String? scheduledAt}) async {
     _setLoading(true);
     try {
       await ApiClient.post(ApiEndpoints.whatsappCampaigns, {
         'campaign_name': name,
         'template_id': templateId,
         'recipients': recipients,
+        if (scheduledAt != null) 'scheduled_at': scheduledAt,
       });
       await getCampaigns();
     } catch (e) {

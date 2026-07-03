@@ -21,6 +21,7 @@ router.get('/templates', ctrl.listTemplates);
 router.post('/templates/sync', ctrl.syncTemplates);
 router.post('/templates', ctrl.createTemplate);
 router.post('/templates/toggle-default', ctrl.toggleDefaultInvoiceTemplate);
+router.post('/templates/delete', ctrl.deleteTemplate);
 
 // Campaign Manager & Logs
 router.get('/campaigns', ctrl.listCampaigns);

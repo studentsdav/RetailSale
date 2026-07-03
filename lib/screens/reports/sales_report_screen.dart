@@ -339,25 +339,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   int get _totalPages =>
       _rows.isEmpty ? 1 : ((_rows.length - 1) ~/ _rowsPerPage) + 1;
 
-  double get _taxSaleTotal => _billWiseSales.fold<double>(
-      0,
-      (sum, sale) =>
-          sum +
-          sale.items.fold<double>(
-            0,
-            (itemSum, item) =>
-                itemSum + (_isTaxedItem(item) ? item.netAmount : 0),
-          ));
-
+  // Non-Tax Sales: sum of item line amounts for zero-tax items (bill-level)
   double get _nonTaxSaleTotal => _billWiseSales.fold<double>(
       0,
-      (sum, sale) =>
-          sum +
-          sale.items.fold<double>(
+      (sum, sale) => sum + sale.items.fold<double>(
             0,
-            (itemSum, item) =>
-                itemSum + (_isTaxedItem(item) ? 0 : item.netAmount),
+            (itemSum, item) => itemSum + (_isTaxedItem(item) ? 0 : item.netAmount),
           ));
+
+  // Taxed Sales After GST = Net Sales (Standard) − Non-Tax Sales
+  // Computed at bill level for consistency with discount allocation
+  double get _taxSaleTotal => _headerRevenueTotal - _nonTaxSaleTotal;
   double get _headerTaxableTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + _taxableSaleValue(sale));
   double get _headerCgstTotal =>
@@ -1487,7 +1479,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  'Formula: Net Sales = Taxable Value + CGST + SGST + IGST + Non-Tax Sales + Subscription Sale - Discount + Charges.',
+                  'Net Sales = Sub-Total − Discount + Charges + GST  •  Total Revenue = Net Sales + Subscription.',
                   style: TextStyle(
                     color: Color(0xFF64748B),
                     fontSize: 12,
@@ -1738,95 +1730,212 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   Widget _buildSummaryRow() {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
+    final subTotal = _billWiseSales.fold<double>(0, (s, sale) => s + sale.subTotal);
+    final discount = _headerDiscountTotal;
+    final charges  = _headerChargeTotal;
+    final gst      = _headerTaxTotal;
+    final netSales = _headerRevenueTotal;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Taxable Value',
-            _headerTaxableTotal,
-            const Color(0xFF0F766E),
+        // ── Bill Breakdown Panel ─────────────────────────────────────────
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Bill Breakdown',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF334155),
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(height: 14),
+              // Equation row
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _breakdownChip(
+                      label: 'Sub-Total',
+                      value: subTotal,
+                      accent: const Color(0xFF0F766E),
+                      icon: Icons.receipt_long_outlined,
+                    ),
+                    _breakdownOp('−', const Color(0xFFDC2626)),
+                    _breakdownChip(
+                      label: 'Discount',
+                      value: discount,
+                      accent: const Color(0xFFDC2626),
+                      icon: Icons.local_offer_outlined,
+                      isDeduction: true,
+                    ),
+                    _breakdownOp(
+                      charges >= 0 ? '+' : '−',
+                      charges >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                    ),
+                    _breakdownChip(
+                      label: charges >= 0 ? 'Charges' : 'Charge Adj.',
+                      value: charges.abs(),
+                      accent: charges >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                      icon: charges >= 0 ? Icons.add_circle_outline : Icons.remove_circle_outline,
+                      isDeduction: charges < 0,
+                    ),
+                    _breakdownOp('+', const Color(0xFF2563EB)),
+                    _breakdownChip(
+                      label: 'GST',
+                      value: gst,
+                      accent: const Color(0xFF2563EB),
+                      icon: Icons.account_balance_outlined,
+                    ),
+                    _breakdownOp('=', const Color(0xFF334155)),
+                    _breakdownChip(
+                      label: 'Net Sales',
+                      value: netSales,
+                      accent: const Color(0xFFEA580C),
+                      icon: Icons.payments_outlined,
+                      isResult: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Total CGST',
-            _headerCgstTotal,
-            const Color(0xFF2563EB),
-          ),
-        ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Total SGST',
-            _headerSgstTotal,
-            const Color(0xFF7C3AED),
-          ),
-        ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Total IGST',
-            _headerIgstTotal,
-            const Color(0xFF0EA5E9),
-          ),
-        ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'GST Total',
-            _headerTaxTotal,
-            const Color(0xFFEA580C),
-          ),
-        ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Net Sales (Standard)',
-            _headerRevenueTotal,
-            const Color(0xFFEA580C),
-          ),
-        ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Subscription Realized',
-            ctrl.summary.subscriptionRealized,
-            const Color(0xFF0EA5E9),
-          ),
-        ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Total Revenue',
-            _headerRevenueTotal + ctrl.summary.subscriptionRealized,
-            const Color(0xFF16A34A),
-          ),
-        ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Taxed Sales After GST',
-            _taxSaleTotal,
-            const Color(0xFF16A34A),
-          ),
-        ),
-        SizedBox(
-          width: 240,
-          child: _metricCard(
-            'Non-Tax Sales',
-            _nonTaxSaleTotal,
-            const Color(0xFF64748B),
-          ),
+        const SizedBox(height: 14),
+
+        // ── Metric Cards ─────────────────────────────────────────────────
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(width: 220, child: _metricCard('Taxable Value', _headerTaxableTotal, const Color(0xFF0F766E))),
+            SizedBox(width: 220, child: _metricCard('Total CGST', _headerCgstTotal, const Color(0xFF2563EB))),
+            SizedBox(width: 220, child: _metricCard('Total SGST', _headerSgstTotal, const Color(0xFF7C3AED))),
+            SizedBox(width: 220, child: _metricCard('Total IGST', _headerIgstTotal, const Color(0xFF0EA5E9))),
+            SizedBox(width: 220, child: _metricCard('GST Total', _headerTaxTotal, const Color(0xFFEA580C))),
+            SizedBox(
+              width: 220,
+              child: _metricCard('Total Discount', _headerDiscountTotal, const Color(0xFFDC2626),
+                  subtitle: 'applied across all bills'),
+            ),
+            SizedBox(
+              width: 220,
+              child: _metricCard(
+                _headerChargeTotal >= 0 ? 'Total Charges' : 'Charge Adj. (Net Refund)',
+                _headerChargeTotal.abs(),
+                _headerChargeTotal >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                subtitle: _headerChargeTotal >= 0
+                    ? 'packing, delivery & other'
+                    : 'charges reversed due to returns',
+              ),
+            ),
+            SizedBox(width: 220, child: _metricCard('Net Sales (Standard)', _headerRevenueTotal, const Color(0xFFEA580C))),
+            SizedBox(width: 220, child: _metricCard('Taxed Sales After GST', _taxSaleTotal, const Color(0xFF16A34A))),
+            SizedBox(width: 220, child: _metricCard('Non-Tax Sales', _nonTaxSaleTotal, const Color(0xFF64748B))),
+            SizedBox(width: 220, child: _metricCard('Subscription Realized', ctrl.summary.subscriptionRealized, const Color(0xFF0EA5E9))),
+            SizedBox(
+              width: 220,
+              child: _metricCard(
+                'Total Revenue',
+                _headerRevenueTotal + ctrl.summary.subscriptionRealized,
+                const Color(0xFF16A34A),
+                subtitle: 'Net Sales + Subscription',
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _metricCard(String label, double value, Color accent) {
+  Widget _breakdownChip({
+    required String label,
+    required double value,
+    required Color accent,
+    required IconData icon,
+    bool isDeduction = false,
+    bool isResult = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isResult
+            ? accent.withOpacity(0.1)
+            : isDeduction
+                ? const Color(0xFFFEF2F2)
+                : accent.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: accent.withOpacity(isResult ? 0.4 : 0.2),
+          width: isResult ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: accent),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _money(value),
+            style: TextStyle(
+              fontSize: isResult ? 17 : 15,
+              fontWeight: isResult ? FontWeight.w900 : FontWeight.w700,
+              color: accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _breakdownOp(String op, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Text(
+        op,
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _metricCard(String label, double value, Color accent,
+      {String? subtitle}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1854,6 +1963,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               color: accent,
             ),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 10.5,
+                color: Color(0xFF94A3B8),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );

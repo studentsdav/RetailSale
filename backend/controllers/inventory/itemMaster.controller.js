@@ -67,11 +67,46 @@ async function hasAnyInventoryTransactions(req, outlet_id) {
 async function hasItemLinkedTransactions(req, itemId, outlet_id) {
     const models = req.propertyDb.models;
     const checks = [
-        models.purchase_order_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0),
-        models.sales_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0),
-        models.goods_receipt_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0),
-        models.request_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0),
-        models.issue_items?.count({ where: { item_id: itemId, outlet_id } }) ?? Promise.resolve(0)
+        models.purchase_order_items?.count({
+            include: [{
+                model: models.purchase_orders,
+                as: 'purchase_order',
+                where: { outlet_id }
+            }],
+            where: { item_id: itemId }
+        }) ?? Promise.resolve(0),
+        models.sales_items?.count({
+            include: [{
+                model: models.sales_headers,
+                as: 'sale',
+                where: { outlet_id }
+            }],
+            where: { item_id: itemId }
+        }) ?? Promise.resolve(0),
+        models.goods_receipt_items?.count({
+            include: [{
+                model: models.goods_receipts,
+                as: 'grn',
+                where: { outlet_id }
+            }],
+            where: { item_id: itemId }
+        }) ?? Promise.resolve(0),
+        models.request_items?.count({
+            include: [{
+                model: models.request_headers,
+                as: 'header',
+                where: { outlet_id }
+            }],
+            where: { item_id: itemId }
+        }) ?? Promise.resolve(0),
+        models.issue_items?.count({
+            include: [{
+                model: models.issue_headers,
+                as: 'issue',
+                where: { outlet_id }
+            }],
+            where: { item_id: itemId }
+        }) ?? Promise.resolve(0)
     ];
 
     const counts = await Promise.all(checks);

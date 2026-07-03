@@ -2601,6 +2601,29 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 66,
+    description: "Add rejection_reason column to whatsapp_templates table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 67,
+    description: "Add allow_automatic_messages to whatsapp_configurations and scheduled_at to whatsapp_campaigns",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE whatsapp_configurations ADD COLUMN IF NOT EXISTS allow_automatic_messages BOOLEAN DEFAULT TRUE;
+        ALTER TABLE whatsapp_campaigns ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP;
+        COMMIT;
+      `);
+    }
   }
 ];
 

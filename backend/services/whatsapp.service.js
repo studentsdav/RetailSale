@@ -66,10 +66,16 @@ async function submitTemplateToMeta(wabaId, token, templateData) {
     }
 
     // 2. Body Component (Required)
-    components.push({
+    const bodyComp = {
         type: 'BODY',
         text: templateData.body_text
-    });
+    };
+    if (templateData.body_text_examples && Array.isArray(templateData.body_text_examples) && templateData.body_text_examples.length > 0) {
+        bodyComp.example = {
+            body_text: [templateData.body_text_examples]
+        };
+    }
+    components.push(bodyComp);
 
     // 3. Footer Component
     if (templateData.footer_text) {
@@ -96,7 +102,10 @@ async function submitTemplateToMeta(wabaId, token, templateData) {
 
     const response = await request('POST', url, headers, body);
     if (response.statusCode >= 300) {
-        throw new Error(response.body?.error?.message || `API error (${response.statusCode})`);
+        console.error('[META API ERROR BODY]:', JSON.stringify(response.body));
+        const errMsg = response.body?.error?.message || `API error (${response.statusCode})`;
+        const details = response.body?.error?.error_data?.details || response.body?.error?.error_user_msg || '';
+        throw new Error(details ? `${errMsg} (${details})` : errMsg);
     }
     return response.body;
 }
@@ -117,9 +126,23 @@ async function sendMessage(phoneNumberId, token, payload) {
     return response.body;
 }
 
+async function deleteTemplateFromMeta(wabaId, token, templateName) {
+    const url = `${META_BASE_URL}/${wabaId}/message_templates?name=${templateName}`;
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    const response = await request('DELETE', url, headers);
+    if (response.statusCode >= 300) {
+        throw new Error(response.body?.error?.message || `API error (${response.statusCode})`);
+    }
+    return response.body;
+}
+
 module.exports = {
     testConnection,
     syncTemplatesFromMeta,
     submitTemplateToMeta,
-    sendMessage
+    sendMessage,
+    deleteTemplateFromMeta
 };
