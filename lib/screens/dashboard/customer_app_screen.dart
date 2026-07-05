@@ -22,6 +22,7 @@ import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/notification_services.dart';
+import '../../utils/order_status_display.dart';
 
 class CustomerAppScreen extends StatefulWidget {
   const CustomerAppScreen({super.key});
@@ -3774,51 +3775,13 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                     order['refund_status']?.toString().toUpperCase() ?? '';
                                 final String returnType =
                                     order['return_type']?.toString().toUpperCase() ?? '';
-                                final bool isExchange = returnType == 'EXCHANGE' ||
-                                    returnStatus == 'EXCHANGED' ||
-                                    refundStatus == 'EXCHANGED';
-                                final bool isRefunded = refundStatus == 'REFUNDED' ||
-                                    returnStatus == 'RETURNED' ||
-                                    returnType == 'REFUND';
-                                final bool isRefundPending = refundStatus == 'PENDING';
+                                final orderStatus = OrderStatusDisplay.fromOrder(order);
                                 final itemsList = order['items'] as List? ?? [];
                                 final dateStr = order['created_at'] != null
                                     ? DateFormat('dd-MMM-yyyy, hh:mm a').format(
                                         DateTime.parse(
                                             order['created_at'].toString()))
                                     : '--';
-
-                                Color statusColor = Colors.orange;
-                                IconData statusIcon = Icons.local_shipping_outlined;
-                                String displayStatus = status;
-                                if (isExchange) {
-                                  statusColor = Colors.purple;
-                                  statusIcon = Icons.swap_horiz_outlined;
-                                  displayStatus = 'EXCHANGED';
-                                } else if (isRefunded) {
-                                  statusColor = Colors.blue;
-                                  statusIcon = Icons.currency_rupee;
-                                  displayStatus = 'REFUNDED';
-                                } else if (isRefundPending) {
-                                  statusColor = Colors.amber.shade800;
-                                  statusIcon = Icons.pending_actions_outlined;
-                                  displayStatus = 'REFUND PENDING';
-                                } else if (status == 'ACCEPTED') {
-                                  statusColor = Colors.blue;
-                                  statusIcon = Icons.check_circle_outline_rounded;
-                                } else if (status == 'ASSIGNED') {
-                                  statusColor = Colors.indigo;
-                                  statusIcon = Icons.local_shipping_outlined;
-                                } else if (status == 'OUT_FOR_DELIVERY') {
-                                  statusColor = Colors.teal;
-                                  statusIcon = Icons.delivery_dining_outlined;
-                                } else if (status == 'DELIVERED') {
-                                  statusColor = Colors.green;
-                                  statusIcon = Icons.check_circle_outline_rounded;
-                                } else if (status == 'CANCELLED') {
-                                  statusColor = Colors.red;
-                                  statusIcon = Icons.cancel_outlined;
-                                }
 
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 16),
@@ -3840,11 +3803,11 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                           children: [
                                             CircleAvatar(
                                               backgroundColor:
-                                                  statusColor.withOpacity(0.12),
+                                                  orderStatus.color.withOpacity(0.12),
                                               radius: 20,
                                               child: Icon(
-                                                statusIcon,
-                                                color: statusColor,
+                                                orderStatus.icon,
+                                                color: orderStatus.color,
                                                 size: 20,
                                               ),
                                             ),
@@ -3874,7 +3837,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                                 vertical: 3),
                                                         decoration:
                                                             BoxDecoration(
-                                                          color: statusColor
+                                                          color: orderStatus.color
                                                               .withOpacity(
                                                                   0.12),
                                                           borderRadius:
@@ -3882,9 +3845,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                                   .circular(20),
                                                         ),
                                                         child: Text(
-                                                          displayStatus,
+                                                          orderStatus.label,
                                                           style: TextStyle(
-                                                            color: statusColor,
+                                                            color: orderStatus.color,
                                                             fontWeight:
                                                                 FontWeight.bold,
                                                             fontSize: 10,

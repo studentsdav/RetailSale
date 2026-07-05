@@ -17,6 +17,7 @@ import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/notification_services.dart';
+import '../../utils/order_status_display.dart';
 
 
 class RetailerConsoleScreen extends StatefulWidget {
@@ -3340,8 +3341,6 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                       final riderName = order['partner']?['name'] ?? 'Unassigned';
                       final String paymentMode = order['payment_mode']?.toString() ?? '';
                       final String notes = order['notes']?.toString() ?? '';
-                      final bool isExchange = paymentMode.toUpperCase() == 'EXCHANGE' ||
-                          notes.toLowerCase().contains('exchange order');
 
                       // Helper variables for return banner details
                       final returnStatus = order['return_status'];
@@ -3397,15 +3396,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                         }
                       }
 
-                      Color statusColor = Colors.orange;
-                      if (isExchange) statusColor = Colors.purple;
-                      else if (status == 'ACCEPTED') statusColor = Colors.blue;
-                      else if (status == 'ASSIGNED') statusColor = Colors.indigo;
-                      else if (status == 'OUT_FOR_DELIVERY') statusColor = Colors.teal;
-                      else if (status == 'DELIVERED') statusColor = Colors.green;
-                      else if (status == 'CANCELLED') statusColor = Colors.red;
-
-                      final displayStatus = isExchange ? 'EXCHANGED' : status;
+                      final orderStatus = OrderStatusDisplay.fromOrder(order);
 
                       return Card(
                         elevation: 0.5,
@@ -3446,13 +3437,13 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.12),
+                              color: orderStatus.color.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              displayStatus,
+                              orderStatus.label,
                               style: TextStyle(
-                                color: statusColor,
+                                color: orderStatus.color,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 10,
                                 letterSpacing: 0.5,
@@ -4161,16 +4152,16 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                               side: BorderSide(color: Colors.red.shade300),
                                             ),
                                           ),
-                                        if (status != 'CANCELLED') ...[
-                                          OutlinedButton.icon(
-                                            onPressed: () => _showReceiptDialog(order),
-                                            icon: const Icon(Icons.receipt_long, size: 16),
-                                            label: const Text('Receipt'),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: Colors.teal.shade700,
-                                              side: BorderSide(color: Colors.teal.shade300),
-                                            ),
+                                        OutlinedButton.icon(
+                                          onPressed: () => _showReceiptDialog(order),
+                                          icon: const Icon(Icons.receipt_long, size: 16),
+                                          label: const Text('Receipt / Reprint'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.teal.shade700,
+                                            side: BorderSide(color: Colors.teal.shade300),
                                           ),
+                                        ),
+                                        if (status != 'DELIVERED' && status != 'CANCELLED')
                                           OutlinedButton.icon(
                                             onPressed: () => _editOrderInPOS(order),
                                             icon: const Icon(Icons.edit, size: 16),
@@ -4180,7 +4171,6 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                               side: BorderSide(color: Colors.blue.shade300),
                                             ),
                                           ),
-                                        ],
                                         if (status == 'PENDING')
                                           FilledButton.icon(
                                             onPressed: () => _showAssignRiderDialog(order['id']),

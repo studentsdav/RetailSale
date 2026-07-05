@@ -159,6 +159,24 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       band.taxAmount += item.taxAmount;
     }
 
+    for (final charge in sale.charges) {
+      final amount = charge.amount;
+      final taxAmount = charge.taxAmount;
+      if (amount == 0 && taxAmount == 0) continue;
+
+      double rate = 0;
+      if (amount != 0) {
+        rate = ((taxAmount / amount) * 100).roundToDouble();
+      } else if (charge.taxPercent != 0) {
+        rate = charge.taxPercent;
+      }
+
+      final normalized = _normalizeTaxRate(rate);
+      final band = bands.putIfAbsent(normalized, _TaxBandSummary.new);
+      band.taxableValue += amount;
+      band.taxAmount += taxAmount;
+    }
+
     return bands;
   }
 
@@ -179,6 +197,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     for (final sale in _billWiseSales) {
       for (final item in sale.items) {
         rates.add(_itemTaxRate(item));
+      }
+      for (final charge in sale.charges) {
+        final amount = charge.amount;
+        final taxAmount = charge.taxAmount;
+        if (amount == 0 && taxAmount == 0) continue;
+        double rate = 0;
+        if (amount != 0) {
+          rate = ((taxAmount / amount) * 100).roundToDouble();
+        } else if (charge.taxPercent != 0) {
+          rate = charge.taxPercent;
+        }
+        rates.add(_normalizeTaxRate(rate));
       }
     }
     final list = rates.toList()..sort();

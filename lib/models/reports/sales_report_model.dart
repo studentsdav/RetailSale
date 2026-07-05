@@ -5,6 +5,7 @@ class SalesReportCharge {
   final String code;
   final double amount;
   final double taxPercent;
+  final double taxAmount;
   final bool taxable;
 
   const SalesReportCharge({
@@ -12,6 +13,7 @@ class SalesReportCharge {
     required this.code,
     required this.amount,
     required this.taxPercent,
+    required this.taxAmount,
     required this.taxable,
   });
 
@@ -21,6 +23,7 @@ class SalesReportCharge {
       code: json['code'] ?? '',
       amount: _toDouble(json['amount']),
       taxPercent: _toDouble(json['tax_percent'] ?? json['taxPercent']),
+      taxAmount: _toDouble(json['tax_amount'] ?? json['taxAmount']),
       taxable: json['taxable'] ?? false,
     );
   }

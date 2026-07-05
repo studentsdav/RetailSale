@@ -70,9 +70,15 @@ function formatWeekKey(dateValue) {
 function sumChargeTotals(charges) {
     let packingCharges = 0;
     let otherCharges = 0;
+    let negativeChargeDiscount = 0;
 
     for (const charge of safeArray(charges)) {
         const amount = toNumber(charge.amount);
+        if (amount < 0) {
+            negativeChargeDiscount += Math.abs(amount);
+            continue;
+        }
+
         const name = String(charge.name || charge.code || '').toUpperCase();
 
         if (name.includes('PACK')) {
@@ -82,7 +88,7 @@ function sumChargeTotals(charges) {
         }
     }
 
-    return { packingCharges, otherCharges };
+    return { packingCharges, otherCharges, negativeChargeDiscount };
 }
 
 function aggregateTaxes({ sale, taxAccumulator }) {
@@ -334,8 +340,8 @@ exports.getSalesReport = async (req, res) => {
 
                 const saleGross = toNumber(sale.sub_total);
                 const saleTaxable = toNumber(sale.taxable_amount);
-                const saleDiscount = toNumber(sale.total_discount);
-                const saleChargeTotal = toNumber(sale.charge_total);
+                const saleDiscount = toNumber(sale.total_discount) + chargeSplit.negativeChargeDiscount;
+                const saleChargeTotal = chargeSplit.packingCharges + chargeSplit.otherCharges;
                 const saleTotalTax = toNumber(sale.total_tax);
                 const saleNetRevenue = toNumber(sale.net_amount);
                 const saleEstimatedCost = lineItems.reduce((sum, item) => sum + item.estimated_cost, 0);

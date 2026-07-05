@@ -403,17 +403,71 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
     final netAmt = parseNum(record['net_amount'] ?? 0.0);
     final taxAmt = parseNum(record['tax_amount'] ?? record['total_tax'] ?? 0.0);
 
+    final String status = record['status']?.toString() ?? 'COMPLETED';
+    final String? returnType = record['return_type']?.toString();
+    final String paymentMode = record['payment_mode']?.toString() ?? '';
+    final String notes = record['notes']?.toString() ?? '';
+    final exchangeAgainstBillNo = RegExp(r'against bill #(\S+)', caseSensitive: false)
+        .firstMatch(notes)
+        ?.group(1);
+    final bool isExchange = returnType == 'EXCHANGE' ||
+        paymentMode.toUpperCase() == 'EXCHANGE' ||
+        notes.toLowerCase().contains('exchange order for return');
+    final String? mappedReturnType = isExchange ? 'EXCHANGE' : returnType;
+
+    double refundAmt = 0.0;
+    final refund = record['refund_details'];
+    if (refund != null) {
+      final paid = double.tryParse(refund['amount_paid']?.toString() ?? '0.0') ?? 0.0;
+      final pending = double.tryParse(refund['amount_pending']?.toString() ?? '0.0') ?? 0.0;
+      refundAmt = paid > 0 ? paid : pending;
+    }
+    final gatewayDetails = record['payment_gateway_details'];
+    if (gatewayDetails != null) {
+      try {
+        final dynamic details = gatewayDetails is String ? jsonDecode(gatewayDetails) : gatewayDetails;
+        if (details != null && details['refund_amount'] != null) {
+          refundAmt = double.tryParse(details['refund_amount'].toString()) ?? refundAmt;
+        }
+      } catch (_) {}
+    }
+
+    final String refundPaymentMode = isExchange
+        ? 'EXCHANGE'
+        : (record['refund_payment_mode']?.toString() ?? record['payment_mode']?.toString() ?? 'CASH');
+    final DateTime? refundPaidAt = DateTime.tryParse(
+      record['refund_paid_at']?.toString() ?? record['updated_at']?.toString() ?? '',
+    );
+
+    List<dynamic> returnedItemsList = [];
+    if (record['returned_items'] != null && (record['returned_items'] as List).isNotEmpty) {
+      returnedItemsList = List<dynamic>.from(record['returned_items']);
+    } else if (record['return_item_id'] != null) {
+      returnedItemsList = [
+        {
+          'item_id': record['return_item_id'],
+          'item_name': record['return_item_name'] ?? '',
+        }
+      ];
+    }
+
     final String saleNo = record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? record['id']?.toString() ?? '';
     final bool hasBillNo = (record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? '').trim().isNotEmpty;
-
     final int? orderId = record['id'] == null ? null : int.tryParse(record['id'].toString());
 
     return SaleOrder(
       saleNo: saleNo,
+      returnStatus: record['return_status']?.toString(),
+      returnType: mappedReturnType,
+      refundAmount: refundAmt,
+      refundPaidAt: refundPaidAt,
+      refundPaymentMode: refundPaymentMode,
+      exchangeAgainstBillNo: exchangeAgainstBillNo,
       hasBillNo: hasBillNo,
       orderId: orderId,
+      returnedItems: returnedItemsList,
       saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
-      status: record['status']?.toString() ?? 'COMPLETED',
+      status: status,
       orderType: 'B2C',
       billingCountry: 'India',
       billingTaxMode: 'CGST_SGST',
