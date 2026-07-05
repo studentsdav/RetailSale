@@ -2639,8 +2639,18 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 69,
+    description: "Add subscription_allocation snapshot to customer_orders",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS subscription_allocation JSONB DEFAULT NULL;
+        COMMIT;
+      `);
+    }
   }
 ];
 
 module.exports = migrations;
-

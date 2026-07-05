@@ -34,6 +34,43 @@ const resolveOutletId = async (req) => {
     return resolvedId;
 };
 
+const resolveOrderBillNo = async (req, order, outlet_id) => {
+    if (!order) return null;
+    const sale = await req.propertyDb.models.sales_headers.findOne({
+        where: {
+            outlet_id,
+            notes: `Auto-generated from delivery order #${order.id}`,
+            is_latest: true
+        }
+    });
+    if (sale) {
+        return sale.sale_no;
+    }
+
+    if (order.payment_mode === 'EXCHANGE' || (order.notes && order.notes.includes('Exchange order for return'))) {
+        const match = order.notes ? order.notes.match(/against bill #([^\s|]+)/) : null;
+        if (match && match[1]) {
+            return match[1];
+        }
+
+        const returnOrderMatch = order.notes ? order.notes.match(/Exchange order for return #(\d+)/) : null;
+        if (returnOrderMatch && returnOrderMatch[1]) {
+            const originalOrderId = parseInt(returnOrderMatch[1]);
+            const origSale = await req.propertyDb.models.sales_headers.findOne({
+                where: {
+                    outlet_id,
+                    notes: `Auto-generated from delivery order #${originalOrderId}`,
+                    is_latest: true
+                }
+            });
+            if (origSale) {
+                return origSale.sale_no;
+            }
+        }
+    }
+    return null;
+};
+
 exports.listCatalogProducts = async (req, res) => {
     try {
         const outletId = await resolveOutletId(req);
@@ -331,6 +368,40 @@ exports.placeOrder = async (req, res) => {
 
         const finalPaymentMode = String(req.body.payment_mode || (payment_status === 'PAID' ? 'UPI' : 'CASH')).trim().toUpperCase();
 
+        let subscriptionAllocationPreview = null;
+        try {
+            const salesController = require('../sales/sales.controller');
+            subscriptionAllocationPreview = await salesController.allocateMilkSubscriptionCoverage({
+                req: {
+                    ...req,
+                    user: {
+                        ...(req.user || {}),
+                        outlet_id: actualOutletId
+                    }
+                },
+                header: {
+                    customer_name,
+                    customer_phone,
+                    customer_gstin: gstin,
+                    sale_date: new Date()
+                },
+                items: items.map((item) => ({
+                    item_id: item.item_id,
+                    item_code: item.item_code,
+                    item_name: item.item_name,
+                    qty: Number(item.qty),
+                    rate: Number(item.rate),
+                    tax_percent: Number(item.tax_percent || 0),
+                    unit: item.unit
+                }))
+            });
+            if (!subscriptionAllocationPreview?.totalCoveredAmount) {
+                subscriptionAllocationPreview = null;
+            }
+        } catch (allocErr) {
+            console.warn('[DELIVERY] Subscription allocation preview failed:', allocErr.message);
+        }
+
         const order = await req.propertyDb.models.customer_orders.create({
             outlet_id: actualOutletId,
             customer_name,
@@ -349,6 +420,7 @@ exports.placeOrder = async (req, res) => {
             commission_status: 'UNPAID',
             gstin: gstin || null,
             charges: charges || null,
+            subscription_allocation: subscriptionAllocationPreview,
             payment_gateway_details: payment_gateway_details || null
         }, { transaction: t });
 
@@ -427,6 +499,9 @@ exports.trackOrder = async (req, res) => {
         const json = order.toJSON();
         json.sale_id = sale ? sale.id : null;
         json.sale_no = sale ? sale.sale_no : null;
+        if (!json.sale_no) {
+            json.sale_no = await resolveOrderBillNo(req, json, order.outlet_id);
+        }
 
         res.json({ success: true, data: json });
     } catch (error) {
@@ -503,18 +578,32 @@ exports.listOrders = async (req, res) => {
             }
         }
 
+        const activeExchangeExclusion = {
+            [Op.or]: [
+                { payment_mode: { [Op.ne]: 'EXCHANGE' } },
+                { status: { [Op.in]: ['DELIVERED', 'CANCELLED'] } }
+            ]
+        };
+
         // 3. Build final where: if includePendingReturns=true, merge with OR for pending returns/refunds
+        // Exclude replacement exchange orders from active lists as they are processed via the return order workflow
         let whereClause;
         if (includePendingReturns === 'true') {
             whereClause = {
                 [Op.or]: [
-                    dateWhereClause,
+                    {
+                        ...dateWhereClause,
+                        ...activeExchangeExclusion
+                    },
                     { outlet_id, return_status: 'PENDING' },
                     { outlet_id, refund_status: 'PENDING' }
                 ]
             };
         } else {
-            whereClause = dateWhereClause;
+            whereClause = {
+                ...dateWhereClause,
+                ...activeExchangeExclusion
+            };
         }
 
 
@@ -578,11 +667,14 @@ exports.listOrders = async (req, res) => {
 
 
 
-        const data = orders.map(o => {
+        const data = await Promise.all(orders.map(async o => {
             const json = o.toJSON();
             const saleInfo = saleMap[o.id];
             json.sale_id = saleInfo ? saleInfo.id : null;
             json.sale_no = saleInfo ? saleInfo.sale_no : null;
+            if (!json.sale_no) {
+                json.sale_no = await resolveOrderBillNo(req, json, outlet_id);
+            }
             json.refund_details = orderRefundsMap[o.id] || null;
 
             // Check if a subscription discount was actually applied to the order (amount < 0)
@@ -595,7 +687,7 @@ exports.listOrders = async (req, res) => {
             json.contains_subscription_item = hasSubscriptionDiscount;
 
             return json;
-        });
+        }));
 
         res.json({ success: true, data });
     } catch (error) {
@@ -767,27 +859,59 @@ exports.acceptOrder = async (req, res) => {
 
         const saleNo = resolved.number;
 
-        // 1.5 Apply Milk Subscription Coverage if applicable
         const salesController = require('../sales/sales.controller');
-        const subscriptionAllocation = await salesController.allocateMilkSubscriptionCoverage({
-            req,
-            header: {
-                customer_name: order.customer_name,
-                customer_phone: order.customer_phone,
-                customer_gstin: order.gstin,
-                sale_date: new Date()
-            },
-            items: order.items.map(item => ({
-                item_id: item.item_id,
-                item_code: item.item_code,
-                item_name: item.item_name,
-                qty: Number(item.qty),
-                rate: Number(item.rate),
-                tax_percent: Number(item.tax_percent || 0),
-                unit: item.unit
-            })),
-            transaction: t
-        });
+        const normalizeSubscriptionAllocation = (value) => {
+            if (!value || typeof value !== 'object') return null;
+            const items = Array.isArray(value.items) ? value.items : [];
+            const consumptions = Array.isArray(value.consumptions) ? value.consumptions : [];
+            const coverages = Array.isArray(value.subscriptionCoverages) ? value.subscriptionCoverages : [];
+            const totalCoveredAmount = Number(value.totalCoveredAmount ?? 0) || 0;
+            const totalCoveredQty = Number(value.totalCoveredQty ?? 0) || 0;
+            return {
+                items,
+                consumptions,
+                totalCoveredAmount,
+                totalCoveredQty,
+                subscriptionId: Number(value.subscriptionId ?? 0) || 0,
+                subscriptionItemId: Number(value.subscriptionItemId ?? 0) || 0,
+                subscriptionCoverages: coverages
+                    .map((coverage) => ({
+                        subscriptionId: Number(coverage?.subscriptionId ?? 0) || 0,
+                        subscriptionItemId: Number(coverage?.subscriptionItemId ?? 0) || 0,
+                        itemId: Number(coverage?.itemId ?? 0) || 0,
+                        totalCoveredQty: Number(coverage?.totalCoveredQty ?? 0) || 0,
+                        totalCoveredAmount: Number(coverage?.totalCoveredAmount ?? 0) || 0
+                    }))
+                    .filter((coverage) => coverage.subscriptionId > 0 || coverage.itemId > 0)
+            };
+        };
+
+        const storedSubscriptionAllocation = normalizeSubscriptionAllocation(order.subscription_allocation);
+        const subscriptionAllocation = storedSubscriptionAllocation && storedSubscriptionAllocation.consumptions.length > 0
+            ? storedSubscriptionAllocation
+            : await salesController.allocateMilkSubscriptionCoverage({
+                req,
+                header: {
+                    customer_name: order.customer_name,
+                    customer_phone: order.customer_phone,
+                    customer_gstin: order.gstin,
+                    sale_date: new Date()
+                },
+                items: order.items.map(item => ({
+                    item_id: item.item_id,
+                    item_code: item.item_code,
+                    item_name: item.item_name,
+                    qty: Number(item.qty),
+                    rate: Number(item.rate),
+                    tax_percent: Number(item.tax_percent || 0),
+                    unit: item.unit
+                })),
+                transaction: t,
+                pendingOrderContext: {
+                    excludeOrderId: order.id,
+                    beforeCreatedAt: order.created_at || order.createdAt || new Date()
+                }
+            });
 
         const finalItems = subscriptionAllocation.items;
         const derivedSubTotal = finalItems.reduce((sum, item) => sum + (toAmount(item.qty) * toAmount(item.rate)), 0);
@@ -948,31 +1072,6 @@ exports.acceptOrder = async (req, res) => {
             notes: `Auto-generated from delivery order #${order.id}`
         }, { transaction: t });
 
-        // 3.5 Persist milk subscription consumptions and deduct advances if covered
-        await salesController.persistMilkSubscriptionConsumptions({
-            req,
-            transaction: t,
-            sale: saleHeader,
-            consumptions: subscriptionAllocation.consumptions
-        });
-        if (subscriptionAllocation.totalCoveredAmount > 0) {
-            const coverageAdvance = await salesController.findSubscriptionItemAdvance(
-                req,
-                subscriptionAllocation.subscriptionId,
-                subscriptionAllocation.subscriptionItemId,
-                t
-            );
-            if (coverageAdvance) {
-                await salesController.consumeSubscriptionItemAdvance(
-                    req,
-                    subscriptionAllocation.subscriptionId,
-                    subscriptionAllocation.subscriptionItemId,
-                    subscriptionAllocation.totalCoveredQty,
-                    t
-                );
-            }
-        }
-
         // 4. Create POS sales_items entries and deduct stock
         for (const item of finalItems) {
             const itemQty = toAmount(item.qty);
@@ -1069,58 +1168,70 @@ exports.acceptOrder = async (req, res) => {
             });
 
             if (subscriptionAllocation.totalCoveredAmount > 0) {
-                const coverageAdvance = await salesController.findSubscriptionItemAdvance(
-                    req,
-                    subscriptionAllocation.subscriptionId,
-                    subscriptionAllocation.subscriptionItemId,
-                    t
-                );
-                if (coverageAdvance) {
-                    await salesController.consumeSubscriptionItemAdvance(
+                const coverages = Array.isArray(subscriptionAllocation.subscriptionCoverages)
+                    ? subscriptionAllocation.subscriptionCoverages
+                    : [{
+                        subscriptionId: subscriptionAllocation.subscriptionId,
+                        subscriptionItemId: subscriptionAllocation.subscriptionItemId,
+                        itemId: null,
+                        totalCoveredQty: subscriptionAllocation.totalCoveredQty,
+                        totalCoveredAmount: subscriptionAllocation.totalCoveredAmount
+                    }];
+
+                for (const coverage of coverages) {
+                    const coverageAdvance = await salesController.findSubscriptionItemAdvance(
                         req,
-                        subscriptionAllocation.subscriptionId,
-                        subscriptionAllocation.subscriptionItemId,
-                        subscriptionAllocation.totalCoveredQty,
+                        coverage.subscriptionId,
+                        coverage.itemId || subscriptionAllocation.subscriptionItemId,
                         t
                     );
-                }
+                    if (coverageAdvance) {
+                        await salesController.consumeSubscriptionItemAdvance(
+                            req,
+                            coverage.subscriptionId,
+                            coverage.itemId || subscriptionAllocation.subscriptionItemId,
+                            coverage.totalCoveredQty,
+                            t
+                        );
+                    }
 
-                const subscriptionCashAdvance = await salesController.findSubscriptionCustomerAdvance(
-                    req,
-                    subscriptionAllocation.subscriptionId,
-                    t
-                );
-                let appliedCashAdvanceAmount = 0;
-                if (subscriptionCashAdvance) {
-                    appliedCashAdvanceAmount = Math.min(
-                        toAmount(subscriptionCashAdvance.available_amount),
-                        toAmount(subscriptionAllocation.totalCoveredAmount)
-                    );
-                    await salesController.consumeSubscriptionCustomerAdvance(
+                    const subscriptionCashAdvance = await salesController.findSubscriptionCustomerAdvance(
                         req,
-                        subscriptionAllocation.subscriptionId,
-                        appliedCashAdvanceAmount,
+                        coverage.subscriptionId,
                         t
                     );
-                }
+                    let appliedCashAdvanceAmount = 0;
+                    if (subscriptionCashAdvance) {
+                        appliedCashAdvanceAmount = Math.min(
+                            toAmount(subscriptionCashAdvance.available_amount),
+                            toAmount(coverage.totalCoveredAmount)
+                        );
+                        await salesController.consumeSubscriptionCustomerAdvance(
+                            req,
+                            coverage.subscriptionId,
+                            appliedCashAdvanceAmount,
+                            t
+                        );
+                    }
 
-                if (appliedCashAdvanceAmount > 0) {
-                    const { createLedgerEntry } = require('../../services/cashLedger.service');
-                    await createLedgerEntry({
-                        db: req.propertyDb,
-                        outlet_id,
-                        txn_date: saleHeader.sale_date || new Date(),
-                        transaction_type: 'ADVANCE_APPLY',
-                        reference_type: 'SUBSCRIPTION',
-                        reference_id: subscriptionAllocation.subscriptionId,
-                        reference_no: saleHeader.sale_no,
-                        party_name: order.customer_name || order.customer_phone || 'Subscription Customer',
-                        payment_method: 'SUBSCRIPTION',
-                        amount_out: appliedCashAdvanceAmount,
-                        notes: `Advance adjusted for subscription item consumption in delivery order #${order.id}`,
-                        created_by: userId,
-                        transaction: t
-                    });
+                    if (appliedCashAdvanceAmount > 0) {
+                        const { createLedgerEntry } = require('../../services/cashLedger.service');
+                        await createLedgerEntry({
+                            db: req.propertyDb,
+                            outlet_id,
+                            txn_date: saleHeader.sale_date || new Date(),
+                            transaction_type: 'ADVANCE_APPLY',
+                            reference_type: 'SUBSCRIPTION',
+                            reference_id: coverage.subscriptionId,
+                            reference_no: saleHeader.sale_no,
+                            party_name: order.customer_name || order.customer_phone || 'Subscription Customer',
+                            payment_method: 'SUBSCRIPTION',
+                            amount_out: appliedCashAdvanceAmount,
+                            notes: `Advance adjusted for subscription item consumption in delivery order #${order.id}`,
+                            created_by: userId,
+                            transaction: t
+                        });
+                    }
                 }
             }
         }
@@ -2598,6 +2709,18 @@ exports.acceptOrderReturn = async (req, res) => {
                     repNetAmount += net;
                 }
 
+                // Find original sale to use its sale_no as the reference number in the stock ledger
+                const sale = await req.propertyDb.models.sales_headers.findOne({
+                    where: {
+                        outlet_id: order.outlet_id,
+                        notes: `Auto-generated from delivery order #${order.id}`,
+                        is_deleted: false,
+                        is_latest: true
+                    },
+                    transaction: t
+                });
+                const originalSaleNo = sale ? sale.sale_no : null;
+
                 const replacementOrder = await req.propertyDb.models.customer_orders.create({
                     outlet_id: order.outlet_id,
                     customer_name: order.customer_name,
@@ -2614,19 +2737,8 @@ exports.acceptOrderReturn = async (req, res) => {
                     commission_amount: 0,
                     commission_status: 'UNPAID',
                     gstin: order.gstin || null,
-                    notes: `Exchange order for return #${order.id}`
+                    notes: `Exchange order for return #${order.id}${originalSaleNo ? ` against bill #${originalSaleNo}` : ''}`
                 }, { transaction: t });
-
-                // Find original sale to use its sale_no as the reference number in the stock ledger
-                const sale = await req.propertyDb.models.sales_headers.findOne({
-                    where: {
-                        outlet_id: order.outlet_id,
-                        notes: `Auto-generated from delivery order #${order.id}`,
-                        is_deleted: false,
-                        is_latest: true
-                    },
-                    transaction: t
-                });
                 const refNo = sale ? sale.sale_no : `ORDER-${order.id}`;
 
                 // Deduct stock of replacement items under the original bill number (avoiding double GST / double bill)
@@ -3122,7 +3234,9 @@ exports.handoverReturn = async (req, res) => {
             const replacementOrder = await req.propertyDb.models.customer_orders.findOne({
                 where: {
                     outlet_id,
-                    notes: `Exchange order for return #${order.id}`
+                    notes: {
+                        [Op.like]: `Exchange order for return #${order.id}%`
+                    }
                 },
                 transaction: t
             });
@@ -3209,7 +3323,9 @@ exports.finalReceiveReturn = async (req, res) => {
             const replacementOrder = await req.propertyDb.models.customer_orders.findOne({
                 where: {
                     outlet_id,
-                    notes: `Exchange order for return #${order.id}`
+                    notes: {
+                        [Op.like]: `Exchange order for return #${order.id}%`
+                    }
                 },
                 transaction: t
             });
@@ -3604,6 +3720,40 @@ exports.finalReceiveReturn = async (req, res) => {
                     await partner.save({ transaction: t });
                 }
             }
+
+            // Auto-mark replacement order as DELIVERED if it exists and is not already completed/cancelled
+            const replacementOrder = await req.propertyDb.models.customer_orders.findOne({
+                where: {
+                    outlet_id,
+                    notes: {
+                        [Op.like]: `Exchange order for return #${order.id}%`
+                    }
+                },
+                transaction: t
+            });
+
+            if (replacementOrder) {
+                if (replacementOrder.status !== 'DELIVERED' && replacementOrder.status !== 'CANCELLED') {
+                    replacementOrder.status = 'DELIVERED';
+                    replacementOrder.delivered_at = new Date();
+                    await replacementOrder.save({ transaction: t });
+
+                    // Update associated POS sale header
+                    const replSale = await req.propertyDb.models.sales_headers.findOne({
+                        where: {
+                            outlet_id,
+                            notes: `Auto-generated from delivery order #${replacementOrder.id}`,
+                            is_deleted: false,
+                            is_latest: true
+                        },
+                        transaction: t
+                    });
+                    if (replSale) {
+                        replSale.status = 'COMPLETED';
+                        await replSale.save({ transaction: t });
+                    }
+                }
+            }
         }
 
         // Reset original order status on return completion
@@ -3933,14 +4083,16 @@ exports.listTransactions = async (req, res) => {
             const orderObj = order.toJSON();
             orderObj.has_pending_credit_notes = false;
 
+            orderObj.bill_no = await resolveOrderBillNo(req, orderObj, outlet_id);
+
             const sale = await req.propertyDb.models.sales_headers.findOne({
                 where: {
                     outlet_id,
                     notes: `Auto-generated from delivery order #${order.id}`,
+                    is_deleted: false,
                     is_latest: true
                 }
             });
-            orderObj.bill_no = sale ? sale.sale_no : null;
 
             if (sale) {
                 const refundsCount = await req.propertyDb.models.sales_refunds.count({
@@ -4035,15 +4187,8 @@ exports.refundGatewayPayment = async (req, res) => {
         });
 
         await t.commit();
-        const sale = await req.propertyDb.models.sales_headers.findOne({
-            where: {
-                outlet_id,
-                notes: `Auto-generated from delivery order #${order.id}`,
-                is_latest: true
-            }
-        });
         const orderJson = order.toJSON();
-        orderJson.bill_no = sale ? sale.sale_no : null;
+        orderJson.bill_no = await resolveOrderBillNo(req, orderJson, outlet_id);
         res.json({ success: true, message: `Gateway Refund via ${gatewayProvider} processed successfully.`, data: orderJson });
     } catch (error) {
         if (t && !t.finished) await t.rollback();
@@ -4233,7 +4378,7 @@ exports.refundGatewayViaCreditNote = async (req, res) => {
 
         await t.commit();
         const orderJson = order.toJSON();
-        orderJson.bill_no = sale ? sale.sale_no : null;
+        orderJson.bill_no = await resolveOrderBillNo(req, orderJson, outlet_id);
         res.json({
             success: true,
             message: `Gateway refund of Rs. ${refundAmt.toFixed(2)} processed successfully.`,
@@ -4244,4 +4389,3 @@ exports.refundGatewayViaCreditNote = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
-

@@ -238,20 +238,14 @@ class PosInvoicePrinter {
                   ),
                 pw.SizedBox(height: 4),
                 pw.Text(
-                  order.status == 'CANCELLED'
-                      ? 'CANCELLED BILL'
-                      : order.status == 'DRAFT'
-                          ? 'PROFORMA BILL'
-                          : hasTaxData
-                              ? 'TAX INVOICE'
-                              : 'INVOICE',
+                  _receiptTitle(order, hasTaxData),
                   style: emphasisStyle,
                 ),
               ],
             ),
           ),
           _dashedDivider(),
-          if (order.status == 'CANCELLED') ...[
+          if (_refundStamp(order).isNotEmpty) ...[
             pw.Container(
               margin: const pw.EdgeInsets.symmetric(vertical: 4),
               padding: const pw.EdgeInsets.all(4),
@@ -260,7 +254,7 @@ class PosInvoicePrinter {
               ),
               child: pw.Center(
                 child: pw.Text(
-                  '*** CANCELLED ***',
+                  _refundStamp(order),
                   style: pw.TextStyle(font: bold, fontSize: 11, color: PdfColors.black),
                 ),
               ),
@@ -268,11 +262,25 @@ class PosInvoicePrinter {
             _dashedDivider(),
           ],
           _thermalMetaRow(
-            (order.status == 'DELIVERED' || order.status == 'COMPLETED') ? 'Bill No' : 'Order No',
+            _receiptNumberLabel(order),
             order.saleNo,
             'Date',
             _date.format(order.saleDate),
           ),
+          if (order.orderId != null && order.hasBillNo)
+            _thermalMetaRow(
+              'Order No',
+              '#${order.orderId}',
+              '',
+              '',
+            ),
+          if (_exchangeAgainstBillNo(order).isNotEmpty)
+            _thermalMetaRow(
+              'Against Bill No',
+              _exchangeAgainstBillNo(order),
+              '',
+              '',
+            ),
           _thermalMetaRow(
             'Cashier',
             data.cashierName.trim().isEmpty
@@ -442,7 +450,7 @@ class PosInvoicePrinter {
           pw.SizedBox(height: 5),
           _thermalMetaRow(
             'Payment',
-            order.paymentMode,
+            _displayPaymentMode(order),
             order.refundAmount > 0
                 ? 'Refund'
                 : ((data.changeDue ?? order.changeAmount) > 0 ? 'Refund (CASH)' : 'Refund'),
@@ -450,6 +458,8 @@ class PosInvoicePrinter {
                 ? order.refundAmount
                 : (data.changeDue ?? order.changeAmount)),
           ),
+          if (_refundTimestamp(order).isNotEmpty)
+            _thermalMetaRow('Refunded On', _refundTimestamp(order), '', ''),
           if ((data.amountReceived ?? order.amountPaid) > 0)
             _thermalMetaRow(
               'Received',
@@ -538,19 +548,15 @@ class PosInvoicePrinter {
               pw.SizedBox(width: 12),
               pw.Expanded(
                 child: pw.Center(
-                  child: pw.Text(
-                    order.status == 'CANCELLED'
-                        ? 'CANCELLED BILL'
-                        : order.status == 'DRAFT'
-                            ? 'DRAFT ORDER'
-                            : hasTaxData
-                                ? 'TAX INVOICE'
-                                : 'INVOICE',
-                    style: pw.TextStyle(
-                      fontSize: 20,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
+                child: pw.Text(
+                  _receiptTitle(order, hasTaxData)
+                      .replaceFirst('BILL', 'INVOICE')
+                      .replaceFirst('RECEIPT', 'INVOICE'),
+                  style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
                   ),
+                ),
                 ),
               ),
               pw.SizedBox(width: 12),
@@ -602,19 +608,23 @@ class PosInvoicePrinter {
           ),
         ),
         pw.SizedBox(height: 12),
-        if (order.status == 'CANCELLED')
+        if (_refundStamp(order).isNotEmpty)
           pw.Container(
             width: double.infinity,
             padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             margin: const pw.EdgeInsets.only(bottom: 10),
             decoration: pw.BoxDecoration(
-              color: PdfColors.red100,
-              border: pw.Border.all(color: PdfColors.red500),
+              color: order.status == 'CANCELLED' ? PdfColors.red100 : PdfColors.orange100,
+              border: pw.Border.all(color: order.status == 'CANCELLED' ? PdfColors.red500 : PdfColors.orange500),
             ),
             child: pw.Center(
               child: pw.Text(
-                'CANCELLED TRANSACTION / BILL',
-                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.red700),
+                _refundStamp(order),
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                  color: order.status == 'CANCELLED' ? PdfColors.red700 : PdfColors.orange700,
+                ),
               ),
             ),
           ),
@@ -651,9 +661,13 @@ class PosInvoicePrinter {
                       ),
                       pw.SizedBox(height: 6),
                       _a4MetaRow(
-                        (order.status == 'DELIVERED' || order.status == 'COMPLETED') ? 'Invoice No' : 'Order No',
+                        _receiptNumberLabel(order),
                         order.saleNo,
                       ),
+                      if (order.orderId != null && order.hasBillNo)
+                        _a4MetaRow('Order No', '#${order.orderId}'),
+                      if (_exchangeAgainstBillNo(order).isNotEmpty)
+                        _a4MetaRow('Against Bill No', _exchangeAgainstBillNo(order)),
                       _a4MetaRow(
                         'Invoice Dt/Tm',
                         '${_date.format(order.saleDate)} ${_time.format(order.saleDate)}',
@@ -662,6 +676,9 @@ class PosInvoicePrinter {
                         'Cashier/Terminal',
                         '${data.cashierId ?? data.cashierName}${(data.terminalNo ?? '').trim().isNotEmpty ? ' / ${data.terminalNo}' : ''}',
                       ),
+                      _a4MetaRow('Payment Method', _displayPaymentMode(order)),
+                      if (_refundTimestamp(order).isNotEmpty)
+                        _a4MetaRow('Refunded On', _refundTimestamp(order)),
                       _a4MetaRow(
                         'Place of Supply',
                         data.buyerState != null && data.buyerState!.isNotEmpty
@@ -1034,6 +1051,64 @@ class PosInvoicePrinter {
       return 'Scheme Savings';
     }
     return 'Total Savings';
+  }
+
+  static bool _isExchangeOrder(SaleOrder order) {
+    final paymentMode = order.paymentMode.trim().toUpperCase();
+    return order.returnType == 'EXCHANGE' || paymentMode == 'EXCHANGE';
+  }
+
+  static String _receiptTitle(SaleOrder order, bool hasTaxData) {
+    if (_isExchangeOrder(order)) {
+      return 'EXCHANGE RECEIPT';
+    }
+    if (order.status == 'CANCELLED') {
+      return 'CANCELLED BILL';
+    }
+    if (order.refundAmount > 0) {
+      return 'REFUNDED BILL';
+    }
+    if (order.status == 'DRAFT') {
+      return 'PROFORMA BILL';
+    }
+    return hasTaxData ? 'TAX INVOICE' : 'INVOICE';
+  }
+
+  static String _receiptNumberLabel(SaleOrder order) {
+    if (order.hasBillNo) {
+      return 'Bill No';
+    }
+    return 'Order No';
+  }
+
+  static String _displayPaymentMode(SaleOrder order) {
+    if (_isExchangeOrder(order)) {
+      return 'EXCHANGE';
+    }
+    return order.paymentMode.trim().isEmpty ? 'CASH' : order.paymentMode.trim();
+  }
+
+  static String _exchangeAgainstBillNo(SaleOrder order) {
+    return (order.exchangeAgainstBillNo ?? '').trim();
+  }
+
+  static String _refundStamp(SaleOrder order) {
+    if (order.status == 'CANCELLED') {
+      return '*** CANCELLED ***';
+    }
+    if (_isExchangeOrder(order)) {
+      return '*** EXCHANGED ***';
+    }
+    if (order.refundAmount > 0) {
+      return '*** REFUNDED ***';
+    }
+    return '';
+  }
+
+  static String _refundTimestamp(SaleOrder order) {
+    final dt = order.refundPaidAt;
+    if (dt == null) return '';
+    return _dateTime.format(dt.toLocal());
   }
 
   static bool _hasTaxData(SaleOrder order) {

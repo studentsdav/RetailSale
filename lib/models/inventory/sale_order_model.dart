@@ -55,11 +55,16 @@ class SaleOrder {
   final String? returnStatus;
   final String? returnType;
   final double refundAmount;
+  final DateTime? refundPaidAt;
+  final String? refundPaymentMode;
   final List<dynamic>? returnedItems;
+  final String? exchangeAgainstBillNo;
+  final bool hasBillNo;
   final bool affectStock;
   final List<SaleScheme> selectedSchemes;
   final List<SaleItem> items;
   final bool itemsPreSplit;
+  final int? orderId;
 
   SaleOrder({
     required this.saleNo,
@@ -113,7 +118,12 @@ class SaleOrder {
     this.returnStatus,
     this.returnType,
     this.refundAmount = 0.0,
+    this.refundPaidAt,
+    this.refundPaymentMode,
     this.returnedItems,
+    this.exchangeAgainstBillNo,
+    this.hasBillNo = false,
+    this.orderId,
     required this.items,
     this.selectedSchemes = const [],
     this.affectStock = true,
@@ -170,6 +180,11 @@ class SaleOrder {
         'loyalty_discount_amount': loyaltyDiscountAmount,
         'notes': notes,
         'modification_note': modificationNote,
+        'refund_paid_at': refundPaidAt?.toIso8601String(),
+        'refund_payment_mode': refundPaymentMode,
+        'exchange_against_bill_no': exchangeAgainstBillNo,
+        'has_bill_no': hasBillNo,
+        'order_id': orderId,
         'affect_stock': affectStock,
         'selected_schemes': selectedSchemes.map((scheme) => scheme.toJson()).toList(),
         'items_pre_split': itemsPreSplit,
@@ -241,6 +256,19 @@ class SaleOrder {
       loyaltyDiscountAmount: parseNum(json['loyalty_discount_amount']),
       notes: json['notes']?.toString(),
       modificationNote: json['modification_note']?.toString(),
+      refundPaidAt: DateTime.tryParse(json['refund_paid_at']?.toString() ?? ''),
+      refundPaymentMode: json['refund_payment_mode']?.toString(),
+      exchangeAgainstBillNo: json['exchange_against_bill_no']?.toString(),
+      hasBillNo: json['has_bill_no'] != null
+          ? (json['has_bill_no'] == true || json['has_bill_no'].toString() == '1')
+          : (json['sale_no']?.toString() ?? '').trim().isNotEmpty,
+      orderId: json['order_id'] != null
+          ? int.tryParse(json['order_id'].toString())
+          : (() {
+              final notesStr = json['notes']?.toString() ?? '';
+              final match = RegExp(r'delivery order #(\d+)').firstMatch(notesStr);
+              return match != null ? int.tryParse(match.group(1) ?? '') : null;
+            })(),
       affectStock: json['affect_stock'] ?? true,
       selectedSchemes: (json['selected_schemes'] as List? ?? const [])
           .map((entry) => SaleScheme.fromJson(Map<String, dynamic>.from(entry)))

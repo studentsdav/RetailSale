@@ -4893,6 +4893,7 @@ class _SaleScreenState extends State<SaleScreen> {
 
     final order = SaleOrder(
       saleNo: _saleNo.text,
+      hasBillNo: _saleNo.text.trim().isNotEmpty,
       saleDate: _saleDate,
       status: status,
       orderType: _orderType,
@@ -5400,8 +5401,19 @@ class _SaleScreenState extends State<SaleScreen> {
         .map((e) => TaxBreakdown.fromJson(Map<String, dynamic>.from(e)))
         .toList();
 
+    final String saleNo = details['sale_no']?.toString() ?? '';
+    final bool hasBillNo = saleNo.trim().isNotEmpty;
+    final String notes = details['notes']?.toString() ?? '';
+    int? orderId;
+    final match = RegExp(r'delivery order #(\d+)').firstMatch(notes);
+    if (match != null) {
+      orderId = int.tryParse(match.group(1) ?? '');
+    }
+
     return SaleOrder(
-      saleNo: details['sale_no']?.toString() ?? '',
+      saleNo: saleNo,
+      hasBillNo: hasBillNo,
+      orderId: orderId,
       saleDate: DateTime.tryParse(details['sale_date']?.toString() ?? '') ??
           DateTime.now(),
       status: details['status']?.toString() ?? 'COMPLETED',

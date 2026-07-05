@@ -403,8 +403,15 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
     final netAmt = parseNum(record['net_amount'] ?? 0.0);
     final taxAmt = parseNum(record['tax_amount'] ?? record['total_tax'] ?? 0.0);
 
+    final String saleNo = record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? record['id']?.toString() ?? '';
+    final bool hasBillNo = (record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? '').trim().isNotEmpty;
+
+    final int? orderId = record['id'] == null ? null : int.tryParse(record['id'].toString());
+
     return SaleOrder(
-      saleNo: record['sale_no']?.toString() ?? record['id']?.toString() ?? '',
+      saleNo: saleNo,
+      hasBillNo: hasBillNo,
+      orderId: orderId,
       saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
       status: record['status']?.toString() ?? 'COMPLETED',
       orderType: 'B2C',

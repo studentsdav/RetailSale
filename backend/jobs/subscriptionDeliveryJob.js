@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const { Op } = require('sequelize');
+const { createLedgerEntry } = require('../services/cashLedger.service');
 
 const lastRunDateByOutlet = new Map();
 let globalLastRunDate = null;
@@ -119,10 +120,29 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                 const currentAvailable = parseFloat(advance.available_qty ?? 0);
                 const nextAvailable = Math.max(currentAvailable - qty, 0);
                 await advance.update({ available_qty: nextAvailable });
+
+                // Keep the cash ledger in sync with the prepaid subscription consumption.
+                // Retailer-accepted orders already create this entry; auto-generated app
+                // subscription sales need the same adjustment line.
+                await createLedgerEntry({
+                    db,
+                    outlet_id: outletId,
+                    txn_date: new Date(today),
+                    transaction_type: 'ADVANCE_APPLY',
+                    reference_type: 'SUBSCRIPTION',
+                    reference_id: sub.id,
+                    reference_no: saleNo,
+                    party_name: sub.customer_name || sub.customer_phone || 'Subscription Customer',
+                    payment_method: 'SUBSCRIPTION',
+                    amount_out: amt,
+                    notes: `Advance adjusted for subscription item consumption in ${saleNo}`,
+                    created_by: sub.created_by || null
+                });
             }
         } catch (e) {
-            log('Failed to deduct advance for sub=' + sub.id + ': ' + e.message, true);
+            log('Failed to sync subscription advance for sub=' + sub.id + ': ' + e.message, true);
         }
+
         log('Accepted sale created sub=' + sub.id + ' sale=' + saleNo + ' outlet=' + outletId);
         return header.id;
     } catch (err) { log('Accepted create failed sub=' + sub.id + ': ' + err.message, true); return null; }
@@ -132,27 +152,35 @@ async function runSubscriptionDelivery(db) {
     const today = todayStr();
     log('Starting for date: ' + today);
     try {
-        const outlets = await db.models.system_settings.findAll({ attributes: ['outlet_id', 'enable_app_subscription'] });
+        const outlets = await db.models.system_settings.findAll({ attributes: ['outlet_id'] });
         if (!outlets || outlets.length === 0) { log('No outlets. Skipping.'); return; }
         for (const outletSetting of outlets) {
             const outletId = outletSetting.outlet_id;
             if (lastRunDateByOutlet.get(outletId) === today) { log('Outlet ' + outletId + ': already ran today.'); continue; }
-            const enableApp = outletSetting.enable_app_subscription === true;
-            log('Outlet ' + outletId + ': enableApp=' + enableApp);
             let subscriptions = [];
             try {
                 subscriptions = await db.models.milk_subscriptions.findAll({
-                    where: { outlet_id: outletId, status: 'ACTIVE', active_subscription: true,
-                        delivery_type: 'HOME', start_date: { [Op.lte]: today }, end_date: { [Op.gte]: today } },
+                    where: {
+                        outlet_id: outletId,
+                        status: 'ACTIVE',
+                        active_subscription: true,
+                        start_date: { [Op.lte]: today },
+                        end_date: { [Op.gte]: today }
+                    },
                     include: [{ model: db.models.item_master, as: 'item_master', required: false,
                         attributes: ['item_code','item_name','unit','rate','retail_sale_price','hsn_code'] }],
                 });
             } catch (err) {
-                log('delivery_type filter failed (' + err.message + '), retrying without it');
+                log('subscription lookup failed (' + err.message + '), retrying with minimal filter');
                 try {
                     subscriptions = await db.models.milk_subscriptions.findAll({
-                        where: { outlet_id: outletId, status: 'ACTIVE', active_subscription: true,
-                            start_date: { [Op.lte]: today }, end_date: { [Op.gte]: today } },
+                        where: {
+                            outlet_id: outletId,
+                            status: 'ACTIVE',
+                            active_subscription: true,
+                            start_date: { [Op.lte]: today },
+                            end_date: { [Op.gte]: today }
+                        },
                         include: [{ model: db.models.item_master, as: 'item_master', required: false,
                             attributes: ['item_code','item_name','unit','rate','retail_sale_price','hsn_code'] }],
                     });
@@ -170,8 +198,7 @@ async function runSubscriptionDelivery(db) {
                     alreadyDone = ex && ex.length > 0;
                 } catch (_) {}
                 if (alreadyDone) { skipped++; continue; }
-                if (enableApp) await createAcceptedSaleForSubscription(db, sub, outletId, today);
-                else await createDraftForSubscription(db, sub, outletId, today);
+                await createAcceptedSaleForSubscription(db, sub, outletId, today);
                 processed++;
             }
             log('Outlet ' + outletId + ': processed=' + processed + ' skipped=' + skipped);

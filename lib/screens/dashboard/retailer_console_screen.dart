@@ -1811,8 +1811,14 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     final netAmt = parseNum(record['net_amount'] ?? 0.0);
     final taxAmt = parseNum(record['tax_amount'] ?? record['total_tax'] ?? 0.0);
 
+    final String saleNo = record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? record['id']?.toString() ?? '';
+    final bool hasBillNo = (record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? '').trim().isNotEmpty;
+    final int? orderId = record['id'] == null ? null : int.tryParse(record['id'].toString());
+
     return SaleOrder(
-      saleNo: record['sale_no']?.toString() ?? record['id']?.toString() ?? '',
+      saleNo: saleNo,
+      hasBillNo: hasBillNo,
+      orderId: orderId,
       saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
       status: record['status']?.toString() ?? 'COMPLETED',
       orderType: 'B2C',
@@ -3332,6 +3338,10 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                       final isCod = !isPrepaid && !isCredit;
                       final status = order['status'] ?? 'PENDING';
                       final riderName = order['partner']?['name'] ?? 'Unassigned';
+                      final String paymentMode = order['payment_mode']?.toString() ?? '';
+                      final String notes = order['notes']?.toString() ?? '';
+                      final bool isExchange = paymentMode.toUpperCase() == 'EXCHANGE' ||
+                          notes.toLowerCase().contains('exchange order');
 
                       // Helper variables for return banner details
                       final returnStatus = order['return_status'];
@@ -3388,11 +3398,14 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                       }
 
                       Color statusColor = Colors.orange;
-                      if (status == 'ACCEPTED') statusColor = Colors.blue;
-                      if (status == 'ASSIGNED') statusColor = Colors.indigo;
-                      if (status == 'OUT_FOR_DELIVERY') statusColor = Colors.teal;
-                      if (status == 'DELIVERED') statusColor = Colors.green;
-                      if (status == 'CANCELLED') statusColor = Colors.red;
+                      if (isExchange) statusColor = Colors.purple;
+                      else if (status == 'ACCEPTED') statusColor = Colors.blue;
+                      else if (status == 'ASSIGNED') statusColor = Colors.indigo;
+                      else if (status == 'OUT_FOR_DELIVERY') statusColor = Colors.teal;
+                      else if (status == 'DELIVERED') statusColor = Colors.green;
+                      else if (status == 'CANCELLED') statusColor = Colors.red;
+
+                      final displayStatus = isExchange ? 'EXCHANGED' : status;
 
                       return Card(
                         elevation: 0.5,
@@ -3427,7 +3440,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                           ),
                           subtitle: Text(
-                            'Order #${order['id']} • Rs. ${netAmt.toStringAsFixed(2)} • ${isCredit ? "Credit" : (isCod ? "CoD" : "Prepaid")}',
+                            'Order #${order['id']} • Rs. ${netAmt.toStringAsFixed(2)} • ${isCredit ? "Credit" : (paymentMode.toUpperCase() == "EXCHANGE" ? "Exchange" : (isCod ? "CoD" : "Prepaid"))}',
                             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                           ),
                           trailing: Container(
@@ -3437,7 +3450,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              status,
+                              displayStatus,
                               style: TextStyle(
                                 color: statusColor,
                                 fontWeight: FontWeight.bold,
@@ -3487,6 +3500,22 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                       ),
                                     ],
                                   ),
+                                  if (notes.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(Icons.note_alt_outlined, size: 16, color: Colors.grey.shade600),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Notes: $notes',
+                                            style: TextStyle(color: Colors.grey.shade800, fontSize: 13),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                   if (status == 'CANCELLED') ...[
                                     const SizedBox(height: 8),
                                     Container(

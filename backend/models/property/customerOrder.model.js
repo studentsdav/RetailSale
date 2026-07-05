@@ -109,6 +109,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.JSONB,
             allowNull: true
         },
+        subscription_allocation: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+            defaultValue: null
+        },
         notes: {
             type: DataTypes.TEXT,
             allowNull: true

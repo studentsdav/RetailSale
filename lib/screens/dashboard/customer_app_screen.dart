@@ -1773,9 +1773,19 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     final taxAmt = parseNum(record['tax_amount'] ?? record['total_tax'] ?? 0.0);
 
     final String status = record['status']?.toString() ?? 'COMPLETED';
-    final String saleNo = (status == 'CANCELLED')
-        ? (record['id']?.toString() ?? '')
-        : (record['bill_no']?.toString() ?? record['sale_no']?.toString() ?? record['id']?.toString() ?? '');
+    final String? returnType = record['return_type']?.toString();
+    final String paymentMode = record['payment_mode']?.toString() ?? '';
+    final String notes = record['notes']?.toString() ?? '';
+    final exchangeAgainstBillNo = RegExp(r'against bill #(\S+)', caseSensitive: false)
+        .firstMatch(notes)
+        ?.group(1);
+    final bool hasBillNo = (record['bill_no']?.toString() ?? record['sale_no']?.toString() ?? '').trim().isNotEmpty;
+    final bool isExchange = returnType == 'EXCHANGE' ||
+        paymentMode.toUpperCase() == 'EXCHANGE' ||
+        notes.toLowerCase().contains('exchange order for return');
+    final String saleNo = (record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? '').trim().isNotEmpty
+        ? (record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? '').trim()
+        : (record['id']?.toString() ?? '');
 
     double refundAmt = 0.0;
     final refund = record['refund_details'];
@@ -1795,7 +1805,13 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     }
 
     final String? returnStatus = record['return_status']?.toString();
-    final String? returnType = record['return_type']?.toString();
+    final String refundPaymentMode = isExchange
+        ? 'EXCHANGE'
+        : (record['refund_payment_mode']?.toString() ?? record['payment_mode']?.toString() ?? 'CASH');
+    final DateTime? refundPaidAt = DateTime.tryParse(
+      record['refund_paid_at']?.toString() ?? record['updated_at']?.toString() ?? '',
+    );
+    final String? mappedReturnType = isExchange ? 'EXCHANGE' : returnType;
 
     List<dynamic> returnedItemsList = [];
     if (record['returned_items'] != null && (record['returned_items'] as List).isNotEmpty) {
@@ -1812,8 +1828,12 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     return SaleOrder(
       saleNo: saleNo,
       returnStatus: returnStatus,
-      returnType: returnType,
+      returnType: mappedReturnType,
       refundAmount: refundAmt,
+      refundPaidAt: refundPaidAt,
+      refundPaymentMode: refundPaymentMode,
+      exchangeAgainstBillNo: exchangeAgainstBillNo,
+      hasBillNo: hasBillNo,
       returnedItems: returnedItemsList,
       saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
       status: status,
@@ -1825,7 +1845,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       customerPhone: record['customer_phone']?.toString(),
       customerAddress: record['customer_address']?.toString(),
       customerGstin: record['gstin']?.toString() ?? record['customer_gstin']?.toString(),
-      paymentMode: record['payment_mode']?.toString() ?? 'CASH',
+      paymentMode: isExchange ? 'EXCHANGE' : (paymentMode.isNotEmpty ? paymentMode : 'CASH'),
       amountPaid: record['payment_status'] == 'PAID' ? netAmt : 0.0,
       changeAmount: 0.0,
       balanceDue: record['payment_status'] == 'PAID' ? 0.0 : netAmt,
@@ -3748,6 +3768,19 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                     0.0;
                                 final String status =
                                     order['status'] ?? 'PENDING';
+                                final String returnStatus =
+                                    order['return_status']?.toString().toUpperCase() ?? '';
+                                final String refundStatus =
+                                    order['refund_status']?.toString().toUpperCase() ?? '';
+                                final String returnType =
+                                    order['return_type']?.toString().toUpperCase() ?? '';
+                                final bool isExchange = returnType == 'EXCHANGE' ||
+                                    returnStatus == 'EXCHANGED' ||
+                                    refundStatus == 'EXCHANGED';
+                                final bool isRefunded = refundStatus == 'REFUNDED' ||
+                                    returnStatus == 'RETURNED' ||
+                                    returnType == 'REFUND';
+                                final bool isRefundPending = refundStatus == 'PENDING';
                                 final itemsList = order['items'] as List? ?? [];
                                 final dateStr = order['created_at'] != null
                                     ? DateFormat('dd-MMM-yyyy, hh:mm a').format(
@@ -3756,16 +3789,36 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                     : '--';
 
                                 Color statusColor = Colors.orange;
-                                if (status == 'ACCEPTED')
+                                IconData statusIcon = Icons.local_shipping_outlined;
+                                String displayStatus = status;
+                                if (isExchange) {
+                                  statusColor = Colors.purple;
+                                  statusIcon = Icons.swap_horiz_outlined;
+                                  displayStatus = 'EXCHANGED';
+                                } else if (isRefunded) {
                                   statusColor = Colors.blue;
-                                if (status == 'ASSIGNED')
+                                  statusIcon = Icons.currency_rupee;
+                                  displayStatus = 'REFUNDED';
+                                } else if (isRefundPending) {
+                                  statusColor = Colors.amber.shade800;
+                                  statusIcon = Icons.pending_actions_outlined;
+                                  displayStatus = 'REFUND PENDING';
+                                } else if (status == 'ACCEPTED') {
+                                  statusColor = Colors.blue;
+                                  statusIcon = Icons.check_circle_outline_rounded;
+                                } else if (status == 'ASSIGNED') {
                                   statusColor = Colors.indigo;
-                                if (status == 'OUT_FOR_DELIVERY')
+                                  statusIcon = Icons.local_shipping_outlined;
+                                } else if (status == 'OUT_FOR_DELIVERY') {
                                   statusColor = Colors.teal;
-                                if (status == 'DELIVERED')
+                                  statusIcon = Icons.delivery_dining_outlined;
+                                } else if (status == 'DELIVERED') {
                                   statusColor = Colors.green;
-                                if (status == 'CANCELLED')
+                                  statusIcon = Icons.check_circle_outline_rounded;
+                                } else if (status == 'CANCELLED') {
                                   statusColor = Colors.red;
+                                  statusIcon = Icons.cancel_outlined;
+                                }
 
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 16),
@@ -3790,17 +3843,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                   statusColor.withOpacity(0.12),
                                               radius: 20,
                                               child: Icon(
-                                                status == 'DELIVERED'
-                                                    ? Icons
-                                                        .check_circle_outline_rounded
-                                                    : status == 'CANCELLED'
-                                                        ? Icons.cancel_outlined
-                                                        : status ==
-                                                                'OUT_FOR_DELIVERY'
-                                                            ? Icons
-                                                                .delivery_dining_outlined
-                                                            : Icons
-                                                                .local_shipping_outlined,
+                                                statusIcon,
                                                 color: statusColor,
                                                 size: 20,
                                               ),
@@ -3839,7 +3882,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                                   .circular(20),
                                                         ),
                                                         child: Text(
-                                                          status,
+                                                          displayStatus,
                                                           style: TextStyle(
                                                             color: statusColor,
                                                             fontWeight:
@@ -5628,241 +5671,14 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       await _fetchCatalog();
     }
 
-    dynamic selectedItem =
-        _catalogItems.isNotEmpty ? _catalogItems.first : null;
-    double dailyAllowedQty = 1.0;
-    int durationDays = 30;
-    DateTime startDate = DateTime.now();
-    String paymentMode = 'UPI';
-
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSt) {
-            final rate = selectedItem != null
-                ? double.tryParse((selectedItem['retail_sale_price'] ??
-                            selectedItem['rate'] ??
-                            '0')
-                        .toString()) ??
-                    0.0
-                : 0.0;
-            final totalQty = dailyAllowedQty * durationDays;
-            final totalCost = totalQty * rate;
-            final endDate = startDate.add(Duration(days: durationDays));
-
-            return AlertDialog(
-              title: const Text('Subscribe to Milk/Daily Services'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Select Service/Product:',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    _catalogItems.isEmpty
-                        ? const Text('Loading catalog...')
-                        : Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<dynamic>(
-                                isExpanded: true,
-                                value: selectedItem,
-                                items: _catalogItems.map((item) {
-                                  return DropdownMenuItem<dynamic>(
-                                    value: item,
-                                    child: Text(
-                                        '${item['item_name']} (Rs. ${item['retail_sale_price'] ?? item['rate']}/unit)'),
-                                  );
-                                }).toList(),
-                                onChanged: (val) {
-                                  setSt(() => selectedItem = val);
-                                },
-                              ),
-                            ),
-                          ),
-                           Text('Daily Quantity (${selectedItem?['unit']?.toString() ?? 'Ltr'}):',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: dailyAllowedQty > 0.5
-                              ? () => setSt(() => dailyAllowedQty -= 0.5)
-                              : null,
-                          icon: const Icon(Icons.remove_circle_outline),
-                        ),
-                        Text(
-                          dailyAllowedQty.toStringAsFixed(1),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        IconButton(
-                          onPressed: () => setSt(() => dailyAllowedQty += 0.5),
-                          icon: const Icon(Icons.add_circle_outline),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Duration:',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          isExpanded: true,
-                          value: durationDays,
-                          items: const [
-                            DropdownMenuItem(
-                                value: 15, child: Text('15 Days (Short Term)')),
-                            DropdownMenuItem(
-                                value: 30, child: Text('30 Days (Monthly)')),
-                            DropdownMenuItem(
-                                value: 60, child: Text('60 Days (2 Months)')),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) setSt(() => durationDays = val);
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Start Date:',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 13)),
-                        TextButton.icon(
-                          onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: startDate,
-                              firstDate: DateTime.now()
-                                  .subtract(const Duration(days: 1)),
-                              lastDate:
-                                  DateTime.now().add(const Duration(days: 30)),
-                            );
-                            if (picked != null) {
-                              setSt(() => startDate = picked);
-                            }
-                          },
-                          icon: const Icon(Icons.calendar_month, size: 16),
-                          label:
-                              Text(DateFormat('dd-MMM-yyyy').format(startDate)),
-                        )
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Payment Mode:',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          value: paymentMode,
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'UPI', child: Text('UPI / Net Banking')),
-                            DropdownMenuItem(
-                                value: 'CASH', child: Text('Cash Advance')),
-                            DropdownMenuItem(
-                                value: 'CARD',
-                                child: Text('Credit/Debit Card')),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) setSt(() => paymentMode = val);
-                          },
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('End Date:',
-                            style: TextStyle(color: Colors.grey)),
-                        Text(DateFormat('dd-MMM-yyyy').format(endDate),
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Total Qty:',
-                            style: TextStyle(color: Colors.grey)),
-                        Text('${totalQty.toStringAsFixed(1)} ${selectedItem?['unit']?.toString() ?? 'units'}',
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Total Cost:',
-                            style: TextStyle(color: Colors.grey)),
-                        Text('Rs. ${totalCost.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: selectedItem == null
-                      ? null
-                      : () => Navigator.pop(ctx, {
-                            'item_id': selectedItem['id'],
-                            'item_name': selectedItem['item_name'],
-                            'start_date':
-                                DateFormat('yyyy-MM-dd').format(startDate),
-                            'end_date':
-                                DateFormat('yyyy-MM-dd').format(endDate),
-                            'daily_allowed_qty': dailyAllowedQty,
-                            'total_payment_amount': totalCost,
-                            'payment_mode': paymentMode,
-                            'customer_name': _loggedInCustomer!['name'],
-                            'customer_phone': _loggedInCustomer!['phone'],
-                            'customer_address':
-                                _loggedInCustomer!['address'] ?? '',
-                          }),
-                  child: const Text('Subscribe Now'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (ctx) => _SubscribeDialog(
+        catalogItems: List<Map<String, dynamic>>.from(_catalogItems),
+        customerName: _loggedInCustomer?['name']?.toString() ?? '',
+        customerPhone: _loggedInCustomer?['phone']?.toString() ?? '',
+        customerAddress: _loggedInCustomer?['address']?.toString() ?? '',
+      ),
     );
 
     if (result == null) return;
@@ -6454,6 +6270,290 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           },
         );
       },
+    );
+  }
+}
+
+class _SubscribeDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> catalogItems;
+  final String customerName;
+  final String customerPhone;
+  final String customerAddress;
+
+  const _SubscribeDialog({
+    required this.catalogItems,
+    required this.customerName,
+    required this.customerPhone,
+    required this.customerAddress,
+  });
+
+  @override
+  State<_SubscribeDialog> createState() => _SubscribeDialogState();
+}
+
+class _SubscribeDialogState extends State<_SubscribeDialog> {
+  int? _selectedItemId;
+  double _dailyAllowedQty = 1.0;
+  int _durationDays = 30;
+  DateTime _startDate = DateTime.now();
+  String _paymentMode = 'UPI';
+  String _deliveryType = 'HOME';
+
+  Map<String, dynamic>? get _selectedItem {
+    if (_selectedItemId == null) return null;
+    for (final item in widget.catalogItems) {
+      final itemId = int.tryParse(item['id']?.toString() ?? '');
+      if (itemId == _selectedItemId) return item;
+    }
+    return null;
+  }
+
+  double _rateFor(Map<String, dynamic>? item) {
+    if (item == null) return 0.0;
+    return double.tryParse(
+          (item['retail_sale_price'] ?? item['rate'] ?? '0').toString(),
+        ) ??
+        0.0;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.catalogItems.isNotEmpty) {
+      _selectedItemId = int.tryParse(widget.catalogItems.first['id']?.toString() ?? '');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedItem = _selectedItem;
+    final rate = _rateFor(selectedItem);
+    final totalQty = _dailyAllowedQty * _durationDays;
+    final totalCost = totalQty * rate;
+    final endDate = _startDate.add(Duration(days: _durationDays));
+    final unitLabel = selectedItem?['unit']?.toString() ?? 'Ltr';
+    final validItems = widget.catalogItems
+        .where((item) => int.tryParse(item['id']?.toString() ?? '') != null)
+        .toList();
+
+    return AlertDialog(
+      title: const Text('Subscribe to Milk/Daily Services'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Select Service/Product:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 6),
+            widget.catalogItems.isEmpty
+                ? const Text('Loading catalog...')
+                : Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        isExpanded: true,
+                        value: _selectedItemId,
+                        items: validItems.map((item) {
+                          final itemId = int.parse(item['id'].toString());
+                          return DropdownMenuItem<int>(
+                            value: itemId,
+                            child: Text(
+                              '${item['item_name']} (Rs. ${item['retail_sale_price'] ?? item['rate']}/unit)',
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setState(() => _selectedItemId = val);
+                        },
+                      ),
+                    ),
+                  ),
+            Text(
+              'Daily Quantity ($unitLabel):',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _dailyAllowedQty > 0.5
+                      ? () => setState(() => _dailyAllowedQty -= 0.5)
+                      : null,
+                  icon: const Icon(Icons.remove_circle_outline),
+                ),
+                Text(
+                  _dailyAllowedQty.toStringAsFixed(1),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                IconButton(
+                  onPressed: () => setState(() => _dailyAllowedQty += 0.5),
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text('Duration:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  isExpanded: true,
+                  value: _durationDays,
+                  items: const [
+                    DropdownMenuItem(value: 15, child: Text('15 Days (Short Term)')),
+                    DropdownMenuItem(value: 30, child: Text('30 Days (Monthly)')),
+                    DropdownMenuItem(value: 60, child: Text('60 Days (2 Months)')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _durationDays = val);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Start Date:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                TextButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _startDate,
+                      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                      lastDate: DateTime.now().add(const Duration(days: 30)),
+                    );
+                    if (picked != null) {
+                      setState(() => _startDate = picked);
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_month, size: 16),
+                  label: Text(DateFormat('dd-MMM-yyyy').format(_startDate)),
+                )
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text('Payment Mode:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: _paymentMode,
+                  items: const [
+                    DropdownMenuItem(value: 'UPI', child: Text('UPI / Net Banking')),
+                    DropdownMenuItem(value: 'CASH', child: Text('Cash Advance')),
+                    DropdownMenuItem(value: 'CARD', child: Text('Credit/Debit Card')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _paymentMode = val);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('Delivery Type:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: _deliveryType,
+                  items: const [
+                    DropdownMenuItem(value: 'HOME', child: Text('Home Delivery')),
+                    DropdownMenuItem(value: 'PICKUP', child: Text('Store Pickup')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _deliveryType = val);
+                  },
+                ),
+              ),
+            ),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('End Date:', style: TextStyle(color: Colors.grey)),
+                Text(DateFormat('dd-MMM-yyyy').format(endDate),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total Qty:', style: TextStyle(color: Colors.grey)),
+                Text(
+                  '${totalQty.toStringAsFixed(1)} ${unitLabel}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total Cost:', style: TextStyle(color: Colors.grey)),
+                Text(
+                  'Rs. ${totalCost.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: selectedItem == null
+              ? null
+              : () => Navigator.pop(context, {
+                    'item_id': selectedItem['id'],
+                    'item_name': selectedItem['item_name'],
+                    'start_date': DateFormat('yyyy-MM-dd').format(_startDate),
+                    'end_date': DateFormat('yyyy-MM-dd').format(endDate),
+                    'daily_allowed_qty': _dailyAllowedQty,
+                    'total_payment_amount': totalCost,
+                    'payment_mode': _paymentMode,
+                    'delivery_type': _deliveryType,
+                    'customer_name': widget.customerName,
+                    'customer_phone': widget.customerPhone,
+                    'customer_address': widget.customerAddress,
+                  }),
+          child: const Text('Subscribe Now'),
+        ),
+      ],
     );
   }
 }

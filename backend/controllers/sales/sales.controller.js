@@ -5,6 +5,30 @@ const { applyLoyaltyOnCompletedSale } = require('../../services/loyalty.service'
 const { Op, fn, col, where: sqlWhere } = require('sequelize');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
 
+const resolveOutletId = async (req) => {
+    const rawId = req.user?.outlet_code || req.user?.outlet_id || 
+                  req.body?.outlet_id || req.body?.outletCode || req.body?.outlet_code || 
+                  req.query?.outlet_id || req.query?.outletCode || req.query?.outlet_code;
+    if (!rawId) return null;
+
+    let resolvedId = null;
+    if (typeof rawId === 'string' && isNaN(Number(rawId))) {
+        const outlet = await req.propertyDb.models.outlets.findOne({
+            where: { outlet_code: rawId }
+        });
+        if (outlet) resolvedId = outlet.id;
+    } else {
+        const num = Number(rawId);
+        if (Number.isInteger(num)) resolvedId = num;
+    }
+
+    if (resolvedId) {
+        if (!req.user) req.user = {};
+        req.user.outlet_id = resolvedId;
+    }
+    return resolvedId;
+};
+
 function normalizeCustomerIdentity(header = {}) {
     let phone = String(header.customer_phone || '').replace(/\D/g, '').trim();
     if (phone.length > 10) {
@@ -572,7 +596,7 @@ async function getActiveMilkSubscriptions(req, identity, itemId = null, asOfDate
             { model: req.propertyDb.models.item_master, as: 'item' },
             { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes' }
         ],
-        order: [['end_date', 'ASC'], ['start_date', 'ASC'], ['id', 'ASC']]
+        order: [['start_date', 'DESC'], ['end_date', 'DESC'], ['id', 'DESC']]
     });
 }
 
@@ -605,7 +629,93 @@ WHERE outlet_id = :outlet_id
             transaction
         }
     );
-    return toRoundedAmount(rows?.[0]?.covered_qty);
+    const consumedQty = toRoundedAmount(rows?.[0]?.covered_qty);
+    if (consumedQty > 0) {
+        return consumedQty;
+    }
+
+    const [fallbackRows] = await req.propertyDb.query(
+        `
+SELECT COALESCE(SUM(si.qty), 0) AS covered_qty
+FROM sales_headers sh
+INNER JOIN sales_items si
+    ON si.sale_id = sh.id
+WHERE sh.outlet_id = :outlet_id
+  AND sh.notes ILIKE :subscription_note
+  AND sh.sale_date::date = :txn_date
+  AND COALESCE(sh.is_deleted, FALSE) = FALSE
+  ${Number.isFinite(Number(itemId)) && Number(itemId) > 0 ? 'AND si.item_id = :item_id' : ''}
+        `,
+        {
+            replacements: {
+                outlet_id: req.user.outlet_id,
+                subscription_note: `%[SUBSCRIPTION_AUTO] subscription_id=${subscriptionId}%`,
+                txn_date: formatDateLocalYmd(txnDate),
+                item_id: Number.isFinite(Number(itemId)) && Number(itemId) > 0
+                    ? Number(itemId)
+                    : undefined
+            },
+            transaction
+        }
+    );
+
+    return toRoundedAmount(fallbackRows?.[0]?.covered_qty);
+}
+
+async function getPendingCustomerItemReservedQtyForDay(
+    req,
+    identity,
+    itemId,
+    txnDate,
+    transaction = undefined,
+    options = {}
+) {
+    const normalizedItemId = Number(itemId) || 0;
+    if (normalizedItemId <= 0) return 0;
+
+    const normalizedIdentity = normalizeCustomerIdentity(identity || {});
+    const whereCustomer = buildCustomerScope(normalizedIdentity);
+    if (!whereCustomer) return 0;
+
+    const pendingOrders = await req.propertyDb.models.customer_orders.findAll({
+        where: {
+            outlet_id: req.user.outlet_id,
+            status: 'PENDING',
+            ...whereCustomer
+        },
+        attributes: ['id', 'created_at', 'items'],
+        order: [['created_at', 'ASC'], ['id', 'ASC']],
+        transaction
+    });
+
+    if (!pendingOrders.length) return 0;
+
+    const cutoffOrderId = Number(options?.excludeOrderId) || 0;
+    const cutoffCreatedAt = options?.beforeCreatedAt ? new Date(options.beforeCreatedAt) : null;
+    let reservedQty = 0;
+
+    for (const order of pendingOrders) {
+        const orderId = Number(order.id) || 0;
+        if (cutoffOrderId > 0 && orderId === cutoffOrderId) {
+            continue;
+        }
+
+        if (cutoffCreatedAt) {
+            const createdAt = order.created_at ? new Date(order.created_at) : null;
+            if (!createdAt) continue;
+            if (createdAt > cutoffCreatedAt) continue;
+            if (createdAt.getTime() === cutoffCreatedAt.getTime() && cutoffOrderId > 0 && orderId >= cutoffOrderId) {
+                continue;
+            }
+        }
+
+        for (const row of Array.isArray(order.items) ? order.items : []) {
+            if (Number(row?.item_id) !== normalizedItemId) continue;
+            reservedQty += toRoundedAmount(row?.qty);
+        }
+    }
+
+    return toRoundedAmount(reservedQty);
 }
 
 async function getCustomerItemConsumedQtyForDay(
@@ -613,7 +723,8 @@ async function getCustomerItemConsumedQtyForDay(
     identity,
     itemId,
     txnDate,
-    transaction = undefined
+    transaction = undefined,
+    options = {}
 ) {
     const normalizedItemId = Number(itemId) || 0;
     if (normalizedItemId <= 0) return 0;
@@ -658,10 +769,135 @@ WHERE c.outlet_id = :outlet_id
         `,
         { replacements: params, transaction }
     );
-    return toRoundedAmount(rows?.[0]?.covered_qty);
+    const consumedQty = toRoundedAmount(rows?.[0]?.covered_qty);
+    const pendingReservedQty = await getPendingCustomerItemReservedQtyForDay(
+        req,
+        normalizedIdentity,
+        normalizedItemId,
+        txnDate,
+        transaction,
+        options
+    );
+    if (consumedQty > 0 || pendingReservedQty > 0) {
+        return consumedQty + pendingReservedQty;
+    }
+
+    let customerWhereFallback = '';
+    const fallbackParams = {
+        outlet_id: req.user.outlet_id,
+        item_id: normalizedItemId,
+        txn_date: formatDateLocalYmd(txnDate),
+        subscription_note: '%[SUBSCRIPTION_AUTO]%'
+    };
+    if (normalizedIdentity.customer_phone) {
+        customerWhereFallback = 'AND sh.customer_phone IN (:phone_last10, :phone_91, :phone_plus91, :phone_0)';
+        fallbackParams.phone_last10 = normalizedIdentity.customer_phone;
+        fallbackParams.phone_91 = `91${normalizedIdentity.customer_phone}`;
+        fallbackParams.phone_plus91 = `+91${normalizedIdentity.customer_phone}`;
+        fallbackParams.phone_0 = `0${normalizedIdentity.customer_phone}`;
+    } else if (normalizedIdentity.customer_gstin) {
+        customerWhereFallback = 'AND sh.customer_gstin = :customer_gstin';
+        fallbackParams.customer_gstin = normalizedIdentity.customer_gstin;
+    } else if (normalizedIdentity.customer_name) {
+        customerWhereFallback = 'AND sh.customer_name = :customer_name';
+        fallbackParams.customer_name = normalizedIdentity.customer_name;
+    }
+
+    const [fallbackRows] = await req.propertyDb.query(
+        `
+SELECT COALESCE(SUM(si.qty), 0) AS covered_qty
+FROM sales_headers sh
+INNER JOIN sales_items si
+    ON si.sale_id = sh.id
+WHERE sh.outlet_id = :outlet_id
+  AND sh.sale_date::date = :txn_date
+  AND COALESCE(sh.is_deleted, FALSE) = FALSE
+  AND sh.notes ILIKE :subscription_note
+  AND si.item_id = :item_id
+  ${customerWhereFallback}
+        `,
+        {
+            replacements: fallbackParams,
+            transaction
+        }
+    );
+
+    return toRoundedAmount(fallbackRows?.[0]?.covered_qty) + pendingReservedQty;
 }
 
-async function allocateMilkSubscriptionCoverage({ req, header, items, transaction }) {
+async function loadSubscriptionConsumptionRows(req, subscription, transaction = undefined) {
+    const consumedRows = await req.propertyDb.models.milk_subscription_consumptions.findAll({
+        where: {
+            outlet_id: req.user.outlet_id,
+            subscription_id: subscription.id,
+            status: { [Op.ne]: 'CANCELLED' }
+        },
+        order: [['txn_date', 'ASC'], ['id', 'ASC']],
+        transaction
+    });
+
+    if (consumedRows.length > 0) {
+        return consumedRows;
+    }
+
+    const autoSales = await req.propertyDb.models.sales_headers.findAll({
+        where: {
+            outlet_id: req.user.outlet_id,
+            is_deleted: false,
+            notes: {
+                [Op.iLike]: `%[SUBSCRIPTION_AUTO] subscription_id=${subscription.id}%`
+            }
+        },
+        include: [
+            {
+                model: req.propertyDb.models.sales_items,
+                as: 'items',
+                required: false
+            }
+        ],
+        order: [['sale_date', 'ASC'], ['id', 'ASC']],
+        transaction
+    });
+
+    const fallbackRows = [];
+    for (const sale of autoSales) {
+        const saleJson = sale.toJSON();
+        const saleDate = saleJson.sale_date ? formatDateLocalYmd(saleJson.sale_date) : formatDateLocalYmd(new Date());
+        for (const item of Array.isArray(saleJson.items) ? saleJson.items : []) {
+            const coveredQty = toAmount(item.qty);
+            if (coveredQty <= 0) continue;
+            const rate = toAmount(item.rate);
+            fallbackRows.push(
+                req.propertyDb.models.milk_subscription_consumptions.build(
+                    {
+                        outlet_id: req.user.outlet_id,
+                        subscription_id: subscription.id,
+                        sale_id: saleJson.id,
+                        sale_no: saleJson.sale_no,
+                        txn_date: saleDate,
+                        item_id: item.item_id,
+                        item_name: item.item_name || subscription.item_name || '',
+                        cart_qty: coveredQty,
+                        covered_qty: coveredQty,
+                        excess_qty: 0,
+                        daily_allowed_qty: toAmount(subscription.daily_allowed_qty),
+                        rate,
+                        covered_amount: coveredQty * rate,
+                        excess_amount: 0,
+                        settlement_id: null,
+                        status: 'CONSUMED',
+                        created_by: saleJson.created_by || subscription.created_by || req.user.id
+                    },
+                    { isNewRecord: false }
+                )
+            );
+        }
+    }
+
+    return fallbackRows;
+}
+
+async function allocateMilkSubscriptionCoverage({ req, header, items, transaction, pendingOrderContext = null }) {
     const identity = normalizeCustomerIdentity(header);
     const saleDate = header.sale_date || new Date();
     const saleDateKey = formatDateLocalYmd(saleDate);
@@ -672,6 +908,22 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
     let subscriptionId = 0;
     let subscriptionItemId = 0;
     const inFlightConsumedByKey = new Map();
+    const subscriptionCoveragesByKey = new Map();
+
+    const addSubscriptionCoverage = (subscription, itemId, coveredQty, coveredAmount) => {
+        const key = `${subscription.id}_${itemId}`;
+        const existing = subscriptionCoveragesByKey.get(key) || {
+            subscriptionId: subscription.id,
+            subscriptionItemId: subscription.item_id,
+            itemId,
+            totalCoveredQty: 0,
+            totalCoveredAmount: 0
+        };
+        existing.totalCoveredQty += coveredQty;
+        existing.totalCoveredAmount += coveredAmount;
+        subscriptionCoveragesByKey.set(key, existing);
+        return existing;
+    };
 
     for (const sourceRow of Array.isArray(items) ? items : []) {
         const itemId = Number(sourceRow.item_id) || 0;
@@ -695,44 +947,59 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
             continue;
         }
 
-        const subscription = subscriptions[0];
-        subscriptionId = subscriptionId || subscription.id;
-        subscriptionItemId = subscriptionItemId || subscription.item_id;
-        const subscriptionAdvance = await findSubscriptionItemAdvance(
-            req,
-            subscription.id,
-            itemId,
-            transaction
-        );
-        const dailyLimit = toAmount(subscription.daily_allowed_qty);
-        const usageKey = `${subscription.id}_${itemId}_${saleDateKey}`;
-        const consumedTodayFromDb = await getCustomerItemConsumedQtyForDay(
-            req,
-            identity,
-            itemId,
-            saleDate,
-            transaction
-        );
-        const inFlightConsumed = toAmount(inFlightConsumedByKey.get(usageKey) || 0);
-        const consumedToday = consumedTodayFromDb + inFlightConsumed;
-        const remainingCoverage = Math.max(dailyLimit - consumedToday, 0);
         const rate = toAmount(sourceRow.rate);
-        const agreedRate = rate > 0 ? rate : toAmount(subscriptionAdvance?.rate || 0);
-        const coveredQty = Math.min(qty, remainingCoverage);
-        const excessQty = Math.max(qty - coveredQty, 0);
-        const itemName = sourceRow.item_name || subscription.item_name || '';
-        const coveredAmount = coveredQty * agreedRate;
-        totalCoveredAmount += coveredAmount;
-        totalCoveredQty += coveredQty;
-        if (coveredQty > 0) {
-            inFlightConsumedByKey.set(usageKey, inFlightConsumed + coveredQty);
-        }
+        let remainingQty = qty;
+        let sourceCoveredQty = 0;
+        let sourceCoveredAmount = 0;
+        let sourceSubscriptionId = 0;
+        let sourceSubscriptionItemId = 0;
+        let sourceItemName = sourceRow.item_name || '';
 
-        if (coveredQty > 0) {
-          updatedItems.push({
-              ...sourceRow,
-              qty: coveredQty,
-              rate: 0,
+        for (const subscription of subscriptions) {
+            if (remainingQty <= 0) break;
+
+            const subscriptionAdvance = await findSubscriptionItemAdvance(
+                req,
+                subscription.id,
+                itemId,
+                transaction
+            );
+            const dailyLimit = toAmount(subscription.daily_allowed_qty);
+            const usageKey = `${subscription.id}_${itemId}_${saleDateKey}`;
+            const consumedTodayFromDb = await getSubscriptionConsumedQtyForDay(
+                req,
+                subscription.id,
+                saleDate,
+                transaction,
+                itemId
+            );
+            const inFlightConsumed = toAmount(inFlightConsumedByKey.get(usageKey) || 0);
+            const consumedToday = consumedTodayFromDb + inFlightConsumed;
+            const remainingCoverage = Math.max(dailyLimit - consumedToday, 0);
+            const coveredQty = Math.min(remainingQty, remainingCoverage);
+            if (coveredQty <= 0) {
+                continue;
+            }
+
+            const agreedRate = rate > 0 ? rate : toAmount(subscriptionAdvance?.rate || 0);
+            const coveredAmount = coveredQty * agreedRate;
+            remainingQty -= coveredQty;
+            sourceCoveredQty += coveredQty;
+            sourceCoveredAmount += coveredAmount;
+            sourceSubscriptionId = sourceSubscriptionId || subscription.id;
+            sourceSubscriptionItemId = sourceSubscriptionItemId || subscription.item_id;
+            sourceItemName = sourceItemName || subscription.item_name || '';
+            subscriptionId = subscriptionId || subscription.id;
+            subscriptionItemId = subscriptionItemId || subscription.item_id;
+            totalCoveredAmount += coveredAmount;
+            totalCoveredQty += coveredQty;
+            addSubscriptionCoverage(subscription, itemId, coveredQty, coveredAmount);
+            inFlightConsumedByKey.set(usageKey, inFlightConsumed + coveredQty);
+
+            updatedItems.push({
+                ...sourceRow,
+                qty: coveredQty,
+                rate: 0,
                 tax_percent: 0,
                 discount_applicable: false,
                 scheme_applicable: false,
@@ -742,43 +1009,18 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
                 tax_amount: 0,
                 line_total: 0,
                 tax_breakup: [],
-              net_amount: 0,
-              is_scheme_free: true,
-              _subscription_free: true,
-              applied_scheme_id: null
-          });
-      }
-
-        if (excessQty > 0) {
-            const billedRow = {
-                ...sourceRow,
-                qty: excessQty
-            };
-            updatedItems.push(billedRow);
-            consumptionRows.push({
-                outlet_id: req.user.outlet_id,
-                subscription_id: subscription.id,
-                txn_date: saleDateKey,
-                item_id: itemId,
-                item_name: itemName,
-                cart_qty: qty,
-                covered_qty: coveredQty,
-                excess_qty: excessQty,
-                daily_allowed_qty: dailyLimit,
-                rate: agreedRate,
-                covered_amount: coveredAmount,
-                excess_amount: excessQty * rate,
-                status: 'PENDING',
-                created_by: req.user.id
+                net_amount: 0,
+                is_scheme_free: true,
+                _subscription_free: true,
+                applied_scheme_id: null
             });
-        } else {
             consumptionRows.push({
                 outlet_id: req.user.outlet_id,
                 subscription_id: subscription.id,
                 txn_date: saleDateKey,
                 item_id: itemId,
-                item_name: itemName,
-                cart_qty: qty,
+                item_name: sourceItemName,
+                cart_qty: coveredQty,
                 covered_qty: coveredQty,
                 excess_qty: 0,
                 daily_allowed_qty: dailyLimit,
@@ -786,6 +1028,29 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
                 covered_amount: coveredAmount,
                 excess_amount: 0,
                 status: 'CONSUMED',
+                created_by: req.user.id
+            });
+        }
+
+        if (remainingQty > 0) {
+            updatedItems.push({
+                ...sourceRow,
+                qty: remainingQty
+            });
+            consumptionRows.push({
+                outlet_id: req.user.outlet_id,
+                subscription_id: sourceSubscriptionId || subscriptions[0].id,
+                txn_date: saleDateKey,
+                item_id: itemId,
+                item_name: sourceItemName,
+                cart_qty: qty,
+                covered_qty: sourceCoveredQty,
+                excess_qty: remainingQty,
+                daily_allowed_qty: toAmount((subscriptions[0] || {}).daily_allowed_qty),
+                rate,
+                covered_amount: sourceCoveredAmount,
+                excess_amount: remainingQty * rate,
+                status: 'PENDING',
                 created_by: req.user.id
             });
         }
@@ -797,7 +1062,8 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
         totalCoveredAmount,
         totalCoveredQty,
         subscriptionId,
-        subscriptionItemId
+        subscriptionItemId,
+        subscriptionCoverages: Array.from(subscriptionCoveragesByKey.values())
     };
 }
 
@@ -851,55 +1117,69 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
             continue;
         }
 
-        const subscription = subscriptions[0];
-        const subscriptionAdvance = await findSubscriptionItemAdvance(
-            req,
-            subscription.id,
-            bucket.itemId,
-            transaction
-        );
-        const dailyLimit = toAmount(subscription.daily_allowed_qty);
-        const usageKey = `${subscription.id}_${bucket.itemId}_${saleDateKey}`;
-        const consumedTodayFromDb = await getCustomerItemConsumedQtyForDay(
-            req,
-            identity,
-            bucket.itemId,
-            saleDate,
-            transaction
-        );
-        const inFlightConsumed = toAmount(inFlightConsumedByKey.get(usageKey) || 0);
-        const consumedToday = consumedTodayFromDb + inFlightConsumed;
-        const remainingCoverage = Math.max(dailyLimit - consumedToday, 0);
-        const agreedRate = toAmount(bucket.rate) > 0
-            ? toAmount(bucket.rate)
-            : toAmount(subscriptionAdvance?.rate || 0);
-        const coveredQty = Math.min(bucket.freeQty, remainingCoverage);
-        if (coveredQty + 1e-9 < bucket.freeQty) {
-            const left = Math.max(remainingCoverage, 0).toFixed(2);
+        let chosenSubscription = null;
+        let coveredQty = 0;
+        let dailyLimit = 0;
+        let agreedRate = 0;
+        let subscriptionAdvance = null;
+        let usageKey = '';
+
+        for (const subscription of subscriptions) {
+            subscriptionAdvance = await findSubscriptionItemAdvance(
+                req,
+                subscription.id,
+                bucket.itemId,
+                transaction
+            );
+            dailyLimit = toAmount(subscription.daily_allowed_qty);
+            usageKey = `${subscription.id}_${bucket.itemId}_${saleDateKey}`;
+            const consumedTodayFromDb = await getSubscriptionConsumedQtyForDay(
+                req,
+                subscription.id,
+                saleDate,
+                transaction,
+                bucket.itemId
+            );
+            const inFlightConsumed = toAmount(inFlightConsumedByKey.get(usageKey) || 0);
+            const consumedToday = consumedTodayFromDb + inFlightConsumed;
+            const remainingCoverage = Math.max(dailyLimit - consumedToday, 0);
+            if (remainingCoverage <= 0) continue;
+
+            chosenSubscription = subscription;
+            agreedRate = toAmount(bucket.rate) > 0
+                ? toAmount(bucket.rate)
+                : toAmount(subscriptionAdvance?.rate || 0);
+            coveredQty = Math.min(bucket.freeQty, remainingCoverage);
+            break;
+        }
+
+        if (!chosenSubscription || coveredQty <= 0) {
+            const left = '0.00';
             const err = new Error(
                 `${bucket.itemName || 'Subscription item'} daily free limit already used. Remaining free qty today: ${left}`
             );
             err.status = 400;
             throw err;
         }
-        const coveredAmount = coveredQty * agreedRate;
+
         const excessQty = Math.max(bucket.cartQty - coveredQty, 0);
+        const coveredAmount = coveredQty * agreedRate;
         if (coveredQty > 0) {
-            inFlightConsumedByKey.set(usageKey, inFlightConsumed + coveredQty);
+            inFlightConsumedByKey.set(usageKey, toAmount(inFlightConsumedByKey.get(usageKey) || 0) + coveredQty);
         }
 
         totalCoveredAmount += coveredAmount;
         totalCoveredQty += coveredQty;
-        subscriptionId = subscriptionId || subscription.id;
-        subscriptionItemId = subscriptionItemId || subscription.item_id;
+        subscriptionId = subscriptionId || chosenSubscription.id;
+        subscriptionItemId = subscriptionItemId || chosenSubscription.item_id;
         coveredSubscriptionItemIds.add(Number(bucket.itemId));
 
         consumptionRows.push({
             outlet_id: req.user.outlet_id,
-            subscription_id: subscription.id,
+            subscription_id: chosenSubscription.id,
             txn_date: saleDateKey,
             item_id: bucket.itemId,
-            item_name: bucket.itemName || subscription.item_name || '',
+            item_name: bucket.itemName || chosenSubscription.item_name || '',
             cart_qty: bucket.cartQty,
             covered_qty: coveredQty,
             excess_qty: excessQty,
@@ -1250,13 +1530,7 @@ async function buildSubscriptionLedgerResponse(req, subscriptionId) {
 
     if (!subscription) return null;
 
-    const consumptions = await req.propertyDb.models.milk_subscription_consumptions.findAll({
-        where: {
-            outlet_id: req.user.outlet_id,
-            subscription_id: subscription.id
-        },
-        order: [['txn_date', 'ASC'], ['id', 'ASC']]
-    });
+    const consumptions = await loadSubscriptionConsumptionRows(req, subscription);
 
     const settlements = await req.propertyDb.models.milk_subscription_settlements.findAll({
         where: {
@@ -2921,56 +3195,68 @@ exports.createSale = async (req, res) => {
                 consumptions: subscriptionAllocation.consumptions
             });
             if (subscriptionAllocation.totalCoveredAmount > 0) {
-                const coverageAdvance = await findSubscriptionItemAdvance(
-                    req,
-                    subscriptionAllocation.subscriptionId,
-                    subscriptionAllocation.subscriptionItemId,
-                    t
-                );
-                if (coverageAdvance) {
-                    await consumeSubscriptionItemAdvance(
-                        req,
-                        subscriptionAllocation.subscriptionId,
-                        subscriptionAllocation.subscriptionItemId,
-                        subscriptionAllocation.totalCoveredQty,
-                        t
-                    );
-                }
+                const coverages = Array.isArray(subscriptionAllocation.subscriptionCoverages)
+                    ? subscriptionAllocation.subscriptionCoverages
+                    : [{
+                        subscriptionId: subscriptionAllocation.subscriptionId,
+                        subscriptionItemId: subscriptionAllocation.subscriptionItemId,
+                        itemId: null,
+                        totalCoveredQty: subscriptionAllocation.totalCoveredQty,
+                        totalCoveredAmount: subscriptionAllocation.totalCoveredAmount
+                    }];
 
-                const subscriptionCashAdvance = await findSubscriptionCustomerAdvance(
-                    req,
-                    subscriptionAllocation.subscriptionId,
-                    t
-                );
-                let appliedCashAdvanceAmount = 0;
-                if (subscriptionCashAdvance) {
-                    appliedCashAdvanceAmount = Math.min(
-                        toAmount(subscriptionCashAdvance.available_amount),
-                        toAmount(subscriptionAllocation.totalCoveredAmount)
-                    );
-                    await consumeSubscriptionCustomerAdvance(
+                for (const coverage of coverages) {
+                    const coverageAdvance = await findSubscriptionItemAdvance(
                         req,
-                        subscriptionAllocation.subscriptionId,
-                        appliedCashAdvanceAmount,
+                        coverage.subscriptionId,
+                        coverage.itemId || subscriptionAllocation.subscriptionItemId,
                         t
                     );
-                }
-                if (appliedCashAdvanceAmount > 0) {
-                    await createLedgerEntry({
-                        db: req.propertyDb,
-                        outlet_id: req.user.outlet_id,
-                        txn_date: referenceSale.sale_date || new Date(),
-                        transaction_type: 'ADVANCE_APPLY',
-                        reference_type: 'SUBSCRIPTION',
-                        reference_id: subscriptionAllocation.subscriptionId,
-                        reference_no: referenceSale.sale_no,
-                        party_name: header.customer_name || header.customer_phone || 'Subscription Customer',
-                        payment_method: 'SUBSCRIPTION',
-                        amount_out: appliedCashAdvanceAmount,
-                        notes: `Advance adjusted for subscription item consumption in ${referenceSale.sale_no}`,
-                        created_by: req.user.id,
-                        transaction: t
-                    });
+                    if (coverageAdvance) {
+                        await consumeSubscriptionItemAdvance(
+                            req,
+                            coverage.subscriptionId,
+                            coverage.itemId || subscriptionAllocation.subscriptionItemId,
+                            coverage.totalCoveredQty,
+                            t
+                        );
+                    }
+
+                    const subscriptionCashAdvance = await findSubscriptionCustomerAdvance(
+                        req,
+                        coverage.subscriptionId,
+                        t
+                    );
+                    let appliedCashAdvanceAmount = 0;
+                    if (subscriptionCashAdvance) {
+                        appliedCashAdvanceAmount = Math.min(
+                            toAmount(subscriptionCashAdvance.available_amount),
+                            toAmount(coverage.totalCoveredAmount)
+                        );
+                        await consumeSubscriptionCustomerAdvance(
+                            req,
+                            coverage.subscriptionId,
+                            appliedCashAdvanceAmount,
+                            t
+                        );
+                    }
+                    if (appliedCashAdvanceAmount > 0) {
+                        await createLedgerEntry({
+                            db: req.propertyDb,
+                            outlet_id: req.user.outlet_id,
+                            txn_date: referenceSale.sale_date || new Date(),
+                            transaction_type: 'ADVANCE_APPLY',
+                            reference_type: 'SUBSCRIPTION',
+                            reference_id: coverage.subscriptionId,
+                            reference_no: referenceSale.sale_no,
+                            party_name: header.customer_name || header.customer_phone || 'Subscription Customer',
+                            payment_method: 'SUBSCRIPTION',
+                            amount_out: appliedCashAdvanceAmount,
+                            notes: `Advance adjusted for subscription item consumption in ${referenceSale.sale_no}`,
+                            created_by: req.user.id,
+                            transaction: t
+                        });
+                    }
                 }
             }
             await markSingleUseSchemesAsConsumed({
@@ -4389,7 +4675,10 @@ exports.listSubscriptions = async (req, res) => {
                 subscription.customer_gstin || ''
             ].join(' ').toLowerCase();
 
-            const consumptions = Array.isArray(subscription.consumptions) ? subscription.consumptions : [];
+            let consumptions = Array.isArray(subscription.consumptions) ? subscription.consumptions : [];
+            if (consumptions.length === 0) {
+                consumptions = await loadSubscriptionConsumptionRows(req, subscription);
+            }
             const advanceSummary = await getSubscriptionItemAdvanceSummary(req, subscription);
             const cashAdvanceSummary = await getSubscriptionCustomerAdvanceSummary(req, subscription);
             data.push({
@@ -4422,6 +4711,7 @@ exports.listSubscriptions = async (req, res) => {
 
 exports.listCustomerSubscriptions = async (req, res) => {
     try {
+        await resolveOutletId(req);
         const identity = normalizeCustomerIdentity(req.query);
         const scope = buildCustomerScope(identity);
         if (!scope) {
@@ -4445,14 +4735,7 @@ exports.listCustomerSubscriptions = async (req, res) => {
         const rows = [];
         const remainingAssignedByItem = new Set();
         for (const subscription of subscriptions) {
-            const coveredRows = await req.propertyDb.models.milk_subscription_consumptions.findAll({
-                where: {
-                    outlet_id: req.user.outlet_id,
-                    subscription_id: subscription.id,
-                    status: { [Op.ne]: 'CANCELLED' }
-                },
-                order: [['txn_date', 'ASC'], ['id', 'ASC']]
-            });
+            const coveredRows = await loadSubscriptionConsumptionRows(req, subscription);
             const advanceSummary = await getSubscriptionItemAdvanceSummary(req, subscription);
             const cashAdvanceSummary = await getSubscriptionCustomerAdvanceSummary(req, subscription);
             const itemId = Number(subscription.item_id) || 0;
@@ -4501,6 +4784,7 @@ exports.listCustomerSubscriptions = async (req, res) => {
 
 exports.getSubscriptionDetails = async (req, res) => {
     try {
+        await resolveOutletId(req);
         const subscriptionId = Number(req.params.id);
         if (!Number.isFinite(subscriptionId) || subscriptionId <= 0) {
             return res.status(400).json({ success: false, message: 'Invalid subscription id' });
@@ -4533,6 +4817,10 @@ exports.getSubscriptionDetails = async (req, res) => {
 };
 
 exports.createSubscription = async (req, res) => {
+    const outlet_id = await resolveOutletId(req);
+    if (!outlet_id) {
+        return res.status(400).json({ success: false, message: 'Valid outlet_id is required' });
+    }
     const t = await req.propertyDb.transaction();
     try {
         const identity = normalizeCustomerIdentity(req.body);
@@ -4565,6 +4853,68 @@ exports.createSubscription = async (req, res) => {
         if (!startDate || !endDate) {
             await t.rollback();
             return res.status(400).json({ success: false, message: 'Valid start_date and end_date are required' });
+        }
+
+        const existingSubscriptions = await req.propertyDb.models.milk_subscriptions.findAll({
+            where: {
+                outlet_id: req.user.outlet_id,
+                item_id: itemId,
+                status: { [Op.ne]: 'CANCELLED' }
+            },
+            order: [['start_date', 'DESC'], ['id', 'DESC']],
+            transaction: t
+        });
+        const duplicateMatch = existingSubscriptions.find((row) => {
+            const rowIdentity = normalizeCustomerIdentity(row.toJSON());
+            const samePhone = identity.customer_phone && rowIdentity.customer_phone
+                ? identity.customer_phone === rowIdentity.customer_phone
+                : false;
+            const sameGstin = identity.customer_gstin && rowIdentity.customer_gstin
+                ? identity.customer_gstin === rowIdentity.customer_gstin
+                : false;
+            const sameName = identity.customer_name && rowIdentity.customer_name
+                ? identity.customer_name.toLowerCase() === rowIdentity.customer_name.toLowerCase()
+                : false;
+            const sameCustomer = samePhone || sameGstin || sameName;
+            if (!sameCustomer) return false;
+            return String(row.start_date || '') === String(req.body.start_date || req.body.startDate || '') &&
+                String(row.end_date || '') === String(req.body.end_date || req.body.endDate || '') &&
+                String(row.delivery_type || '').toUpperCase() === String(req.body.delivery_type || 'HOME').trim().toUpperCase();
+        });
+        if (duplicateMatch) {
+            await t.rollback();
+            return res.status(409).json({
+                success: false,
+                message: 'An identical subscription already exists for this customer and period.',
+                data: duplicateMatch.toJSON()
+            });
+        }
+
+        const overlappingMatch = existingSubscriptions.find((row) => {
+            const rowIdentity = normalizeCustomerIdentity(row.toJSON());
+            const samePhone = identity.customer_phone && rowIdentity.customer_phone
+                ? identity.customer_phone === rowIdentity.customer_phone
+                : false;
+            const sameGstin = identity.customer_gstin && rowIdentity.customer_gstin
+                ? identity.customer_gstin === rowIdentity.customer_gstin
+                : false;
+            const sameName = identity.customer_name && rowIdentity.customer_name
+                ? identity.customer_name.toLowerCase() === rowIdentity.customer_name.toLowerCase()
+                : false;
+            const sameCustomer = samePhone || sameGstin || sameName;
+            if (!sameCustomer) return false;
+            const rowStart = parseDateOnly(row.start_date);
+            const rowEnd = parseDateOnly(row.end_date);
+            if (!rowStart || !rowEnd) return false;
+            return rowStart <= endDate && rowEnd >= startDate;
+        });
+        if (overlappingMatch) {
+            await t.rollback();
+            return res.status(409).json({
+                success: false,
+                message: 'An overlapping active subscription already exists for this customer and item.',
+                data: overlappingMatch.toJSON()
+            });
         }
 
         const selectedSchemes = normalizeSelectedSchemes(req.body.selected_schemes || req.body.selectedSchemes);
@@ -4606,7 +4956,9 @@ exports.createSubscription = async (req, res) => {
             scheme_discount_amount: schemeTotals.scheme_discount_amount,
             bonus_qty: schemeTotals.bonus_qty + bonusQty,
             selected_schemes: selectedSchemes,
-            delivery_type: String(req.body.delivery_type || 'PICKUP').trim().toUpperCase(),
+            // App self-subscriptions need to flow through the home-delivery job.
+            // Retailer-created records still override this explicitly from the UI.
+            delivery_type: String(req.body.delivery_type || 'HOME').trim().toUpperCase(),
             status: 'ACTIVE',
             active_subscription: true,
             created_by: req.user.id,
@@ -4714,6 +5066,7 @@ exports.createSubscription = async (req, res) => {
 
 exports.getSubscriptionLedger = async (req, res) => {
     try {
+        await resolveOutletId(req);
         const subscriptionId = Number(req.params.id);
         if (!Number.isFinite(subscriptionId) || subscriptionId <= 0) {
             return res.status(400).json({ success: false, message: 'Invalid subscription id' });
@@ -4769,17 +5122,24 @@ exports.generateFinalSettlement = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Subscription not found' });
         }
 
-        const consumptionRows = await req.propertyDb.models.milk_subscription_consumptions.findAll({
-            where: {
-                outlet_id: req.user.outlet_id,
-                subscription_id: subscription.id,
-                txn_date: {
-                    [Op.lte]: subscription.end_date
-                }
-            },
-            order: [['txn_date', 'ASC'], ['id', 'ASC']],
-            transaction: t
-        });
+        let consumptionRows = await loadSubscriptionConsumptionRows(req, subscription, t);
+        if (consumptionRows.length > 0 && consumptionRows.some((row) => !row.id)) {
+            const createdRows = [];
+            for (const row of consumptionRows) {
+                const payload = typeof row.toJSON === 'function' ? row.toJSON() : { ...row };
+                delete payload.id;
+                createdRows.push(
+                    await req.propertyDb.models.milk_subscription_consumptions.create(
+                        {
+                            ...payload,
+                            status: payload.status || 'CONSUMED'
+                        },
+                        { transaction: t }
+                    )
+                );
+            }
+            consumptionRows = createdRows;
+        }
 
         const metrics = buildSubscriptionMetrics(
             subscription,
