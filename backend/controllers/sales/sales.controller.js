@@ -3878,7 +3878,54 @@ exports.listSales = async (req, res) => {
             order: [['sale_date', 'DESC'], ['id', 'DESC']]
         });
 
-        res.json({ success: true, data: sales });
+        const saleIds = sales.map(s => s.id);
+        const refunds = saleIds.length > 0 ? await req.propertyDb.models.sales_refunds.findAll({
+            where: {
+                outlet_id: req.user.outlet_id,
+                sale_id: saleIds
+            }
+        }) : [];
+
+        const refundsMap = {};
+        for (const refund of refunds) {
+            if (!refundsMap[refund.sale_id]) {
+                refundsMap[refund.sale_id] = [];
+            }
+            refundsMap[refund.sale_id].push(refund);
+        }
+
+        const enrichedSales = sales.map(sale => {
+            const saleJson = sale.toJSON();
+            const saleRefunds = refundsMap[sale.id] || [];
+            let totalRefundPaid = 0;
+            let hasPending = false;
+            let hasPaid = false;
+            saleRefunds.forEach(r => {
+                totalRefundPaid += Number(r.amount_paid || 0);
+                if (r.status === 'PAID') hasPaid = true;
+                if (r.status === 'PENDING') hasPending = true;
+            });
+
+            if (saleRefunds.length > 0) {
+                saleJson.refund_amount = totalRefundPaid;
+                if (hasPaid && hasPending) {
+                    saleJson.refund_status = 'PARTIALLY_REFUNDED';
+                } else if (hasPaid) {
+                    saleJson.refund_status = 'REFUNDED';
+                } else if (hasPending) {
+                    saleJson.refund_status = 'PENDING';
+                }
+                const paidRefunds = saleRefunds.filter(r => r.status === 'PAID');
+                if (paidRefunds.length > 0) {
+                    paidRefunds.sort((a, b) => new Date(b.updated_at || b.refund_date) - new Date(a.updated_at || a.refund_date));
+                    saleJson.refund_payment_mode = paidRefunds[0].payment_mode;
+                    saleJson.refund_paid_at = paidRefunds[0].updated_at || paidRefunds[0].refund_date;
+                }
+            }
+            return saleJson;
+        });
+
+        res.json({ success: true, data: enrichedSales });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -4237,6 +4284,38 @@ exports.getSaleDetails = async (req, res) => {
             };
         });
         saleJson.credit_notes = creditNotes;
+
+        // Load all refunds for this sale
+        const refunds = await req.propertyDb.models.sales_refunds.findAll({
+            where: { sale_id: sale.id, outlet_id }
+        });
+
+        saleJson.refunds = refunds;
+        let totalRefundPaid = 0;
+        let hasPending = false;
+        let hasPaid = false;
+        refunds.forEach(r => {
+            totalRefundPaid += Number(r.amount_paid || 0);
+            if (r.status === 'PAID') hasPaid = true;
+            if (r.status === 'PENDING') hasPending = true;
+        });
+
+        if (refunds.length > 0) {
+            saleJson.refund_amount = totalRefundPaid;
+            if (hasPaid && hasPending) {
+                saleJson.refund_status = 'PARTIALLY_REFUNDED';
+            } else if (hasPaid) {
+                saleJson.refund_status = 'REFUNDED';
+            } else if (hasPending) {
+                saleJson.refund_status = 'PENDING';
+            }
+            const paidRefunds = refunds.filter(r => r.status === 'PAID');
+            if (paidRefunds.length > 0) {
+                paidRefunds.sort((a, b) => new Date(b.updated_at || b.refund_date) - new Date(a.updated_at || a.refund_date));
+                saleJson.refund_payment_mode = paidRefunds[0].payment_mode;
+                saleJson.refund_paid_at = paidRefunds[0].updated_at || paidRefunds[0].refund_date;
+            }
+        }
 
         res.json({ success: true, data: saleJson });
     } catch (error) {

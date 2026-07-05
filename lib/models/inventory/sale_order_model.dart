@@ -2,6 +2,7 @@ import 'billing_charge_model.dart';
 import 'sale_item_model.dart';
 import 'sale_scheme_model.dart';
 import 'tax_breakdown_model.dart';
+import 'dart:convert';
 
 class SaleOrder {
   final String saleNo;
@@ -54,6 +55,7 @@ class SaleOrder {
   final String? modificationNote;
   final String? returnStatus;
   final String? returnType;
+  final String? refundStatus;
   final double refundAmount;
   final DateTime? refundPaidAt;
   final String? refundPaymentMode;
@@ -117,6 +119,7 @@ class SaleOrder {
     this.notes,
     this.returnStatus,
     this.returnType,
+    this.refundStatus,
     this.refundAmount = 0.0,
     this.refundPaidAt,
     this.refundPaymentMode,
@@ -180,8 +183,10 @@ class SaleOrder {
         'loyalty_discount_amount': loyaltyDiscountAmount,
         'notes': notes,
         'modification_note': modificationNote,
+        'refund_amount': refundAmount,
         'refund_paid_at': refundPaidAt?.toIso8601String(),
         'refund_payment_mode': refundPaymentMode,
+        'refund_status': refundStatus,
         'exchange_against_bill_no': exchangeAgainstBillNo,
         'has_bill_no': hasBillNo,
         'order_id': orderId,
@@ -196,6 +201,26 @@ class SaleOrder {
   factory SaleOrder.fromJson(Map<String, dynamic> json) {
     double parseNum(dynamic value) =>
         double.tryParse(value?.toString() ?? '') ?? 0;
+
+    double refundAmt = parseNum(json['refund_amount'] ?? json['refundAmount']);
+    final refund = json['refund_details'];
+    if (refundAmt == 0.0 && refund != null) {
+      final paid = double.tryParse(refund['amount_paid']?.toString() ?? '0.0') ?? 0.0;
+      final pending = double.tryParse(refund['amount_pending']?.toString() ?? '0.0') ?? 0.0;
+      refundAmt = paid > 0 ? paid : pending;
+    }
+    final gatewayDetails = json['payment_gateway_details'];
+    if (gatewayDetails != null) {
+      try {
+        final dynamic details = gatewayDetails is String ? jsonDecode(gatewayDetails) : gatewayDetails;
+        if (details != null && details['refund_amount'] != null) {
+          refundAmt = double.tryParse(details['refund_amount'].toString()) ?? refundAmt;
+        }
+      } catch (_) {}
+    }
+
+    final refundPaidAtVal = json['refund_paid_at']?.toString() ?? (refund != null ? refund['refund_date']?.toString() : null);
+    final refundPaymentModeVal = json['refund_payment_mode']?.toString() ?? (refund != null ? refund['payment_mode']?.toString() : null);
 
     return SaleOrder(
       saleNo: json['sale_no']?.toString() ?? '',
@@ -256,8 +281,10 @@ class SaleOrder {
       loyaltyDiscountAmount: parseNum(json['loyalty_discount_amount']),
       notes: json['notes']?.toString(),
       modificationNote: json['modification_note']?.toString(),
-      refundPaidAt: DateTime.tryParse(json['refund_paid_at']?.toString() ?? ''),
-      refundPaymentMode: json['refund_payment_mode']?.toString(),
+      refundStatus: json['refund_status']?.toString(),
+      refundAmount: refundAmt,
+      refundPaidAt: DateTime.tryParse(refundPaidAtVal ?? ''),
+      refundPaymentMode: refundPaymentModeVal,
       exchangeAgainstBillNo: json['exchange_against_bill_no']?.toString(),
       hasBillNo: json['has_bill_no'] != null
           ? (json['has_bill_no'] == true || json['has_bill_no'].toString() == '1')

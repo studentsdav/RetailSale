@@ -1816,6 +1816,45 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     final bool hasBillNo = (record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? '').trim().isNotEmpty;
     final int? orderId = record['id'] == null ? null : int.tryParse(record['id'].toString());
 
+    String refundStatus = record['refund_status']?.toString() ?? '';
+    final dynamic gatewayDetails = record['payment_gateway_details'];
+    if (gatewayDetails != null) {
+      try {
+        final dynamic details = gatewayDetails is String ? jsonDecode(gatewayDetails) : gatewayDetails;
+        refundStatus = (details?['status']?.toString() ?? refundStatus);
+      } catch (_) {}
+    }
+
+    final returnType = record['return_type']?.toString();
+    final bool isExchange = returnType == 'EXCHANGE' || record['payment_mode']?.toString().toUpperCase() == 'EXCHANGE';
+    double refundAmt = 0.0;
+    if (record['refund_amount'] != null) {
+      refundAmt = double.tryParse(record['refund_amount'].toString()) ?? 0.0;
+    }
+    if (refundAmt == 0.0) {
+      final refund = record['refund_details'];
+      if (refund != null) {
+        final paid = double.tryParse(refund['amount_paid']?.toString() ?? '0.0') ?? 0.0;
+        final pending = double.tryParse(refund['amount_pending']?.toString() ?? '0.0') ?? 0.0;
+        refundAmt = paid > 0 ? paid : pending;
+      }
+    }
+    if (gatewayDetails != null) {
+      try {
+        final dynamic details = gatewayDetails is String ? jsonDecode(gatewayDetails) : gatewayDetails;
+        if (details != null && details['refund_amount'] != null) {
+          refundAmt = double.tryParse(details['refund_amount'].toString()) ?? refundAmt;
+        }
+      } catch (_) {}
+    }
+
+    final String refundPaymentMode = isExchange
+        ? 'EXCHANGE'
+        : (record['refund_payment_mode']?.toString() ?? record['payment_mode']?.toString() ?? 'CASH');
+    final DateTime? refundPaidAt = DateTime.tryParse(
+      record['refund_paid_at']?.toString() ?? record['updated_at']?.toString() ?? '',
+    );
+
     return SaleOrder(
       saleNo: saleNo,
       hasBillNo: hasBillNo,
@@ -1852,6 +1891,10 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       totalDiscount: 0.0,
       roundOffAmount: 0.0,
       netAmount: netAmt,
+      refundStatus: refundStatus.isNotEmpty ? refundStatus : null,
+      refundAmount: refundAmt,
+      refundPaidAt: refundPaidAt,
+      refundPaymentMode: refundPaymentMode,
       items: saleItems,
     );
   }

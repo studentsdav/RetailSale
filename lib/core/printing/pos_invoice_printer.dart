@@ -451,12 +451,10 @@ class PosInvoicePrinter {
           _thermalMetaRow(
             'Payment',
             _displayPaymentMode(order),
-            order.refundAmount > 0
+            _isRefundedOrder(order)
                 ? 'Refund'
                 : ((data.changeDue ?? order.changeAmount) > 0 ? 'Refund (CASH)' : 'Refund'),
-            _money(order.refundAmount > 0
-                ? order.refundAmount
-                : (data.changeDue ?? order.changeAmount)),
+            _money(_refundAmountForDisplay(order, data.changeDue)),
           ),
           if (_refundTimestamp(order).isNotEmpty)
             _thermalMetaRow('Refunded On', _refundTimestamp(order), '', ''),
@@ -1021,10 +1019,14 @@ class PosInvoicePrinter {
             ),
           pw.Divider(height: 10),
           _a4AmountRow('Grand Total', order.netAmount, bold: true),
-          if (order.refundAmount > 0) ...[
+          if (_isRefundedOrder(order)) ...[
             pw.Divider(height: 10),
-            _a4AmountRow('Refunded Amount', order.refundAmount),
-            _a4AmountRow('Net Payable', order.netAmount - order.refundAmount, bold: true),
+            _a4AmountRow('Refunded Amount', _refundAmountForDisplay(order)),
+            _a4AmountRow(
+              'Net Payable',
+              order.netAmount - _refundAmountForDisplay(order),
+              bold: true,
+            ),
           ],
           if (order.amountPaid > 0) ...[
             pw.Divider(height: 10),
@@ -1065,7 +1067,7 @@ class PosInvoicePrinter {
     if (order.status == 'CANCELLED') {
       return 'CANCELLED BILL';
     }
-    if (order.refundAmount > 0) {
+    if (_isRefundedOrder(order)) {
       return 'REFUNDED BILL';
     }
     if (order.status == 'DRAFT') {
@@ -1099,7 +1101,7 @@ class PosInvoicePrinter {
     if (_isExchangeOrder(order)) {
       return '*** EXCHANGED ***';
     }
-    if (order.refundAmount > 0) {
+    if (_isRefundedOrder(order)) {
       return '*** REFUNDED ***';
     }
     return '';
@@ -1109,6 +1111,32 @@ class PosInvoicePrinter {
     final dt = order.refundPaidAt;
     if (dt == null) return '';
     return _dateTime.format(dt.toLocal());
+  }
+
+  static bool _isRefundedOrder(SaleOrder order) {
+    final refundStatus = _refundStatus(order);
+    return refundStatus == 'REFUNDED' ||
+        refundStatus == 'PARTIALLY_REFUNDED' ||
+        refundStatus == 'PAID' ||
+        order.refundAmount > 0 ||
+        order.refundPaidAt != null;
+  }
+
+  static String _refundStatus(SaleOrder order) {
+    return (order.refundStatus ?? '').trim().toUpperCase();
+  }
+
+  static double _refundAmountForDisplay(SaleOrder order, [double? fallback]) {
+    if (order.refundAmount > 0) {
+      return order.refundAmount;
+    }
+    if (_isRefundedOrder(order) && (fallback ?? 0) > 0) {
+      return fallback!;
+    }
+    if (_isRefundedOrder(order)) {
+      return order.netAmount;
+    }
+    return order.changeAmount > 0 ? order.changeAmount : (fallback ?? 0.0);
   }
 
   static bool _hasTaxData(SaleOrder order) {

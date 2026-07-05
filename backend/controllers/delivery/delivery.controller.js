@@ -1977,11 +1977,57 @@ exports.getCustomerHistory = async (req, res) => {
             order: [['sale_date', 'DESC']]
         });
 
+        const inStoreSaleIds = inStoreSales.map(s => s.id);
+        const inStoreRefunds = inStoreSaleIds.length > 0 ? await req.propertyDb.models.sales_refunds.findAll({
+            where: {
+                sale_id: inStoreSaleIds
+            }
+        }) : [];
+
+        const inStoreRefundsMap = {};
+        for (const refund of inStoreRefunds) {
+            if (!inStoreRefundsMap[refund.sale_id]) {
+                inStoreRefundsMap[refund.sale_id] = [];
+            }
+            inStoreRefundsMap[refund.sale_id].push(refund);
+        }
+
+        const enrichedInStoreSales = inStoreSales.map(sale => {
+            const saleJson = sale.toJSON();
+            const refunds = inStoreRefundsMap[sale.id] || [];
+            let totalRefundPaid = 0;
+            let hasPending = false;
+            let hasPaid = false;
+            refunds.forEach(r => {
+                totalRefundPaid += Number(r.amount_paid || 0);
+                if (r.status === 'PAID') hasPaid = true;
+                if (r.status === 'PENDING') hasPending = true;
+            });
+
+            if (refunds.length > 0) {
+                saleJson.refund_amount = totalRefundPaid;
+                if (hasPaid && hasPending) {
+                    saleJson.refund_status = 'PARTIALLY_REFUNDED';
+                } else if (hasPaid) {
+                    saleJson.refund_status = 'REFUNDED';
+                } else if (hasPending) {
+                    saleJson.refund_status = 'PENDING';
+                }
+                const paidRefunds = refunds.filter(r => r.status === 'PAID');
+                if (paidRefunds.length > 0) {
+                    paidRefunds.sort((a, b) => new Date(b.updated_at || b.refund_date) - new Date(a.updated_at || a.refund_date));
+                    saleJson.refund_payment_mode = paidRefunds[0].payment_mode;
+                    saleJson.refund_paid_at = paidRefunds[0].updated_at || paidRefunds[0].refund_date;
+                }
+            }
+            return saleJson;
+        });
+
         res.json({
             success: true,
             data: {
                 onlineOrders: enrichedOrders,
-                inStoreSales
+                inStoreSales: enrichedInStoreSales
             }
         });
     } catch (error) {

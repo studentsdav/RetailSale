@@ -1789,11 +1789,16 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         : (record['id']?.toString() ?? '');
 
     double refundAmt = 0.0;
-    final refund = record['refund_details'];
-    if (refund != null) {
-      final paid = double.tryParse(refund['amount_paid']?.toString() ?? '0.0') ?? 0.0;
-      final pending = double.tryParse(refund['amount_pending']?.toString() ?? '0.0') ?? 0.0;
-      refundAmt = paid > 0 ? paid : pending;
+    if (record['refund_amount'] != null) {
+      refundAmt = double.tryParse(record['refund_amount'].toString()) ?? 0.0;
+    }
+    if (refundAmt == 0.0) {
+      final refund = record['refund_details'];
+      if (refund != null) {
+        final paid = double.tryParse(refund['amount_paid']?.toString() ?? '0.0') ?? 0.0;
+        final pending = double.tryParse(refund['amount_pending']?.toString() ?? '0.0') ?? 0.0;
+        refundAmt = paid > 0 ? paid : pending;
+      }
     }
     final gatewayDetails = record['payment_gateway_details'];
     if (gatewayDetails != null) {
