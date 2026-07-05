@@ -6,9 +6,13 @@ const { Op, fn, col, where: sqlWhere } = require('sequelize');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
 
 function normalizeCustomerIdentity(header = {}) {
+    let phone = String(header.customer_phone || '').replace(/\D/g, '').trim();
+    if (phone.length > 10) {
+        phone = phone.slice(-10);
+    }
     return {
         // Keep digits-only for stable matching across UI formats like "+91 98..." / "098..." / "98-...".
-        customer_phone: String(header.customer_phone || '').replace(/\D/g, '').trim(),
+        customer_phone: phone,
         customer_gstin: String(header.customer_gstin || '').trim().toUpperCase(),
         customer_name: String(header.customer_name || '').trim()
     };
@@ -16,7 +20,13 @@ function normalizeCustomerIdentity(header = {}) {
 
 function buildCustomerScope(identity = {}) {
     if (identity.customer_phone) {
-        return { customer_phone: identity.customer_phone };
+        const phone = String(identity.customer_phone).replace(/\D/g, '').trim();
+        const last10 = phone.length > 10 ? phone.slice(-10) : phone;
+        return {
+            customer_phone: {
+                [Op.in]: [last10, `91${last10}`, `+91${last10}`, `0${last10}`]
+            }
+        };
     }
     if (identity.customer_gstin) {
         return { customer_gstin: identity.customer_gstin };
@@ -515,7 +525,15 @@ function collectAppliedSchemeIds(header = {}, items = []) {
 
 function buildCustomerOrConditions(identity = {}) {
     const conditions = [];
-    if (identity.customer_phone) conditions.push({ customer_phone: identity.customer_phone });
+    if (identity.customer_phone) {
+        const phone = String(identity.customer_phone).replace(/\D/g, '').trim();
+        const last10 = phone.length > 10 ? phone.slice(-10) : phone;
+        conditions.push({
+            customer_phone: {
+                [Op.in]: [last10, `91${last10}`, `+91${last10}`, `0${last10}`]
+            }
+        });
+    }
     if (identity.customer_gstin) conditions.push({ customer_gstin: identity.customer_gstin });
     if (identity.customer_name) conditions.push({ customer_name: identity.customer_name });
     return conditions;
@@ -611,15 +629,18 @@ async function getCustomerItemConsumedQtyForDay(
     };
 
     let customerWhere = '';
-    if (whereCustomer.customer_phone) {
-        customerWhere = 'AND ms.customer_phone = :customer_phone';
-        params.customer_phone = whereCustomer.customer_phone;
-    } else if (whereCustomer.customer_gstin) {
+    if (normalizedIdentity.customer_phone) {
+        customerWhere = 'AND ms.customer_phone IN (:phone_last10, :phone_91, :phone_plus91, :phone_0)';
+        params.phone_last10 = normalizedIdentity.customer_phone;
+        params.phone_91 = `91${normalizedIdentity.customer_phone}`;
+        params.phone_plus91 = `+91${normalizedIdentity.customer_phone}`;
+        params.phone_0 = `0${normalizedIdentity.customer_phone}`;
+    } else if (normalizedIdentity.customer_gstin) {
         customerWhere = 'AND ms.customer_gstin = :customer_gstin';
-        params.customer_gstin = whereCustomer.customer_gstin;
-    } else if (whereCustomer.customer_name) {
+        params.customer_gstin = normalizedIdentity.customer_gstin;
+    } else if (normalizedIdentity.customer_name) {
         customerWhere = 'AND ms.customer_name = :customer_name';
-        params.customer_name = whereCustomer.customer_name;
+        params.customer_name = normalizedIdentity.customer_name;
     }
 
     const [rows] = await req.propertyDb.query(

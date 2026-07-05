@@ -77,9 +77,25 @@ exports.getSettings = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
 
-        const settings = await req.propertyDb.models.system_settings.findOne({
-            where: { outlet_id }
-        });
+        let settings = null;
+        try {
+            settings = await req.propertyDb.models.system_settings.findOne({
+                where: { outlet_id }
+            });
+        } catch (dbErr) {
+            console.warn("⚠️ System settings query failed in getSettings, trying fallback without merchant_upi_id:", dbErr.message);
+            try {
+                const attributes = Object.keys(req.propertyDb.models.system_settings.rawAttributes).filter(
+                    attr => attr !== 'merchant_upi_id'
+                );
+                settings = await req.propertyDb.models.system_settings.findOne({
+                    where: { outlet_id },
+                    attributes: attributes
+                });
+            } catch (fallbackErr) {
+                console.error("❌ Fallback query in getSettings failed:", fallbackErr.stack);
+            }
+        }
 
         // first time → defaults
         if (!settings) {
@@ -101,7 +117,12 @@ exports.getSettings = async (req, res) => {
                     default_charges: [],
                     voucher_rules: [],
                     is_cloud_enabled: false,
-                    enable_app_subscription: false
+                    enable_app_subscription: false,
+                    enable_payment_gateway: false,
+                    payment_gateway_provider: 'SANDBOX',
+                    payment_gateway_api_key: '',
+                    payment_gateway_secret_key: '',
+                    merchant_upi_id: ''
                 }
             });
         }
@@ -149,7 +170,12 @@ exports.saveSettings = async (req, res) => {
                 : [],
             voucher_rules: Array.isArray(req.body.voucher_rules)
                 ? req.body.voucher_rules
-                : (existing?.voucher_rules || [])
+                : (existing?.voucher_rules || []),
+            enable_payment_gateway: req.body.enable_payment_gateway ?? false,
+            payment_gateway_provider: req.body.payment_gateway_provider || 'SANDBOX',
+            payment_gateway_api_key: req.body.payment_gateway_api_key || '',
+            payment_gateway_secret_key: req.body.payment_gateway_secret_key || '',
+            merchant_upi_id: req.body.merchant_upi_id || ''
         };
 
         let record;

@@ -89,6 +89,7 @@ class MainDashboardScreen extends StatefulWidget {
 
 class _MainDashboardScreenState extends State<MainDashboardScreen> {
   // USER SESSION
+  final Set<int> _shownNotificationIds = {};
 
   final DateTime _loginTime =
       DateTime.now().subtract(const Duration(hours: 3, minutes: 20));
@@ -640,8 +641,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         try {
           final res = await ApiClient.get('/api/notifications');
           for (final n in res['data']) {
-            if (n['is_read'] == false) {
-              NotificationService.show(n['id'], n['title'], n['message']);
+            final id = n['id'] as int? ?? 0;
+            if (id > 0 && n['is_read'] == false && !_shownNotificationIds.contains(id)) {
+              _shownNotificationIds.add(id);
+              NotificationService.show(id, n['title']?.toString() ?? 'Notification', n['message']?.toString() ?? '');
             }
           }
         } catch (e) {

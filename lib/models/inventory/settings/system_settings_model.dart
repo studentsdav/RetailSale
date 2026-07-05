@@ -19,6 +19,11 @@ class SystemSettings {
   /// and appear directly in the retailer console. When false, they are
   /// created as DRAFT bills in the sale screen for manual confirmation.
   bool enableAppSubscription;
+  bool enablePaymentGateway;
+  String paymentGatewayProvider;
+  String paymentGatewayApiKey;
+  String paymentGatewaySecretKey;
+  String merchantUpiId;
 
   SystemSettings({
     required this.autoReorder,
@@ -36,6 +41,11 @@ class SystemSettings {
     required this.defaultCharges,
     required this.isCloudEnabled,
     required this.enableAppSubscription,
+    required this.enablePaymentGateway,
+    required this.paymentGatewayProvider,
+    required this.paymentGatewayApiKey,
+    required this.paymentGatewaySecretKey,
+    required this.merchantUpiId,
   });
 
   factory SystemSettings.fromJson(Map<String, dynamic> json) {
@@ -55,6 +65,11 @@ class SystemSettings {
       billFormat: json['bill_format'] ?? 'A4',
       isCloudEnabled: json['is_cloud_enabled'] ?? false,
       enableAppSubscription: json['enable_app_subscription'] ?? false,
+      enablePaymentGateway: json['enable_payment_gateway'] ?? false,
+      paymentGatewayProvider: json['payment_gateway_provider'] ?? 'SANDBOX',
+      paymentGatewayApiKey: json['payment_gateway_api_key'] ?? '',
+      paymentGatewaySecretKey: json['payment_gateway_secret_key'] ?? '',
+      merchantUpiId: json['merchant_upi_id'] ?? '',
       defaultCharges: rawCharges is List
           ? rawCharges
               .map((e) => BillingCharge.fromJson(Map<String, dynamic>.from(e)))
@@ -115,6 +130,11 @@ class SystemSettings {
           defaultCharges.map((charge) => charge.toJson()).toList(),
       'is_cloud_enabled': isCloudEnabled,
       'enable_app_subscription': enableAppSubscription,
+      'enable_payment_gateway': enablePaymentGateway,
+      'payment_gateway_provider': paymentGatewayProvider,
+      'payment_gateway_api_key': paymentGatewayApiKey,
+      'payment_gateway_secret_key': paymentGatewaySecretKey,
+      'merchant_upi_id': merchantUpiId,
     };
   }
 }

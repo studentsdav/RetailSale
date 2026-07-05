@@ -42,5 +42,10 @@ router.put('/retailer/items/:item_code/b2b-rate', adminAuth, ctrl.updateB2bRate)
 router.get('/retailer/return-settings', ctrl.getReturnSettings);
 router.put('/retailer/return-settings', adminAuth, ctrl.updateReturnSettings);
 router.put('/retailer/items/:item_code/return-window', adminAuth, ctrl.updateItemReturnWindow);
+router.get('/retailer/transactions', adminAuth, ctrl.listTransactions);
+router.post('/retailer/orders/:id/refund-gateway', adminAuth, ctrl.refundGatewayPayment);
+router.get('/retailer/orders/:id/pending-refunds', adminAuth, ctrl.getOrderPendingRefunds);
+router.post('/retailer/orders/:id/refund-via-creditnote', adminAuth, ctrl.refundGatewayViaCreditNote);
+
 
 module.exports = router;

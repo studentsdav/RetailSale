@@ -12,9 +12,12 @@ function toWhole(value, fallback = 0) {
 }
 
 function normalizeCustomerIdentity(payload = {}) {
-    const phone = String(payload.customer_phone || payload.customerPhone || '')
+    let phone = String(payload.customer_phone || payload.customerPhone || '')
         .replace(/\D/g, '')
         .trim();
+    if (phone.length > 10) {
+        phone = phone.slice(-10);
+    }
     const gstin = String(payload.customer_gstin || payload.customerGstin || '')
         .trim()
         .toUpperCase();

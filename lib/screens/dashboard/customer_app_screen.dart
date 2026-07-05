@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
+import '../../core/config/app_brand.dart';
 import '../../core/auth/token_storage.dart';
 import '../../controllers/dashboard/dashboard_controller.dart'
     as UserProfiledata;
@@ -86,6 +87,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   int? _activeOrderId;
   bool _isExchangeAvailable = true;
   bool _isRefundAvailable = true;
+  bool _enablePaymentGateway = false;
+  String _paymentGatewayProvider = 'SANDBOX';
+  String _paymentGatewayApiKey = '';
+  String _merchantUpiId = '';
   List<dynamic> _subscriptions = [];
   bool _isSubscriptionsLoading = false;
   int _historySubTabIndex = 0; // 0 for Orders, 1 for Subscriptions
@@ -268,6 +273,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           }
           _isExchangeAvailable = data['is_exchange_available'] ?? true;
           _isRefundAvailable = data['is_refund_available'] ?? true;
+          _enablePaymentGateway = data['enable_payment_gateway'] ?? false;
+          _paymentGatewayProvider = data['payment_gateway_provider'] ?? 'SANDBOX';
+          _paymentGatewayApiKey = data['payment_gateway_api_key'] ?? '';
+          _merchantUpiId = data['merchant_upi_id'] ?? '';
         });
       }
       // Load system settings to get bill_format (only if we have an admin/user token)
@@ -522,6 +531,496 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     }
   }
 
+  Future<Map<String, dynamic>?> _showDirectUpiQrDialog(double amount) async {
+    final upiUrl = 'upi://pay?pa=$_merchantUpiId&pn=${Uri.encodeComponent(AppBrand.companyName)}&am=${amount.toStringAsFixed(2)}&cu=INR&tn=DeliveryOrder';
+    final qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${Uri.encodeComponent(upiUrl)}';
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogCtx) {
+        final theme = Theme.of(dialogCtx);
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              elevation: 8,
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'UPI Direct QR Payment',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Scan and pay using any UPI App (GPay/PhonePe/Paytm)',
+                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                      textAlign: TextAlign.center,
+                    ),
+                    const Divider(height: 24),
+                    Text(
+                      'Amount to Pay',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Rs. ${amount.toStringAsFixed(2)}',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Beautiful QR frame
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Image.network(
+                        qrUrl,
+                        width: 200,
+                        height: 200,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            width: 200,
+                            height: 200,
+                            color: Colors.grey.shade50,
+                            alignment: Alignment.center,
+                            child: const CircularProgressIndicator(),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 200,
+                            height: 200,
+                            color: Colors.grey.shade100,
+                            alignment: Alignment.center,
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.wifi_off_outlined, color: Colors.red, size: 36),
+                                SizedBox(height: 8),
+                                Text(
+                                  'QR load failed',
+                                  style: TextStyle(fontSize: 11, color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'UPI ID: $_merchantUpiId',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'monospace'),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.08),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified_user_outlined, size: 16, color: Colors.green),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Please scan the QR, complete the payment on your device, and click "I Have Paid" below.',
+                              style: TextStyle(fontSize: 11, color: Colors.green.shade900),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(null),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () async {
+                              // Show circular loading indicator
+                              showDialog(
+                                context: dialogCtx,
+                                barrierDismissible: false,
+                                builder: (context) => const Center(
+                                  child: Card(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(24),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          CircularProgressIndicator(),
+                                          SizedBox(height: 16),
+                                          Text('Verifying payment...'),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+
+                              // Simulate verifying delay
+                              await Future.delayed(const Duration(seconds: 2));
+
+                              // Pop the loading spinner
+                              if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+
+                              final txnId = 'upi_qr_${DateTime.now().millisecondsSinceEpoch}';
+                              if (dialogCtx.mounted) {
+                                Navigator.of(dialogCtx).pop({
+                                  'success': true,
+                                  'provider': 'DIRECT_UPI_QR',
+                                  'txn_id': txnId,
+                                  'status': 'PAID',
+                                  'amount': amount,
+                                  'payment_method': 'UPI',
+                                  'upi_details': 'Direct Scan QR',
+                                  'paid_at': DateTime.now().toIso8601String(),
+                                });
+                              }
+                            },
+                            style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                            child: const Text('I Have Paid'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> _showPaymentGatewayDialog(double amount) async {
+    String testStatus = 'SUCCESS'; // 'SUCCESS' or 'FAILURE'
+    String paymentMethod = 'CARD'; // 'CARD', 'UPI'
+    
+    final TextEditingController cardNoCtrl = TextEditingController(text: '4111 2222 3333 4444');
+    final TextEditingController cardExpiryCtrl = TextEditingController(text: '12/28');
+    final TextEditingController cardCvvCtrl = TextEditingController(text: '123');
+    final TextEditingController upiCtrl = TextEditingController(text: 'customer@okaxis');
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogCtx) {
+        final theme = Theme.of(dialogCtx);
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              elevation: 8,
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Secure Checkout',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _paymentGatewayProvider,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.lock_outline, size: 14, color: theme.colorScheme.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                'SECURE',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    Text(
+                      'Amount to Pay',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Rs. ${amount.toStringAsFixed(2)}',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Select Payment Method',
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('Card'),
+                            selected: paymentMethod == 'CARD',
+                            onSelected: (selected) {
+                              if (selected) setModalState(() => paymentMethod = 'CARD');
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('UPI ID'),
+                            selected: paymentMethod == 'UPI',
+                            onSelected: (selected) {
+                              if (selected) setModalState(() => paymentMethod = 'UPI');
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (paymentMethod == 'CARD') ...[
+                      TextField(
+                        controller: cardNoCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Card Number',
+                          prefixIcon: Icon(Icons.credit_card_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: cardExpiryCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Expiry (MM/YY)',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: cardCvvCtrl,
+                              obscureText: true,
+                              decoration: const InputDecoration(
+                                labelText: 'CVV',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      TextField(
+                        controller: upiCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'UPI ID',
+                          prefixIcon: Icon(Icons.qr_code_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.08),
+                        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.bug_report_outlined, size: 16, color: Colors.amber),
+                              SizedBox(width: 6),
+                              Text(
+                                'TEST SANDBOX MODE',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Text('Simulate Status: ', style: TextStyle(fontSize: 12)),
+                              const SizedBox(width: 8),
+                              DropdownButton<String>(
+                                value: testStatus,
+                                underline: const SizedBox(),
+                                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                                items: const [
+                                  DropdownMenuItem(value: 'SUCCESS', child: Text('SUCCESS (Approve)')),
+                                  DropdownMenuItem(value: 'FAILURE', child: Text('FAILURE (Decline)')),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setModalState(() => testStatus = val);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(null),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () async {
+                              // Show circular loading indicator
+                              showDialog(
+                                context: dialogCtx,
+                                barrierDismissible: false,
+                                builder: (context) => const Center(
+                                  child: Card(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(24),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          CircularProgressIndicator(),
+                                          SizedBox(height: 16),
+                                          Text('Processing transaction...'),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+
+                              // Simulate processing delay
+                              await Future.delayed(const Duration(seconds: 2));
+
+                              // Pop the loading spinner
+                              if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+
+                              if (testStatus == 'SUCCESS') {
+                                final txnId = 'pay_${_paymentGatewayProvider.toLowerCase()}_${DateTime.now().millisecondsSinceEpoch}';
+                                final cardNo = cardNoCtrl.text.trim();
+                                final maskedCard = cardNo.length >= 4 
+                                    ? 'Card **** ${cardNo.substring(cardNo.length - 4)}' 
+                                    : 'Card';
+                                final maskedUpi = upiCtrl.text.trim();
+                                if (dialogCtx.mounted) {
+                                  Navigator.of(dialogCtx).pop({
+                                    'success': true,
+                                    'provider': _paymentGatewayProvider,
+                                    'txn_id': txnId,
+                                    'status': 'PAID',
+                                    'amount': amount,
+                                    'payment_method': paymentMethod,
+                                    'card_details': paymentMethod == 'CARD' ? maskedCard : null,
+                                    'upi_details': paymentMethod == 'UPI' ? maskedUpi : null,
+                                    'paid_at': DateTime.now().toIso8601String(),
+                                  });
+                                }
+                              } else {
+                                if (dialogCtx.mounted) {
+                                  ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Payment Declined. Please try a different card or UPI ID.'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                  Navigator.of(dialogCtx).pop(null);
+                                }
+                              }
+                            },
+                            child: const Text('Pay Now'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _placeOrder() async {
     if (_cart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -672,6 +1171,25 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       double netAmount = subTotal + finalTax + totalCharges - couponDiscount - subscriptionDiscount;
       if (netAmount < 0) netAmount = 0.0;
 
+      Map<String, dynamic>? gatewayDetails;
+      if (_paymentMode == 'PAID' && _enablePaymentGateway) {
+        setState(() => _isLoading = false);
+        gatewayDetails = await _showPaymentGatewayDialog(netAmount);
+        if (gatewayDetails == null) {
+          // Cancelled or failed payment
+          return;
+        }
+        setState(() => _isLoading = true);
+      } else if (_paymentMode == 'PAID' && !_enablePaymentGateway && _merchantUpiId.isNotEmpty) {
+        setState(() => _isLoading = false);
+        gatewayDetails = await _showDirectUpiQrDialog(netAmount);
+        if (gatewayDetails == null) {
+          // Cancelled or failed payment
+          return;
+        }
+        setState(() => _isLoading = true);
+      }
+
       final outletCode = _loggedInCustomer?['outlet_id'] ??
           _currentUser?.outletCode ??
           (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
@@ -685,11 +1203,12 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         'tax_amount': finalTax,
         'delivery_charge': totalCharges,
         'net_amount': netAmount,
-        'payment_status': _paymentMode,
-        'payment_mode': _chosenPaymentMethod,
+        'payment_status': gatewayDetails != null ? 'PAID' : _paymentMode,
+        'payment_mode': gatewayDetails != null ? gatewayDetails['payment_method'] : _chosenPaymentMethod,
         'gstin': _gstin.isEmpty ? null : _gstin,
         'charges': chargesList,
-        'coupon_code': _appliedCoupon != null ? _appliedCoupon!['code'] : null
+        'coupon_code': _appliedCoupon != null ? _appliedCoupon!['code'] : null,
+        'payment_gateway_details': gatewayDetails,
       };
 
       final res = await ApiClient.post('/api/delivery/orders', body);
@@ -1253,10 +1772,51 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     final netAmt = parseNum(record['net_amount'] ?? 0.0);
     final taxAmt = parseNum(record['tax_amount'] ?? record['total_tax'] ?? 0.0);
 
+    final String status = record['status']?.toString() ?? 'COMPLETED';
+    final String saleNo = (status == 'CANCELLED')
+        ? (record['id']?.toString() ?? '')
+        : (record['bill_no']?.toString() ?? record['sale_no']?.toString() ?? record['id']?.toString() ?? '');
+
+    double refundAmt = 0.0;
+    final refund = record['refund_details'];
+    if (refund != null) {
+      final paid = double.tryParse(refund['amount_paid']?.toString() ?? '0.0') ?? 0.0;
+      final pending = double.tryParse(refund['amount_pending']?.toString() ?? '0.0') ?? 0.0;
+      refundAmt = paid > 0 ? paid : pending;
+    }
+    final gatewayDetails = record['payment_gateway_details'];
+    if (gatewayDetails != null) {
+      try {
+        final dynamic details = gatewayDetails is String ? jsonDecode(gatewayDetails) : gatewayDetails;
+        if (details != null && details['refund_amount'] != null) {
+          refundAmt = double.tryParse(details['refund_amount'].toString()) ?? refundAmt;
+        }
+      } catch (_) {}
+    }
+
+    final String? returnStatus = record['return_status']?.toString();
+    final String? returnType = record['return_type']?.toString();
+
+    List<dynamic> returnedItemsList = [];
+    if (record['returned_items'] != null && (record['returned_items'] as List).isNotEmpty) {
+      returnedItemsList = List<dynamic>.from(record['returned_items']);
+    } else if (record['return_item_id'] != null) {
+      returnedItemsList = [
+        {
+          'item_id': record['return_item_id'],
+          'item_name': record['return_item_name'] ?? '',
+        }
+      ];
+    }
+
     return SaleOrder(
-      saleNo: record['sale_no']?.toString() ?? record['id']?.toString() ?? '',
+      saleNo: saleNo,
+      returnStatus: returnStatus,
+      returnType: returnType,
+      refundAmount: refundAmt,
+      returnedItems: returnedItemsList,
       saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
-      status: record['status']?.toString() ?? 'COMPLETED',
+      status: status,
       orderType: 'B2C',
       billingCountry: 'India',
       billingTaxMode: 'CGST_SGST',
@@ -2858,13 +3418,16 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     if (selected) setState(() => _chosenPaymentMethod = 'CASH');
                   },
                 ),
-                ChoiceChip(
-                  label: const Text('CARD'),
-                  selected: _chosenPaymentMethod == 'CARD',
-                  onSelected: (selected) {
-                    if (selected) setState(() => _chosenPaymentMethod = 'CARD');
-                  },
-                ),
+
+                if (_enablePaymentGateway) ...[
+                  ChoiceChip(
+                    label: const Text('CARD'),
+                    selected: _chosenPaymentMethod == 'CARD',
+                    onSelected: (selected) {
+                      if (selected) setState(() => _chosenPaymentMethod = 'CARD');
+                    },
+                  ),
+                ],
                 ChoiceChip(
                   label: const Text('UPI'),
                   selected: _chosenPaymentMethod == 'UPI',
@@ -2872,13 +3435,15 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     if (selected) setState(() => _chosenPaymentMethod = 'UPI');
                   },
                 ),
-                ChoiceChip(
-                  label: const Text('CREDIT'),
-                  selected: _chosenPaymentMethod == 'CREDIT',
-                  onSelected: (selected) {
-                    if (selected) setState(() => _chosenPaymentMethod = 'CREDIT');
-                  },
-                ),
+                if (_enablePaymentGateway) ...[
+                  ChoiceChip(
+                    label: const Text('CREDIT'),
+                    selected: _chosenPaymentMethod == 'CREDIT',
+                    onSelected: (selected) {
+                      if (selected) setState(() => _chosenPaymentMethod = 'CREDIT');
+                    },
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 8),
@@ -2896,15 +3461,32 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     if (selected) setState(() => _paymentMode = 'UNPAID');
                   },
                 ),
-                ChoiceChip(
-                  label: const Text('Paid Online'),
-                  selected: _paymentMode == 'PAID',
-                  onSelected: (selected) {
-                    if (selected) setState(() => _paymentMode = 'PAID');
-                  },
-                ),
+                if (_enablePaymentGateway || _merchantUpiId.isNotEmpty)
+                  ChoiceChip(
+                    label: const Text('Paid Online'),
+                    selected: _paymentMode == 'PAID',
+                    onSelected: (selected) {
+                      if (selected) setState(() => _paymentMode = 'PAID');
+                    },
+                  ),
               ],
             ),
+            if (_enablePaymentGateway)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  '🔒 Payment gateway active via $_paymentGatewayProvider. Orders marked as Paid Online will proceed to secure payment.',
+                  style: TextStyle(color: theme.colorScheme.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              )
+            else if (_merchantUpiId.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  '📱 Direct UPI QR active. Orders marked as Paid Online will show a QR Code for instant UPI payment.',
+                  style: const TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -3579,7 +4161,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                               final refundMethod = order['refund_payment_mode'] ?? order['payment_mode'] ?? 'UPI';
                                               
                                               final label = isRefunded
-                                                  ? 'Refund Paid via $refundMethod at $refundPaidAtStr:'
+                                                  ? (refundMethod == 'GATEWAY'
+                                                      ? 'Refund processed via Online Gateway. Credited to source account in 48 hours to 3 business days.\nProcessed at $refundPaidAtStr:'
+                                                      : 'Refund Paid via $refundMethod at $refundPaidAtStr:')
                                                   : 'Refund Pending:';
 
                                               return Padding(
@@ -4475,6 +5059,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           )
         else
           ..._subscriptions.map((sub) {
+            final String unit = sub['item']?['unit']?.toString() ?? 'Ltr';
             final double consumed = double.tryParse(
                     sub['advance_consumed_qty']?.toString() ?? '0.0') ??
                 0.0;
@@ -4577,7 +5162,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Daily Limit: ${sub['daily_allowed_qty']} Ltr',
+                        Text('Daily Limit: ${sub['daily_allowed_qty']} $unit',
                             style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
                         Text('Rate: Rs. ${sub['advance_rate'] ?? '0.0'}/unit',
                             style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
@@ -4606,10 +5191,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              _subStat('Total Qty', '${original.toStringAsFixed(1)} Ltr',
+                              _subStat('Total Qty', '${original.toStringAsFixed(1)} $unit',
                                   Icons.inventory_2_outlined, Colors.teal.shade700, theme),
                               const SizedBox(width: 8),
-                              _subStat('Remaining', '${remaining.toStringAsFixed(1)} Ltr',
+                              _subStat('Remaining', '${remaining.toStringAsFixed(1)} $unit',
                                   Icons.water_drop_outlined,
                                   remaining < 2 ? Colors.red.shade600 : Colors.green.shade700,
                                   theme),
@@ -4627,7 +5212,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             style: theme.textTheme.bodySmall
                                 ?.copyWith(fontWeight: FontWeight.w600)),
                         Text(
-                          '${consumed.toStringAsFixed(1)} / ${original.toStringAsFixed(1)} Ltr',
+                          '${consumed.toStringAsFixed(1)} / ${original.toStringAsFixed(1)} $unit',
                           style: theme.textTheme.bodySmall
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
@@ -4764,6 +5349,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   void _showTransactionLedgerDialog(Map<String, dynamic> sub, List<dynamic> entries, Map<String, dynamic> summary) {
     final theme = Theme.of(context);
+    final String unit = sub['item']?['unit']?.toString() ?? 'Ltr';
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -4804,11 +5390,12 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _ledgerStat('Total Paid', 'Rs. ${(double.tryParse(summary['prepaid_value']?.toString() ?? '0') ?? 0.0).toStringAsFixed(2)}', Colors.blue.shade700),
-                    _ledgerStat('Consumed', '${(double.tryParse(summary['consumed_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} Ltr', Colors.orange.shade700),
-                    _ledgerStat('Remaining', '${(double.tryParse(sub['advance_remaining_qty']?.toString() ?? sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} Ltr', Colors.green.shade700),
+                    _ledgerStat('Consumed', '${(double.tryParse(summary['consumed_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} $unit', Colors.orange.shade700),
+                    _ledgerStat('Remaining', '${(double.tryParse(sub['advance_remaining_qty']?.toString() ?? sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} $unit', Colors.green.shade700),
                   ],
                 ),
               ),
+              // Entries list
               Flexible(
                 child: entries.isEmpty
                     ? const Padding(
@@ -4822,11 +5409,11 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                         separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (_, i) {
                           final e = entries[i];
-                          final date = e['delivery_date'] != null
-                              ? DateFormat('dd-MMM-yy').format(DateTime.parse(e['delivery_date'].toString()))
+                          final date = e['txn_date'] != null
+                              ? DateFormat('dd-MMM-yy').format(DateTime.parse(e['txn_date'].toString()))
                               : '--';
-                          final qty = double.tryParse(e['qty']?.toString() ?? '0') ?? 0.0;
-                          final amt = double.tryParse(e['amount']?.toString() ?? '0') ?? 0.0;
+                          final qty = double.tryParse(e['covered_qty']?.toString() ?? '0') ?? 0.0;
+                          final amt = double.tryParse(e['covered_amount']?.toString() ?? '0') ?? 0.0;
                           return ListTile(
                             dense: true,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
@@ -4836,13 +5423,13 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               child: Icon(Icons.water_drop, size: 14, color: theme.colorScheme.primary),
                             ),
                             title: Text(date, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                            subtitle: Text(e['description']?.toString() ?? 'Delivery', style: const TextStyle(fontSize: 11)),
+                            subtitle: Text(e['item_name']?.toString() ?? 'Delivery', style: const TextStyle(fontSize: 11)),
                             trailing: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text('${qty.toStringAsFixed(1)} Ltr', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                Text('Rs. ${amt.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                                  Text('${qty.toStringAsFixed(1)} $unit', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('Rs. ${amt.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                               ],
                             ),
                           );
@@ -4876,6 +5463,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   Future<void> _showRenewSubscriptionDialog(dynamic subMap) async {
     final sub = Map<String, dynamic>.from(subMap);
+    final String unit = sub['item']?['unit']?.toString() ?? 'Ltr';
     final rate = double.tryParse(sub['advance_rate']?.toString() ?? '0') ?? 0.0;
     final dailyQty = double.tryParse(sub['daily_allowed_qty']?.toString() ?? '1') ?? 1.0;
     int durationDays = 30;
@@ -4907,7 +5495,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               children: [
                 Text('Item: ${sub['item_name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text('Daily: ${dailyQty.toStringAsFixed(1)} Ltr  |  Rate: Rs. ${rate.toStringAsFixed(2)}/unit',
+                Text('Daily: ${dailyQty.toStringAsFixed(1)} $unit  |  Rate: Rs. ${rate.toStringAsFixed(2)}/unit',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 const Divider(height: 20),
                 const Text('Duration:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -4961,7 +5549,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(10)),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Total Qty: ${totalQty.toStringAsFixed(1)} Ltr', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text('Total Qty: ${totalQty.toStringAsFixed(1)} $unit', style: const TextStyle(fontWeight: FontWeight.w600)),
                     Text('End Date: ${DateFormat('dd-MMM-yyyy').format(endDate)}', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
                     const SizedBox(height: 4),
                     Text('Total Advance: Rs. ${totalCost.toStringAsFixed(2)}',
@@ -5099,9 +5687,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               ),
                             ),
                           ),
-                    const SizedBox(height: 12),
-                    const Text('Daily Quantity (Ltr/Units):',
-                        style: TextStyle(
+                           Text('Daily Quantity (${selectedItem?['unit']?.toString() ?? 'Ltr'}):',
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 6),
                     Row(
@@ -5226,7 +5813,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       children: [
                         const Text('Total Qty:',
                             style: TextStyle(color: Colors.grey)),
-                        Text('${totalQty.toStringAsFixed(1)} units',
+                        Text('${totalQty.toStringAsFixed(1)} ${selectedItem?['unit']?.toString() ?? 'units'}',
                             style:
                                 const TextStyle(fontWeight: FontWeight.bold)),
                       ],

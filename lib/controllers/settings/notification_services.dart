@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:retailpos/core/api/api_client.dart';
+import 'package:retailpos/core/settings/local_preferences.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -45,6 +46,9 @@ class NotificationService {
   }
 
   static Future<void> show(int id, String title, String body) async {
+    final showNotif = await LocalPreferences.getShowNotifications();
+    if (!showNotif) return;
+
     const WindowsNotificationDetails windowsDetails =
         WindowsNotificationDetails();
 

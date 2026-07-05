@@ -225,6 +225,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {}
   }
 
+  void showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ctrl = context.watch<SystemSettingsController>();
@@ -266,6 +275,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return Align(
         alignment: Alignment.centerRight,
         child: FilledButton.icon(
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
           icon: const Icon(Icons.save),
           label: const Text('Save Settings'),
           onPressed: saveAllSettings,
@@ -278,7 +293,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return ListView(
         padding: EdgeInsets.symmetric(
           horizontal: horizontalPadding,
-          vertical: 18,
+          vertical: 24,
         ),
         children: [
           Center(
@@ -288,7 +303,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ...sections,
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   buildSaveBar(),
                 ],
               ),
@@ -301,7 +316,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return DefaultTabController(
       length: 5,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF6F7F9),
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF121214)
+            : const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: const Text('Settings'),
           bottom: const TabBar(
@@ -319,776 +336,770 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context, constraints) {
             return TabBarView(
               children: [
+                // 1. OPERATIONS TAB
                 buildTabBody([
                   if (AppConfig.isLocalServer)
-                    _section('Data & Security', [
-                      _switchTile(
-                        'Enable Cloud Backup',
-                        'Automatically sync your store data to Cloud',
-                        s.isCloudEnabled,
-                        (bool newValue) async {
-                          setState(() => s.isCloudEnabled = newValue);
+                    _customSection(
+                      'Data & Security',
+                      'Manage your cloud configuration and manual offline backups.',
+                      [
+                        _settingRow(
+                          title: 'Enable Cloud Backup',
+                          description: 'Automatically sync your store data to the Cloud',
+                          control: Switch.adaptive(
+                            value: s.isCloudEnabled,
+                            onChanged: (bool newValue) async {
+                              setState(() => s.isCloudEnabled = newValue);
+                              final success = await BackupService.toggleCloudSync(newValue);
+                              ctrl.save(s);
+                              if (mounted) {
+                                if (success) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(newValue
+                                          ? 'Cloud backup enabled successfully!'
+                                          : 'Cloud backup paused.'),
+                                      backgroundColor: newValue ? Colors.green : Colors.orange,
+                                    ),
+                                  );
+                                } else {
+                                  setState(() => s.isCloudEnabled = !newValue);
+                                  showErrorSnackbar('Failed to update setting. Check internet.');
+                                }
+                              }
+                            },
+                          ),
+                        ),
+                        _settingRow(
+                          title: 'Create Manual Backup',
+                          description: 'Encrypt your local database and save to Downloads folder.',
+                          isLast: true,
+                          control: FilledButton.icon(
+                            onPressed: _isCreatingEncBackup
+                                ? null
+                                : () async {
+                                    setState(() => _isCreatingEncBackup = true);
+                                    try {
+                                      final savedPath = await BackupService.createAndSaveLocalEncBackup();
+                                      if (!mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('.enc backup saved to $savedPath'),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    } catch (e) {
+                                      if (!mounted) return;
+                                      showErrorSnackbar('Failed to create backup: $e');
+                                    } finally {
+                                      if (mounted) {
+                                        setState(() => _isCreatingEncBackup = false);
+                                      }
+                                    }
+                                  },
+                            icon: _isCreatingEncBackup
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.enhanced_encryption_outlined, size: 18),
+                            label: Text(_isCreatingEncBackup ? 'Backing up...' : 'Create .enc Backup'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  _customSection(
+                    'Inventory Settings',
+                    'Configure behaviors and triggers for product inventory management.',
+                    [
+                      _settingRow(
+                        title: 'Enable Auto Reorder Alert',
+                        description: 'Notify when stock falls below specified reorder thresholds',
+                        control: Switch.adaptive(
+                          value: s.autoReorder,
+                          onChanged: (v) => setState(() => s.autoReorder = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Allow Negative Stock',
+                        description: 'Allow issue/sale transactions even if current stock is zero or insufficient',
+                        control: Switch.adaptive(
+                          value: s.allowNegativeStock,
+                          onChanged: (v) => setState(() => s.allowNegativeStock = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Show Item Images in Sales',
+                        description: 'Display item photographs directly on the POS sale screen',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: s.enableItemImagesInSales,
+                          onChanged: (v) => setState(() => s.enableItemImagesInSales = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Subscription Delivery',
+                    'Manage automated workflows for daily recurring orders.',
+                    [
+                      _settingRow(
+                        title: 'Enable App Subscription Delivery',
+                        description: 'Daily subscription orders are auto-accepted into retailer console instead of being drafts',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: s.enableAppSubscription,
+                          onChanged: (v) => setState(() => s.enableAppSubscription = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Payment Gateway & UPI (Beta)',
+                    'Configure digital checkout APIs and direct merchant QR billing.',
+                    [
+                      _settingRow(
+                        title: 'Enable Payment Gateway',
+                        description: 'Require online payments for customer app delivery orders',
+                        isLast: !s.enablePaymentGateway && s.merchantUpiId.isEmpty,
+                        control: Switch.adaptive(
+                          value: s.enablePaymentGateway,
+                          onChanged: (v) => setState(() {
+                            s.enablePaymentGateway = v;
+                            if (!v) {
+                              s.paymentGatewayProvider = 'SANDBOX';
+                            }
+                          }),
+                        ),
+                      ),
+                      if (s.enablePaymentGateway) ...[
+                        _settingRow(
+                          title: 'Payment Gateway Provider',
+                          description: 'Choose your secure processing merchant partner',
+                          control: SizedBox(
+                            width: 280,
+                            child: DropdownButtonFormField<String>(
+                              value: s.paymentGatewayProvider,
+                              decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                              items: ['SANDBOX', 'RAZORPAY', 'STRIPE', 'PAYTM']
+                                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => s.paymentGatewayProvider = val);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        _settingRow(
+                          title: 'API Key / Merchant ID',
+                          description: 'Public identifier supplied by the gateway developer console',
+                          control: SizedBox(
+                            width: 280,
+                            child: TextFormField(
+                              initialValue: s.paymentGatewayApiKey,
+                              decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                              onChanged: (val) => s.paymentGatewayApiKey = val.trim(),
+                            ),
+                          ),
+                        ),
+                        _settingRow(
+                          title: 'API Secret / Salt Key',
+                          description: 'Private credential used to sign checkout requests securely',
+                          isLast: s.merchantUpiId.isEmpty,
+                          control: SizedBox(
+                            width: 280,
+                            child: TextFormField(
+                              initialValue: s.paymentGatewaySecretKey,
+                              obscureText: true,
+                              decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                              onChanged: (val) => s.paymentGatewaySecretKey = val.trim(),
+                            ),
+                          ),
+                        ),
+                      ],
+                      _settingRow(
+                        title: 'Direct Merchant UPI ID',
+                        description: 'e.g. storename@okaxis. Enables direct UPI QR generation if payment gateway is off.',
+                        isLast: true,
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            initialValue: s.merchantUpiId,
+                            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                            onChanged: (val) => s.merchantUpiId = val.trim(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Approval Rules',
+                    'Set authorization constraints for warehouse managers.',
+                    [
+                      _settingRow(
+                        title: 'Damage Approval Required',
+                        description: 'Require manager approval/authorization before writing off damaged items',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: s.damageApprovalRequired,
+                          onChanged: (v) => setState(() => s.damageApprovalRequired = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Audit & Compliance',
+                    'Maintain system logs and dashboard communication.',
+                    [
+                      _settingRow(
+                        title: 'Enable Audit Log',
+                        description: 'Log all warehouse stock updates, edits, and deletions for security review',
+                        control: Switch.adaptive(
+                          value: s.enableAuditLog,
+                          onChanged: (v) => setState(() => s.enableAuditLog = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Show Notifications',
+                        description: 'Show app alerts and desktop warnings in the administrator console',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: _showNotifications,
+                          onChanged: (v) => setState(() => _showNotifications = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_isAdmin)
+                    _customSection(
+                      'Danger Zone',
+                      'High-risk administrative operations.',
+                      [
+                        _settingRow(
+                          title: 'Clear All Transaction Data',
+                          description: 'Wipes transaction logs, sales, GRNs, and ledger items. Master catalogs are preserved.',
+                          isLast: true,
+                          control: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: _showClearTransactionDataDialog,
+                            icon: const Icon(Icons.delete_forever, size: 18),
+                            label: const Text('Clear Transaction Data'),
+                          ),
+                        ),
+                      ],
+                    ),
+                ], constraints),
 
-                          final success =
-                              await BackupService.toggleCloudSync(newValue);
-                          ctrl.save(s);
+                // 2. APPEARANCE TAB
+                buildTabBody([
+                  _customSection(
+                    'Design System Presets',
+                    'Quickly format layout shapes to match enterprise guidelines.',
+                    [
+                      _settingRow(
+                        title: 'Microsoft Fluent Preset',
+                        description: 'Instantly apply compact, flat-edged buttons and rectangular inputs for a sleek workspace layout.',
+                        isLast: true,
+                        control: FilledButton(
+                          onPressed: () async {
+                            await themeCtrl.updateTheme(AppTheme.microsoftFluent);
+                            await uiPrefsCtrl.updateTouchMode(false);
+                            await uiPrefsCtrl.updateTextfieldSize('compact');
+                            await uiPrefsCtrl.updateTextfieldBorderStyle('rectangular');
+                            await uiPrefsCtrl.updateCardColorStyle('white');
+                            await uiPrefsCtrl.updateCardBorderStyle('flat');
+                            await uiPrefsCtrl.updateButtonBorderStyle('flat');
 
-                          if (mounted) {
-                            if (success) {
+                            if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(newValue
-                                      ? 'Cloud backup enabled successfully!'
-                                      : 'Cloud backup paused.'),
-                                  backgroundColor:
-                                      newValue ? Colors.green : Colors.orange,
-                                ),
-                              );
-                            } else {
-                              setState(() => s.isCloudEnabled = !newValue);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                      'Failed to update setting. Check internet.'),
-                                  backgroundColor: Colors.red,
-                                ),
+                                const SnackBar(content: Text('Microsoft Fluent Preset theme applied!')),
                               );
                             }
-                          }
-                        },
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: FilledButton.icon(
-                          onPressed: _isCreatingEncBackup
-                              ? null
-                              : () async {
-                                  setState(() => _isCreatingEncBackup = true);
-                                  try {
-                                    final savedPath = await BackupService
-                                        .createAndSaveLocalEncBackup();
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          '.enc backup saved to $savedPath',
-                                        ),
-                                        backgroundColor: Colors.green,
-                                      ),
-                                    );
-                                  } catch (e) {
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Failed to create backup: $e',
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  } finally {
-                                    if (mounted) {
-                                      setState(
-                                          () => _isCreatingEncBackup = false);
-                                    }
-                                  }
-                                },
-                          icon: _isCreatingEncBackup
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.enhanced_encryption_outlined),
-                          label: Text(_isCreatingEncBackup
-                              ? 'Creating .enc backup...'
-                              : 'Create .enc Backup to Downloads'),
+                          },
+                          child: const Text('Apply Preset'),
                         ),
                       ),
-                    ]),
-                  _section('Inventory Settings', [
-                    _switchTile(
-                      'Enable Auto Reorder Alert',
-                      'Notify when stock falls below reorder level',
-                      s.autoReorder,
-                      (v) => setState(() => s.autoReorder = v),
-                    ),
-                    _switchTile(
-                      'Allow Negative Stock',
-                      'Allow issue even if stock is insufficient',
-                      s.allowNegativeStock,
-                      (v) => setState(() => s.allowNegativeStock = v),
-                    ),
-                    _switchTile(
-                      'Show Item Images in Sales',
-                      'Display item photos on the sales screen when available',
-                      s.enableItemImagesInSales,
-                      (v) => setState(() => s.enableItemImagesInSales = v),
-                    ),
-                  ]),
-                  _section('Subscription Delivery', [
-                    _switchTile(
-                      'Enable App for Subscription Delivery',
-                      'When ON: daily subscription home-delivery orders are auto-accepted and appear directly in retailer console. When OFF: orders appear as draft bills on the sale screen for manual confirmation.',
-                      s.enableAppSubscription,
-                      (v) => setState(() => s.enableAppSubscription = v),
-                    ),
-                  ]),
-                  _section('Approval Rules', [
-                    _switchTile(
-                      'Damage Approval Required',
-                      'Manager approval required for damage entry',
-                      s.damageApprovalRequired,
-                      (v) => setState(() => s.damageApprovalRequired = v),
-                    ),
-                  ]),
-                  _section('Audit & Compliance', [
-                    _switchTile(
-                      'Enable Audit Log',
-                      'Track all stock changes and edits',
-                      s.enableAuditLog,
-                      (v) => setState(() => s.enableAuditLog = v),
-                    ),
-                    _switchTile(
-                      'Show Notifications',
-                      'Show notification icon and desktop alerts in dashboard',
-                      _showNotifications,
-                      (v) => setState(() => _showNotifications = v),
-                    ),
-                  ]),
-                  if (_isAdmin)
-                    _section('Danger Zone', [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF7F7),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: const Color(0xFFFECACA)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Admin only',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.red,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            const Text(
-                              'Keeps master data and system settings, but removes stock, sales, purchase, finance, and report records.',
-                              style: TextStyle(
-                                  color: Color(0xFF64748B), height: 1.4),
-                            ),
-                            const SizedBox(height: 14),
-                            FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              onPressed: _showClearTransactionDataDialog,
-                              icon: const Icon(Icons.delete_forever, size: 18),
-                              label: const Text('Clear All Transaction Data'),
-                            ),
-                          ],
+                    ],
+                  ),
+                  _customSection(
+                    'Interface Customization',
+                    'Configure spacing, sizing parameters, shapes, and color configurations.',
+                    [
+                      _settingRow(
+                        title: 'Touch Screen Mode',
+                        description: 'Increases size of tap targets and adjusts list spacing for touchscreen users',
+                        control: Switch.adaptive(
+                          value: uiPrefsCtrl.touchMode,
+                          onChanged: (v) => uiPrefsCtrl.updateTouchMode(v),
                         ),
                       ),
-                    ]),
+                      _settingRow(
+                        title: 'Default Startup Screen',
+                        description: 'Determine which dashboard loads first upon log-in',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: uiPrefsCtrl.defaultStartupScreen,
+                            items: const [
+                              DropdownMenuItem(value: 'INVENTORY_DASHBOARD', child: Text('Warehouse Dashboard')),
+                              DropdownMenuItem(value: 'RETAIL_SALES', child: Text('Retail Dashboard')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                uiPrefsCtrl.updateDefaultStartupScreen(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Application Palette Theme',
+                        description: 'Change the overall theme color scheme of the console',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: themeCtrl.themeKey,
+                            items: AppTheme.availableThemes.entries
+                                .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                themeCtrl.updateTheme(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Textfield Spacing Density',
+                        description: 'Select heights for forms, search fields, and transaction rows',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: uiPrefsCtrl.textfieldSize,
+                            items: const [
+                              DropdownMenuItem(value: 'extra_compact', child: Text('Extra Compact')),
+                              DropdownMenuItem(value: 'compact', child: Text('Compact')),
+                              DropdownMenuItem(value: 'normal', child: Text('Normal (Default)')),
+                              DropdownMenuItem(value: 'comfortable', child: Text('Comfortable')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                uiPrefsCtrl.updateTextfieldSize(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Textfield Border Styling',
+                        description: 'Modify input text field corner visual properties',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: uiPrefsCtrl.textfieldBorderStyle,
+                            items: const [
+                              DropdownMenuItem(value: 'rounded', child: Text('Rounded Borders')),
+                              DropdownMenuItem(value: 'rectangular', child: Text('Rectangular Borders')),
+                              DropdownMenuItem(value: 'underlined', child: Text('Underlined Only')),
+                              DropdownMenuItem(value: 'none', child: Text('No Borders (Borderless)')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                uiPrefsCtrl.updateTextfieldBorderStyle(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Global Card Background Color',
+                        description: 'Fine-tune color tint and card panel backgrounds',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: uiPrefsCtrl.cardColorStyle,
+                            items: const [
+                              DropdownMenuItem(value: 'soft', child: Text('Soft Surface')),
+                              DropdownMenuItem(value: 'white', child: Text('Plain White')),
+                              DropdownMenuItem(value: 'tint', child: Text('Theme Tint')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                uiPrefsCtrl.updateCardColorStyle(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Global Card Shape',
+                        description: 'Select corner radius attributes for details cards and containers',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: uiPrefsCtrl.cardBorderStyle,
+                            items: const [
+                              DropdownMenuItem(value: 'rounded', child: Text('Rounded Corners')),
+                              DropdownMenuItem(value: 'less_rounded', child: Text('Less Rounded')),
+                              DropdownMenuItem(value: 'flat', child: Text('Flat (Sharp Corners)')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                uiPrefsCtrl.updateCardBorderStyle(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Global Button Shape',
+                        description: 'Modify corner roundness configurations for interactive button surfaces',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: uiPrefsCtrl.buttonBorderStyle,
+                            items: const [
+                              DropdownMenuItem(value: 'rounded', child: Text('Rounded Corners')),
+                              DropdownMenuItem(value: 'less_rounded', child: Text('Less Rounded')),
+                              DropdownMenuItem(value: 'flat', child: Text('Flat (Sharp Corners)')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                uiPrefsCtrl.updateButtonBorderStyle(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Global Text Size Scale',
+                        description: 'Change core app system font scale attributes',
+                        isLast: true,
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: uiPrefsCtrl.fontSizeAdjustment,
+                            items: const [
+                              DropdownMenuItem(value: 'small', child: Text('Small')),
+                              DropdownMenuItem(value: 'normal', child: Text('Normal (Default)')),
+                              DropdownMenuItem(value: 'large', child: Text('Large')),
+                              DropdownMenuItem(value: 'extra_large', child: Text('Extra Large')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                uiPrefsCtrl.updateFontSizeAdjustment(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ], constraints),
+
+                // 3. BILLING & PRINT TAB
                 buildTabBody([
-                  _section('Appearance', [
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      child: Card(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withOpacity(0.05),
-                        shape: RoundedRectangleBorder(
-                          side: BorderSide(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withOpacity(0.2)),
-                          borderRadius: BorderRadius.circular(12),
+                  _customSection(
+                    'Printing Config',
+                    'Receipt printing triggers, defaults, and printer outputs.',
+                    [
+                      _settingRow(
+                        title: 'Auto Print on Save',
+                        description: 'Directly send receipt print task immediately upon document save',
+                        control: Switch.adaptive(
+                          value: s.autoPrintOnSave,
+                          onChanged: (v) => setState(() => s.autoPrintOnSave = v),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
+                      ),
+                      _settingRow(
+                        title: 'Invoicing Print Mode',
+                        description: 'Select printing dialog workflow trigger style',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: s.printMode,
+                            items: _printModes
+                                .map((mode) => DropdownMenuItem(
+                                      value: mode,
+                                      child: Text(
+                                        mode == 'PRINT_DIALOG'
+                                            ? 'Open Print Dialog'
+                                            : mode == 'ASK_BEFORE_PRINT'
+                                                ? 'Ask Yes / No'
+                                                : 'Direct Print (System Default)',
+                                      ),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => s.printMode = value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Default Printer Device',
+                        description: 'Target printer for system defaults or silent printing',
+                        isLast: true,
+                        control: SizedBox(
+                          width: 280,
                           child: Row(
                             children: [
-                              Icon(Icons.dashboard_customize_outlined,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  size: 28),
-                              const SizedBox(width: 16),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Microsoft Fluent Enterprise Preset',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      'Instantly apply a clean, compact, professional layout with rectangular borders, optimized for enterprise-grade productivity.',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                  ],
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  value: selectedPrinterValue,
+                                  items: _printers
+                                      .map((printer) => DropdownMenuItem(
+                                            value: printer.url,
+                                            child: Text(printer.name + (printer.isDefault ? ' (System Default)' : '')),
+                                          ))
+                                      .toList(),
+                                  onChanged: (value) {
+                                    final printer = _printers.cast<Printer?>().firstWhere(
+                                          (entry) => entry?.url == value,
+                                          orElse: () => null,
+                                        );
+                                    setState(() {
+                                      s.defaultPrinterUrl = value ?? '';
+                                      s.defaultPrinterName = printer?.name ?? '';
+                                    });
+                                  },
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              FilledButton(
-                                onPressed: () async {
-                                  await themeCtrl
-                                      .updateTheme(AppTheme.microsoftFluent);
-                                  await uiPrefsCtrl.updateTouchMode(false);
-                                  await uiPrefsCtrl
-                                      .updateTextfieldSize('compact');
-                                  await uiPrefsCtrl.updateTextfieldBorderStyle(
-                                      'rectangular');
-                                  await uiPrefsCtrl
-                                      .updateCardColorStyle('white');
-                                  await uiPrefsCtrl
-                                      .updateCardBorderStyle('flat');
-                                  await uiPrefsCtrl
-                                      .updateButtonBorderStyle('flat');
-
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Microsoft Fluent Enterprise theme applied!'),
-                                        duration: Duration(seconds: 2),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: const Text('Apply Preset'),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: _loadingPrinters ? null : _loadPrinters,
+                                icon: _loadingPrinters
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.refresh, size: 20),
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                    _switchTile(
-                      'Touch Screen Mode',
-                      'Larger tap targets and softer spacing for touch devices',
-                      uiPrefsCtrl.touchMode,
-                      (v) => uiPrefsCtrl.updateTouchMode(v),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: uiPrefsCtrl.defaultStartupScreen,
-                        decoration: const InputDecoration(
-                          labelText: 'Default Startup Screen',
-                          helperText:
-                              'Choose which screen should open first after login',
+                    ],
+                  ),
+                  _customSection(
+                    'Global Invoicing Details',
+                    'Configure standard tax regimes, invoice formats, and country rules.',
+                    [
+                      _settingRow(
+                        title: 'Billing Country',
+                        description: 'Preselect default tax configurations and regional specifications',
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            initialValue: s.billingCountry,
+                            onChanged: (value) => s.billingCountry = value.trim().isEmpty ? 'India' : value.trim(),
+                          ),
                         ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'INVENTORY_DASHBOARD',
-                            child: Text('Warehouse Dashboard'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'RETAIL_SALES',
-                            child: Text('Retail Dashboard'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            uiPrefsCtrl.updateDefaultStartupScreen(value);
-                          }
-                        },
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: themeCtrl.themeKey,
-                        decoration: const InputDecoration(
-                          labelText: 'Application Theme',
-                          helperText: 'Choose a Famalth enterprise theme',
-                        ),
-                        items: AppTheme.availableThemes.entries
-                            .map(
-                              (entry) => DropdownMenuItem(
-                                value: entry.key,
-                                child: Text(entry.value),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            themeCtrl.updateTheme(value);
-                          }
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: uiPrefsCtrl.textfieldSize,
-                        decoration: const InputDecoration(
-                          labelText: 'Global Textfield Size',
-                          helperText:
-                              'Apply extra compact, compact, normal, or comfortable height',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'extra_compact',
-                            child: Text('Extra Compact'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'compact',
-                            child: Text('Compact'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'normal',
-                            child: Text('Normal'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'comfortable',
-                            child: Text('Comfortable'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            uiPrefsCtrl.updateTextfieldSize(value);
-                          }
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: uiPrefsCtrl.textfieldBorderStyle,
-                        decoration: const InputDecoration(
-                          labelText: 'Global Textfield Border Style',
-                          helperText:
-                              'Choose the visual style for all input text fields',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'rounded',
-                            child: Text('Rounded Borders'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'rectangular',
-                            child: Text('Rectangular Borders'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'underlined',
-                            child: Text('Underlined Only'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'none',
-                            child: Text('No Borders (Borderless)'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            uiPrefsCtrl.updateTextfieldBorderStyle(value);
-                          }
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: uiPrefsCtrl.cardColorStyle,
-                        decoration: const InputDecoration(
-                          labelText: 'Global Card Color',
-                          helperText: 'Control card tint across all screens',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'soft',
-                            child: Text('Soft Surface'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'white',
-                            child: Text('Plain White'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'tint',
-                            child: Text('Theme Tint'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            uiPrefsCtrl.updateCardColorStyle(value);
-                          }
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: uiPrefsCtrl.cardBorderStyle,
-                        decoration: const InputDecoration(
-                          labelText: 'Global Card Shape',
-                          helperText:
-                              'Choose the corner roundness for all cards',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'rounded',
-                            child: Text('Rounded (Default)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'less_rounded',
-                            child: Text('Less Rounded'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'flat',
-                            child: Text('Flat (Sharp Corners)'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            uiPrefsCtrl.updateCardBorderStyle(value);
-                          }
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: uiPrefsCtrl.buttonBorderStyle,
-                        decoration: const InputDecoration(
-                          labelText: 'Global Button Shape',
-                          helperText: 'Choose the corner roundness for buttons',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'rounded',
-                            child: Text('Rounded (Default)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'less_rounded',
-                            child: Text('Less Rounded'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'flat',
-                            child: Text('Flat (Sharp Corners)'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            uiPrefsCtrl.updateButtonBorderStyle(value);
-                          }
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: uiPrefsCtrl.fontSizeAdjustment,
-                        decoration: const InputDecoration(
-                          labelText: 'Global Font Size Scale',
-                          helperText: 'Adjust text size across all views',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'small',
-                            child: Text('Small'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'normal',
-                            child: Text('Normal (Default)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'large',
-                            child: Text('Large'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'extra_large',
-                            child: Text('Extra Large'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            uiPrefsCtrl.updateFontSizeAdjustment(value);
-                          }
-                        },
-                      ),
-                    ),
-                  ]),
-                ], constraints),
-                buildTabBody([
-                  _section('Printing', [
-                    _switchTile(
-                      'Auto Print on Save',
-                      'Automatically print after save',
-                      s.autoPrintOnSave,
-                      (v) => setState(() => s.autoPrintOnSave = v),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: s.printMode,
-                        decoration:
-                            const InputDecoration(labelText: 'Print Mode'),
-                        items: _printModes
-                            .map(
-                              (mode) => DropdownMenuItem(
-                                value: mode,
-                                child: Text(
-                                  mode == 'PRINT_DIALOG'
-                                      ? 'Open Print Dialog'
-                                      : mode == 'ASK_BEFORE_PRINT'
-                                          ? 'Ask Yes / No Before Print'
-                                          : 'Direct Print to Selected Printer',
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => s.printMode = value);
-                          }
-                        },
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
+                      _settingRow(
+                        title: 'Default Billing Tax Mode',
+                        description: 'Configure active regional tax compliance formats',
+                        control: SizedBox(
+                          width: 280,
                           child: DropdownButtonFormField<String>(
-                            initialValue: selectedPrinterValue,
-                            decoration: const InputDecoration(
-                              labelText: 'Default Printer',
-                            ),
-                            items: _printers
-                                .map(
-                                  (printer) => DropdownMenuItem(
-                                    value: printer.url,
-                                    child: Text(
-                                      printer.name +
-                                          (printer.isDefault
-                                              ? ' (System Default)'
-                                              : ''),
-                                    ),
-                                  ),
-                                )
+                            value: s.billingTaxMode,
+                            items: _taxModes
+                                .map((mode) => DropdownMenuItem(
+                                      value: mode,
+                                      child: Text(mode.replaceAll('_', ' ')),
+                                    ))
                                 .toList(),
                             onChanged: (value) {
-                              final printer =
-                                  _printers.cast<Printer?>().firstWhere(
-                                        (entry) => entry?.url == value,
-                                        orElse: () => null,
-                                      );
-                              setState(() {
-                                s.defaultPrinterUrl = value ?? '';
-                                s.defaultPrinterName = printer?.name ?? '';
-                              });
+                              if (value != null) {
+                                setState(() => s.billingTaxMode = value);
+                              }
                             },
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        OutlinedButton.icon(
-                          onPressed: _loadingPrinters ? null : _loadPrinters,
-                          icon: const Icon(Icons.refresh),
-                          label:
-                              Text(_loadingPrinters ? 'Loading...' : 'Refresh'),
+                      ),
+                      _settingRow(
+                        title: 'Default Invoice Output Format',
+                        description: 'Select invoice document paper dimensions',
+                        isLast: true,
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: s.billFormat,
+                            items: _billFormats
+                                .map((format) => DropdownMenuItem(
+                                      value: format,
+                                      child: Text(_billFormatLabel(format)),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => s.billFormat = value);
+                              }
+                            },
+                          ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      s.printMode == 'DIRECT_DEFAULT'
-                          ? 'Direct print sends the bill to the selected printer without opening printer selection.'
-                          : s.printMode == 'ASK_BEFORE_PRINT'
-                              ? 'Sales will ask Yes / No before printing. If Yes, the normal print dialog opens.'
-                              : 'Every print opens the print dialog and user can choose printer.',
-                      style: const TextStyle(color: Color(0xFF64748B)),
-                    ),
-                  ]),
-                  _section('Global Billing', [
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: TextFormField(
-                        initialValue: s.billingCountry,
-                        decoration: const InputDecoration(
-                          labelText: 'Country',
-                          helperText:
-                              'Used to preselect billing tax mode and invoice defaults',
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Default Billing Charges',
+                    'Configure auto-applied packaging, delivery, or custom surcharges.',
+                    [
+                      ...List.generate(
+                        s.defaultCharges.length,
+                        (index) => Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                          child: _chargeTile(
+                            s.defaultCharges[index],
+                            onChanged: (updated) {
+                              setState(() => s.defaultCharges[index] = updated);
+                            },
+                            onDelete: s.defaultCharges.length <= 1
+                                ? null
+                                : () {
+                                    setState(() => s.defaultCharges.removeAt(index));
+                                  },
+                          ),
                         ),
-                        onChanged: (value) => s.billingCountry =
-                            value.trim().isEmpty ? 'India' : value.trim(),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: s.billingTaxMode,
-                        decoration: const InputDecoration(
-                            labelText: 'Default Tax Mode'),
-                        items: _taxModes
-                            .map(
-                              (mode) => DropdownMenuItem(
-                                value: mode,
-                                child: Text(mode.replaceAll('_', ' ')),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => s.billingTaxMode = value);
-                          }
-                        },
+                      Padding(
+                        padding: const EdgeInsets.only(left: 20.0, bottom: 16.0, top: 8.0),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                s.defaultCharges.add(
+                                  const BillingCharge(
+                                    name: 'Custom',
+                                    code: 'CUSTOM',
+                                    amount: 0,
+                                    calculationValue: 0,
+                                    taxable: false,
+                                    autoApply: false,
+                                    isEnabled: false,
+                                    taxType: 'GST',
+                                    taxPercent: 0,
+                                  ),
+                                );
+                              });
+                            },
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Add Charge Rule'),
+                          ),
+                        ),
                       ),
-                    ),
-                    DropdownButtonFormField<String>(
-                      initialValue: s.billFormat,
-                      decoration:
-                          const InputDecoration(labelText: 'Bill Format'),
-                      items: _billFormats
-                          .map(
-                            (format) => DropdownMenuItem(
-                              value: format,
-                              child: Text(_billFormatLabel(format)),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => s.billFormat = value);
-                        }
-                      },
-                    ),
-                  ]),
-                  _section('Default Charges', [
-                    ...List.generate(
-                      s.defaultCharges.length,
-                      (index) => _chargeTile(
-                        s.defaultCharges[index],
-                        onChanged: (updated) {
-                          setState(() => s.defaultCharges[index] = updated);
-                        },
-                        onDelete: s.defaultCharges.length <= 1
-                            ? null
-                            : () {
-                                setState(
-                                    () => s.defaultCharges.removeAt(index));
-                              },
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            s.defaultCharges.add(
-                              const BillingCharge(
-                                name: 'Custom',
-                                code: 'CUSTOM',
-                                amount: 0,
-                                calculationValue: 0,
-                                taxable: false,
-                                autoApply: false,
-                                isEnabled: false,
-                                taxType: 'GST',
-                                taxPercent: 0,
-                              ),
-                            );
-                          });
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Charge Rule'),
-                      ),
-                    ),
-                  ]),
+                    ],
+                  ),
                 ], constraints),
+
+                // 4. BRANDING TAB
                 buildTabBody([
-                  _section('Branding', [
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: TextFormField(
-                        key: ValueKey(
-                            'branding-company-${_branding.companyName}'),
-                        initialValue: _branding.companyName,
-                        decoration:
-                            const InputDecoration(labelText: 'Company Name'),
-                        onChanged: (value) =>
-                            _branding = _branding.copyWith(companyName: value),
+                  _customSection(
+                    'Store Branding & Support Metadata',
+                    'Customize invoice labels, support emails, contact phone lines, and websites.',
+                    [
+                      _settingRow(
+                        title: 'Company / Organization Name',
+                        description: 'Primary legal business name printed at the top of bills',
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            key: ValueKey('branding-company-${_branding.companyName}'),
+                            initialValue: _branding.companyName,
+                            onChanged: (value) => _branding = _branding.copyWith(companyName: value),
+                          ),
+                        ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: TextFormField(
-                        key: ValueKey(
-                            'branding-product-${_branding.productName}'),
-                        initialValue: _branding.productName,
-                        decoration:
-                            const InputDecoration(labelText: 'Product Name'),
-                        onChanged: (value) =>
-                            _branding = _branding.copyWith(productName: value),
+                      _settingRow(
+                        title: 'Product / System Name',
+                        description: 'Primary label for title bars and login screens',
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            key: ValueKey('branding-product-${_branding.productName}'),
+                            initialValue: _branding.productName,
+                            onChanged: (value) => _branding = _branding.copyWith(productName: value),
+                          ),
+                        ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: TextFormField(
-                        key: ValueKey(
-                            'branding-powered-${_branding.poweredByLabel}'),
-                        initialValue: _branding.poweredByLabel,
-                        decoration: const InputDecoration(
-                            labelText: 'Powered By Label'),
-                        onChanged: (value) => _branding =
-                            _branding.copyWith(poweredByLabel: value),
+                      _settingRow(
+                        title: 'Powered By Tagline',
+                        description: 'Footer attribution copyright label printed on reports',
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            key: ValueKey('branding-powered-${_branding.poweredByLabel}'),
+                            initialValue: _branding.poweredByLabel,
+                            onChanged: (value) => _branding = _branding.copyWith(poweredByLabel: value),
+                          ),
+                        ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: TextFormField(
-                        key: ValueKey(
-                            'branding-email-${_branding.supportEmail}'),
-                        initialValue: _branding.supportEmail,
-                        decoration:
-                            const InputDecoration(labelText: 'Support Email'),
-                        onChanged: (value) =>
-                            _branding = _branding.copyWith(supportEmail: value),
+                      _settingRow(
+                        title: 'Support Desk Email',
+                        description: 'Target contact email address for customer tickets',
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            key: ValueKey('branding-email-${_branding.supportEmail}'),
+                            initialValue: _branding.supportEmail,
+                            onChanged: (value) => _branding = _branding.copyWith(supportEmail: value),
+                          ),
+                        ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: TextFormField(
-                        key: ValueKey(
-                            'branding-phone-${_branding.supportPhone}'),
-                        initialValue: _branding.supportPhone,
-                        decoration:
-                            const InputDecoration(labelText: 'Support Phone'),
-                        onChanged: (value) =>
-                            _branding = _branding.copyWith(supportPhone: value),
+                      _settingRow(
+                        title: 'Support Desk Phone',
+                        description: 'Contact helpline phone number shown on support panels',
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            key: ValueKey('branding-phone-${_branding.supportPhone}'),
+                            initialValue: _branding.supportPhone,
+                            onChanged: (value) => _branding = _branding.copyWith(supportPhone: value),
+                          ),
+                        ),
                       ),
-                    ),
-                    TextFormField(
-                      key: ValueKey('branding-web-${_branding.supportWebsite}'),
-                      initialValue: _branding.supportWebsite,
-                      decoration:
-                          const InputDecoration(labelText: 'Support Website'),
-                      onChanged: (value) =>
-                          _branding = _branding.copyWith(supportWebsite: value),
-                    ),
-                  ]),
+                      _settingRow(
+                        title: 'Support Website URL',
+                        description: 'Reference business website domain linked in footer',
+                        isLast: true,
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            key: ValueKey('branding-web-${_branding.supportWebsite}'),
+                            initialValue: _branding.supportWebsite,
+                            onChanged: (value) => _branding = _branding.copyWith(supportWebsite: value),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ], constraints),
+
+                // 5. KEYBOARD SHORTCUTS TAB
                 buildTabBody([
-                  _buildKeyboardShortcutsSection(Theme.of(context)),
+                  _customSection(
+                    'Keyboard Shortcuts Guide',
+                    'Use hotkeys to quickly navigate screens without using a mouse.',
+                    [
+                      Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: _buildKeyboardShortcutsSection(Theme.of(context)),
+                      ),
+                    ],
+                  ),
                 ], constraints),
               ],
             );
@@ -1098,39 +1109,117 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ---------------- HELPERS ----------------
-  Widget _section(String title, List<Widget> children) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            const Divider(),
-            ...children,
-          ],
+  // ---------------- UPGRADED LAYOUT BUILDERS ----------------
+
+  Widget _customSection(String title, String? description, List<Widget> rows) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 10, top: 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              if (description != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
-      ),
+        Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: rows,
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
     );
   }
 
-  Widget _switchTile(
-    String title,
-    String subtitle,
-    bool value,
-    ValueChanged<bool> onChanged,
-  ) {
-    return SwitchListTile(
-      value: value,
-      onChanged: onChanged,
-      title: Text(title),
-      subtitle: Text(subtitle),
+  Widget _settingRow({
+    required String title,
+    required String description,
+    required Widget control,
+    bool isLast = false,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isDark ? Colors.white38 : const Color(0xFF64748B),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 24),
+              control,
+            ],
+          ),
+        ),
+        if (!isLast)
+          Divider(
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+            height: 1,
+            thickness: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
+      ],
     );
   }
 
@@ -1166,12 +1255,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     initialValue: charge.calculationValue.toStringAsFixed(
                       charge.calculationValue % 1 == 0 ? 0 : 2,
                     ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
-                      labelText: charge.calculationType == 'PERCENT'
-                          ? 'Percent'
-                          : 'Amount',
+                      labelText: charge.calculationType == 'PERCENT' ? 'Percent' : 'Amount',
                     ),
                     onChanged: (value) => onChanged(
                       charge.copyWith(
@@ -1200,8 +1286,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Auto Apply'),
                     value: charge.autoApply,
-                    onChanged: (value) => onChanged(
-                        charge.copyWith(autoApply: value, isEnabled: value)),
+                    onChanged: (value) => onChanged(charge.copyWith(autoApply: value, isEnabled: value)),
                   ),
                 ),
                 Expanded(
@@ -1209,8 +1294,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Taxable'),
                     value: charge.taxable,
-                    onChanged: (value) =>
-                        onChanged(charge.copyWith(taxable: value)),
+                    onChanged: (value) => onChanged(charge.copyWith(taxable: value)),
                   ),
                 ),
                 Expanded(
@@ -1218,8 +1302,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Enabled'),
                     value: charge.isEnabled,
-                    onChanged: (value) =>
-                        onChanged(charge.copyWith(isEnabled: value)),
+                    onChanged: (value) => onChanged(charge.copyWith(isEnabled: value)),
                   ),
                 ),
               ],
@@ -1245,9 +1328,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onChanged(
                         charge.copyWith(
                           calculationType: value,
-                          amount: value == 'PERCENT'
-                              ? charge.amount
-                              : charge.calculationValue,
+                          amount: value == 'PERCENT' ? charge.amount : charge.calculationValue,
                         ),
                       );
                     },
@@ -1257,8 +1338,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: charge.taxType,
-                    decoration:
-                        const InputDecoration(labelText: 'Charge Tax Type'),
+                    decoration: const InputDecoration(labelText: 'Charge Tax Type'),
                     items: _taxTypes
                         .map(
                           (type) => DropdownMenuItem(
@@ -1283,8 +1363,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     initialValue: charge.taxPercent.toStringAsFixed(
                       charge.taxPercent % 1 == 0 ? 0 : 2,
                     ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     enabled: charge.taxable,
                     decoration: const InputDecoration(labelText: 'Tax %'),
                     onChanged: (value) => onChanged(
@@ -1304,6 +1383,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildKeyboardShortcutsSection(ThemeData theme) {
     Widget shortcutRow(String keyCombination, String actionDescription) {
+      final isDark = theme.brightness == Brightness.dark;
+
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -1311,9 +1392,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.grey.shade200,
+                color: isDark ? const Color(0xFF1E2024) : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade300),
                 boxShadow: const [
                   BoxShadow(
                     color: Colors.black12,
@@ -1324,11 +1405,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               child: Text(
                 keyCombination,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'monospace',
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
-                  color: Colors.black87,
+                  color: isDark ? Colors.white70 : Colors.black87,
                 ),
               ),
             ),
@@ -1336,7 +1417,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Expanded(
               child: Text(
                 actionDescription,
-                style: const TextStyle(fontSize: 13.5, color: Colors.black87),
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: isDark ? Colors.white60 : Colors.black87,
+                ),
               ),
             ),
           ],
@@ -1344,46 +1428,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
 
-    return _section('Keyboard Shortcuts Guide', [
-      const Text(
-        'Use hotkeys to quickly navigate through screens and control operations without using a mouse.',
-        style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
-      ),
-      const SizedBox(height: 16),
-      const Text(
-        'Global Navigation Shortcuts (Anywhere)',
-        style: TextStyle(
-            fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue),
-      ),
-      const Divider(),
-      shortcutRow('Alt + S', 'Open Settings Panel'),
-      shortcutRow('Alt + B', 'Open Retail POS Billing Console'),
-      shortcutRow('Alt + I', 'Open Item Master'), 
-      shortcutRow('Alt + W', 'Open WhatsApp Integration Dashboard'),
-      shortcutRow('Alt + H', 'Open Help & Support Panel'),
-      shortcutRow('Alt + P', 'Open Purchase Order Console'),
-      shortcutRow('Alt + G', 'Open Goods Receiving (GRN) Screen'),
-      shortcutRow('Alt + R', 'Open Sales Report Console'),
-      shortcutRow('Alt + C', 'Open Daily Closing Report Console'),
-      shortcutRow('Alt + Y', 'Open Supplier Payments Report'),
-      shortcutRow('Alt + F', 'Open Finance / Cash Ledger Console'),
-      shortcutRow('Alt + A', 'Open Brand Analysis Report'),
-      shortcutRow('Alt + K', 'Open Store Analysis / Stock Balance'),
-      shortcutRow('Alt + D', 'Open Damage Item Console'),
-      const SizedBox(height: 20),
-      const Text(
-        'POS Billing / Cart Shortcuts',
-        style: TextStyle(
-            fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue),
-      ),
-      const Divider(),
-      shortcutRow('Enter / F1',
-          'Focus & search product in barcode scanner input field'),
-      shortcutRow('F2', 'Trigger Checkout Payment dialog directly'),
-      shortcutRow('Delete',
-          'Remove the currently selected/highlighted cart line item (or last item if none selected)'),
-      shortcutRow(
-          'Escape', 'Close checkout popup / Clear barcode scanner input'),
-    ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Use hotkeys to quickly navigate through screens and control operations without using a mouse.',
+          style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Global Navigation Shortcuts (Anywhere)',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue),
+        ),
+        const Divider(),
+        shortcutRow('Alt + S', 'Open Settings Panel'),
+        shortcutRow('Alt + B', 'Open Retail POS Billing Console'),
+        shortcutRow('Alt + I', 'Open Item Master'),
+        shortcutRow('Alt + W', 'Open WhatsApp Integration Dashboard'),
+        shortcutRow('Alt + H', 'Open Help & Support Panel'),
+        shortcutRow('Alt + P', 'Open Purchase Order Console'),
+        shortcutRow('Alt + G', 'Open Goods Receiving (GRN) Screen'),
+        shortcutRow('Alt + R', 'Open Sales Report Console'),
+        shortcutRow('Alt + C', 'Open Daily Closing Report Console'),
+        shortcutRow('Alt + Y', 'Open Supplier Payments Report'),
+        shortcutRow('Alt + F', 'Open Finance / Cash Ledger Console'),
+        shortcutRow('Alt + A', 'Open Brand Analysis Report'),
+        shortcutRow('Alt + K', 'Open Store Analysis / Stock Balance'),
+        shortcutRow('Alt + D', 'Open Damage Item Console'),
+        const SizedBox(height: 20),
+        const Text(
+          'POS Billing / Cart Shortcuts',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue),
+        ),
+        const Divider(),
+        shortcutRow('Enter / F1', 'Focus & search product in barcode scanner input field'),
+        shortcutRow('F2', 'Trigger Checkout Payment dialog directly'),
+        shortcutRow('Delete', 'Remove the currently selected/highlighted cart line item (or last item if none selected)'),
+        shortcutRow('Escape', 'Close checkout popup / Clear barcode scanner input'),
+      ],
+    );
   }
 }

@@ -2624,6 +2624,21 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 68,
+    description: "Add payment gateway settings to system_settings and payment_gateway_details to customer_orders",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS enable_payment_gateway BOOLEAN DEFAULT FALSE;
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS payment_gateway_provider VARCHAR(50) DEFAULT 'SANDBOX';
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS payment_gateway_api_key VARCHAR(255) DEFAULT '';
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS payment_gateway_secret_key VARCHAR(255) DEFAULT '';
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_gateway_details JSONB DEFAULT NULL;
+        COMMIT;
+      `);
+    }
   }
 ];
 

@@ -175,6 +175,18 @@ if (!fs.existsSync(licensePath)) {
         await ensureDatabase(config);
         await propertyDb.authenticate();
         console.log('✅ Database connected');
+        
+        // Dynamically add merchant_upi_id column if missing to prevent DB query crashes
+        try {
+            await propertyDb.query(`
+                ALTER TABLE system_settings 
+                ADD COLUMN IF NOT EXISTS merchant_upi_id VARCHAR(255) DEFAULT '';
+            `);
+            console.log('✅ Verified/added merchant_upi_id column in system_settings table');
+        } catch (colErr) {
+            console.warn('⚠️ Failed to dynamically alter table system_settings:', colErr.message);
+        }
+
         await runMigrations(propertyDb);
 
         console.log('✅ Database migrations complete');

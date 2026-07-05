@@ -52,6 +52,10 @@ class SaleOrder {
   final double loyaltyDiscountAmount;
   final String? notes;
   final String? modificationNote;
+  final String? returnStatus;
+  final String? returnType;
+  final double refundAmount;
+  final List<dynamic>? returnedItems;
   final bool affectStock;
   final List<SaleScheme> selectedSchemes;
   final List<SaleItem> items;
@@ -106,6 +110,10 @@ class SaleOrder {
     this.loyaltyPointsRedeemed = 0,
     this.loyaltyDiscountAmount = 0,
     this.notes,
+    this.returnStatus,
+    this.returnType,
+    this.refundAmount = 0.0,
+    this.returnedItems,
     required this.items,
     this.selectedSchemes = const [],
     this.affectStock = true,

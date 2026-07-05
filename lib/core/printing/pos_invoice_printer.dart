@@ -238,19 +238,37 @@ class PosInvoicePrinter {
                   ),
                 pw.SizedBox(height: 4),
                 pw.Text(
-                  order.status == 'DRAFT'
-                      ? 'PROFORMA BILL'
-                      : hasTaxData
-                          ? 'TAX INVOICE'
-                          : 'INVOICE',
+                  order.status == 'CANCELLED'
+                      ? 'CANCELLED BILL'
+                      : order.status == 'DRAFT'
+                          ? 'PROFORMA BILL'
+                          : hasTaxData
+                              ? 'TAX INVOICE'
+                              : 'INVOICE',
                   style: emphasisStyle,
                 ),
               ],
             ),
           ),
           _dashedDivider(),
+          if (order.status == 'CANCELLED') ...[
+            pw.Container(
+              margin: const pw.EdgeInsets.symmetric(vertical: 4),
+              padding: const pw.EdgeInsets.all(4),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.black, width: 1.5),
+              ),
+              child: pw.Center(
+                child: pw.Text(
+                  '*** CANCELLED ***',
+                  style: pw.TextStyle(font: bold, fontSize: 11, color: PdfColors.black),
+                ),
+              ),
+            ),
+            _dashedDivider(),
+          ],
           _thermalMetaRow(
-            'Bill No',
+            (order.status == 'DELIVERED' || order.status == 'COMPLETED') ? 'Bill No' : 'Order No',
             order.saleNo,
             'Date',
             _date.format(order.saleDate),
@@ -362,11 +380,16 @@ class PosInvoicePrinter {
             ],
           ),
           pw.SizedBox(height: 3),
-          ...order.items.map((item) => _thermalItemRow(item)),
+          ...order.items.map((item) => _thermalItemRow(item, order)),
           _dashedDivider(),
           _thermalAmountRow('Total Items', totalItems.toDouble()),
           _thermalAmountRow('Total Qty', order.totalQty),
           _thermalAmountRow('Subtotal', order.subTotal),
+          if (order.refundAmount > 0) ...[
+            _dashedDivider(),
+            _thermalAmountRow('Refunded Amt', order.refundAmount),
+            _thermalAmountRow('Net Payable', order.netAmount - order.refundAmount),
+          ],
           if (order.totalDiscount > 0)
             _thermalAmountRow(_savingLabel(order), order.totalDiscount),
           if (order.loyaltyPointsRedeemed > 0 &&
@@ -403,7 +426,11 @@ class PosInvoicePrinter {
               ),
             ),
           ],
-          if (roundOff.abs() > 0.0009) _thermalAmountRow('Round Off', roundOff),
+          if (roundOff.abs() > 0.0009)
+            _thermalAmountRow(
+              roundOff.abs() >= 1.0 ? 'Subscription Adj' : 'Round Off',
+              roundOff,
+            ),
           _dashedDivider(),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -416,8 +443,12 @@ class PosInvoicePrinter {
           _thermalMetaRow(
             'Payment',
             order.paymentMode,
-            (data.changeDue ?? order.changeAmount) > 0 ? 'Refund (CASH)' : 'Refund',
-            _money((data.changeDue ?? order.changeAmount)),
+            order.refundAmount > 0
+                ? 'Refund'
+                : ((data.changeDue ?? order.changeAmount) > 0 ? 'Refund (CASH)' : 'Refund'),
+            _money(order.refundAmount > 0
+                ? order.refundAmount
+                : (data.changeDue ?? order.changeAmount)),
           ),
           if ((data.amountReceived ?? order.amountPaid) > 0)
             _thermalMetaRow(
@@ -508,11 +539,13 @@ class PosInvoicePrinter {
               pw.Expanded(
                 child: pw.Center(
                   child: pw.Text(
-                    order.status == 'DRAFT'
-                        ? 'DRAFT ORDER'
-                        : hasTaxData
-                            ? 'TAX INVOICE'
-                            : 'INVOICE',
+                    order.status == 'CANCELLED'
+                        ? 'CANCELLED BILL'
+                        : order.status == 'DRAFT'
+                            ? 'DRAFT ORDER'
+                            : hasTaxData
+                                ? 'TAX INVOICE'
+                                : 'INVOICE',
                     style: pw.TextStyle(
                       fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
@@ -569,6 +602,22 @@ class PosInvoicePrinter {
           ),
         ),
         pw.SizedBox(height: 12),
+        if (order.status == 'CANCELLED')
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            margin: const pw.EdgeInsets.only(bottom: 10),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.red100,
+              border: pw.Border.all(color: PdfColors.red500),
+            ),
+            child: pw.Center(
+              child: pw.Text(
+                'CANCELLED TRANSACTION / BILL',
+                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.red700),
+              ),
+            ),
+          ),
         if (order.status == 'DRAFT')
           pw.Container(
             width: double.infinity,
@@ -601,7 +650,10 @@ class PosInvoicePrinter {
                         style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                       ),
                       pw.SizedBox(height: 6),
-                      _a4MetaRow('Invoice No', order.saleNo),
+                      _a4MetaRow(
+                        (order.status == 'DELIVERED' || order.status == 'COMPLETED') ? 'Invoice No' : 'Order No',
+                        order.saleNo,
+                      ),
                       _a4MetaRow(
                         'Invoice Dt/Tm',
                         '${_date.format(order.saleDate)} ${_time.format(order.saleDate)}',
@@ -837,11 +889,28 @@ class PosInvoicePrinter {
     final data = order.items.asMap().entries.map((entry) {
       final index = entry.key;
       final item = entry.value;
+      bool isReturned = false;
+      bool isExchanged = false;
+      if (order.returnedItems != null && order.returnedItems!.isNotEmpty) {
+        for (var rit in order.returnedItems!) {
+          if (rit['item_id']?.toString() == item.itemId.toString() ||
+              rit['item_name']?.toString().toUpperCase() == item.itemName.toUpperCase() ||
+              rit['item_code']?.toString() == item.itemCode) {
+            if (order.returnType == 'EXCHANGE') {
+              isExchanged = true;
+            } else {
+              isReturned = true;
+            }
+          }
+        }
+      }
+      final suffix = isReturned ? ' (REFUNDED)' : (isExchanged ? ' (EXCHANGED)' : '');
+
       final brandStr = item.brand != null && item.brand!.trim().isNotEmpty
           ? '${item.brand!.trim()} - '
           : '';
       final name =
-          item.isSchemeFree ? '$brandStr${item.itemName} (FREE)' : '$brandStr${item.itemName}';
+          item.isSchemeFree ? '$brandStr${item.itemName} (FREE)$suffix' : '$brandStr${item.itemName}$suffix';
       if (hasTaxData) {
         return [
           '${index + 1}',
@@ -928,9 +997,18 @@ class PosInvoicePrinter {
           if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
           if (hasTaxData) _a4AmountRow('Total SGST Amount', sgstTotal),
           if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
-          if (roundOff.abs() > 0.0009) _a4AmountRow('Round Off', roundOff),
+          if (roundOff.abs() > 0.0009)
+            _a4AmountRow(
+              roundOff.abs() >= 1.0 ? 'Subscription Adj' : 'Round Off',
+              roundOff,
+            ),
           pw.Divider(height: 10),
           _a4AmountRow('Grand Total', order.netAmount, bold: true),
+          if (order.refundAmount > 0) ...[
+            pw.Divider(height: 10),
+            _a4AmountRow('Refunded Amount', order.refundAmount),
+            _a4AmountRow('Net Payable', order.netAmount - order.refundAmount, bold: true),
+          ],
           if (order.amountPaid > 0) ...[
             pw.Divider(height: 10),
             _a4AmountRow(
@@ -1010,9 +1088,26 @@ class PosInvoicePrinter {
     );
   }
 
-  static pw.Widget _thermalItemRow(SaleItem item) {
+  static pw.Widget _thermalItemRow(SaleItem item, SaleOrder order) {
     final font = pw.Font.helvetica();
     final bold = pw.Font.helveticaBold();
+
+    bool isReturned = false;
+    bool isExchanged = false;
+    if (order.returnedItems != null && order.returnedItems!.isNotEmpty) {
+      for (var rit in order.returnedItems!) {
+        if (rit['item_id']?.toString() == item.itemId.toString() ||
+            rit['item_name']?.toString().toUpperCase() == item.itemName.toUpperCase() ||
+            rit['item_code']?.toString() == item.itemCode) {
+          if (order.returnType == 'EXCHANGE') {
+            isExchanged = true;
+          } else {
+            isReturned = true;
+          }
+        }
+      }
+    }
+    final suffix = isReturned ? ' (REFUNDED)' : (isExchanged ? ' (EXCHANGED)' : '');
 
     final hsnOrCode = item.hsnSacCode.trim().isNotEmpty
         ? item.hsnSacCode.trim()
@@ -1050,8 +1145,8 @@ class PosInvoicePrinter {
               pw.Expanded(
                 child: pw.Text(
                   item.isSchemeFree
-                      ? '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)'
-                      : '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}',
+                      ? '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)${suffix}'
+                      : '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}${suffix}',
                   style: pw.TextStyle(
                     font: bold,
                     fontSize: 8.7,
@@ -2231,6 +2326,161 @@ class PosInvoicePrinter {
         .where((part) => part.isNotEmpty)
         .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
         .join(' ');
+  }
+
+  static Future<void> printRefundReceipt({
+    required Map<String, dynamic> order,
+    required PropertyInfo? property,
+    required double refundAmt,
+    required String refundTxnId,
+    required String refundedAt,
+    required String pmDetails,
+    required String gateway,
+    String? creditNoteNo,
+  }) async {
+    final pdfBytes = await buildRefundReceiptPdf(
+      order: order,
+      property: property,
+      refundAmt: refundAmt,
+      refundTxnId: refundTxnId,
+      refundedAt: refundedAt,
+      pmDetails: pmDetails,
+      gateway: gateway,
+      creditNoteNo: creditNoteNo,
+    );
+    await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+  }
+
+  static Future<Uint8List> buildRefundReceiptPdf({
+    required Map<String, dynamic> order,
+    required PropertyInfo? property,
+    required double refundAmt,
+    required String refundTxnId,
+    required String refundedAt,
+    required String pmDetails,
+    required String gateway,
+    String? creditNoteNo,
+  }) async {
+    final document = pw.Document();
+    final pageFormat = _thermalSheetFor('THERMAL_80');
+    final formattedDate = refundedAt.isNotEmpty ? refundedAt : DateTime.now().toString().split(' ')[0];
+
+    document.addPage(
+      pw.MultiPage(
+        pageFormat: pageFormat,
+        build: (_) => [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      property?.propertyName ?? AppBrand.companyName,
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                    ),
+                    if (property?.address != null && property!.address.isNotEmpty)
+                      pw.Text(property.address, style: const pw.TextStyle(fontSize: 7.5), textAlign: pw.TextAlign.center),
+                    if (property?.mobile != null && property!.mobile.isNotEmpty)
+                      pw.Text('Phone: ${property.mobile}', style: const pw.TextStyle(fontSize: 7.5)),
+                    if (property?.gstNo != null && property!.gstNo.isNotEmpty)
+                      pw.Text('GSTIN: ${property.gstNo}', style: const pw.TextStyle(fontSize: 7.5)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Center(
+                child: pw.Text(
+                  'ONLINE REFUND RECEIPT',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              _thermalDividerWidget(),
+              pw.SizedBox(height: 4),
+              
+              _thermalReceiptRow('Refund Date:', formattedDate),
+              _thermalReceiptRow('Refund Txn ID:', refundTxnId),
+              if (order['status'] == 'CANCELLED')
+                _thermalReceiptRow('Order No:', '#${order['id'] ?? 'N/A'}')
+              else if (order['status'] == 'DELIVERED')
+                _thermalReceiptRow('Bill No:', '${order['bill_no'] ?? order['id'] ?? 'N/A'}')
+              else
+                _thermalReceiptRow('Original Order ID:', '#${order['id'] ?? 'N/A'}'),
+              if (creditNoteNo != null && creditNoteNo.isNotEmpty && creditNoteNo != 'N/A')
+                _thermalReceiptRow('Credit Note No:', creditNoteNo),
+              _thermalReceiptRow('Gateway Provider:', gateway),
+              _thermalReceiptRow('Payment Method:', pmDetails),
+              
+              pw.SizedBox(height: 4),
+              _thermalDividerWidget(),
+              pw.SizedBox(height: 4),
+              
+              pw.Text('Customer Info:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+              pw.SizedBox(height: 2),
+              pw.Text('Name: ${order['customer_name'] ?? 'N/A'}', style: const pw.TextStyle(fontSize: 7.5)),
+              pw.Text('Phone: ${order['customer_phone'] ?? 'N/A'}', style: const pw.TextStyle(fontSize: 7.5)),
+              if (order['customer_address'] != null && order['customer_address'].toString().isNotEmpty)
+                pw.Text('Address: ${order['customer_address']}', style: const pw.TextStyle(fontSize: 7.5)),
+                
+              pw.SizedBox(height: 4),
+              _thermalDividerWidget(),
+              pw.SizedBox(height: 4),
+
+              _thermalReceiptRow('Original Amount Paid:', 'Rs. ${double.tryParse(order['net_amount']?.toString() ?? '0.0')?.toStringAsFixed(2) ?? '0.00'}'),
+              _thermalReceiptRow('Refunded Amount:', 'Rs. ${refundAmt.toStringAsFixed(2)}', isBold: true),
+              
+              pw.SizedBox(height: 6),
+              _thermalDividerWidget(),
+              pw.SizedBox(height: 6),
+              
+              pw.Center(
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      'The refund amount will be credited back to your source account/card/UPI within 3 business days.',
+                      style: pw.TextStyle(fontSize: 6.8, fontStyle: pw.FontStyle.italic),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Thank you for your business.',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return document.save();
+  }
+
+  static pw.Widget _thermalDividerWidget() {
+    return pw.Container(
+      height: 1,
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(width: 0.8, style: pw.BorderStyle.dashed, color: PdfColors.black),
+        ),
+      ),
+    );
+  }
+
+  static pw.Widget _thermalReceiptRow(String label, String value, {bool isBold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: pw.TextStyle(fontSize: 7.5, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+          pw.Text(value, style: pw.TextStyle(fontSize: 7.5, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+        ],
+      ),
+    );
   }
 }
 

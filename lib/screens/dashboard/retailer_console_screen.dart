@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -35,6 +36,10 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   int _retailerSubTabIndex = 0; // 0: Orders, 1: Returns, 2: Riders, 3: B2B Rates
   String _statusFilter = 'ALL'; // 'ALL', 'PENDING', 'CANCELLED', 'DELIVERED'
   int _ordersSubTab = 0; // 0: Dashboard, 1: Orders List
+
+  // --- Online Transactions State ---
+  List<dynamic> _onlineTransactions = [];
+  bool _loadingTransactions = false;
 
   // --- B2B Rates State ---
   List<dynamic> _b2bItems = [];
@@ -256,12 +261,798 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
         _retailerOrders = newOrders;
         _retailerRiders = ridersRes['data'] ?? [];
       });
+
+      if (_retailerSubTabIndex == 5) {
+        _fetchOnlineTransactions();
+      }
     } catch (e) {
       debugPrint('Error fetching retailer data: $e');
     } finally {
       if (!isBackground) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// Safely extract payment_gateway_details regardless of JSON decode type
+  Map<String, dynamic> _safeGatewayDetails(dynamic txn) {
+    final raw = txn['payment_gateway_details'];
+    if (raw == null) return {};
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return {};
+  }
+
+  bool _isWithin7Days(String? createdAtStr) {
+    if (createdAtStr == null) return false;
+    try {
+      final DateTime createdAt = DateTime.parse(createdAtStr);
+      final DateTime now = DateTime.now();
+      final difference = now.difference(createdAt).inDays;
+      return difference <= 7;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  String _getOriginalPaymentMethod(Map<String, dynamic> details, String fallback) {
+    final method = details['payment_method'] ?? fallback;
+    if (method == 'CARD') {
+      return details['card_details'] ?? 'Card';
+    } else if (method == 'UPI') {
+      return details['upi_details'] ?? 'UPI';
+    }
+    return method;
+  }
+
+  Future<void> _fetchOnlineTransactions() async {
+    setState(() => _loadingTransactions = true);
+    try {
+      final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+      final res = await ApiClient.get('/api/delivery/retailer/transactions?outlet_id=$outletCode');
+      if (res['success'] == true) {
+        setState(() {
+          _onlineTransactions = res['data'] ?? [];
+        });
+      } else {
+        debugPrint('Error fetching transactions: ${res['message']}');
+      }
+    } catch (e) {
+      debugPrint('Error fetching transactions: $e');
+    } finally {
+      setState(() => _loadingTransactions = false);
+    }
+  }
+
+  Future<void> _handleGatewayRefund(dynamic orderId, double refundAmount) async {
+    final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+    final reasonCtrl = TextEditingController();
+    final amtCtrl = TextEditingController(text: refundAmount.toStringAsFixed(2));
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogCtx) {
+        final theme = Theme.of(dialogCtx);
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              elevation: 8,
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Secure Refund',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'GATEWAY REFUND',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.lock_outline, size: 14, color: theme.colorScheme.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                'SECURE',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    Text(
+                      'Amount to Refund',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      controller: amtCtrl,
+                      keyboardType: TextInputType.number,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        prefixText: 'Rs. ',
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'This will trigger an automatic refund through the integrated online payment gateway.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: reasonCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Reason for Refund',
+                        prefixIcon: Icon(Icons.info_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(dialogCtx, false),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () {
+                              final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
+                              if (amt <= 0 || amt > refundAmount + 0.01) {
+                                ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                                  SnackBar(content: Text('Invalid refund amount. Max: Rs. ${refundAmount.toStringAsFixed(2)}')),
+                                );
+                                return;
+                              }
+                              Navigator.pop(dialogCtx, true);
+                            },
+                            child: const Text('Process Refund'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final double finalRefundAmt = double.tryParse(amtCtrl.text.trim()) ?? refundAmount;
+    final String reason = reasonCtrl.text.trim();
+    reasonCtrl.dispose();
+    amtCtrl.dispose();
+
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient.post(
+        '/api/delivery/retailer/orders/$orderId/refund-gateway?outlet_id=$outletCode',
+        {
+          'refund_amount': finalRefundAmt,
+          'reason': reason.isNotEmpty ? reason : 'Customer request/Order cancel',
+        },
+      );
+      if (res['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message']?.toString() ?? 'Gateway refund processed successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+        
+        try {
+          final propertyCtrl = PropertyInfoController();
+          await propertyCtrl.load();
+          
+          final order = res['data'] ?? {};
+          final details = _safeGatewayDetails(order);
+          final pmDetails = details['payment_method'] ?? order['payment_mode'] ?? 'ONLINE';
+          final provider = details['provider'] ?? 'GATEWAY';
+          final cnNo = 'N/A';
+          
+          final printReceipt = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Print Refund Receipt?'),
+              content: const Text('Do you want to print the thermal receipt for this online refund?'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Skip')),
+                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Print')),
+              ],
+            ),
+          );
+          
+          if (printReceipt == true) {
+            await PosInvoicePrinter.printRefundReceipt(
+              order: order,
+              property: propertyCtrl.data,
+              refundAmt: finalRefundAmt,
+              refundTxnId: details['refund_txn_id'] ?? 'N/A',
+              refundedAt: details['refunded_at'] ?? DateTime.now().toIso8601String(),
+              pmDetails: pmDetails,
+              gateway: provider,
+              creditNoteNo: cnNo,
+            );
+          }
+        } catch (printErr) {
+          debugPrint('Error after refund receipt setup/print: $printErr');
+        }
+        
+        await _fetchRetailerData();
+        await _fetchOnlineTransactions();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message']?.toString() ?? 'Failed to process gateway refund'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error triggering gateway refund: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showRefundReceiptModal(Map<String, dynamic> txn) {
+    final details = _safeGatewayDetails(txn);
+    final provider = details['provider'] ?? 'GATEWAY';
+    final gatewayStatus = details['status'] ?? 'PAID';
+    final paymentId = details['txn_id'] ?? details['payment_id'] ?? 'N/A';
+    
+    final bool isRefunded = gatewayStatus == 'REFUNDED' || txn['refund_status'] == 'REFUNDED';
+    final rawRefundAmt = double.tryParse(details['refund_amount']?.toString() ?? '0') ?? 0.0;
+    final netAmt = double.tryParse(txn['net_amount']?.toString() ?? '0.0') ?? 0.0;
+    final refundAmt = rawRefundAmt > 0 ? rawRefundAmt : netAmt;
+    final refundTxnId = details['refund_txn_id'] ?? 'N/A';
+    final refundedAt = details['refunded_at'] ?? '';
+    final paidAt = details['paid_at'] ?? txn['createdAt'] ?? txn['created_at'] ?? '';
+    final refundDateStr = refundedAt.isNotEmpty 
+        ? DateFormat('yyyy-MM-dd').format(DateTime.parse(refundedAt).toLocal()) 
+        : (paidAt.isNotEmpty ? DateFormat('yyyy-MM-dd').format(DateTime.parse(paidAt.toString()).toLocal()) : DateFormat('yyyy-MM-dd').format(DateTime.now()));
+
+    final refundsList = details['refunds'] as List<dynamic>? ?? [];
+    final String cnNo = refundsList.isNotEmpty
+        ? refundsList.map((r) => (r as Map)['credit_note_no']?.toString() ?? '').where((no) => no.isNotEmpty).join(', ')
+        : 'N/A';
+
+    final String cardOrUpi = _getOriginalPaymentMethod(details, txn['payment_mode'] ?? 'ONLINE');
+    final String refundMethodFormatted = '$cardOrUpi (via $provider)';
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext dialogCtx) {
+        final theme = Theme.of(dialogCtx);
+        return Dialog(
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 12,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  color: Colors.blue.shade600,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long, color: Colors.white, size: 22),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Refund Receipt',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const Spacer(),
+                      InkWell(
+                        onTap: () => Navigator.pop(dialogCtx),
+                        child: const Icon(Icons.close, color: Colors.white, size: 22),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              'ONLINE REFUND SUCCESSFUL',
+                              style: TextStyle(
+                                color: Colors.blue.shade900,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Processed via $provider',
+                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      _buildReceiptRow('Order ID:', '#${txn['id']}'),
+                      if (cnNo != 'N/A')
+                        _buildReceiptRow('Credit Note No:', cnNo),
+                      _buildReceiptRow('Customer Name:', '${txn['customer_name'] ?? 'Walk-in'}'),
+                      _buildReceiptRow('Customer Phone:', '${txn['customer_phone'] ?? 'N/A'}'),
+                      _buildReceiptRow('Address:', '${txn['customer_address'] ?? 'Dehradun'}'),
+                      const Divider(),
+                      _buildReceiptRow('Original Amount Paid:', 'Rs. ${netAmt.toStringAsFixed(2)}'),
+                      _buildReceiptRow(
+                        'Refunded Amount:',
+                        'Rs. ${refundAmt.toStringAsFixed(2)}',
+                        isBold: true,
+                        valueColor: Colors.blue.shade900,
+                      ),
+                      const Divider(),
+                      _buildReceiptRow('Refund Txn ID:', refundTxnId),
+                      _buildReceiptRow('Refund Method:', refundMethodFormatted),
+                      _buildReceiptRow('Refund Date:', refundDateStr),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.blue.shade100),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'The refund amount will be credited to the source account in 48 hours to 3 business days.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade900,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogCtx),
+                            child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            onPressed: () async {
+                              Navigator.pop(dialogCtx);
+                              setState(() => _isLoading = true);
+                              try {
+                                final propertyCtrl = PropertyInfoController();
+                                await propertyCtrl.load();
+                                
+                                final pmDetails = details['payment_method'] ?? txn['payment_mode'] ?? 'ONLINE';
+                                final provider = details['provider'] ?? 'GATEWAY';
+                                
+                                await PosInvoicePrinter.printRefundReceipt(
+                                  order: txn,
+                                  property: propertyCtrl.data,
+                                  refundAmt: refundAmt,
+                                  refundTxnId: refundTxnId,
+                                  refundedAt: refundedAt,
+                                  pmDetails: pmDetails,
+                                  gateway: provider,
+                                  creditNoteNo: cnNo,
+                                );
+                              } catch (e) {
+                                debugPrint('Error printing receipt: $e');
+                              } finally {
+                                setState(() => _isLoading = false);
+                              }
+                            },
+                            icon: const Icon(Icons.print, size: 18),
+                            label: const Text('Print Receipt', style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.blue.shade600,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReceiptRow(String label, String value, {bool isBold = false, Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: valueColor ?? Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleCreditNoteRefund(Map<String, dynamic> txn) async {
+    final orderId = txn['id'];
+    final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+
+    setState(() => _isLoading = true);
+    List<dynamic> creditNotes = [];
+    try {
+      final res = await ApiClient.get('/api/delivery/retailer/orders/$orderId/pending-refunds?outlet_id=$outletCode');
+      if (res['success'] == true) {
+        creditNotes = res['data'] ?? [];
+      } else {
+        throw Exception(res['message'] ?? 'Failed to load credit notes');
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading credit notes: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isLoading = false);
+
+    if (creditNotes.isEmpty) {
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.indigo.shade700),
+                const SizedBox(width: 8),
+                const Text('No Pending Credit Notes'),
+              ],
+            ),
+            content: const Text(
+              'No pending credit notes found for this order.\n\nTo refund a delivered item, please go to the Return/Refund panel first, return the item(s) to generate a credit note, and then select it here for gateway refund.',
+              style: TextStyle(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    final selectedCn = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (BuildContext dialogCtx) {
+        final theme = Theme.of(dialogCtx);
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 8,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            constraints: const BoxConstraints(maxWidth: 480, maxHeight: 500),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Select Credit Note',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(dialogCtx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select a pending credit note to refund via payment gateway.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const Divider(height: 24),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: creditNotes.length,
+                    itemBuilder: (ctx, index) {
+                      final cn = creditNotes[index] as Map<String, dynamic>;
+                      final cnNo = cn['refund_no'] ?? 'N/A';
+                      final rawDate = cn['refund_date'] ?? '';
+                      final dateStr = rawDate.isNotEmpty
+                          ? DateFormat('dd-MMM-yyyy').format(DateTime.parse(rawDate))
+                          : 'N/A';
+                      final amtPending = double.tryParse(cn['amount_pending']?.toString() ?? '0') ?? 0.0;
+                      final amtPaid = double.tryParse(cn['amount_paid']?.toString() ?? '0') ?? 0.0;
+                      final refundVal = amtPending - amtPaid;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => Navigator.pop(dialogCtx, cn),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      cnNo,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Date: $dateStr',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    ),
+                                  ],
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      'Rs. ${refundVal.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.colorScheme.primary,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.shade50,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'PENDING CN',
+                                        style: TextStyle(
+                                          color: Colors.orange,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selectedCn == null) return;
+
+    final amtPending = double.tryParse(selectedCn['amount_pending']?.toString() ?? '0') ?? 0.0;
+    final amtPaid = double.tryParse(selectedCn['amount_paid']?.toString() ?? '0') ?? 0.0;
+    final double finalRefundAmt = amtPending - amtPaid;
+    final String cnNo = selectedCn['refund_no'] ?? 'N/A';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Gateway Refund'),
+        content: Text(
+          'Are you sure you want to process a gateway refund of Rs. ${finalRefundAmt.toStringAsFixed(2)} for Credit Note $cnNo?\n\nThis will transfer the amount to the customer\'s source account.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Process Refund'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient.post(
+        '/api/delivery/retailer/orders/$orderId/refund-via-creditnote?outlet_id=$outletCode',
+        {
+          'refund_id': selectedCn['id'],
+          'reason': 'Refunded via credit note $cnNo',
+        },
+      );
+
+      if (res['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message']?.toString() ?? 'Refund processed successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+
+        try {
+          final propertyCtrl = PropertyInfoController();
+          await propertyCtrl.load();
+
+          final order = res['data'] ?? {};
+          final details = _safeGatewayDetails(order);
+          final pmDetails = details['payment_method'] ?? order['payment_mode'] ?? 'ONLINE';
+          final provider = details['provider'] ?? 'GATEWAY';
+
+          final printReceipt = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Print Refund Receipt?'),
+              content: const Text('Do you want to print the thermal receipt for this online refund?'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Skip')),
+                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Print')),
+              ],
+            ),
+          );
+
+          if (printReceipt == true) {
+            await PosInvoicePrinter.printRefundReceipt(
+              order: order,
+              property: propertyCtrl.data,
+              refundAmt: finalRefundAmt,
+              refundTxnId: details['refund_txn_id'] ?? 'N/A',
+              refundedAt: details['refunded_at'] ?? DateTime.now().toIso8601String(),
+              pmDetails: pmDetails,
+              gateway: provider,
+              creditNoteNo: cnNo,
+            );
+          }
+        } catch (printErr) {
+          debugPrint('Error printing refund receipt: $printErr');
+        }
+
+        await _fetchRetailerData();
+        await _fetchOnlineTransactions();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message']?.toString() ?? 'Failed to process refund'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error triggering credit note refund: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -3038,15 +3829,43 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                   ],
                                                 ),
                                               ),
-                                              FilledButton(
-                                                onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
-                                                style: FilledButton.styleFrom(
-                                                  backgroundColor: Colors.green.shade700,
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                  minimumSize: Size.zero,
+                                              if (order['payment_gateway_details'] != null) ...[
+                                                Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    FilledButton(
+                                                      onPressed: () => _handleGatewayRefund(order['id'], refundDue),
+                                                      style: FilledButton.styleFrom(
+                                                        backgroundColor: Colors.indigo.shade700,
+                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                        minimumSize: Size.zero,
+                                                      ),
+                                                      child: const Text('Refund Online', style: TextStyle(fontSize: 11)),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    OutlinedButton(
+                                                      onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
+                                                      style: OutlinedButton.styleFrom(
+                                                        foregroundColor: Colors.green.shade800,
+                                                        side: BorderSide(color: Colors.green.shade300),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                        minimumSize: Size.zero,
+                                                      ),
+                                                      child: const Text('Mark Manual Paid', style: TextStyle(fontSize: 11)),
+                                                    ),
+                                                  ],
                                                 ),
-                                                child: const Text('Mark Paid', style: TextStyle(fontSize: 12)),
-                                              ),
+                                              ] else ...[
+                                                FilledButton(
+                                                  onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
+                                                  style: FilledButton.styleFrom(
+                                                    backgroundColor: Colors.green.shade700,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                    minimumSize: Size.zero,
+                                                  ),
+                                                  child: const Text('Mark Paid', style: TextStyle(fontSize: 12)),
+                                                ),
+                                              ],
                                             ],
                                           ),
                                         ),
@@ -3221,21 +4040,48 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                     alignment: WrapAlignment.start,
                                     children: [
                                       if (order['refund_status']?.toString() == 'PENDING' && !isCod) ...[
-                                        (() {
+                                        ...(() {
                                           final origAmt = double.tryParse(order['original_net_amount']?.toString() ?? '') ?? 0.0;
                                           final curAmt = double.tryParse(order['net_amount']?.toString() ?? '') ?? 0.0;
                                           final refundDue = origAmt > 0 ? origAmt - curAmt : 0.0;
-                                          return FilledButton.icon(
-                                            onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
-                                            icon: const Icon(Icons.currency_rupee, size: 16),
-                                            label: Text(refundDue > 0
-                                                ? 'Mark Refund Paid (Rs. ${refundDue.toStringAsFixed(2)})'
-                                                : 'Mark Refund Paid'),
-                                            style: FilledButton.styleFrom(
-                                              backgroundColor: Colors.green.shade700,
-                                              foregroundColor: Colors.white,
-                                            ),
-                                          );
+                                          if (order['payment_gateway_details'] != null) {
+                                            return [
+                                              FilledButton.icon(
+                                                onPressed: () => _handleGatewayRefund(order['id'], refundDue),
+                                                icon: const Icon(Icons.security, size: 16),
+                                                label: Text(refundDue > 0
+                                                    ? 'Refund Online (Rs. ${refundDue.toStringAsFixed(2)})'
+                                                    : 'Refund Online'),
+                                                style: FilledButton.styleFrom(
+                                                  backgroundColor: Colors.indigo.shade700,
+                                                  foregroundColor: Colors.white,
+                                                ),
+                                              ),
+                                              OutlinedButton.icon(
+                                                onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
+                                                icon: const Icon(Icons.currency_rupee, size: 16),
+                                                label: const Text('Mark Manual Paid'),
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor: Colors.green.shade800,
+                                                  side: BorderSide(color: Colors.green.shade300),
+                                                ),
+                                              ),
+                                            ];
+                                          } else {
+                                            return [
+                                              FilledButton.icon(
+                                                onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
+                                                icon: const Icon(Icons.currency_rupee, size: 16),
+                                                label: Text(refundDue > 0
+                                                    ? 'Mark Refund Paid (Rs. ${refundDue.toStringAsFixed(2)})'
+                                                    : 'Mark Refund Paid'),
+                                                style: FilledButton.styleFrom(
+                                                  backgroundColor: Colors.green.shade700,
+                                                  foregroundColor: Colors.white,
+                                                ),
+                                              )
+                                            ];
+                                          }
                                         })(),
                                       ] else if (order['return_status'] == 'PENDING') ...[
                                         OutlinedButton.icon(
@@ -5273,6 +6119,355 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           );
   }
 
+  Widget _buildOnlineTransactionsSection(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Online Gateway Payments',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _fetchOnlineTransactions,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Monitor payment gateway settlements and process online refunds.',
+            style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _loadingTransactions && _onlineTransactions.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : _onlineTransactions.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.payment_outlined, size: 56, color: Colors.grey.shade400),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'No online payment gateway transactions found.',
+                              style: TextStyle(color: Colors.grey, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _onlineTransactions.length,
+                        itemBuilder: (context, index) {
+                          final txn = _onlineTransactions[index];
+                          final details = _safeGatewayDetails(txn);
+                          final provider = details['provider'] ?? 'GATEWAY';
+                          final gatewayStatus = details['status'] ?? 'PAID';
+                          // Key stored by customer app is 'txn_id'
+                          final paymentId = details['txn_id'] ?? details['payment_id'] ?? 'N/A';
+                          // Date of payment: prefer paid_at from gateway, fallback to order created_at
+                          final rawDate = details['paid_at'] ?? txn['createdAt'] ?? txn['created_at'];
+                          
+                          final bool isRefunded = gatewayStatus == 'REFUNDED' || txn['refund_status'] == 'REFUNDED';
+                          final bool isPartiallyRefunded = gatewayStatus == 'PARTIALLY_REFUNDED' || txn['refund_status'] == 'PARTIALLY_REFUNDED';
+                          final bool isCancelled = txn['status'] == 'CANCELLED';
+                          final bool isDelivered = txn['status'] == 'DELIVERED';
+                          final bool isRefundPending = txn['refund_status'] == 'PENDING';
+                          final bool within7Days = _isWithin7Days(txn['createdAt'] ?? txn['created_at']);
+                          // Eligible for refund: cancelled/pending OR delivered (7-day return window) OR partially refunded (can refund remaining credit notes)
+                          final bool isRefundEligible = !isRefunded && (isCancelled || isRefundPending || isDelivered || isPartiallyRefunded);
+                          final bool hasPendingCreditNotes = txn['has_pending_credit_notes'] == true;
+
+                          final netAmt = double.tryParse(txn['net_amount']?.toString() ?? '0.0') ?? 0.0;
+                          final dateStr = rawDate != null
+                              ? DateFormat('dd-MMM-yyyy, hh:mm a').format(DateTime.parse(rawDate.toString()).toLocal())
+                              : 'N/A';
+
+                          final String cardOrUpi = _getOriginalPaymentMethod(details, txn['payment_mode'] ?? 'ONLINE');
+                          final String refundMethodFormatted = '$cardOrUpi (via $provider)';
+                          // Show actual refund_amount if > 0, else fall back to net amount
+                          final rawRefundAmt = double.tryParse(details['refund_amount']?.toString() ?? '0') ?? 0.0;
+                          final refundAmt = rawRefundAmt > 0 ? rawRefundAmt : netAmt;
+                          final refundTxnId = details['refund_txn_id'] ?? 'N/A';
+                          final refundedAt = details['refunded_at'] ?? '';
+                          final refundsList = details['refunds'] as List<dynamic>? ?? [];
+                          final String cnNo = refundsList.isNotEmpty
+                              ? refundsList.map((r) => (r as Map)['credit_note_no']?.toString() ?? '').where((no) => no.isNotEmpty).join(', ')
+                              : 'N/A';
+
+                          Color statusColor = Colors.green;
+                          if (isRefunded) statusColor = Colors.blue.shade700;
+                          else if (isPartiallyRefunded) statusColor = Colors.orange.shade700;
+                          else if (isCancelled) statusColor = Colors.red;
+                          else if (isDelivered) statusColor = Colors.teal;
+
+                          return Card(
+                            elevation: 0.5,
+                            margin: const EdgeInsets.only(bottom: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: Colors.grey.shade200, width: 1.2),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Header Row matching Mockup 1
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Order #${txn['id']}',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Customer: ${txn['customer_name'] ?? 'Walk-in'} (${txn['customer_phone'] ?? 'N/A'})',
+                                              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Address: ${txn['customer_address'] ?? 'Dehradun'}',
+                                              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Date: $dateStr',
+                                              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        'Rs. ${netAmt.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const Divider(height: 24),
+                                  
+                                  // Gateway Info Row matching Mockup 1
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Gateway: $provider ($cardOrUpi)',
+                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Txn ID: $paymentId',
+                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: statusColor.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: Text(
+                                          isRefunded
+                                              ? 'REFUNDED'
+                                              : (isPartiallyRefunded ? 'PARTIALLY REFUNDED' : (isCancelled ? 'CANCELLED' : (isDelivered ? 'DELIVERED' : 'PAID'))),
+                                          style: TextStyle(
+                                            color: statusColor,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  
+                                  // Action or Info Section matching Mockup 1
+                                  if (isRefunded || isPartiallyRefunded) ...[
+                                    const SizedBox(height: 16),
+                                    // Info box matching Mockup 1
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade50.withOpacity(0.4),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.blue.shade100),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                'Refund Information',
+                                                style: TextStyle(
+                                                  color: Colors.blue.shade900,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          if (cnNo != 'N/A') ...[
+                                            Text('Credit Note: $cnNo', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                                            const SizedBox(height: 2),
+                                          ],
+                                          Text('Refund Txn ID: $refundTxnId', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                                          const SizedBox(height: 2),
+                                          Text('Refund Method: $refundMethodFormatted', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Refund Amount: Rs. ${refundAmt.toStringAsFixed(2)}',
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.end,
+                                              children: [
+                                                OutlinedButton.icon(
+                                                  onPressed: () => _showRefundReceiptModal(txn),
+                                                  icon: const Icon(Icons.info_outline, size: 14, color: Colors.blue),
+                                                  label: const Text('View Details', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: BorderSide(color: Colors.blue.shade300, width: 1.2),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                                    minimumSize: Size.zero,
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                FilledButton.icon(
+                                                  onPressed: () async {
+                                                    setState(() => _isLoading = true);
+                                                    try {
+                                                      final propertyCtrl = PropertyInfoController();
+                                                      await propertyCtrl.load();
+                                                      
+                                                      final pmDetails = details['payment_method'] ?? txn['payment_mode'] ?? 'ONLINE';
+                                                      final provider = details['provider'] ?? 'GATEWAY';
+                                                      
+                                                      await PosInvoicePrinter.printRefundReceipt(
+                                                        order: txn,
+                                                        property: propertyCtrl.data,
+                                                        refundAmt: refundAmt,
+                                                        refundTxnId: refundTxnId,
+                                                        refundedAt: refundedAt,
+                                                        pmDetails: pmDetails,
+                                                        gateway: provider,
+                                                        creditNoteNo: cnNo,
+                                                      );
+                                                    } catch (e) {
+                                                      debugPrint('Error printing receipt: $e');
+                                                    } finally {
+                                                      setState(() => _isLoading = false);
+                                                    }
+                                                  },
+                                                  icon: const Icon(Icons.print, size: 14, color: Colors.white),
+                                                  label: const Text('Reprint Receipt', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                                  style: FilledButton.styleFrom(
+                                                    backgroundColor: Colors.blue.shade700,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                                    minimumSize: Size.zero,
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  if (isRefundEligible) ...[
+                                    const SizedBox(height: 16),
+                                    if (within7Days) ...[
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: isDelivered
+                                            ? (hasPendingCreditNotes
+                                                ? FilledButton.icon(
+                                                    onPressed: () => _handleCreditNoteRefund(txn),
+                                                    icon: const Icon(Icons.receipt_long, size: 16),
+                                                    label: const Text('Refund via Credit Note', style: TextStyle(fontWeight: FontWeight.bold)),
+                                                    style: FilledButton.styleFrom(
+                                                      backgroundColor: Colors.orange.shade800,
+                                                      foregroundColor: Colors.white,
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                                    ),
+                                                  )
+                                                : const SizedBox.shrink())
+                                            : FilledButton.icon(
+                                                onPressed: () => _handleGatewayRefund(txn['id'], netAmt),
+                                                icon: const Icon(Icons.security, size: 16),
+                                                label: const Text('Refund Online via Gateway', style: TextStyle(fontWeight: FontWeight.bold)),
+                                                style: FilledButton.styleFrom(
+                                                  backgroundColor: Colors.indigo.shade700,
+                                                  foregroundColor: Colors.white,
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                                ),
+                                              ),
+                                      ),
+                                    ] else ...[
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.shade50,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.red.shade200),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 16),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'Refund Window Closed (7-day period expired)',
+                                              style: TextStyle(color: Colors.red.shade800, fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDeliveryDrawer(BuildContext context) {
     final theme = Theme.of(context);
     return Drawer(
@@ -5361,6 +6556,18 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                 _retailerSubTabIndex = 4;
                 _fetchReturnSettings();
                 if (_b2bItems.isEmpty) _fetchB2bItems();
+              });
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.payment_outlined),
+            title: const Text('Online Transactions'),
+            selected: _retailerSubTabIndex == 5,
+            onTap: () {
+              Navigator.of(context).pop();
+              setState(() {
+                _retailerSubTabIndex = 5;
+                _fetchOnlineTransactions();
               });
             },
           ),
@@ -5501,6 +6708,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                 _buildRetailerRidersSection(theme),
                 _buildB2bRatesSection(theme),
                 _buildReturnSettingsSection(theme),
+                _buildOnlineTransactionsSection(theme),
               ],
             ),
       bottomNavigationBar: BottomNavigationBar(
@@ -5515,6 +6723,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             if (index == 4) {
               _fetchReturnSettings();
               if (_b2bItems.isEmpty) _fetchB2bItems();
+            }
+            if (index == 5) {
+              _fetchOnlineTransactions();
             }
           });
         },
@@ -5560,6 +6771,10 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           const BottomNavigationBarItem(
             icon: Icon(Icons.settings_outlined),
             label: 'Settings',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.payment_outlined),
+            label: 'Online Txns',
           ),
         ],
       ),

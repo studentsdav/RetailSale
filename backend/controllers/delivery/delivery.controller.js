@@ -16,14 +16,22 @@ const resolveOutletId = async (req) => {
                   req.query?.outlet_code || req.query?.outletcode || req.query?.outlet_id;
     if (!rawId) return null;
 
-    if (typeof rawId === 'string') {
+    let resolvedId = null;
+    if (typeof rawId === 'string' && isNaN(Number(rawId))) {
         const outlet = await req.propertyDb.models.outlets.findOne({
             where: { outlet_code: rawId }
         });
-        if (outlet) return outlet.id;
+        if (outlet) resolvedId = outlet.id;
+    } else {
+        const num = Number(rawId);
+        if (Number.isInteger(num)) resolvedId = num;
     }
-    const num = Number(rawId);
-    return Number.isInteger(num) ? num : null;
+
+    if (resolvedId) {
+        if (!req.user) req.user = {};
+        req.user.outlet_id = resolvedId;
+    }
+    return resolvedId;
 };
 
 exports.listCatalogProducts = async (req, res) => {
@@ -160,7 +168,8 @@ exports.placeOrder = async (req, res) => {
             payment_status, // PAID (online) or UNPAID (CoD)
             gstin,
             charges,
-            coupon_code
+            coupon_code,
+            payment_gateway_details
         } = req.body;
 
         if (!outlet_id || !customer_name || !customer_phone || !customer_address || !items || items.length === 0) {
@@ -339,7 +348,8 @@ exports.placeOrder = async (req, res) => {
             commission_amount: toAmount(calculatedCommission),
             commission_status: 'UNPAID',
             gstin: gstin || null,
-            charges: charges || null
+            charges: charges || null,
+            payment_gateway_details: payment_gateway_details || null
         }, { transaction: t });
 
         // Retailer notification: new order received
@@ -526,7 +536,6 @@ exports.listOrders = async (req, res) => {
                 notes: {
                     [Op.or]: orderIds.map(id => `Auto-generated from delivery order #${id}`)
                 },
-                is_deleted: false,
                 is_latest: true
             }
         }) : [];
@@ -540,11 +549,51 @@ exports.listOrders = async (req, res) => {
             }
         }
 
+        const saleIds = sales.map(s => s.id);
+        const refunds = saleIds.length > 0 ? await req.propertyDb.models.sales_refunds.findAll({
+            where: {
+                outlet_id,
+                sale_id: saleIds
+            }
+        }) : [];
+
+        const orderRefundsMap = {};
+        for (const refund of refunds) {
+            const sale = sales.find(s => s.id === refund.sale_id);
+            if (sale) {
+                const match = String(sale.notes || '').match(/#(\d+)$/);
+                if (match) {
+                    const orderId = parseInt(match[1]);
+                    orderRefundsMap[orderId] = {
+                        payment_mode: refund.payment_mode || 'N/A',
+                        amount_paid: parseFloat(refund.amount_paid ?? 0.0),
+                        amount_pending: parseFloat(refund.amount_pending ?? 0.0),
+                        status: refund.status || 'PENDING',
+                        notes: refund.notes || '',
+                        refund_date: refund.refund_date
+                    };
+                }
+            }
+        }
+
+
+
         const data = orders.map(o => {
             const json = o.toJSON();
             const saleInfo = saleMap[o.id];
             json.sale_id = saleInfo ? saleInfo.id : null;
             json.sale_no = saleInfo ? saleInfo.sale_no : null;
+            json.refund_details = orderRefundsMap[o.id] || null;
+
+            // Check if a subscription discount was actually applied to the order (amount < 0)
+            const charges = json.charges || [];
+            const hasSubscriptionDiscount = charges.some(c => 
+                (c.code === 'SUBSCRIPTION_DISCOUNT' || String(c.name || '').toLowerCase().includes('subscription discount')) &&
+                parseFloat(c.amount || 0) < 0
+            );
+
+            json.contains_subscription_item = hasSubscriptionDiscount;
+
             return json;
         });
 
@@ -685,6 +734,19 @@ exports.acceptOrder = async (req, res) => {
         if (order.status !== 'PENDING') {
             await t.rollback();
             return res.status(400).json({ success: false, message: `Order already accepted or processed. Current status: ${order.status}` });
+        }
+
+        if (for_edit === true) {
+            const charges = order.charges || [];
+            const hasSubscriptionDiscount = charges.some(c => 
+                (c.code === 'SUBSCRIPTION_DISCOUNT' || String(c.name || '').toLowerCase().includes('subscription discount')) &&
+                parseFloat(c.amount || 0) < 0
+            );
+
+            if (hasSubscriptionDiscount) {
+                await t.rollback();
+                return res.status(400).json({ success: false, message: 'Subscription item included' });
+            }
         }
 
         // 1. Resolve official sale invoice number
@@ -1708,10 +1770,18 @@ exports.getCustomerHistory = async (req, res) => {
                 notes: {
                     [Op.in]: onlineOrderIds.map(id => `Auto-generated from delivery order #${id}`)
                 },
-                is_deleted: false,
                 is_latest: true
             }
         }) : [];
+
+        const orderIdToSaleNoMap = {};
+        for (const sale of associatedSales) {
+            const match = sale.notes.match(/#(\d+)/);
+            if (match) {
+                const orderId = parseInt(match[1]);
+                orderIdToSaleNoMap[orderId] = sale.sale_no;
+            }
+        }
 
         const saleIdToOrderMap = {};
         for (const sale of associatedSales) {
@@ -1782,6 +1852,7 @@ exports.getCustomerHistory = async (req, res) => {
             orderJson.return_window_days = minWindow;
             orderJson.return_days_remaining = daysRemaining;
             orderJson.refund_details = orderRefundsMap[orderJson.id] || null;
+            orderJson.bill_no = orderIdToSaleNoMap[orderJson.id] || null;
             return orderJson;
         });
 
@@ -1930,14 +2001,58 @@ exports.cancelOrder = async (req, res) => {
         order.status = 'CANCELLED';
         order.cancellation_reason = reason || 'Retailer cancelled';
 
+        let isGatewayRefunded = false;
+        let gatewayTxnId = null;
+
         // Handle refund_status for prepaid orders
         if (isPrepaid) {
-            if (refund_now === true) {
-                order.refund_status = 'REFUNDED';
-                order.refund_payment_mode = order.payment_mode || 'UPI';
-                order.refund_paid_at = new Date();
-            } else {
-                order.refund_status = 'PENDING';
+            if (order.payment_gateway_details) {
+                try {
+                    const details = typeof order.payment_gateway_details === 'string'
+                        ? JSON.parse(order.payment_gateway_details)
+                        : JSON.parse(JSON.stringify(order.payment_gateway_details || {}));
+                    
+                    // Accept both 'txn_id' (Flutter customer app key) and legacy 'transaction_id'
+                    if (details && (details.txn_id || details.transaction_id)) {
+                        gatewayTxnId = details.txn_id || details.transaction_id;
+                        const refundTxnId = 'REF_' + Math.random().toString(36).substr(2, 9).toUpperCase();
+                        
+                        // Set top level values for UI queries
+                        details.refund_txn_id = refundTxnId;
+                        details.status = 'REFUNDED';
+                        details.refunded_at = new Date().toISOString();
+                        details.refund_reason = reason || 'Order cancelled by Retailer';
+                        details.refund_amount = Number(order.net_amount);
+
+                        details.refunds = details.refunds || [];
+                        details.refunds.push({
+                            refund_transaction_id: refundTxnId,
+                            amount: Number(order.net_amount),
+                            reason: reason || 'Order cancelled by Retailer',
+                            refunded_at: new Date().toISOString(),
+                            status: 'SUCCESS'
+                        });
+                        
+                        order.payment_gateway_details = details;
+                        order.changed('payment_gateway_details', true);
+                        order.refund_status = 'REFUNDED';
+                        order.refund_payment_mode = 'GATEWAY';
+                        order.refund_paid_at = new Date();
+                        isGatewayRefunded = true;
+                    }
+                } catch (err) {
+                    console.error("Auto gateway refund failed during cancelOrder: ", err);
+                }
+            }
+            
+            if (!isGatewayRefunded) {
+                if (refund_now === true) {
+                    order.refund_status = 'REFUNDED';
+                    order.refund_payment_mode = order.payment_mode || 'UPI';
+                    order.refund_paid_at = new Date();
+                } else {
+                    order.refund_status = 'PENDING';
+                }
             }
         }
 
@@ -2043,8 +2158,8 @@ exports.cancelOrder = async (req, res) => {
             }
         }
 
-        // For prepaid orders cancelled by supplier: if refund_now=true, add a debit entry to record the refund payout
-        if (isPrepaid && refund_now === true) {
+        // For prepaid orders cancelled by supplier: if refund_now=true or isGatewayRefunded, add a debit entry to record the refund payout
+        if (isPrepaid && (refund_now === true || isGatewayRefunded)) {
             // Immediate refund: debit ledger to record money returned to customer
             const { createLedgerEntry } = require('../../services/cashLedger.service');
             await createLedgerEntry({
@@ -2056,9 +2171,11 @@ exports.cancelOrder = async (req, res) => {
                 reference_id: order.id,
                 reference_no: `ORD-${order.id}`,
                 party_name: order.customer_name,
-                payment_method: order.payment_mode || 'UPI',
+                payment_method: isGatewayRefunded ? 'GATEWAY' : (order.payment_mode || 'UPI'),
                 amount_out: toAmount(order.net_amount),
-                notes: `Refund for cancelled prepaid order #${order.id} to ${order.customer_name}`,
+                notes: isGatewayRefunded
+                    ? `Gateway Auto-Refund for cancelled prepaid order #${order.id} (Txn: ${gatewayTxnId})`
+                    : `Refund for cancelled prepaid order #${order.id} to ${order.customer_name}`,
                 created_by: req.user?.id || null,
                 transaction: t
             });
@@ -2210,9 +2327,53 @@ exports.cancelOrderAsCustomer = async (req, res) => {
 
         // For prepaid orders cancelled by customer: auto-add a refund debit entry (no retailer action needed)
         if (order.payment_status === 'PAID') {
-            order.refund_status = 'REFUNDED';
-            order.refund_payment_mode = order.payment_mode || 'UPI';
-            order.refund_paid_at = new Date();
+            let isGatewayRefunded = false;
+            let gatewayTxnId = null;
+
+            if (order.payment_gateway_details) {
+                try {
+                    const details = typeof order.payment_gateway_details === 'string'
+                        ? JSON.parse(order.payment_gateway_details)
+                        : JSON.parse(JSON.stringify(order.payment_gateway_details || {}));
+                    
+                    // Accept both 'txn_id' (Flutter customer app key) and legacy 'transaction_id'
+                    if (details && (details.txn_id || details.transaction_id)) {
+                        gatewayTxnId = details.txn_id || details.transaction_id;
+                        const refundTxnId = 'REF_' + Math.random().toString(36).substr(2, 9).toUpperCase();
+                        
+                        // Set top level values for UI queries
+                        details.refund_txn_id = refundTxnId;
+                        details.status = 'REFUNDED';
+                        details.refunded_at = new Date().toISOString();
+                        details.refund_reason = reason || 'Order cancelled by Customer';
+                        details.refund_amount = Number(order.net_amount);
+
+                        details.refunds = details.refunds || [];
+                        details.refunds.push({
+                            refund_transaction_id: refundTxnId,
+                            amount: Number(order.net_amount),
+                            reason: reason || 'Order cancelled by Customer',
+                            refunded_at: new Date().toISOString(),
+                            status: 'SUCCESS'
+                        });
+                        
+                        order.payment_gateway_details = details;
+                        order.changed('payment_gateway_details', true);
+                        order.refund_status = 'REFUNDED';
+                        order.refund_payment_mode = 'GATEWAY';
+                        order.refund_paid_at = new Date();
+                        isGatewayRefunded = true;
+                    }
+                } catch (err) {
+                    console.error("Auto gateway refund failed during cancelOrderAsCustomer: ", err);
+                }
+            }
+
+            if (!isGatewayRefunded) {
+                order.refund_status = 'REFUNDED';
+                order.refund_payment_mode = order.payment_mode || 'UPI';
+                order.refund_paid_at = new Date();
+            }
             await order.save({ transaction: t });
 
             // Record refund debit in ledger
@@ -2226,9 +2387,11 @@ exports.cancelOrderAsCustomer = async (req, res) => {
                 reference_id: order.id,
                 reference_no: `ORD-${order.id}`,
                 party_name: order.customer_name,
-                payment_method: order.payment_mode || 'UPI',
+                payment_method: isGatewayRefunded ? 'GATEWAY' : (order.payment_mode || 'UPI'),
                 amount_out: toAmount(order.net_amount),
-                notes: `Auto-refund for customer-cancelled prepaid order #${order.id} to ${order.customer_name}`,
+                notes: isGatewayRefunded 
+                    ? `Gateway Auto-Refund for customer-cancelled prepaid order #${order.id} (Txn: ${gatewayTxnId})`
+                    : `Auto-refund for customer-cancelled prepaid order #${order.id} to ${order.customer_name}`,
                 created_by: null,
                 transaction: t
             });
@@ -2683,6 +2846,25 @@ exports.getReturnSettings = async (req, res) => {
         const settings = await req.propertyDb.models.outlet_settings.findOne({
             where: { outlet_id: actualOutletId }
         });
+        let sysSettings = null;
+        try {
+            sysSettings = await req.propertyDb.models.system_settings.findOne({
+                where: { outlet_id: actualOutletId }
+            });
+        } catch (dbErr) {
+            console.warn("⚠️ System settings query failed, trying fallback without merchant_upi_id:", dbErr.message);
+            try {
+                const attributes = Object.keys(req.propertyDb.models.system_settings.rawAttributes).filter(
+                    attr => attr !== 'merchant_upi_id'
+                );
+                sysSettings = await req.propertyDb.models.system_settings.findOne({
+                    where: { outlet_id: actualOutletId },
+                    attributes: attributes
+                });
+            } catch (fallbackErr) {
+                console.error("❌ Fallback system settings query failed:", fallbackErr.stack);
+            }
+        }
         const meta = settings?.meta_data || {};
         res.json({
             success: true,
@@ -2700,7 +2882,11 @@ exports.getReturnSettings = async (req, res) => {
                 custom_charges: meta.custom_charges || [],
                 coupons: meta.coupons || [],
                 is_exchange_available: meta.is_exchange_available ?? true,
-                is_refund_available: meta.is_refund_available ?? true
+                is_refund_available: meta.is_refund_available ?? true,
+                enable_payment_gateway: sysSettings?.enable_payment_gateway ?? false,
+                payment_gateway_provider: sysSettings?.payment_gateway_provider ?? 'SANDBOX',
+                payment_gateway_api_key: sysSettings?.payment_gateway_api_key ?? '',
+                merchant_upi_id: sysSettings?.merchant_upi_id ?? ''
             }
         });
     } catch (error) {
@@ -3220,9 +3406,16 @@ exports.finalReceiveReturn = async (req, res) => {
         // 2. Refund / Exchange Logic
         if (refund_action === 'REFUND') {
             order.return_status = 'RETURNED';
-            order.refund_status = 'REFUNDED';
-            order.refund_payment_mode = order.payment_mode || 'UPI';
-            order.refund_paid_at = new Date();
+            if (order.payment_gateway_details) {
+                // For gateway orders, the refund is pending until manually processed via gateway transactions tab
+                order.refund_status = 'PENDING';
+                order.refund_payment_mode = null;
+                order.refund_paid_at = null;
+            } else {
+                order.refund_status = 'REFUNDED';
+                order.refund_payment_mode = order.payment_mode || 'UPI';
+                order.refund_paid_at = new Date();
+            }
 
             if (sale) {
                 const alreadyReturned = {};
@@ -3716,3 +3909,339 @@ exports.getRiderNotifications = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+exports.listTransactions = async (req, res) => {
+    try {
+        const outlet_id = await resolveOutletId(req);
+        if (!outlet_id) {
+            return res.status(400).json({ success: false, message: 'outlet_id is required' });
+        }
+
+        const { Sequelize } = req.propertyDb;
+        const orders = await req.propertyDb.models.customer_orders.findAll({
+            where: {
+                outlet_id,
+                payment_gateway_details: {
+                    [Sequelize.Op.ne]: null
+                }
+            },
+            order: [['id', 'DESC']]
+        });
+
+        const ordersJson = [];
+        for (const order of orders) {
+            const orderObj = order.toJSON();
+            orderObj.has_pending_credit_notes = false;
+
+            const sale = await req.propertyDb.models.sales_headers.findOne({
+                where: {
+                    outlet_id,
+                    notes: `Auto-generated from delivery order #${order.id}`,
+                    is_latest: true
+                }
+            });
+            orderObj.bill_no = sale ? sale.sale_no : null;
+
+            if (sale) {
+                const refundsCount = await req.propertyDb.models.sales_refunds.count({
+                    where: {
+                        outlet_id,
+                        sale_id: sale.id,
+                        status: {
+                            [Sequelize.Op.in]: ['PENDING', 'PARTIALLY_PAID']
+                        }
+                    }
+                });
+                orderObj.has_pending_credit_notes = refundsCount > 0;
+            }
+            ordersJson.push(orderObj);
+        }
+
+        res.json({ success: true, data: ordersJson });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.refundGatewayPayment = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const { id } = req.params;
+        const { refund_amount, reason } = req.body;
+        const outlet_id = await resolveOutletId(req);
+
+        if (!outlet_id) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'outlet_id is required' });
+        }
+
+        const order = await req.propertyDb.models.customer_orders.findOne({
+            where: { id, outlet_id },
+            transaction: t
+        });
+
+        if (!order) {
+            await t.rollback();
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        if (!order.payment_gateway_details) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'This order was not paid using online payment gateway.' });
+        }
+
+        const details = JSON.parse(JSON.stringify(order.payment_gateway_details || {}));
+        if (details.status === 'REFUNDED') {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'This transaction is already fully refunded.' });
+        }
+
+        // Simulate Gateway Refund api call (Razorpay/Stripe/Paytm API)
+        const gatewayProvider = details.provider || 'SANDBOX';
+        const refundTxnId = 'ref_' + gatewayProvider.toLowerCase() + '_' + Math.random().toString(36).substring(2, 15);
+        
+        // Update payment_gateway_details
+        details.refund_txn_id = refundTxnId;
+        details.status = 'REFUNDED';
+        details.refunded_at = new Date().toISOString();
+        details.refund_reason = reason || 'Customer requested refund';
+        details.refund_amount = refund_amount || order.net_amount;
+
+        order.refund_status = 'REFUNDED';
+        order.refund_payment_mode = order.payment_mode || 'GATEWAY';
+        order.refund_paid_at = new Date();
+        order.payment_gateway_details = details;
+        order.changed('payment_gateway_details', true);
+        
+        await order.save({ transaction: t });
+
+        // Record the refund in Cash Ledger
+        const refundAmt = toAmount(refund_amount || order.net_amount);
+        const { createLedgerEntry } = require('../../services/cashLedger.service');
+        await createLedgerEntry({
+            db: req.propertyDb,
+            outlet_id,
+            txn_date: new Date(),
+            transaction_type: 'REFUND',
+            reference_type: 'DELIVERY_ORDER',
+            reference_id: order.id,
+            reference_no: `ORD-${order.id}`,
+            party_name: order.customer_name,
+            payment_method: order.payment_mode || 'UPI',
+            amount_out: refundAmt,
+            notes: `Gateway Online Refund: ${gatewayProvider} TxID ${refundTxnId}. Reason: ${reason || 'Customer request'}`,
+            created_by: req.user?.id || null,
+            transaction: t
+        });
+
+        await t.commit();
+        const sale = await req.propertyDb.models.sales_headers.findOne({
+            where: {
+                outlet_id,
+                notes: `Auto-generated from delivery order #${order.id}`,
+                is_latest: true
+            }
+        });
+        const orderJson = order.toJSON();
+        orderJson.bill_no = sale ? sale.sale_no : null;
+        res.json({ success: true, message: `Gateway Refund via ${gatewayProvider} processed successfully.`, data: orderJson });
+    } catch (error) {
+        if (t && !t.finished) await t.rollback();
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getOrderPendingRefunds = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const outlet_id = await resolveOutletId(req);
+        if (!outlet_id) {
+            return res.status(400).json({ success: false, message: 'outlet_id is required' });
+        }
+
+        const order = await req.propertyDb.models.customer_orders.findOne({
+            where: { id, outlet_id }
+        });
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        const sale = await req.propertyDb.models.sales_headers.findOne({
+            where: {
+                outlet_id,
+                notes: `Auto-generated from delivery order #${order.id}`,
+                is_deleted: false,
+                is_latest: true
+            }
+        });
+
+        if (!sale) {
+            return res.json({ success: true, data: [] });
+        }
+
+        const refunds = await req.propertyDb.models.sales_refunds.findAll({
+            where: {
+                outlet_id,
+                sale_id: sale.id,
+                status: {
+                    [req.propertyDb.Sequelize.Op.in]: ['PENDING', 'PARTIALLY_PAID']
+                }
+            },
+            order: [['id', 'DESC']]
+        });
+
+        res.json({ success: true, data: refunds });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.refundGatewayViaCreditNote = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const { id } = req.params;
+        const { refund_id, reason } = req.body;
+        const outlet_id = await resolveOutletId(req);
+
+        if (!outlet_id) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'outlet_id is required' });
+        }
+
+        const order = await req.propertyDb.models.customer_orders.findOne({
+            where: { id, outlet_id },
+            transaction: t
+        });
+
+        if (!order) {
+            await t.rollback();
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        if (!order.payment_gateway_details) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'This order was not paid using online payment gateway.' });
+        }
+
+        // Check if within 7 days
+        const createdAt = new Date(order.created_at);
+        const now = new Date();
+        const differenceInDays = (now - createdAt) / (1000 * 60 * 60 * 24);
+        if (differenceInDays > 7) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'Refund window is closed (7-day period expired).' });
+        }
+
+        const sale = await req.propertyDb.models.sales_headers.findOne({
+            where: {
+                outlet_id,
+                notes: `Auto-generated from delivery order #${order.id}`,
+                is_deleted: false,
+                is_latest: true
+            },
+            transaction: t
+        });
+
+        if (!sale) {
+            await t.rollback();
+            return res.status(404).json({ success: false, message: 'Associated sale record not found.' });
+        }
+
+        const refund = await req.propertyDb.models.sales_refunds.findOne({
+            where: { id: refund_id, sale_id: sale.id, outlet_id },
+            transaction: t
+        });
+
+        if (!refund) {
+            await t.rollback();
+            return res.status(404).json({ success: false, message: 'Credit note not found.' });
+        }
+
+        if (refund.status === 'PAID') {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'This credit note has already been fully paid.' });
+        }
+
+        const refundAmt = Number(refund.amount_pending) - Number(refund.amount_paid);
+        if (refundAmt <= 0) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'Remaining refund amount is 0.' });
+        }
+
+        const details = JSON.parse(JSON.stringify(order.payment_gateway_details || {}));
+
+        // Simulate Gateway Refund API call
+        const gatewayProvider = details.provider || 'SANDBOX';
+        const refundTxnId = 'ref_' + gatewayProvider.toLowerCase() + '_' + Math.random().toString(36).substring(2, 15);
+
+        // Update sales_refunds (credit note)
+        await refund.update({
+            amount_paid: Number(refund.amount_paid) + refundAmt,
+            status: 'PAID',
+            payment_mode: 'GATEWAY',
+            reference_no: refundTxnId,
+            notes: reason || `Refunded via Gateway from credit note ${refund.refund_no}`,
+            updated_by: req.user?.id || null
+        }, { transaction: t });
+
+        // Update payment_gateway_details of order
+        details.refunds = details.refunds || [];
+        details.refunds.push({
+            refund_transaction_id: refundTxnId,
+            amount: refundAmt,
+            reason: reason || `Refunded via Credit Note ${refund.refund_no}`,
+            refunded_at: new Date().toISOString(),
+            credit_note_id: refund.id,
+            credit_note_no: refund.refund_no,
+            status: 'SUCCESS'
+        });
+
+        details.refund_txn_id = refundTxnId;
+        details.refunded_at = new Date().toISOString();
+        details.refund_reason = reason || `Refunded via Credit Note ${refund.refund_no}`;
+        details.refund_amount = (Number(details.refund_amount) || 0) + refundAmt;
+
+        const isFullyRefunded = Number(details.refund_amount) >= Number(order.net_amount);
+        details.status = isFullyRefunded ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+
+        order.refund_status = isFullyRefunded ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+        order.refund_payment_mode = 'GATEWAY';
+        order.refund_paid_at = new Date();
+        order.payment_gateway_details = details;
+        order.changed('payment_gateway_details', true);
+
+        await order.save({ transaction: t });
+
+        // Insert into Cash Ledger
+        const { createLedgerEntry } = require('../../services/cashLedger.service');
+        await createLedgerEntry({
+            db: req.propertyDb,
+            outlet_id,
+            txn_date: new Date(),
+            transaction_type: 'SALE_REFUND',
+            reference_type: 'SALE_REFUND',
+            reference_id: refund.id,
+            reference_no: refund.refund_no,
+            party_name: order.customer_name || 'Walk-in Customer',
+            payment_method: 'GATEWAY',
+            amount_out: refundAmt,
+            notes: reason || `Refunded via Gateway against credit note ${refund.refund_no} for order #${order.id}`,
+            created_by: req.user?.id || null,
+            transaction: t
+        });
+
+        await t.commit();
+        const orderJson = order.toJSON();
+        orderJson.bill_no = sale ? sale.sale_no : null;
+        res.json({
+            success: true,
+            message: `Gateway refund of Rs. ${refundAmt.toFixed(2)} processed successfully.`,
+            data: orderJson
+        });
+    } catch (error) {
+        if (t && !t.finished) await t.rollback();
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+

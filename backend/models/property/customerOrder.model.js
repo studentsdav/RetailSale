@@ -148,6 +148,11 @@ module.exports = (sequelize, DataTypes) => {
         is_prepaid: {
             type: DataTypes.BOOLEAN,
             defaultValue: false
+        },
+        payment_gateway_details: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+            defaultValue: null
         }
     }, {
         timestamps: true,

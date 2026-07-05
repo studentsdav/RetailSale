@@ -82,6 +82,26 @@ module.exports = (sequelize, DataTypes) => {
         enable_app_subscription: {
             type: DataTypes.BOOLEAN,
             defaultValue: false
+        },
+        enable_payment_gateway: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        payment_gateway_provider: {
+            type: DataTypes.STRING(50),
+            defaultValue: 'SANDBOX'
+        },
+        payment_gateway_api_key: {
+            type: DataTypes.STRING(255),
+            defaultValue: ''
+        },
+        payment_gateway_secret_key: {
+            type: DataTypes.STRING(255),
+            defaultValue: ''
+        },
+        merchant_upi_id: {
+            type: DataTypes.STRING(255),
+            defaultValue: ''
         }
     }, {
         tableName: 'system_settings',
