@@ -16,6 +16,7 @@ router.post('/orders/:id/return', ctrl.requestOrderReturn);
 router.post('/orders/:id/cancel', ctrl.cancelOrderAsCustomer);
 router.post('/orders/:id/feedback', ctrl.submitOrderFeedback);
 router.get('/customer/notifications', ctrl.getCustomerNotifications);
+router.get('/sales/:id', ctrl.getSaleDetailsPublic);
 
 // Rider app endpoints (accessible from Rider App)
 router.post('/rider/register', ctrl.registerRiderFromApp);

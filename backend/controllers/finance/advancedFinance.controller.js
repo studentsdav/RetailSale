@@ -49,13 +49,28 @@ function toAmount(value) {
 
 function buildCustomerMatch(search) {
     if (!search) return null;
-    return {
-        [Op.or]: [
-            { customer_name: { [Op.iLike]: `%${search}%` } },
-            { customer_phone: { [Op.iLike]: `%${search}%` } },
-            { customer_gstin: { [Op.iLike]: `%${search}%` } }
-        ]
-    };
+    const cleanPhone = String(search).replace(/\D/g, '').trim();
+    const last10 = cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+    const orConditions = [
+        { customer_name: { [Op.iLike]: `%${search}%` } },
+        { customer_gstin: { [Op.iLike]: `%${search}%` } }
+    ];
+
+    if (last10.length >= 7) {
+        orConditions.push({
+            customer_phone: {
+                [Op.or]: [
+                    { [Op.iLike]: `%${search}%` },
+                    { [Op.in]: [last10, `91${last10}`, `+91${last10}`, `0${last10}`] }
+                ]
+            }
+        });
+    } else {
+        orConditions.push({ customer_phone: { [Op.iLike]: `%${search}%` } });
+    }
+
+    return { [Op.or]: orConditions };
 }
 
 function normalizeCustomerIdentity(payload = {}) {

@@ -11,9 +11,9 @@ const toAmount = (val) => {
 
 // Helper to safely extract and resolve outlet_id (string outlet code or integer ID)
 const resolveOutletId = async (req) => {
-    const rawId = req.user?.outlet_code || req.user?.outlet_id || 
-                  req.body?.outlet_code || req.body?.outletcode || req.body?.outlet_id || 
-                  req.query?.outlet_code || req.query?.outletcode || req.query?.outlet_id;
+    const rawId = req.body?.outlet_code || req.body?.outletcode || req.body?.outlet_id || 
+                  req.query?.outlet_code || req.query?.outletcode || req.query?.outlet_id ||
+                  req.user?.outlet_code || req.user?.outlet_id;
     if (!rawId) return null;
 
     let resolvedId = null;
@@ -30,6 +30,11 @@ const resolveOutletId = async (req) => {
     if (resolvedId) {
         if (!req.user) req.user = {};
         req.user.outlet_id = resolvedId;
+        const { contextStorage } = require('../../utils/context');
+        const store = contextStorage.getStore();
+        if (store) {
+            store.set('outlet_id', resolvedId);
+        }
     }
     return resolvedId;
 };
@@ -914,7 +919,7 @@ exports.acceptOrder = async (req, res) => {
             });
 
         const finalItems = subscriptionAllocation.items;
-        const derivedSubTotal = finalItems.reduce((sum, item) => sum + (toAmount(item.qty) * toAmount(item.rate)), 0);
+        const derivedSubTotal = finalItems.reduce((sum, item) => sum + (toAmount(item.qty) * toAmount(item.reference_rate || item.rate)), 0);
 
         // 3. Local tax calculation helpers
         const taxSummary = new Map();
@@ -978,8 +983,9 @@ exports.acceptOrder = async (req, res) => {
         // Process charges
         let chargeTaxTotal = 0.0;
         let chargeSubtotal = 0.0;
-        if (order.charges && Array.isArray(order.charges)) {
-            for (const ch of order.charges) {
+        const orderCharges = (order.charges || []).filter(c => c.code !== 'SUBSCRIPTION_DISCOUNT');
+        if (orderCharges.length > 0) {
+            for (const ch of orderCharges) {
                 const chTaxPercent = parseFloat(ch.tax_percent || 0.0);
                 const chTaxableAmount = parseFloat(ch.taxable_amount || ch.amount || 0.0);
                 const chTaxAmount = parseFloat(ch.tax_amount || 0.0);
@@ -995,11 +1001,11 @@ exports.acceptOrder = async (req, res) => {
         let itemsTaxTotal = 0.0;
         for (const item of finalItems) {
             const itemQty = toAmount(item.qty);
-            const itemRate = toAmount(item.rate);
+            const itemRate = toAmount(item.reference_rate || item.rate);
             const itemAmount = itemQty * itemRate;
-            const itemTaxPercent = item._subscription_free ? 0.0 : parseFloat(item.tax_percent || 0.0);
-            const itemTaxableAmount = item._subscription_free ? 0.0 : parseFloat(item.taxable_amount || itemAmount || 0.0);
-            const itemTaxAmount = item._subscription_free ? 0.0 : parseFloat(item.tax_amount || (itemTaxableAmount * itemTaxPercent / 100) || 0.0);
+            const itemTaxPercent = parseFloat(item.tax_percent || 0.0);
+            const itemTaxableAmount = parseFloat(item.taxable_amount || itemAmount || 0.0);
+            const itemTaxAmount = parseFloat(item.tax_amount || (itemTaxableAmount * itemTaxPercent / 100) || 0.0);
 
             itemsTaxTotal += itemTaxAmount;
 
@@ -1025,11 +1031,62 @@ exports.acceptOrder = async (req, res) => {
         const finalTaxAmount = itemsTaxTotal + chargeTaxTotal;
         const derivedNetAmount = toAmount(derivedSubTotal) + toAmount(finalTaxAmount) + toAmount(chargeSubtotal);
 
+        let subscriptionTaxAmount = 0.0;
+        let subscriptionTaxCgst = 0.0;
+        let subscriptionTaxSgst = 0.0;
+        let subscriptionTaxIgst = 0.0;
+        let subscriptionTaxableAmount = 0.0;
+        for (const item of finalItems) {
+            if (item._subscription_free === true || item.is_advance_free === true) {
+                const itemQty = toAmount(item.qty);
+                const itemRate = toAmount(item.reference_rate || item.rate);
+                const itemAmount = itemQty * itemRate;
+                const itemTaxPercent = parseFloat(item.tax_percent ?? 0.0);
+                const itemTaxAmount = itemAmount * itemTaxPercent / 100;
+                subscriptionTaxAmount += itemTaxAmount;
+                subscriptionTaxableAmount += itemAmount;
+
+                const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemAmount);
+                for (const tax of itemBreakup) {
+                    if (tax.code === 'CGST') subscriptionTaxCgst += tax.taxAmount;
+                    else if (tax.code === 'SGST') subscriptionTaxSgst += tax.taxAmount;
+                    else if (tax.code === 'IGST') subscriptionTaxIgst += tax.taxAmount;
+                }
+            }
+        }
+
+        const adjustedCgstAmount = Math.max(0, toAmount(derivedCgstAmount - subscriptionTaxCgst));
+        const adjustedSgstAmount = Math.max(0, toAmount(derivedSgstAmount - subscriptionTaxSgst));
+        const adjustedIgstAmount = Math.max(0, toAmount(derivedIgstAmount - subscriptionTaxIgst));
+        const adjustedTotalTax = Math.max(0, toAmount(finalTaxAmount - subscriptionTaxAmount));
+
+        const adjustedTaxBreakup = derivedTaxBreakup.map(tax => {
+            const copy = { ...tax };
+            if (copy.code === 'CGST') {
+                copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxCgst));
+                copy.tax_amount = copy.taxAmount;
+                copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
+                copy.tax_amount = copy.taxAmount;
+            } else if (copy.code === 'SGST') {
+                copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxSgst));
+                copy.tax_amount = copy.taxAmount;
+                copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
+                copy.tax_amount = copy.taxAmount;
+            } else if (copy.code === 'IGST') {
+                copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxIgst));
+                copy.tax_amount = copy.taxAmount;
+                copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
+                copy.tax_amount = copy.taxAmount;
+            }
+            return copy;
+        });
+
         // 2. Prepare POS Sale parameters
         const isPrepaid = order.payment_status === 'PAID';
         const isCredit = order.payment_mode === 'CREDIT';
-        const amountPaid = isPrepaid ? derivedNetAmount : 0;
-        const balanceDue = isPrepaid ? 0 : derivedNetAmount;
+        const finalPayableNetAmount = Math.max(0, derivedNetAmount - (subscriptionAllocation.totalCoveredAmount + subscriptionTaxAmount));
+        const amountPaid = isPrepaid ? finalPayableNetAmount : 0;
+        const balanceDue = isPrepaid ? 0 : finalPayableNetAmount;
         const paymentMode = isPrepaid ? 'UPI' : (isCredit ? 'CREDIT' : 'CASH');
 
         // 3. Create POS sales_headers entry
@@ -1053,17 +1110,17 @@ exports.acceptOrder = async (req, res) => {
             total_qty: finalItems.reduce((sum, item) => sum + toAmount(item.qty), 0),
             sub_total: derivedSubTotal,
             taxable_amount: toAmount(derivedSubTotal) + toAmount(chargeSubtotal),
-            cgst_amount: derivedCgstAmount,
-            sgst_amount: derivedSgstAmount,
-            igst_amount: derivedIgstAmount,
-            tax_breakup: derivedTaxBreakup,
-            total_tax: finalTaxAmount,
-            charges: order.charges || [],
+            cgst_amount: adjustedCgstAmount,
+            sgst_amount: adjustedSgstAmount,
+            igst_amount: adjustedIgstAmount,
+            tax_breakup: adjustedTaxBreakup,
+            total_tax: adjustedTotalTax,
+            charges: orderCharges,
             charge_total: toAmount(chargeSubtotal),
             charge_tax_total: toAmount(chargeTaxTotal),
-            total_discount: subscriptionAllocation.totalCoveredAmount,
+            total_discount: subscriptionAllocation.totalCoveredAmount + subscriptionTaxAmount,
             round_off_amount: 0,
-            net_amount: derivedNetAmount,
+            net_amount: finalPayableNetAmount,
             status: 'COMPLETED',
             created_by: userId,
             is_latest: true,
@@ -1075,11 +1132,11 @@ exports.acceptOrder = async (req, res) => {
         // 4. Create POS sales_items entries and deduct stock
         for (const item of finalItems) {
             const itemQty = toAmount(item.qty);
-            const itemRate = toAmount(item.rate);
+            const itemRate = toAmount(item.reference_rate || item.rate);
             const itemAmount = itemQty * itemRate;
-            const itemTaxPercent = item._subscription_free ? 0.0 : parseFloat(item.tax_percent || 0.0);
-            const itemTaxableAmount = item._subscription_free ? 0.0 : parseFloat(item.taxable_amount || itemAmount || 0.0);
-            const itemTaxAmount = item._subscription_free ? 0.0 : parseFloat(item.tax_amount || (itemTaxableAmount * itemTaxPercent / 100) || 0.0);
+            const itemTaxPercent = parseFloat(item.tax_percent || 0.0);
+            const itemTaxableAmount = parseFloat(item.taxable_amount || itemAmount || 0.0);
+            const itemTaxAmount = parseFloat(item.tax_amount || (itemTaxableAmount * itemTaxPercent / 100) || 0.0);
             const itemLineTotal = itemTaxableAmount + itemTaxAmount;
             const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemTaxableAmount);
 
@@ -1106,7 +1163,9 @@ exports.acceptOrder = async (req, res) => {
                 tax_amount: itemTaxAmount,
                 line_total: itemLineTotal,
                 tax_breakup: itemBreakup,
-                net_amount: itemLineTotal
+                net_amount: itemLineTotal,
+                is_scheme_free: item.is_scheme_free === true || item._subscription_free === true,
+                is_advance_free: item.is_advance_free === true || item._subscription_free === true
             }, { transaction: t });
 
 
@@ -1657,26 +1716,15 @@ exports.registerCustomer = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Missing required registration fields' });
         }
 
-        // Resolve string outlet_id to integer and fetch outlet record for outlet_code
-        let actualOutletId;
-        let resolvedOutletCode = outlet_id;
-        if (typeof outlet_id === 'string' && outlet_id.startsWith('OUTLET')) {
-            const outlet = await req.propertyDb.models.outlets.findOne({
-                where: { outlet_code: outlet_id },
-                transaction: t
-            });
-            if (!outlet) {
-                await t.rollback();
-                return res.status(400).json({ success: false, message: `Outlet not found for code: ${outlet_id}` });
-            }
-            actualOutletId = outlet.id;
-            resolvedOutletCode = outlet.outlet_code;
-        } else {
-            actualOutletId = Number(outlet_id);
-            // Fetch outlet_code from integer id
-            const outlet = await req.propertyDb.models.outlets.findByPk(actualOutletId, { transaction: t });
-            if (outlet) resolvedOutletCode = outlet.outlet_code;
+        const actualOutletId = await resolveOutletId(req);
+        if (!actualOutletId) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: `Outlet not found for: ${outlet_id}` });
         }
+
+        let resolvedOutletCode = outlet_id;
+        const outlet = await req.propertyDb.models.outlets.findByPk(actualOutletId, { transaction: t });
+        if (outlet) resolvedOutletCode = outlet.outlet_code;
 
         // Check if customer already exists
         const existing = await req.propertyDb.models.delivery_customers.findOne({
@@ -2863,18 +2911,9 @@ exports.registerRiderFromApp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'All fields are required' });
         }
 
-        // Resolve string outlet_id to integer
-        let actualOutletId;
-        if (typeof outlet_id === 'string' && outlet_id.startsWith('OUTLET')) {
-            const outlet = await req.propertyDb.models.outlets.findOne({
-                where: { outlet_code: outlet_id }
-            });
-            if (!outlet) {
-                return res.status(400).json({ success: false, message: `Outlet not found for code: ${outlet_id}` });
-            }
-            actualOutletId = outlet.id;
-        } else {
-            actualOutletId = Number(outlet_id);
+        const actualOutletId = await resolveOutletId(req);
+        if (!actualOutletId) {
+            return res.status(400).json({ success: false, message: `Outlet not found for: ${outlet_id}` });
         }
 
         // Check if delivery partner already exists
@@ -4432,6 +4471,72 @@ exports.refundGatewayViaCreditNote = async (req, res) => {
         });
     } catch (error) {
         if (t && !t.finished) await t.rollback();
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getSaleDetailsPublic = async (req, res) => {
+    try {
+        const sale = await req.propertyDb.models.sales_headers.findOne({
+            where: {
+                [Op.or]: [
+                    { id: isNaN(Number(req.params.id)) ? -1 : Number(req.params.id) },
+                    { sale_no: req.params.id }
+                ]
+            },
+            include: [
+                {
+                    model: req.propertyDb.models.sales_items,
+                    as: 'items',
+                    include: [
+                        {
+                            model: req.propertyDb.models.item_master,
+                            as: 'item',
+                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand']
+                        }
+                    ]
+                },
+                {
+                    model: req.propertyDb.models.customer_repayments,
+                    as: 'repayments',
+                    required: false
+                }
+            ]
+        });
+
+        if (!sale) {
+            return res.status(404).json({ success: false, message: 'Sale not found' });
+        }
+
+        const creditNotes = await req.propertyDb.models.sales_credit_notes.findAll({
+            where: { sale_id: sale.id }
+        });
+
+        const alreadyReturned = {};
+        creditNotes.forEach(cn => {
+            if (Array.isArray(cn.items)) {
+                cn.items.forEach(it => {
+                    alreadyReturned[it.item_id] = (alreadyReturned[it.item_id] || 0) + Number(it.qty);
+                });
+            }
+        });
+
+        const saleJson = sale.toJSON();
+        saleJson.items = saleJson.items.map(item => {
+            return {
+                ...item,
+                returned_qty: alreadyReturned[item.item_id] || 0
+            };
+        });
+        saleJson.credit_notes = creditNotes;
+
+        const refunds = await req.propertyDb.models.sales_refunds.findAll({
+            where: { sale_id: sale.id }
+        });
+        saleJson.refunds = refunds;
+
+        res.json({ success: true, data: saleJson });
+    } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 };

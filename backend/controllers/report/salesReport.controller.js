@@ -159,11 +159,21 @@ exports.getSalesReport = async (req, res) => {
         }
 
         if (search) {
-            where[Op.or] = [
+            const cleanPhone = String(search).replace(/\D/g, '').trim();
+            const last10 = cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone;
+            const searchOr = [
                 { sale_no: { [Op.iLike]: `%${search}%` } },
                 { customer_name: { [Op.iLike]: `%${search}%` } },
                 { customer_phone: { [Op.iLike]: `%${search}%` } }
             ];
+            if (last10.length >= 7) {
+                searchOr.push({
+                    customer_phone: {
+                        [Op.in]: [last10, `91${last10}`, `+91${last10}`, `0${last10}`]
+                    }
+                });
+            }
+            where[Op.or] = searchOr;
         }
 
         const sales = await req.propertyDb.models.sales_headers.findAll({
@@ -190,11 +200,21 @@ exports.getSalesReport = async (req, res) => {
             };
         }
         if (search) {
-            cnWhere[Op.or] = [
+            const cleanPhone = String(search).replace(/\D/g, '').trim();
+            const last10 = cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone;
+            const searchOr = [
                 { credit_note_no: { [Op.iLike]: `%${search}%` } },
                 { customer_name: { [Op.iLike]: `%${search}%` } },
                 { customer_phone: { [Op.iLike]: `%${search}%` } }
             ];
+            if (last10.length >= 7) {
+                searchOr.push({
+                    customer_phone: {
+                        [Op.in]: [last10, `91${last10}`, `+91${last10}`, `0${last10}`]
+                    }
+                });
+            }
+            cnWhere[Op.or] = searchOr;
         }
 
         const cnInclude = [{

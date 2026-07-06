@@ -513,7 +513,22 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
       final propertyCtrl = PropertyInfoController();
       await propertyCtrl.load();
 
-      final order = _mapRecordToSaleOrder(record);
+      SaleOrder? order;
+      final saleId = record['sale_id'] ?? record['sale_no'] ?? record['id'] ?? record['order_id'];
+      if (saleId != null) {
+        try {
+          final res = await ApiClient.get('/api/delivery/sales/$saleId');
+          final details = Map<String, dynamic>.from(res['data'] ?? const {});
+          if (details.isNotEmpty) {
+            details['bill_format'] = _billFormat;
+            order = SaleOrder.fromJson(details);
+          }
+        } catch (e) {
+          debugPrint('Error fetching public sale details: $e');
+        }
+      }
+
+      order ??= _mapRecordToSaleOrder(record);
 
       await PosInvoicePrinter.printSaleInvoice(
         order: order,

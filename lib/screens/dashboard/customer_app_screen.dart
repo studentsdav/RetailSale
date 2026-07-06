@@ -1883,7 +1883,22 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       final propertyCtrl = PropertyInfoController();
       await propertyCtrl.load();
 
-      final order = _mapRecordToSaleOrder(record);
+      SaleOrder? order;
+      final saleId = record['sale_id'] ?? record['sale_no'] ?? record['id'] ?? record['order_id'];
+      if (saleId != null) {
+        try {
+          final res = await ApiClient.get('/api/delivery/sales/$saleId');
+          final details = Map<String, dynamic>.from(res['data'] ?? const {});
+          if (details.isNotEmpty) {
+            details['bill_format'] = _billFormat;
+            order = SaleOrder.fromJson(details);
+          }
+        } catch (e) {
+          debugPrint('Error fetching public sale details: $e');
+        }
+      }
+
+      order ??= _mapRecordToSaleOrder(record);
 
       await PosInvoicePrinter.printSaleInvoice(
         order: order,
@@ -5639,9 +5654,13 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       await _fetchCatalog();
     }
 
+    final outletCode = _loggedInCustomer?['outlet_id'] ??
+        _currentUser?.outletCode ??
+        (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => _SubscribeDialog(
+        outletCode: outletCode,
         catalogItems: List<Map<String, dynamic>>.from(_catalogItems),
         customerName: _loggedInCustomer?['name']?.toString() ?? '',
         customerPhone: _loggedInCustomer?['phone']?.toString() ?? '',
@@ -6243,12 +6262,14 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 }
 
 class _SubscribeDialog extends StatefulWidget {
+  final String outletCode;
   final List<Map<String, dynamic>> catalogItems;
   final String customerName;
   final String customerPhone;
   final String customerAddress;
 
   const _SubscribeDialog({
+    required this.outletCode,
     required this.catalogItems,
     required this.customerName,
     required this.customerPhone,
@@ -6267,9 +6288,13 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
   String _paymentMode = 'UPI';
   String _deliveryType = 'HOME';
 
+  bool _isSearching = false;
+  List<Map<String, dynamic>> _matchingItems = [];
+  Timer? _debounce;
+
   Map<String, dynamic>? get _selectedItem {
     if (_selectedItemId == null) return null;
-    for (final item in widget.catalogItems) {
+    for (final item in _matchingItems) {
       final itemId = int.tryParse(item['id']?.toString() ?? '');
       if (itemId == _selectedItemId) return item;
     }
@@ -6287,9 +6312,48 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
   @override
   void initState() {
     super.initState();
-    if (widget.catalogItems.isNotEmpty) {
-      _selectedItemId = int.tryParse(widget.catalogItems.first['id']?.toString() ?? '');
+    _matchingItems = List<Map<String, dynamic>>.from(widget.catalogItems);
+    if (_matchingItems.isNotEmpty) {
+      _selectedItemId = int.tryParse(_matchingItems.first['id']?.toString() ?? '');
     }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      if (query.trim().isEmpty) {
+        setState(() {
+          _matchingItems = List<Map<String, dynamic>>.from(widget.catalogItems);
+          _isSearching = false;
+        });
+        return;
+      }
+      setState(() {
+        _isSearching = true;
+      });
+      try {
+        final queryStr = 'outlet_id=${widget.outletCode}&page=1&search=${Uri.encodeComponent(query)}&limit=10';
+        final res = await ApiClient.get('/api/delivery/catalog?$queryStr');
+        if (res['success'] == true) {
+          final fetched = List<Map<String, dynamic>>.from(res['data'] ?? []);
+          setState(() {
+            _matchingItems = fetched;
+          });
+        }
+      } catch (e) {
+        debugPrint('Search failed: $e');
+      } finally {
+        setState(() {
+          _isSearching = false;
+        });
+      }
+    });
   }
 
   @override
@@ -6298,6 +6362,9 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
     final rate = _rateFor(selectedItem);
     final totalQty = _dailyAllowedQty * _durationDays;
     final totalCost = totalQty * rate;
+    final taxPercent = double.tryParse(selectedItem?['tax_percent']?.toString() ?? '0') ?? 0.0;
+    final totalGst = totalCost * taxPercent / 100.0;
+    final netPayable = totalCost + totalGst;
     final endDate = _startDate.add(Duration(days: _durationDays));
     final unitLabel = selectedItem?['unit']?.toString() ?? 'Ltr';
     final validItems = widget.catalogItems
@@ -6305,6 +6372,10 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
         .toList();
 
     return AlertDialog(
+      titlePadding: const EdgeInsets.fromLTRB(25, 20, 25, 10),
+      contentPadding: const EdgeInsets.fromLTRB(25, 10, 25, 10),
+      actionsPadding: const EdgeInsets.fromLTRB(25, 10, 25, 20),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 25, vertical: 24),
       title: const Text('Subscribe to Milk/Daily Services'),
       content: SingleChildScrollView(
         child: Column(
@@ -6314,33 +6385,49 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
             const Text('Select Service/Product:',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 6),
-            widget.catalogItems.isEmpty
-                ? const Text('Loading catalog...')
-                : Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<int>(
-                        isExpanded: true,
-                        value: _selectedItemId,
-                        items: validItems.map((item) {
-                          final itemId = int.parse(item['id'].toString());
-                          return DropdownMenuItem<int>(
-                            value: itemId,
-                            child: Text(
-                              '${item['item_name']} (Rs. ${item['retail_sale_price'] ?? item['rate']}/unit)',
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          setState(() => _selectedItemId = val);
-                        },
-                      ),
-                    ),
-                  ),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Search product...',
+                prefixIcon: const Icon(Icons.search, size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              onChanged: _onSearchChanged,
+            ),
+            const SizedBox(height: 6),
+            Container(
+              height: 120,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: _isSearching
+                  ? const Center(child: CircularProgressIndicator())
+                  : _matchingItems.isEmpty
+                      ? const Center(child: Text('No products found'))
+                      : SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: _matchingItems.map((item) {
+                              final itemId = int.tryParse(item['id']?.toString() ?? '');
+                              final isSelected = itemId == _selectedItemId;
+                              return ListTile(
+                                dense: true,
+                                title: Text(item['item_name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w500)),
+                                subtitle: Text('Rs. ${item['retail_sale_price'] ?? item['rate']}/unit'),
+                                selected: isSelected,
+                                selectedColor: Colors.blue.shade700,
+                                selectedTileColor: Colors.blue.shade50,
+                                onTap: () {
+                                  setState(() {
+                                    _selectedItemId = itemId;
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ),
+            ),
             Text(
               'Daily Quantity ($unitLabel):',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -6485,12 +6572,57 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Total Cost:', style: TextStyle(color: Colors.grey)),
+                const Text('Base Price:', style: TextStyle(color: Colors.grey)),
+                Text(
+                  'Rs. ${rate.toStringAsFixed(2)} / $unitLabel',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('GST:', style: TextStyle(color: Colors.grey)),
+                Text(
+                  '${taxPercent.toStringAsFixed(1)}%',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total Base Cost:', style: TextStyle(color: Colors.grey)),
                 Text(
                   'Rs. ${totalCost.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total GST:', style: TextStyle(color: Colors.grey)),
+                Text(
+                  'Rs. ${totalGst.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Net Amount Payable:', style: TextStyle(color: Colors.grey)),
+                Text(
+                  'Rs. ${netPayable.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.green,
+                    fontSize: 15
                   ),
                 ),
               ],
@@ -6512,7 +6644,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                     'start_date': DateFormat('yyyy-MM-dd').format(_startDate),
                     'end_date': DateFormat('yyyy-MM-dd').format(endDate),
                     'daily_allowed_qty': _dailyAllowedQty,
-                    'total_payment_amount': totalCost,
+                    'total_payment_amount': netPayable,
                     'payment_mode': _paymentMode,
                     'delivery_type': _deliveryType,
                     'customer_name': widget.customerName,

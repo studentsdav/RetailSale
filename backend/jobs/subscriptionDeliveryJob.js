@@ -6,7 +6,17 @@ const lastRunDateByOutlet = new Map();
 let globalLastRunDate = null;
 
 function todayStr() {
-    return new Date().toISOString().split('T')[0];
+    try {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        return formatter.format(new Date());
+    } catch (e) {
+        return new Date().toISOString().split('T')[0];
+    }
 }
 
 function log(msg, isError = false) {
@@ -69,6 +79,41 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
         const saleNo = 'SUB-' + today.replace(/-/g,'') + '-' + String(r?.[0]?.n ?? 1).padStart(4,'0');
         const rate = parseFloat(sub.item_master?.retail_sale_price ?? sub.item_master?.rate ?? 0);
         const qty = parseFloat(sub.daily_allowed_qty ?? 1);
+        const amt = rate * qty;
+
+        const taxPercent = parseFloat(sub.item_master?.tax_percent || 0.0);
+        const taxType = sub.item_master?.tax_type || 'GST';
+        const taxAmount = (amt * taxPercent) / 100;
+        const halfRate = taxPercent / 2;
+        const halfAmount = taxAmount / 2;
+
+        const taxBreakup = taxPercent > 0 ? [
+            {
+                code: 'CGST',
+                label: `CGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
+                taxType: 'GST',
+                tax_type: 'GST',
+                rate: halfRate,
+                taxableAmount: amt,
+                taxable_amount: amt,
+                taxAmount: halfAmount,
+                tax_amount: halfAmount
+            },
+            {
+                code: 'SGST',
+                label: `SGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
+                taxType: 'GST',
+                tax_type: 'GST',
+                rate: halfRate,
+                taxableAmount: amt,
+                taxable_amount: amt,
+                taxAmount: halfAmount,
+                tax_amount: halfAmount
+            }
+        ] : [];
+
+        const lineTotal = amt + taxAmount;
+
         const header = await db.models.sales_headers.create({
             outlet_id: outletId, sale_no: saleNo, sale_date: new Date(today),
             customer_name: sub.customer_name || 'Subscription Customer',
@@ -77,10 +122,10 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
             payment_reference: null, initial_amount_paid: 0, amount_paid: 0,
             change_amount: 0, balance_due: 0, order_type: 'B2C',
             billing_country: 'India', billing_tax_mode: 'CGST_SGST', bill_format: 'A4',
-            tax_percent: 0, total_qty: qty, sub_total: rate * qty, taxable_amount: 0,
-            cgst_amount: 0, sgst_amount: 0, igst_amount: 0, total_tax: 0,
-            tax_breakup: [], charges: [], charge_total: 0, charge_tax_total: 0,
-            total_discount: rate * qty, round_off_amount: 0, net_amount: 0,
+            tax_percent: 0, total_qty: qty, sub_total: amt, taxable_amount: amt,
+            cgst_amount: halfAmount, sgst_amount: halfAmount, igst_amount: 0, total_tax: taxAmount,
+            tax_breakup: taxBreakup, charges: [], charge_total: 0, charge_tax_total: 0,
+            total_discount: lineTotal, round_off_amount: 0, net_amount: 0,
             scheme_discount: 0, manual_discount_type: null,
             manual_discount_value: 0, manual_discount_amount: 0,
             notes: '[SUBSCRIPTION_AUTO] subscription_id=' + sub.id + ' | ' + (sub.customer_name||'') + ' | ' + (sub.item_master?.item_name||''),
@@ -91,11 +136,12 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                 outlet_id: outletId, sale_id: header.id, item_id: sub.item_id,
                 item_code: sub.item_master.item_code||'', item_name: sub.item_master.item_name||'',
                 hsn_code: sub.item_master.hsn_code||'', batch_no: null, expiry_date: null,
-                qty, original_qty: qty, unit: sub.item_master.unit||'PCS', rate: 0, amount: 0,
-                tax_percent: 0, cgst_percent: 0, sgst_percent: 0, igst_percent: 0, cess_percent: 0,
-                taxable_amount: 0, cgst_amount: 0, sgst_amount: 0, igst_amount: 0,
-                cess_amount: 0, tax_amount: 0, discount_percent: 0, discount_amount: 0,
-                scheme_id: null, scheme_name: null, is_scheme_free: true, is_advance_free: false,
+                qty, original_qty: qty, unit: sub.item_master.unit||'PCS', rate, amount: amt,
+                tax_percent: taxPercent, cgst_percent: halfRate, sgst_percent: halfRate, igst_percent: 0, cess_percent: 0,
+                taxable_amount: amt, cgst_amount: halfAmount, sgst_amount: halfAmount, igst_amount: 0,
+                cess_amount: 0, tax_amount: taxAmount, discount_percent: 0, discount_amount: 0,
+                scheme_id: null, scheme_name: null, is_scheme_free: false, is_advance_free: true,
+                line_total: lineTotal, net_amount: lineTotal, tax_breakup: taxBreakup
             });
         }
         if (db.models.milk_subscription_consumptions) {
@@ -121,9 +167,22 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                 const nextAvailable = Math.max(currentAvailable - qty, 0);
                 await advance.update({ available_qty: nextAvailable });
 
+                const cashAdvance = await db.models.customer_advances.findOne({
+                    where: {
+                        outlet_id: outletId,
+                        [Op.or]: [
+                            { source_sale_id: sub.id },
+                            { reference_no: `SUBSCRIPTION-${sub.id}` }
+                        ]
+                    }
+                });
+                if (cashAdvance) {
+                    const currentCashAvailable = parseFloat(cashAdvance.available_amount ?? 0);
+                    const nextCashAvailable = Math.max(currentCashAvailable - lineTotal, 0);
+                    await cashAdvance.update({ available_amount: nextCashAvailable });
+                }
+
                 // Keep the cash ledger in sync with the prepaid subscription consumption.
-                // Retailer-accepted orders already create this entry; auto-generated app
-                // subscription sales need the same adjustment line.
                 await createLedgerEntry({
                     db,
                     outlet_id: outletId,
@@ -134,7 +193,7 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                     reference_no: saleNo,
                     party_name: sub.customer_name || sub.customer_phone || 'Subscription Customer',
                     payment_method: 'SUBSCRIPTION',
-                    amount_out: amt,
+                    amount_out: lineTotal,
                     notes: `Advance adjusted for subscription item consumption in ${saleNo}`,
                     created_by: sub.created_by || null
                 });
@@ -168,7 +227,7 @@ async function runSubscriptionDelivery(db) {
                         end_date: { [Op.gte]: today }
                     },
                     include: [{ model: db.models.item_master, as: 'item_master', required: false,
-                        attributes: ['item_code','item_name','unit','rate','retail_sale_price','hsn_code'] }],
+                        attributes: ['item_code','item_name','unit','rate','retail_sale_price','hsn_code','tax_percent','tax_type'] }],
                 });
             } catch (err) {
                 log('subscription lookup failed (' + err.message + '), retrying with minimal filter');
@@ -182,7 +241,7 @@ async function runSubscriptionDelivery(db) {
                             end_date: { [Op.gte]: today }
                         },
                         include: [{ model: db.models.item_master, as: 'item_master', required: false,
-                            attributes: ['item_code','item_name','unit','rate','retail_sale_price','hsn_code'] }],
+                            attributes: ['item_code','item_name','unit','rate','retail_sale_price','hsn_code','tax_percent','tax_type'] }],
                     });
                 } catch (e2) { log('Fallback also failed: ' + e2.message, true); }
             }

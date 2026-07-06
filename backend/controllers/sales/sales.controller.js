@@ -6,9 +6,9 @@ const { Op, fn, col, where: sqlWhere } = require('sequelize');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
 
 const resolveOutletId = async (req) => {
-    const rawId = req.user?.outlet_code || req.user?.outlet_id || 
-                  req.body?.outlet_id || req.body?.outletCode || req.body?.outlet_code || 
-                  req.query?.outlet_id || req.query?.outletCode || req.query?.outlet_code;
+    const rawId = req.body?.outlet_id || req.body?.outletCode || req.body?.outlet_code || 
+                  req.query?.outlet_id || req.query?.outletCode || req.query?.outlet_code ||
+                  req.user?.outlet_code || req.user?.outlet_id;
     if (!rawId) return null;
 
     let resolvedId = null;
@@ -25,6 +25,11 @@ const resolveOutletId = async (req) => {
     if (resolvedId) {
         if (!req.user) req.user = {};
         req.user.outlet_id = resolvedId;
+        const { contextStorage } = require('../../utils/context');
+        const store = contextStorage.getStore();
+        if (store) {
+            store.set('outlet_id', resolvedId);
+        }
     }
     return resolvedId;
 };
@@ -70,10 +75,20 @@ function dateOnly(value) {
 function formatDateLocalYmd(value) {
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) return null;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    try {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        return formatter.format(d);
+    } catch (err) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
 }
 
 function dateOnlyString(value) {
@@ -558,8 +573,20 @@ function buildCustomerOrConditions(identity = {}) {
             }
         });
     }
-    if (identity.customer_gstin) conditions.push({ customer_gstin: identity.customer_gstin });
-    if (identity.customer_name) conditions.push({ customer_name: identity.customer_name });
+    if (identity.customer_gstin) {
+        conditions.push({
+            customer_gstin: {
+                [Op.iLike]: String(identity.customer_gstin).trim()
+            }
+        });
+    }
+    if (identity.customer_name) {
+        conditions.push({
+            customer_name: {
+                [Op.iLike]: String(identity.customer_name).trim()
+            }
+        });
+    }
     return conditions;
 }
 
@@ -573,10 +600,8 @@ async function getActiveMilkSubscriptions(req, identity, itemId = null, asOfDate
         outlet_id: req.user.outlet_id,
         status: 'ACTIVE',
         active_subscription: true,
-        [Op.and]: [
-            sqlWhere(fn('DATE', col('milk_subscriptions.start_date')), { [Op.lte]: asOfDay }),
-            sqlWhere(fn('DATE', col('milk_subscriptions.end_date')), { [Op.gte]: asOfDay })
-        ]
+        start_date: { [Op.lte]: asOfDay },
+        end_date: { [Op.gte]: asOfDay }
     };
 
     const customerFilters = buildCustomerOrConditions(identity);
@@ -593,8 +618,8 @@ async function getActiveMilkSubscriptions(req, identity, itemId = null, asOfDate
     return req.propertyDb.models.milk_subscriptions.findAll({
         where,
         include: [
-            { model: req.propertyDb.models.item_master, as: 'item' },
-            { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes' }
+            { model: req.propertyDb.models.item_master, as: 'item', required: false },
+            { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes', required: false }
         ],
         order: [['start_date', 'DESC'], ['end_date', 'DESC'], ['id', 'DESC']]
     });
@@ -611,15 +636,13 @@ async function getSubscriptionConsumedQtyForDay(
         `
 SELECT COALESCE(SUM(covered_qty), 0) AS covered_qty
 FROM milk_subscription_consumptions
-WHERE outlet_id = :outlet_id
-  AND subscription_id = :subscription_id
+WHERE subscription_id = :subscription_id
   AND txn_date = :txn_date
   ${Number.isFinite(Number(itemId)) && Number(itemId) > 0 ? 'AND item_id = :item_id' : ''}
   AND status <> 'CANCELLED'
         `,
         {
             replacements: {
-                outlet_id: req.user.outlet_id,
                 subscription_id: subscriptionId,
                 txn_date: formatDateLocalYmd(txnDate),
                 item_id: Number.isFinite(Number(itemId)) && Number(itemId) > 0
@@ -640,15 +663,13 @@ SELECT COALESCE(SUM(si.qty), 0) AS covered_qty
 FROM sales_headers sh
 INNER JOIN sales_items si
     ON si.sale_id = sh.id
-WHERE sh.outlet_id = :outlet_id
-  AND sh.notes ILIKE :subscription_note
+WHERE sh.notes ILIKE :subscription_note
   AND sh.sale_date::date = :txn_date
   AND COALESCE(sh.is_deleted, FALSE) = FALSE
   ${Number.isFinite(Number(itemId)) && Number(itemId) > 0 ? 'AND si.item_id = :item_id' : ''}
         `,
         {
             replacements: {
-                outlet_id: req.user.outlet_id,
                 subscription_note: `%[SUBSCRIPTION_AUTO] subscription_id=${subscriptionId}%`,
                 txn_date: formatDateLocalYmd(txnDate),
                 item_id: Number.isFinite(Number(itemId)) && Number(itemId) > 0
@@ -828,7 +849,6 @@ WHERE sh.outlet_id = :outlet_id
 async function loadSubscriptionConsumptionRows(req, subscription, transaction = undefined) {
     const consumedRows = await req.propertyDb.models.milk_subscription_consumptions.findAll({
         where: {
-            outlet_id: req.user.outlet_id,
             subscription_id: subscription.id,
             status: { [Op.ne]: 'CANCELLED' }
         },
@@ -999,8 +1019,9 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
             updatedItems.push({
                 ...sourceRow,
                 qty: coveredQty,
+                reference_rate: agreedRate || rate,
                 rate: 0,
-                tax_percent: 0,
+                tax_percent: parseFloat(sourceRow.tax_percent || 0.0),
                 discount_applicable: false,
                 scheme_applicable: false,
                 line_discount: 0,
@@ -1080,6 +1101,21 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
     let subscriptionId = 0;
     let subscriptionItemId = 0;
     const inFlightConsumedByKey = new Map();
+    const subscriptionCoveragesByKey = new Map();
+    const addSubscriptionCoverage = (subscription, itemId, coveredQty, coveredAmount) => {
+        const key = `${subscription.id}_${itemId}`;
+        const existing = subscriptionCoveragesByKey.get(key) || {
+            subscriptionId: subscription.id,
+            subscriptionItemId: subscription.item_id,
+            itemId,
+            totalCoveredQty: 0,
+            totalCoveredAmount: 0
+        };
+        existing.totalCoveredQty += coveredQty;
+        existing.totalCoveredAmount += coveredAmount;
+        subscriptionCoveragesByKey.set(key, existing);
+        return existing;
+    };
 
     for (const row of sourceItems) {
         const itemId = Number(row.item_id) || 0;
@@ -1110,11 +1146,45 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
             bucket.itemId,
             saleDate
         );
-        // Pre-split free rows can come from non-subscription item advances too.
-        // If no active subscription exists for this item/customer/day, skip
-        // subscription-allocation for this bucket instead of throwing.
         if (!subscriptions.length) {
-            continue;
+            const globalSubscriptions = await req.propertyDb.models.milk_subscriptions.findAll({
+                where: {
+                    status: 'ACTIVE',
+                    active_subscription: true,
+                    item_id: bucket.itemId,
+                    start_date: { [Op.lte]: saleDateKey },
+                    end_date: { [Op.gte]: saleDateKey }
+                }
+            });
+            const matchingGlobal = globalSubscriptions.filter((row) => {
+                const rowIdentity = normalizeCustomerIdentity(row.toJSON());
+                const samePhone = identity.customer_phone && rowIdentity.customer_phone
+                    ? identity.customer_phone === rowIdentity.customer_phone
+                    : false;
+                const sameGstin = identity.customer_gstin && rowIdentity.customer_gstin
+                    ? identity.customer_gstin === rowIdentity.customer_gstin
+                    : false;
+                const sameName = identity.customer_name && rowIdentity.customer_name
+                    ? identity.customer_name.toLowerCase() === rowIdentity.customer_name.toLowerCase()
+                    : false;
+                return samePhone || sameGstin || sameName;
+            });
+
+            if (matchingGlobal.length > 0) {
+                const targetOutlet = await req.propertyDb.models.outlets.findByPk(matchingGlobal[0].outlet_id);
+                const currentOutlet = await req.propertyDb.models.outlets.findByPk(req.user.outlet_id);
+                const err = new Error(
+                    `No active subscription found for free item "${bucket.itemName || 'Subscription item'}" at current outlet: ${currentOutlet?.outlet_name || req.user.outlet_id}. However, an active subscription was found at outlet: ${targetOutlet?.outlet_name || matchingGlobal[0].outlet_id}. Subscriptions are only valid at the outlet where they are subscribed.`
+                );
+                err.status = 400;
+                throw err;
+            } else {
+                const err = new Error(
+                    `No active subscription found for free item "${bucket.itemName || 'Subscription item'}" for this customer.`
+                );
+                err.status = 400;
+                throw err;
+            }
         }
 
         let chosenSubscription = null;
@@ -1166,6 +1236,7 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
         const coveredAmount = coveredQty * agreedRate;
         if (coveredQty > 0) {
             inFlightConsumedByKey.set(usageKey, toAmount(inFlightConsumedByKey.get(usageKey) || 0) + coveredQty);
+            addSubscriptionCoverage(chosenSubscription, bucket.itemId, coveredQty, coveredAmount);
         }
 
         totalCoveredAmount += coveredAmount;
@@ -1211,7 +1282,8 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
         totalCoveredAmount,
         totalCoveredQty,
         subscriptionId,
-        subscriptionItemId
+        subscriptionItemId,
+        subscriptionCoverages: Array.from(subscriptionCoveragesByKey.values())
     };
 }
 
@@ -2421,6 +2493,16 @@ async function createSaleVersion({
     const created_by = req.user.id;
     const normalizedIdentity = normalizeCustomerIdentity(header);
 
+    const itemIds = saleItems.map(row => Number(row?.item_id)).filter(id => Number.isFinite(id) && id > 0);
+    const itemMasters = itemIds.length > 0 ? await req.propertyDb.models.item_master.findAll({
+        where: {
+            outlet_id,
+            id: { [Op.in]: itemIds }
+        },
+        transaction
+    }) : [];
+    const itemMasterMap = new Map(itemMasters.map(item => [item.id, item]));
+
     let totalQty = 0;
     let subTotal = 0;
     let itemsTaxableTotal = 0;
@@ -2429,6 +2511,11 @@ async function createSaleVersion({
     const taxSummary = new Map();
     let schemeFreeQtyAmount = 0;
     let subscriptionAdjustmentAmount = 0;
+    let advanceSubscriptionDiscount = 0;
+    let subscriptionTaxCgst = 0;
+    let subscriptionTaxSgst = 0;
+    let subscriptionTaxIgst = 0;
+    let subscriptionTaxableAmount = 0;
 
     const itemRateFallbackMap = new Map();
     for (const row of saleItems) {
@@ -2503,16 +2590,64 @@ async function createSaleVersion({
 
     for (const row of saleItems) {
         const qty = toAmount(row.qty);
-        const rate = toAmount(row.rate);
+        let rate = toAmount(row.rate);
+        let taxPercent = toAmount(row.tax_percent);
+        let taxType = row.tax_type || 'GST';
+
+        const isAdvanceOrSubFree = row.is_advance_free === true || row._subscription_free === true;
+        if (isAdvanceOrSubFree && rate <= 0) {
+            const itemMaster = itemMasterMap.get(Number(row.item_id));
+            const referenceRate = toAmount(
+                row.reference_rate ??
+                row.original_rate ??
+                itemMaster?.retail_sale_price ??
+                itemMaster?.rate ??
+                0
+            );
+            if (referenceRate > 0) {
+                rate = referenceRate;
+            }
+            if (itemMaster) {
+                taxPercent = toAmount(itemMaster.tax_percent);
+                taxType = itemMaster.tax_type || 'GST';
+            }
+        }
+
         const amount = qty * rate;
-        const lineDiscount = toAmount(row.line_discount);
-        const taxableAmount = toAmount(row.taxable_amount, amount - lineDiscount);
-        const taxAmount = toAmount(row.tax_amount);
-        const lineTotal = toAmount(row.line_total, taxableAmount + taxAmount);
-        const itemNetAmount = toAmount(row.net_amount, lineTotal);
-        const rowTaxes = Array.isArray(row.tax_breakup)
-            ? row.tax_breakup.map((tax) => normalizeTaxBreakupEntry(tax))
-            : [];
+        let lineDiscount = toAmount(row.line_discount);
+
+        let taxableAmount, taxAmount, lineTotal, itemNetAmount, rowTaxes;
+
+        if (isAdvanceOrSubFree) {
+            lineDiscount = 0;
+            taxableAmount = amount;
+            const billingTaxMode = header.billing_tax_mode || 'CGST_SGST';
+            rowTaxes = calculateTaxesForAmount({
+                taxMode: billingTaxMode,
+                taxType,
+                taxPercent,
+                taxableAmount
+            });
+            taxAmount = rowTaxes.reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0);
+            lineTotal = taxableAmount + taxAmount;
+            itemNetAmount = lineTotal;
+            advanceSubscriptionDiscount += lineTotal;
+            subscriptionTaxableAmount += taxableAmount;
+            for (const tax of rowTaxes) {
+                if (tax.code === 'CGST') subscriptionTaxCgst += toAmount(tax.taxAmount);
+                else if (tax.code === 'SGST') subscriptionTaxSgst += toAmount(tax.taxAmount);
+                else if (tax.code === 'IGST') subscriptionTaxIgst += toAmount(tax.taxAmount);
+            }
+        } else {
+            taxableAmount = toAmount(row.taxable_amount, amount - lineDiscount);
+            taxAmount = toAmount(row.tax_amount);
+            lineTotal = toAmount(row.line_total, taxableAmount + taxAmount);
+            itemNetAmount = toAmount(row.net_amount, lineTotal);
+            rowTaxes = Array.isArray(row.tax_breakup)
+                ? row.tax_breakup.map((tax) => normalizeTaxBreakupEntry(tax))
+                : [];
+        }
+
         if (row.is_scheme_free === true) {
             const referenceRate = toAmount(
                 row.scheme_free_reference_rate ??
@@ -2643,18 +2778,46 @@ async function createSaleVersion({
     const headerChargeTaxTotal = toAmount(header.charge_tax_total);
     const derivedTaxBreakup = Array.from(taxSummary.values())
         .sort((a, b) => a.label.localeCompare(b.label));
-    const derivedCgstAmount = derivedTaxBreakup
-        .filter((tax) => tax.code === 'CGST')
-        .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0);
-    const derivedSgstAmount = derivedTaxBreakup
-        .filter((tax) => tax.code === 'SGST')
-        .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0);
-    const derivedIgstAmount = derivedTaxBreakup
-        .filter((tax) => tax.code === 'IGST')
-        .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0);
-    const derivedTotalDiscount = Math.max(toAmount(header.total_discount || 0), 0);
+    const derivedCgstAmount = Math.max(0, toAmount(
+        derivedTaxBreakup
+            .filter((tax) => tax.code === 'CGST')
+            .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0) - subscriptionTaxCgst
+    ));
+    const derivedSgstAmount = Math.max(0, toAmount(
+        derivedTaxBreakup
+            .filter((tax) => tax.code === 'SGST')
+            .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0) - subscriptionTaxSgst
+    ));
+    const derivedIgstAmount = Math.max(0, toAmount(
+        derivedTaxBreakup
+            .filter((tax) => tax.code === 'IGST')
+            .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0) - subscriptionTaxIgst
+    ));
+    const derivedTotalDiscount = Math.max(toAmount(header.total_discount || 0), advanceSubscriptionDiscount);
     const derivedTaxableAmount = itemsTaxableTotal + headerChargeTotal;
-    const derivedTotalTax = itemsTaxTotal + headerChargeTaxTotal;
+    const derivedTotalTax = Math.max(0, toAmount(itemsTaxTotal + headerChargeTaxTotal - (subscriptionTaxCgst + subscriptionTaxSgst + subscriptionTaxIgst)));
+
+    const adjustedTaxBreakup = derivedTaxBreakup.map(tax => {
+        const copy = { ...tax };
+        if (copy.code === 'CGST') {
+            copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxCgst));
+            copy.tax_amount = copy.taxAmount;
+            copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
+            copy.taxable_amount = copy.taxableAmount;
+        } else if (copy.code === 'SGST') {
+            copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxSgst));
+            copy.tax_amount = copy.taxAmount;
+            copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
+            copy.taxable_amount = copy.taxableAmount;
+        } else if (copy.code === 'IGST') {
+            copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxIgst));
+            copy.tax_amount = copy.taxAmount;
+            copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
+            copy.taxable_amount = copy.taxableAmount;
+        }
+        return copy;
+    });
+
     const derivedNetAmount =
         Math.max(
             0,
@@ -2662,7 +2825,8 @@ async function createSaleVersion({
                 headerChargeTotal +
                 headerChargeTaxTotal +
                 roundOffAmount -
-                invoiceDiscount
+                invoiceDiscount -
+                advanceSubscriptionDiscount
         );
     const effectiveChangeAmount = header.change_amount != null
         ? Math.max(toAmount(header.change_amount), 0)
@@ -2680,7 +2844,7 @@ async function createSaleVersion({
         sgst_amount: derivedSgstAmount,
         igst_amount: derivedIgstAmount,
         total_tax: derivedTotalTax,
-        tax_breakup: derivedTaxBreakup,
+        tax_breakup: adjustedTaxBreakup,
         charges: Array.isArray(header.charges) ? header.charges : [],
         charge_total: headerChargeTotal,
         charge_tax_total: headerChargeTaxTotal,
@@ -4233,9 +4397,12 @@ exports.deleteCustomer = async (req, res) => {
 exports.getSaleDetails = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-        const sale = await req.propertyDb.models.sales_headers.findOne({
+        let sale = await req.propertyDb.models.sales_headers.findOne({
             where: {
-                id: req.params.id,
+                [Op.or]: [
+                    { id: isNaN(Number(req.params.id)) ? -1 : Number(req.params.id) },
+                    { sale_no: req.params.id }
+                ],
                 outlet_id
             },
             include: [
@@ -4257,6 +4424,35 @@ exports.getSaleDetails = async (req, res) => {
                 }
             ]
         });
+
+        if (!sale) {
+            sale = await req.propertyDb.models.sales_headers.findOne({
+                where: {
+                    [Op.or]: [
+                        { id: isNaN(Number(req.params.id)) ? -1 : Number(req.params.id) },
+                        { sale_no: req.params.id }
+                    ]
+                },
+                include: [
+                    {
+                        model: req.propertyDb.models.sales_items,
+                        as: 'items',
+                        include: [
+                            {
+                                model: req.propertyDb.models.item_master,
+                                as: 'item',
+                                attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand']
+                            }
+                        ]
+                    },
+                    {
+                        model: req.propertyDb.models.customer_repayments,
+                        as: 'repayments',
+                        required: false
+                    }
+                ]
+            });
+        }
 
         if (!sale) {
             return res.status(404).json({ success: false, message: 'Sale not found' });
@@ -5177,6 +5373,7 @@ exports.getSubscriptionLedger = async (req, res) => {
 };
 
 exports.generateFinalSettlement = async (req, res) => {
+    await resolveOutletId(req);
     const t = await req.propertyDb.transaction();
     try {
         const subscriptionId = Number(req.params.id);
@@ -5191,7 +5388,7 @@ exports.generateFinalSettlement = async (req, res) => {
                 outlet_id: req.user.outlet_id
             },
             include: [
-                { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes' }
+                { model: req.propertyDb.models.milk_subscription_schemes, as: 'schemes', required: false }
             ],
             transaction: t
         });
@@ -6035,6 +6232,7 @@ exports.validateVoucher = async (req, res) => {
 };
 
 exports.deleteSubscription = async (req, res) => {
+    await resolveOutletId(req);
     const t = await req.propertyDb.transaction();
     try {
         const subscriptionId = Number(req.params.id);
@@ -6132,6 +6330,7 @@ exports.deleteSubscription = async (req, res) => {
 
 exports.updateSubscriptionStatus = async (req, res) => {
     try {
+        await resolveOutletId(req);
         const subscriptionId = Number(req.params.id);
         if (!Number.isFinite(subscriptionId) || subscriptionId <= 0) {
             return res.status(400).json({ success: false, message: 'Invalid subscription id' });
