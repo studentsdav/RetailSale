@@ -2650,6 +2650,18 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 70,
+    description: "Add coupon fields to customer_orders",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(80) DEFAULT NULL;
+        ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS coupon_discount_amount DECIMAL(12, 2) DEFAULT 0;
+        COMMIT;
+      `);
+    }
   }
 ];
 

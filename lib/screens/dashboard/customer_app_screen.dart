@@ -1052,11 +1052,38 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       );
       return;
     }
-
     setState(() => _isLoading = true);
 
     try {
       double subTotal = 0;
+      _cart.forEach((itemId, value) {
+        final item = value['item'];
+        final qty = value['qty'];
+        final rate = _getItemPrice(item);
+        subTotal += rate * qty;
+      });
+
+      double nonSubscriptionSubTotal = 0;
+      _cart.forEach((itemId, value) {
+        final item = value['item'];
+        final qty = value['qty'];
+        final rate = _getItemPrice(item);
+        final sub = _subscriptions.firstWhere(
+          (s) => s['item_id'] == itemId && (s['active_subscription'] == true || s['status'] == 'ACTIVE'),
+          orElse: () => null,
+        );
+        double coveredQty = 0.0;
+        if (sub != null) {
+          final double remainingQty = double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0;
+          coveredQty = qty < remainingQty ? qty : remainingQty;
+        }
+        final double paidQty = qty - coveredQty;
+        nonSubscriptionSubTotal += rate * paidQty;
+      });
+
+      double couponDiscount = _calculateCouponDiscount(subTotal);
+      double discountRatio = nonSubscriptionSubTotal > 0 ? (nonSubscriptionSubTotal - couponDiscount) / nonSubscriptionSubTotal : 1.0;
+
       double tax = 0;
       double subscriptionDiscount = 0.0;
       double subscriptionTaxDiscount = 0.0;
@@ -1067,20 +1094,29 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         final qty = value['qty'];
         final rate = _getItemPrice(item);
         final itemTotal = rate * qty;
-        subTotal += itemTotal;
-
-        final itemTaxPercent =
-            double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-        final itemTaxAmount = itemTotal * itemTaxPercent / 100.0;
-        tax += itemTaxAmount;
 
         final sub = _subscriptions.firstWhere(
           (s) => s['item_id'] == itemId && (s['active_subscription'] == true || s['status'] == 'ACTIVE'),
           orElse: () => null,
         );
+        double coveredQty = 0.0;
         if (sub != null) {
           final double remainingQty = double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0;
-          final double coveredQty = qty < remainingQty ? qty : remainingQty;
+          coveredQty = qty < remainingQty ? qty : remainingQty;
+        }
+        final double paidQty = qty - coveredQty;
+        final double paidItemTotal = rate * paidQty;
+        final double freeItemTotal = rate * coveredQty;
+
+        final double discountedPaidItemTotal = paidItemTotal * discountRatio;
+        final double discountedItemTotal = discountedPaidItemTotal + freeItemTotal;
+
+        final itemTaxPercent =
+            double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+        final itemTaxAmount = discountedItemTotal * itemTaxPercent / 100.0;
+        tax += itemTaxAmount;
+
+        if (coveredQty > 0) {
           subscriptionDiscount += rate * coveredQty;
           subscriptionTaxDiscount += (rate * coveredQty) * itemTaxPercent / 100.0;
         }
@@ -1140,7 +1176,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         }
       }
 
-      double couponDiscount = _calculateCouponDiscount(subTotal);
+      // couponDiscount is already calculated above
       if (couponDiscount > 0 && _appliedCoupon != null) {
         chargesList.add({
           'name': 'Coupon Discount (${_appliedCoupon!['code']})',
@@ -1884,7 +1920,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       await propertyCtrl.load();
 
       SaleOrder? order;
-      final saleId = record['sale_id'] ?? record['sale_no'] ?? record['id'] ?? record['order_id'];
+      final saleId = record['sale_id'] ?? record['bill_no'] ?? record['sale_no'] ?? record['id'] ?? record['order_id'];
       if (saleId != null) {
         try {
           final res = await ApiClient.get('/api/delivery/sales/$saleId');
@@ -2270,6 +2306,34 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   Widget _buildCartSummary(ThemeData theme) {
     double subTotal = 0;
+    _cart.forEach((itemId, value) {
+      final item = value['item'];
+      final qty = value['qty'];
+      final price = _getItemPrice(item);
+      subTotal += price * qty;
+    });
+
+    double nonSubscriptionSubTotal = 0;
+    _cart.forEach((itemId, value) {
+      final item = value['item'];
+      final qty = value['qty'];
+      final price = _getItemPrice(item);
+      final sub = _subscriptions.firstWhere(
+        (s) => s['item_id'] == itemId && (s['active_subscription'] == true || s['status'] == 'ACTIVE'),
+        orElse: () => null,
+      );
+      double coveredQty = 0.0;
+      if (sub != null) {
+        final double remainingQty = double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0;
+        coveredQty = qty < remainingQty ? qty : remainingQty;
+      }
+      final double paidQty = qty - coveredQty;
+      nonSubscriptionSubTotal += price * paidQty;
+    });
+
+    double couponDiscount = _calculateCouponDiscount(subTotal);
+    double discountRatio = nonSubscriptionSubTotal > 0 ? (nonSubscriptionSubTotal - couponDiscount) / nonSubscriptionSubTotal : 1.0;
+
     double tax = 0;
     double subscriptionDiscount = 0.0;
     double subscriptionTaxDiscount = 0.0;
@@ -2278,20 +2342,30 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       final item = value['item'];
       final qty = value['qty'];
       final price = _getItemPrice(item);
-      subTotal += price * qty;
-
-      final itemTaxPercent =
-          double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-      final itemTax = (price * qty) * itemTaxPercent / 100.0;
-      tax += itemTax;
+      final itemTotal = price * qty;
 
       final sub = _subscriptions.firstWhere(
         (s) => s['item_id'] == itemId && (s['active_subscription'] == true || s['status'] == 'ACTIVE'),
         orElse: () => null,
       );
+      double coveredQty = 0.0;
       if (sub != null) {
         final double remainingQty = double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0;
-        final double coveredQty = qty < remainingQty ? qty : remainingQty;
+        coveredQty = qty < remainingQty ? qty : remainingQty;
+      }
+      final double paidQty = qty - coveredQty;
+      final double paidItemTotal = price * paidQty;
+      final double freeItemTotal = price * coveredQty;
+
+      final double discountedPaidItemTotal = paidItemTotal * discountRatio;
+      final double discountedItemTotal = discountedPaidItemTotal + freeItemTotal;
+
+      final itemTaxPercent =
+          double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+      final itemTax = discountedItemTotal * itemTaxPercent / 100.0;
+      tax += itemTax;
+
+      if (coveredQty > 0) {
         subscriptionDiscount += price * coveredQty;
         subscriptionTaxDiscount += (price * coveredQty) * itemTaxPercent / 100.0;
       }
@@ -2325,7 +2399,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       }
     }
 
-    double couponDiscount = _calculateCouponDiscount(subTotal);
+    // couponDiscount is already calculated above
 
     double totalCharges = delivery + customChargesTotal;
     double totalChargesGst = deliveryGst + customChargesGstTotal;

@@ -5237,6 +5237,8 @@ class _SaleScreenState extends State<SaleScreen> {
       taxPercent: _jsonDouble(json['tax_percent']),
       discountApplicable: json['discount_applicable'] ?? true,
       schemeApplicable: json['scheme_applicable'] ?? true,
+      isSchemeFree: json['is_scheme_free'] ?? false,
+      isAdvanceFree: json['is_advance_free'] ?? false,
       lineDiscount: _jsonDouble(json['line_discount']),
       taxableAmount: _jsonDouble(json['taxable_amount']),
       taxAmount: _jsonDouble(json['tax_amount']),

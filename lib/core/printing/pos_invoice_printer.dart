@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:intl/intl.dart';
@@ -184,11 +185,25 @@ class PosInvoicePrinter {
         pw.TextStyle(font: bold, fontSize: 14, color: _thermalPrimary);
     final totalItems = order.items.length;
     final roundOff = _billRoundOff(order);
-    final groupedTaxes = _groupedTaxBreakup(order);
-    final hasTaxData = _hasTaxData(order);
-    final cgstTotal = _taxAmountFromBreakup(groupedTaxes, 'CGST');
-    final sgstTotal = _taxAmountFromBreakup(groupedTaxes, 'SGST');
-    final igstTotal = _taxAmountFromBreakup(groupedTaxes, 'IGST');
+    final subscriptionAdjustment = _subscriptionAdjustmentAmount(order);
+    final savingsAmount = _displaySavingsAmount(order);
+    final itemGroupedTaxes = _adjustedItemGroupedTaxes(order, _groupedTaxBreakup(order));
+    final chargeGroupedTaxes = _groupedChargeTaxBreakup(order);
+    final hasTaxData = itemGroupedTaxes.isNotEmpty;
+    final hasChargeTaxData = chargeGroupedTaxes.isNotEmpty;
+    final chargeTaxSummaryTotal = _groupTaxTotal(chargeGroupedTaxes);
+    final cgstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'CGST') +
+        _taxAmountFromBreakup(chargeGroupedTaxes, 'CGST');
+    final sgstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'SGST') +
+        _taxAmountFromBreakup(chargeGroupedTaxes, 'SGST');
+    final igstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'IGST') +
+        _taxAmountFromBreakup(chargeGroupedTaxes, 'IGST');
+    final displayNetPayable = _displayNetPayable(
+      order,
+      chargeTaxTotal: chargeTaxSummaryTotal,
+      summaryTaxTotal: cgstTotal + sgstTotal + igstTotal,
+      subscriptionAdjustment: subscriptionAdjustment,
+    );
 
     return pw.DefaultTextStyle(
       style: bodyStyle,
@@ -398,35 +413,52 @@ class PosInvoicePrinter {
             _thermalAmountRow('Refunded Amt', order.refundAmount),
             _thermalAmountRow('Net Payable', order.netAmount - order.refundAmount),
           ],
-          if (order.totalDiscount > 0)
-            _thermalAmountRow(_savingLabel(order), order.totalDiscount),
+          if (savingsAmount > 0.0009)
+            _thermalAmountRow(_savingLabel(order), savingsAmount),
           if (order.loyaltyPointsRedeemed > 0 &&
               order.loyaltyDiscountAmount > 0)
             pw.Text(
               'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
               style: emphasisStyle,
             ),
-            if (hasTaxData) _dashedDivider(),
-            if (hasTaxData) _thermalAmountRow('Taxable Amt', order.taxableAmount),
-            if (hasTaxData && cgstTotal > 0)
-              _thermalAmountRow('CGST', cgstTotal),
-            if (hasTaxData && sgstTotal > 0)
-              _thermalAmountRow('SGST', sgstTotal),
-            if (hasTaxData && igstTotal > 0)
-              _thermalAmountRow('IGST', igstTotal),
-            ...order.charges.where((charge) => charge.amount > 0).map(
-                  (charge) => _thermalAmountRow(
-                    charge.name,
-                    charge.amount,
-                  ),
+          if (hasTaxData) _dashedDivider(),
+          if (hasTaxData) _thermalAmountRow('Taxable Amt', _adjustedItemTaxableTotal(order)),
+          if (hasTaxData && cgstTotal > 0)
+            _thermalAmountRow('CGST', cgstTotal),
+          if (hasTaxData && sgstTotal > 0)
+            _thermalAmountRow('SGST', sgstTotal),
+          if (hasTaxData && igstTotal > 0)
+            _thermalAmountRow('IGST', igstTotal),
+          ...order.charges.where((charge) => charge.amount > 0).map(
+                (charge) => _thermalAmountRow(
+                  charge.name,
+                  charge.amount,
                 ),
-            if (hasTaxData && order.chargeTaxTotal > 0)
-              _thermalAmountRow('Charge Tax', order.chargeTaxTotal),
-          if (hasTaxData && groupedTaxes.isNotEmpty) ...[
+              ),
+          if (hasTaxData && itemGroupedTaxes.isNotEmpty) ...[
             pw.SizedBox(height: 4),
-            pw.Text('Tax Breakup', style: emphasisStyle),
+            pw.Text('Tax Breakup - Items', style: emphasisStyle),
             pw.SizedBox(height: 3),
-            ...groupedTaxes.map(
+            ..._groupedTaxBreakup(order).map(
+              (tax) => _thermalTaxSummaryRow(
+                tax.label,
+                tax.taxableAmount,
+                tax.taxAmount,
+              ),
+            ),
+            if (subscriptionAdjustment > 0) ...[
+              _thermalTaxSummaryRow(
+                'Subscription Adjustment',
+                -_appSubscriptionDiscountAmount(order),
+                -_appSubscriptionTaxAdjustmentAmount(order),
+              ),
+            ],
+          ],
+          if (hasChargeTaxData) ...[
+            pw.SizedBox(height: 4),
+            pw.Text('Tax Breakup - Charges', style: emphasisStyle),
+            pw.SizedBox(height: 3),
+            ...chargeGroupedTaxes.map(
               (tax) => _thermalTaxSummaryRow(
                 tax.label,
                 tax.taxableAmount,
@@ -436,15 +468,23 @@ class PosInvoicePrinter {
           ],
           if (roundOff.abs() > 0.0009)
             _thermalAmountRow(
-              roundOff.abs() >= 1.0 ? 'Subscription Adj' : 'Round Off',
+              'Round Off',
               roundOff,
             ),
+          if (_showSubscriptionAdjustmentRow(order, subscriptionAdjustment))
+            _thermalAmountRow('Subscription Adjustment', subscriptionAdjustment),
+          if (order.paymentMode.trim().toUpperCase() != 'SUBSCRIPTION') ...[
+            if (_appSubscriptionDiscountAmount(order) > 0.0009)
+              _thermalAmountRow('Subscription Adjustment', _appSubscriptionDiscountAmount(order)),
+            if (_appSubscriptionTaxAdjustmentAmount(order) > 0.0009)
+              _thermalAmountRow('Subscription Tax Adjustment', _appSubscriptionTaxAdjustmentAmount(order)),
+          ],
           _dashedDivider(),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text('NET PAYABLE', style: grandStyle),
-              pw.Text(_money(order.netAmount), style: grandStyle),
+              pw.Text(_money(displayNetPayable), style: grandStyle),
             ],
           ),
           pw.SizedBox(height: 5),
@@ -925,7 +965,7 @@ class PosInvoicePrinter {
           ? '${item.brand!.trim()} - '
           : '';
       final name =
-          item.isSchemeFree ? '$brandStr${item.itemName} (FREE)$suffix' : '$brandStr${item.itemName}$suffix';
+          (item.isSchemeFree || item.isAdvanceFree) ? '$brandStr${item.itemName} (FREE)$suffix' : '$brandStr${item.itemName}$suffix';
       if (hasTaxData) {
         return [
           '${index + 1}',
@@ -981,11 +1021,25 @@ class PosInvoicePrinter {
   static pw.Widget _buildTotalsBox(SaleOrder order) {
     final hasTaxData = _hasTaxData(order);
     final roundOff = _billRoundOff(order);
+    final subscriptionAdjustment = _subscriptionAdjustmentAmount(order);
+    final savingsAmount = _displaySavingsAmount(order);
     final savingsLabel = _savingLabel(order);
-    final groupedTaxes = _groupedTaxBreakup(order);
-    final cgstTotal = _taxAmountFromBreakup(groupedTaxes, 'CGST');
-    final sgstTotal = _taxAmountFromBreakup(groupedTaxes, 'SGST');
-    final igstTotal = _taxAmountFromBreakup(groupedTaxes, 'IGST');
+    final itemGroupedTaxes = _adjustedItemGroupedTaxes(order, _groupedTaxBreakup(order));
+    final chargeGroupedTaxes = _groupedChargeTaxBreakup(order);
+    final chargeTaxSummaryTotal = _groupTaxTotal(chargeGroupedTaxes);
+    final cgstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'CGST') +
+        _taxAmountFromBreakup(chargeGroupedTaxes, 'CGST');
+    final sgstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'SGST') +
+        _taxAmountFromBreakup(chargeGroupedTaxes, 'SGST');
+    final igstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'IGST') +
+        _taxAmountFromBreakup(chargeGroupedTaxes, 'IGST');
+    final summaryTaxTotal = cgstTotal + sgstTotal + igstTotal;
+    final displayNetPayable = _displayNetPayable(
+      order,
+      chargeTaxTotal: chargeTaxSummaryTotal,
+      summaryTaxTotal: summaryTaxTotal,
+      subscriptionAdjustment: subscriptionAdjustment,
+    );
     return pw.Container(
       width: double.infinity,
       padding: const pw.EdgeInsets.all(10),
@@ -994,8 +1048,8 @@ class PosInvoicePrinter {
       ),
       child: pw.Column(
         children: [
-          if (order.totalDiscount > 0)
-            _a4AmountRow(savingsLabel, order.totalDiscount),
+          if (savingsAmount > 0.0009)
+            _a4AmountRow(savingsLabel, savingsAmount),
           if (order.loyaltyPointsRedeemed > 0 &&
               order.loyaltyDiscountAmount > 0)
             pw.Padding(
@@ -1008,23 +1062,31 @@ class PosInvoicePrinter {
                 ),
               ),
             ),
-          if (hasTaxData) _a4AmountRow('Taxable Value', order.taxableAmount),
+          if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
           if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
           if (hasTaxData) _a4AmountRow('Total SGST Amount', sgstTotal),
           if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
           if (roundOff.abs() > 0.0009)
             _a4AmountRow(
-              roundOff.abs() >= 1.0 ? 'Subscription Adj' : 'Round Off',
+              'Round Off',
               roundOff,
             ),
+          if (_showSubscriptionAdjustmentRow(order, subscriptionAdjustment))
+            _a4AmountRow('Subscription Adjustment', _appSubscriptionDiscountAmount(order)),
+          if (order.paymentMode.trim().toUpperCase() != 'SUBSCRIPTION') ...[
+            if (_appSubscriptionDiscountAmount(order) > 0.0009)
+              _a4AmountRow('Subscription Adjustment', _appSubscriptionDiscountAmount(order)),
+            if (_appSubscriptionTaxAdjustmentAmount(order) > 0.0009)
+              _a4AmountRow('Subscription Tax Adjustment', _appSubscriptionTaxAdjustmentAmount(order)),
+          ],
           pw.Divider(height: 10),
-          _a4AmountRow('Grand Total', order.netAmount, bold: true),
+          _a4AmountRow('Grand Total', displayNetPayable, bold: true),
           if (_isRefundedOrder(order)) ...[
             pw.Divider(height: 10),
             _a4AmountRow('Refunded Amount', _refundAmountForDisplay(order)),
             _a4AmountRow(
               'Net Payable',
-              order.netAmount - _refundAmountForDisplay(order),
+              displayNetPayable - _refundAmountForDisplay(order),
               bold: true,
             ),
           ],
@@ -1045,6 +1107,9 @@ class PosInvoicePrinter {
   }
 
   static String _savingLabel(SaleOrder order) {
+    if (_couponSavingsAmount(order) > 0.0009) {
+      return 'Coupon Discount';
+    }
     final mode = order.paymentMode.toUpperCase();
     if (mode == 'SUBSCRIPTION') {
       return 'Subscription Adjusted Amount';
@@ -1152,13 +1217,27 @@ class PosInvoicePrinter {
   }
 
   static double _billRoundOff(SaleOrder order) {
+    final appSubDiscount = _appSubscriptionDiscountAmount(order);
+    if (appSubDiscount > 0.0009 && order.paymentMode.trim().toUpperCase() != 'SUBSCRIPTION') {
+      final itemBase = _adjustedItemTaxableTotal(order);
+      final chargeBase = order.chargeTotal;
+      final itemGroupedTaxes = _adjustedItemGroupedTaxes(order, _groupedTaxBreakup(order));
+      final chargeGroupedTaxes = _groupedChargeTaxBreakup(order);
+      final summaryTax = _taxAmountFromBreakup(itemGroupedTaxes, 'CGST') +
+          _taxAmountFromBreakup(itemGroupedTaxes, 'SGST') +
+          _taxAmountFromBreakup(itemGroupedTaxes, 'IGST') +
+          _taxAmountFromBreakup(chargeGroupedTaxes, 'CGST') +
+          _taxAmountFromBreakup(chargeGroupedTaxes, 'SGST') +
+          _taxAmountFromBreakup(chargeGroupedTaxes, 'IGST');
+      final displayNetPayable = _displayNetPayable(order);
+      final subscriptionTax = _appSubscriptionTaxAdjustmentAmount(order);
+      return double.parse((displayNetPayable - (itemBase + chargeBase + summaryTax - appSubDiscount - subscriptionTax)).toStringAsFixed(2));
+    }
     if (order.roundOffAmount.abs() > 0.0009) {
       return order.roundOffAmount;
     }
-    final computedTotal = (order.subTotal - order.totalDiscount) +
-        order.chargeTotal +
-        order.totalTax;
-    return double.parse((order.netAmount - computedTotal).toStringAsFixed(2));
+    final computedTotal = _displayNetPayable(order);
+    return double.parse((computedTotal - computedTotal.roundToDouble()).toStringAsFixed(2));
   }
 
   static pw.Widget _partyCard({
@@ -1224,7 +1303,7 @@ class PosInvoicePrinter {
     final detailParts = <String>[
       if (hsnOrCode.isNotEmpty) 'HSN $hsnOrCode',
       qtyUnitRate,
-      if (item.isSchemeFree) 'FREE',
+      if (item.isSchemeFree || item.isAdvanceFree) 'FREE',
       if (item.taxPercent > 0)
         // Show plain "GST 18% = Rs. X.XX" so customer clearly sees rate + amount
         'GST ${_formatTaxPercent(item.taxPercent)}%'
@@ -1247,7 +1326,7 @@ class PosInvoicePrinter {
             children: [
               pw.Expanded(
                 child: pw.Text(
-                  item.isSchemeFree
+                  (item.isSchemeFree || item.isAdvanceFree)
                       ? '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)${suffix}'
                       : '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}${suffix}',
                   style: pw.TextStyle(
@@ -1492,8 +1571,222 @@ class PosInvoicePrinter {
     return value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
   }
 
+  static double _subscriptionAdjustmentAmount(SaleOrder order) {
+    if (order.paymentMode.trim().toUpperCase() != 'SUBSCRIPTION') {
+      return 0.0;
+    }
+    return order.items.fold<double>(
+      0,
+      (sum, item) => item.isAdvanceFree ? sum + item.netAmount : sum,
+    );
+  }
+
+  static double _appSubscriptionDiscountAmount(SaleOrder order) {
+    return order.items.fold<double>(
+      0,
+      (sum, item) => item.isAdvanceFree ? sum + (_displayRate(item) * item.qty) : sum,
+    );
+  }
+
+  static double _appSubscriptionTaxAdjustmentAmount(SaleOrder order) {
+    return order.items.fold<double>(
+      0,
+      (sum, item) => item.isAdvanceFree
+          ? sum + ((_displayRate(item) * item.qty) * item.taxPercent / 100)
+          : sum,
+    );
+  }
+
+  static double _adjustedItemTaxableTotal(SaleOrder order) {
+    return _itemTaxableTotal(order);
+  }
+
+  static List<TaxBreakdown> _adjustedItemGroupedTaxes(SaleOrder order, List<TaxBreakdown> original) {
+    return original;
+  }
+
+  static double _couponSavingsAmount(SaleOrder order) {
+    if (order.couponDiscountAmount > 0.0009) {
+      return order.couponDiscountAmount;
+    }
+
+    final gatewayDetails = order.paymentGatewayDetails;
+    if (gatewayDetails != null) {
+      final gatewayCoupon = double.tryParse(
+            gatewayDetails['coupon_discount_amount']?.toString() ?? '0',
+          ) ??
+          0.0;
+      if (gatewayCoupon > 0.0009) {
+        return gatewayCoupon;
+      }
+    }
+
+    final chargeCoupon = order.charges.fold<double>(0, (sum, charge) {
+      final code = charge.code.trim().toUpperCase();
+      final name = charge.name.trim().toUpperCase();
+      if (code == 'COUPON_DISCOUNT' || name.contains('COUPON DISCOUNT')) {
+        return sum + charge.amount.abs();
+      }
+      return sum;
+    });
+    if (chargeCoupon > 0.0009) {
+      return chargeCoupon;
+    }
+
+    return order.items.fold<double>(
+      0,
+      (sum, item) => sum + item.lineDiscount,
+    );
+  }
+
+  static double _displaySavingsAmount(SaleOrder order) {
+    return _couponSavingsAmount(order);
+  }
+
+  static bool _showSubscriptionAdjustmentRow(SaleOrder order, double subscriptionAdjustment) {
+    return order.paymentMode.trim().toUpperCase() == 'SUBSCRIPTION' && subscriptionAdjustment > 0.0009;
+  }
+
+  static double _itemTaxableTotal(SaleOrder order) {
+    return order.items.fold<double>(
+      0,
+      (sum, item) => sum + _displayItemTaxableAmount(order, item),
+    );
+  }
+
+  static List<TaxBreakdown> _groupedChargeTaxBreakup(SaleOrder order) {
+    final billingMode = order.billingTaxMode.trim().toUpperCase();
+    final grouped = <String, TaxBreakdown>{};
+
+    for (final charge in order.charges) {
+      final taxableAmount = charge.amount.abs();
+      final taxAmount = taxableAmount * charge.taxPercent / 100.0;
+      if (taxableAmount <= 0 || taxAmount <= 0) continue;
+
+      if (billingMode == 'IGST') {
+        final key = 'IGST|${charge.taxPercent}';
+        final existing = grouped[key];
+        grouped[key] = existing == null
+            ? TaxBreakdown(
+                code: 'IGST',
+                label: 'IGST ${_formatTaxPercent(charge.taxPercent)}%',
+                taxType: 'GST',
+                rate: charge.taxPercent,
+                taxableAmount: taxableAmount,
+                taxAmount: taxAmount,
+              )
+            : TaxBreakdown(
+                code: 'IGST',
+                label: existing.label,
+                taxType: 'GST',
+                rate: charge.taxPercent,
+                taxableAmount: existing.taxableAmount + taxableAmount,
+                taxAmount: existing.taxAmount + taxAmount,
+              );
+        continue;
+      }
+
+      final halfRate = charge.taxPercent / 2;
+      final halfTaxAmount = taxAmount / 2;
+      final cgstKey = 'CGST|${halfRate}';
+      final sgstKey = 'SGST|${halfRate}';
+
+      final cgstExisting = grouped[cgstKey];
+      grouped[cgstKey] = cgstExisting == null
+          ? TaxBreakdown(
+              code: 'CGST',
+              label: 'CGST ${_formatTaxPercent(halfRate)}%',
+              taxType: 'GST',
+              rate: halfRate,
+              taxableAmount: taxableAmount,
+              taxAmount: halfTaxAmount,
+            )
+          : TaxBreakdown(
+              code: 'CGST',
+              label: cgstExisting.label,
+              taxType: 'GST',
+              rate: halfRate,
+              taxableAmount: cgstExisting.taxableAmount + taxableAmount,
+              taxAmount: cgstExisting.taxAmount + halfTaxAmount,
+            );
+
+      final sgstExisting = grouped[sgstKey];
+      grouped[sgstKey] = sgstExisting == null
+          ? TaxBreakdown(
+              code: 'SGST',
+              label: 'SGST ${_formatTaxPercent(halfRate)}%',
+              taxType: 'GST',
+              rate: halfRate,
+              taxableAmount: taxableAmount,
+              taxAmount: halfTaxAmount,
+            )
+          : TaxBreakdown(
+              code: 'SGST',
+              label: sgstExisting.label,
+              taxType: 'GST',
+              rate: halfRate,
+              taxableAmount: sgstExisting.taxableAmount + taxableAmount,
+              taxAmount: sgstExisting.taxAmount + halfTaxAmount,
+            );
+    }
+
+    return grouped.values.toList();
+  }
+
+
+  static double _displayItemTaxableAmount(SaleOrder order, SaleItem item) {
+    final taxable = _taxableAmountForItem(item);
+    if (item.lineDiscount > 0.0009 || taxable <= 0.0009) {
+      return taxable;
+    }
+    final totalLineDiscount = order.items.fold<double>(0, (sum, i) => sum + i.lineDiscount);
+    if (totalLineDiscount > 0.0009) {
+      return taxable;
+    }
+    if (order.couponDiscountAmount > 0.0009) {
+      final grossItemTotal = order.items.fold<double>(
+        0,
+        (sum, entry) => sum + entry.amount,
+      );
+      if (grossItemTotal > 0.0009) {
+        final couponShare = math.min(item.amount, (item.amount / grossItemTotal) * order.couponDiscountAmount);
+        return math.max(0, item.amount - couponShare);
+      }
+    }
+    return taxable;
+  }
+
+  static double _displayNetPayable(
+    SaleOrder order, {
+    double? itemTaxableTotal,
+    double? chargeTaxTotal,
+    double? summaryTaxTotal,
+    double? subscriptionAdjustment,
+  }) {
+    if (order.netAmount > 0.0009) {
+      return order.netAmount;
+    }
+    final itemBase = itemTaxableTotal ?? _itemTaxableTotal(order);
+    final chargeBase = order.chargeTotal;
+    final chargeTax = chargeTaxTotal ?? _groupTaxTotal(_groupedChargeTaxBreakup(order));
+    final summaryTax = summaryTaxTotal ??
+        (_taxAmountFromBreakup(_groupedTaxBreakup(order), 'CGST') +
+            _taxAmountFromBreakup(_groupedTaxBreakup(order), 'SGST') +
+            _taxAmountFromBreakup(_groupedTaxBreakup(order), 'IGST') +
+            _taxAmountFromBreakup(_groupedChargeTaxBreakup(order), 'CGST') +
+            _taxAmountFromBreakup(_groupedChargeTaxBreakup(order), 'SGST') +
+            _taxAmountFromBreakup(_groupedChargeTaxBreakup(order), 'IGST'));
+    final subscription = subscriptionAdjustment ?? _subscriptionAdjustmentAmount(order);
+    return math.max(0, itemBase + chargeBase + chargeTax + summaryTax - subscription);
+  }
+
+  static double _groupTaxTotal(List<TaxBreakdown> taxes) {
+    return taxes.fold<double>(0, (sum, tax) => sum + tax.taxAmount);
+  }
+
   static List<TaxBreakdown> _sourceTaxBreakup(SaleOrder order) {
-    if (order.taxBreakup.isNotEmpty) {
+    final hasSubscriptionItems = order.items.any((item) => item.isAdvanceFree);
+    if (order.taxBreakup.isNotEmpty && !hasSubscriptionItems) {
       return order.taxBreakup;
     }
     return order.items
@@ -1503,38 +1796,39 @@ class PosInvoicePrinter {
 
   static List<TaxBreakdown> _groupedTaxBreakup(SaleOrder order) {
     final grouped = <String, TaxBreakdown>{};
-    for (final tax in _sourceTaxBreakup(order)) {
-      final key = '${tax.code}|${tax.label}|${tax.rate}';
-      final existing = grouped[key];
-      if (existing == null) {
-        grouped[key] = tax;
-      } else {
-        grouped[key] = TaxBreakdown(
-          code: tax.code,
-          label: tax.label,
-          taxType: tax.taxType,
-          rate: tax.rate,
-          taxableAmount: existing.taxableAmount + tax.taxableAmount,
-          taxAmount: existing.taxAmount + tax.taxAmount,
-        );
+    for (final item in order.items) {
+      for (final tax in _itemTaxBreakup(order, item)) {
+        final key = '${tax.code}|${tax.label}|${tax.rate}';
+        final existing = grouped[key];
+        if (existing == null) {
+          grouped[key] = tax;
+        } else {
+          grouped[key] = TaxBreakdown(
+            code: tax.code,
+            label: tax.label,
+            taxType: tax.taxType,
+            rate: tax.rate,
+            taxableAmount: existing.taxableAmount + tax.taxableAmount,
+            taxAmount: existing.taxAmount + tax.taxAmount,
+          );
+        }
       }
     }
     return grouped.values.toList();
   }
 
   static List<TaxBreakdown> _itemTaxBreakup(SaleOrder order, SaleItem item) {
-    if (item.taxBreakup.isNotEmpty) {
-      return item.taxBreakup;
-    }
-
     final taxPercent = item.taxPercent;
     if (taxPercent <= 0) return const <TaxBreakdown>[];
 
-    final taxableAmount = item.taxableAmount.abs() > 0.0009
-        ? item.taxableAmount
-        : item.referenceRate > 0
-            ? item.referenceRate * item.qty
-            : item.amount;
+    final double taxableAmount;
+    if (item.isAdvanceFree) {
+      taxableAmount = item.referenceRate > 0
+          ? item.referenceRate * item.qty
+          : item.amount;
+    } else {
+      taxableAmount = _displayItemTaxableAmount(order, item);
+    }
     if (taxableAmount <= 0) return const <TaxBreakdown>[];
 
     final taxAmount = taxableAmount * taxPercent / 100;

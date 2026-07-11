@@ -1002,7 +1002,10 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
             }
 
             const agreedRate = rate > 0 ? rate : toAmount(subscriptionAdvance?.rate || 0);
-            const coveredAmount = coveredQty * agreedRate;
+            const preTaxAmount = coveredQty * agreedRate;
+            const taxPercent = toAmount(sourceRow.tax_percent || 0);
+            const taxAmount = preTaxAmount * taxPercent / 100.0;
+            const coveredAmount = preTaxAmount + taxAmount;
             remainingQty -= coveredQty;
             sourceCoveredQty += coveredQty;
             sourceCoveredAmount += coveredAmount;
@@ -1127,7 +1130,8 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
             itemName: row.item_name || '',
             cartQty: 0,
             freeQty: 0,
-            rate: 0
+            rate: 0,
+            taxPercent: toAmount(row.tax_percent || 0)
         };
         bucket.cartQty += qty;
         if (row.is_advance_free === true) {
@@ -1233,7 +1237,10 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
         }
 
         const excessQty = Math.max(bucket.cartQty - coveredQty, 0);
-        const coveredAmount = coveredQty * agreedRate;
+        const taxPercent = bucket.taxPercent || 0;
+        const preTaxAmount = coveredQty * agreedRate;
+        const taxAmount = preTaxAmount * taxPercent / 100.0;
+        const coveredAmount = preTaxAmount + taxAmount;
         if (coveredQty > 0) {
             inFlightConsumedByKey.set(usageKey, toAmount(inFlightConsumedByKey.get(usageKey) || 0) + coveredQty);
             addSubscriptionCoverage(chosenSubscription, bucket.itemId, coveredQty, coveredAmount);
@@ -2793,7 +2800,7 @@ async function createSaleVersion({
             .filter((tax) => tax.code === 'IGST')
             .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0) - subscriptionTaxIgst
     ));
-    const derivedTotalDiscount = Math.max(toAmount(header.total_discount || 0), advanceSubscriptionDiscount);
+    const derivedTotalDiscount = Math.max(0, toAmount(header.total_discount || 0));
     const derivedTaxableAmount = itemsTaxableTotal + headerChargeTotal;
     const derivedTotalTax = Math.max(0, toAmount(itemsTaxTotal + headerChargeTaxTotal - (subscriptionTaxCgst + subscriptionTaxSgst + subscriptionTaxIgst)));
 
@@ -3408,7 +3415,7 @@ exports.createSale = async (req, res) => {
                         await createLedgerEntry({
                             db: req.propertyDb,
                             outlet_id: req.user.outlet_id,
-                            txn_date: referenceSale.sale_date || new Date(),
+                            txn_date: header.sale_date || referenceSale.sale_date || new Date(),
                             transaction_type: 'ADVANCE_APPLY',
                             reference_type: 'SUBSCRIPTION',
                             reference_id: coverage.subscriptionId,

@@ -3,6 +3,7 @@ import 'sale_item_model.dart';
 import 'sale_scheme_model.dart';
 import 'tax_breakdown_model.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 
 class SaleOrder {
   final String saleNo;
@@ -43,6 +44,8 @@ class SaleOrder {
   final double chargeTotal;
   final double chargeTaxTotal;
   final double totalDiscount;
+  final double couponDiscountAmount;
+  final Map<String, dynamic>? paymentGatewayDetails;
   final double roundOffAmount;
   final double netAmount;
   final String? voucherCode;
@@ -108,6 +111,8 @@ class SaleOrder {
     required this.chargeTotal,
     required this.chargeTaxTotal,
     required this.totalDiscount,
+    this.couponDiscountAmount = 0,
+    this.paymentGatewayDetails,
     required this.roundOffAmount,
     required this.netAmount,
     this.voucherCode,
@@ -174,6 +179,8 @@ class SaleOrder {
         'charge_total': chargeTotal,
         'charge_tax_total': chargeTaxTotal,
         'total_discount': totalDiscount,
+        'coupon_discount_amount': couponDiscountAmount,
+        'payment_gateway_details': paymentGatewayDetails,
         'round_off_amount': roundOffAmount,
         'net_amount': netAmount,
         'voucher_code': voucherCode,
@@ -215,6 +222,34 @@ class SaleOrder {
         final dynamic details = gatewayDetails is String ? jsonDecode(gatewayDetails) : gatewayDetails;
         if (details != null && details['refund_amount'] != null) {
           refundAmt = double.tryParse(details['refund_amount'].toString()) ?? refundAmt;
+        }
+      } catch (_) {}
+    }
+    Map<String, dynamic>? parsedGatewayDetails;
+    double couponDiscountAmount = parseNum(json['coupon_discount_amount']);
+    final rawCharges = json['charges'];
+    if (couponDiscountAmount <= 0.0009 && rawCharges is List) {
+      for (final entry in rawCharges) {
+        if (entry is! Map) continue;
+        final code = entry['code']?.toString().trim().toUpperCase() ?? '';
+        final name = entry['name']?.toString().trim().toUpperCase() ?? '';
+        if (code == 'COUPON_DISCOUNT' || name.contains('COUPON DISCOUNT')) {
+          couponDiscountAmount = math.max(
+            couponDiscountAmount,
+            (double.tryParse(entry['amount']?.toString() ?? '0') ?? 0).abs(),
+          );
+        }
+      }
+    }
+    if (gatewayDetails != null) {
+      try {
+        final dynamic details = gatewayDetails is String ? jsonDecode(gatewayDetails) : gatewayDetails;
+        if (details is Map) {
+          parsedGatewayDetails = Map<String, dynamic>.from(details);
+          couponDiscountAmount = math.max(
+            couponDiscountAmount,
+            double.tryParse(parsedGatewayDetails['coupon_discount_amount']?.toString() ?? '0') ?? 0,
+          );
         }
       } catch (_) {}
     }
@@ -269,6 +304,8 @@ class SaleOrder {
       chargeTotal: parseNum(json['charge_total']),
       chargeTaxTotal: parseNum(json['charge_tax_total']),
       totalDiscount: parseNum(json['total_discount']),
+      couponDiscountAmount: couponDiscountAmount,
+      paymentGatewayDetails: parsedGatewayDetails,
       roundOffAmount: parseNum(json['round_off_amount']),
       netAmount: parseNum(json['net_amount']),
       voucherCode: json['voucher_code']?.toString(),

@@ -1,4 +1,4 @@
-const { Op } = require('sequelize');
+﻿const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
 const { insertLedger } = require('../../services/stockLedger.service');
@@ -7,6 +7,20 @@ const { insertLedger } = require('../../services/stockLedger.service');
 const toAmount = (val) => {
     const num = Number(val);
     return Number.isFinite(num) ? num : 0;
+};
+
+const parseJsonObject = (value) => {
+    if (!value) return {};
+    if (typeof value === 'object') return { ...value };
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (_) {
+            return {};
+        }
+    }
+    return {};
 };
 
 // Helper to safely extract and resolve outlet_id (string outlet code or integer ID)
@@ -443,7 +457,7 @@ exports.placeOrder = async (req, res) => {
         await req.propertyDb.models.system_notifications.create({
             outlet_id: actualOutletId,
             module: 'CUSTOMER',
-            title: 'Order Placed! 🎉',
+            title: 'Order Placed! ≡ƒÄë',
             message: `Your order #${order.id} (Rs. ${toAmount(net_amount).toFixed(2)}) has been placed and is awaiting confirmation.`,
             type: 'SUCCESS',
             entity_id: order.id
@@ -980,6 +994,12 @@ exports.acceptOrder = async (req, res) => {
             ];
         };
 
+        const gatewayDetails = parseJsonObject(order.payment_gateway_details);
+        const appCouponDiscountAmount = Math.max(
+            toAmount(gatewayDetails.coupon_discount_amount || 0),
+            0
+        );
+
         // Process charges
         let chargeTaxTotal = 0.0;
         let chargeSubtotal = 0.0;
@@ -987,7 +1007,9 @@ exports.acceptOrder = async (req, res) => {
         if (orderCharges.length > 0) {
             for (const ch of orderCharges) {
                 const chTaxPercent = parseFloat(ch.tax_percent || 0.0);
-                const chTaxableAmount = parseFloat(ch.taxable_amount || ch.amount || 0.0);
+                const chTaxableAmount = ch.taxable_amount !== undefined && ch.taxable_amount !== null
+                    ? parseFloat(ch.taxable_amount || 0.0)
+                    : parseFloat(ch.amount || 0.0);
                 const chTaxAmount = parseFloat(ch.tax_amount || 0.0);
                 chargeSubtotal += chTaxableAmount;
                 chargeTaxTotal += chTaxAmount;
@@ -1084,6 +1106,7 @@ exports.acceptOrder = async (req, res) => {
         // 2. Prepare POS Sale parameters
         const isPrepaid = order.payment_status === 'PAID';
         const isCredit = order.payment_mode === 'CREDIT';
+        const resolvedCouponDiscountAmount = appCouponDiscountAmount;
         const finalPayableNetAmount = Math.max(0, derivedNetAmount - (subscriptionAllocation.totalCoveredAmount + subscriptionTaxAmount));
         const amountPaid = isPrepaid ? finalPayableNetAmount : 0;
         const balanceDue = isPrepaid ? 0 : finalPayableNetAmount;
@@ -1237,6 +1260,9 @@ exports.acceptOrder = async (req, res) => {
                         totalCoveredAmount: subscriptionAllocation.totalCoveredAmount
                     }];
 
+                // Track total cash advance actually consumed to decide SALE_SCHEME_FREE_EXPENSE below
+                let totalAppliedCashAdvance = 0;
+
                 for (const coverage of coverages) {
                     const coverageAdvance = await salesController.findSubscriptionItemAdvance(
                         req,
@@ -1274,6 +1300,7 @@ exports.acceptOrder = async (req, res) => {
                     }
 
                     if (appliedCashAdvanceAmount > 0) {
+                        totalAppliedCashAdvance += appliedCashAdvanceAmount;
                         const { createLedgerEntry } = require('../../services/cashLedger.service');
                         await createLedgerEntry({
                             db: req.propertyDb,
@@ -1291,6 +1318,30 @@ exports.acceptOrder = async (req, res) => {
                             transaction: t
                         });
                     }
+                }
+
+                // If subscription covered items but NO (or only partial) cash advance was consumed
+                // (e.g. milk/item subscription with no prepaid cash advance bucket),
+                // post SALE_SCHEME_FREE_EXPENSE so the ledger is balanced.
+                const subscriptionLineTotal = subscriptionTaxableAmount + subscriptionTaxAmount;
+                const uncoveredByAdvance = Math.max(0, subscriptionLineTotal - totalAppliedCashAdvance);
+                if (uncoveredByAdvance > 0) {
+                    const { createLedgerEntry: createSubFreeEntry } = require('../../services/cashLedger.service');
+                    await createSubFreeEntry({
+                        db: req.propertyDb,
+                        outlet_id,
+                        txn_date: new Date(),
+                        transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
+                        reference_type: 'SALE',
+                        reference_id: saleHeader.id,
+                        reference_no: saleHeader.sale_no,
+                        party_name: order.customer_name || order.customer_phone || 'Walk-in Customer',
+                        payment_method: 'SUBSCRIPTION',
+                        amount_out: uncoveredByAdvance,
+                        notes: `Subscription free item expense for delivery order #${order.id} (${saleHeader.sale_no})`,
+                        created_by: userId,
+                        transaction: t
+                    });
                 }
             }
         }
@@ -1329,7 +1380,7 @@ exports.acceptOrder = async (req, res) => {
                 await req.propertyDb.models.system_notifications.create({
                     outlet_id,
                     module: 'RIDER',
-                    title: 'New Delivery Assigned 🛵',
+                    title: 'New Delivery Assigned ≡ƒ¢╡',
                     message: `Order #${order.id} for ${order.customer_name} at ${order.delivery_address || 'customer address'} has been assigned to you.`,
                     type: 'INFO',
                     entity_id: partner.id
@@ -1339,7 +1390,7 @@ exports.acceptOrder = async (req, res) => {
                 await req.propertyDb.models.system_notifications.create({
                     outlet_id,
                     module: 'CUSTOMER',
-                    title: 'Order Confirmed & Rider Assigned ✅',
+                    title: 'Order Confirmed & Rider Assigned Γ£à',
                     message: `Your order #${order.id} is confirmed. Rider ${partner.name} will deliver it to you.`,
                     type: 'SUCCESS',
                     entity_id: order.id
@@ -1379,6 +1430,27 @@ exports.acceptOrder = async (req, res) => {
                 payment_method: paymentMode,
                 amount_in: derivedNetAmount,
                 notes: `Prepaid delivery order #${order.id} checkout`,
+                created_by: userId,
+                transaction: t
+            });
+        }
+
+        // Book coupon/savings discount as an expense debit
+        // (Subscription expense is already booked in the coverage loop above)
+        if (resolvedCouponDiscountAmount > 0) {
+            const { createLedgerEntry: createDiscountEntry } = require('../../services/cashLedger.service');
+            await createDiscountEntry({
+                db: req.propertyDb,
+                outlet_id,
+                txn_date: new Date(),
+                transaction_type: 'SALE_DISCOUNT_EXPENSE',
+                reference_type: 'SALE',
+                reference_id: saleHeader.id,
+                reference_no: saleHeader.sale_no,
+                party_name: saleHeader.customer_name || saleHeader.customer_phone || 'Walk-in Customer',
+                payment_method: paymentMode,
+                amount_out: resolvedCouponDiscountAmount,
+                notes: `Discount expense for delivery order #${order.id} (${saleHeader.sale_no})`,
                 created_by: userId,
                 transaction: t
             });
@@ -1538,6 +1610,59 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                         transaction: t
                     });
                 }
+
+                // Re-post discount and subscription expense debits wiped by cash_ledger.destroy above
+                {
+                    const { createLedgerEntry: createExpEntry } = require('../../services/cashLedger.service');
+                    const expParty = sale.customer_name || sale.customer_phone || 'Walk-in Customer';
+
+                    const freeItems = await req.propertyDb.models.sales_items.findAll({
+                        where: { sale_id: sale.id, is_advance_free: true },
+                        transaction: t
+                    });
+                    const subscriptionItemValue = freeItems.reduce((sum, si) => sum + toAmount(si.amount), 0);
+
+                    // Coupon discount expense (subtract subscription item value to avoid double-debit)
+                    const rawDiscount = toAmount(sale.total_discount) - toAmount(sale.scheme_discount) - toAmount(sale.manual_discount_amount);
+                    const discountToPost = Math.max(0, rawDiscount - subscriptionItemValue);
+                    if (discountToPost > 0) {
+                        await createExpEntry({
+                            db: req.propertyDb,
+                            outlet_id: order.outlet_id,
+                            txn_date: new Date(),
+                            transaction_type: 'SALE_DISCOUNT_EXPENSE',
+                            reference_type: 'SALE',
+                            reference_id: sale.id,
+                            reference_no: sale.sale_no,
+                            party_name: expParty,
+                            payment_method: finalPaymentMode,
+                            amount_out: discountToPost,
+                            notes: `Discount expense for delivery order #${order.id} (${sale.sale_no})`,
+                            created_by: req.user?.id || 1,
+                            transaction: t
+                        });
+                    }
+
+                    // Subscription free item expense
+                    const subscriptionExpense = freeItems.reduce((sum, si) => sum + toAmount(si.taxable_amount) + toAmount(si.tax_amount), 0);
+                    if (subscriptionExpense > 0) {
+                        await createExpEntry({
+                            db: req.propertyDb,
+                            outlet_id: order.outlet_id,
+                            txn_date: new Date(),
+                            transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
+                            reference_type: 'SALE',
+                            reference_id: sale.id,
+                            reference_no: sale.sale_no,
+                            party_name: expParty,
+                            payment_method: 'SUBSCRIPTION',
+                            amount_out: subscriptionExpense,
+                            notes: `Subscription free item expense for delivery order #${order.id} (${sale.sale_no})`,
+                            created_by: req.user?.id || 1,
+                            transaction: t
+                        });
+                    }
+                }
             }
         } else {
             await t.rollback();
@@ -1549,7 +1674,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
             await req.propertyDb.models.system_notifications.create({
                 outlet_id: order.outlet_id,
                 module: 'CUSTOMER',
-                title: 'Your Order is On the Way! 🛵',
+                title: 'Your Order is On the Way! ≡ƒ¢╡',
                 message: `Your order #${order.id} is out for delivery and will arrive soon!`,
                 type: 'INFO',
                 entity_id: order.id
@@ -1566,7 +1691,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
             await req.propertyDb.models.system_notifications.create({
                 outlet_id: order.outlet_id,
                 module: 'CUSTOMER',
-                title: 'Order Delivered! ✅',
+                title: 'Order Delivered! Γ£à',
                 message: `Your order #${order.id} has been delivered. Thank you for shopping with us!`,
                 type: 'SUCCESS',
                 entity_id: order.id
@@ -1653,7 +1778,7 @@ async function autoAssignOrder(req, order, transaction) {
         await req.propertyDb.models.system_notifications.create({
             outlet_id: order.outlet_id,
             module: 'RIDER',
-            title: 'New Delivery Assigned 🛵',
+            title: 'New Delivery Assigned ≡ƒ¢╡',
             message: `Order #${order.id} for ${order.customer_name} has been assigned to you. Please pick it up.`,
             type: 'INFO',
             entity_id: partner.id
@@ -1663,7 +1788,7 @@ async function autoAssignOrder(req, order, transaction) {
         await req.propertyDb.models.system_notifications.create({
             outlet_id: order.outlet_id,
             module: 'CUSTOMER',
-            title: 'Order Confirmed & Rider Assigned ✅',
+            title: 'Order Confirmed & Rider Assigned Γ£à',
             message: `Your order #${order.id} is confirmed. Rider ${partner.name} is on the way.`,
             type: 'SUCCESS',
             entity_id: order.id
@@ -3049,7 +3174,7 @@ exports.getReturnSettings = async (req, res) => {
                 where: { outlet_id: actualOutletId }
             });
         } catch (dbErr) {
-            console.warn("⚠️ System settings query failed, trying fallback without merchant_upi_id:", dbErr.message);
+            console.warn("ΓÜá∩╕Å System settings query failed, trying fallback without merchant_upi_id:", dbErr.message);
             try {
                 const attributes = Object.keys(req.propertyDb.models.system_settings.rawAttributes).filter(
                     attr => attr !== 'merchant_upi_id'
@@ -3059,7 +3184,7 @@ exports.getReturnSettings = async (req, res) => {
                     attributes: attributes
                 });
             } catch (fallbackErr) {
-                console.error("❌ Fallback system settings query failed:", fallbackErr.stack);
+                console.error("Γ¥î Fallback system settings query failed:", fallbackErr.stack);
             }
         }
         const meta = settings?.meta_data || {};
@@ -3124,7 +3249,7 @@ exports.updateReturnSettings = async (req, res) => {
         if (default_return_window_days !== undefined) {
             const days = parseInt(default_return_window_days);
             if (isNaN(days) || days < 0 || days > 365) {
-                return res.status(400).json({ success: false, message: 'Invalid number of days (0–365)' });
+                return res.status(400).json({ success: false, message: 'Invalid number of days (0ΓÇô365)' });
             }
             meta.default_return_window_days = days;
         }
