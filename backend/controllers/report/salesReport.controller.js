@@ -360,7 +360,7 @@ exports.getSalesReport = async (req, res) => {
 
                 const saleGross = toNumber(sale.sub_total);
                 const saleTaxable = toNumber(sale.taxable_amount);
-                const saleDiscount = toNumber(sale.total_discount) + chargeSplit.negativeChargeDiscount;
+                const saleDiscount = toNumber(sale.total_discount);
                 const saleChargeTotal = chargeSplit.packingCharges + chargeSplit.otherCharges;
                 const saleTotalTax = toNumber(sale.total_tax);
                 const saleNetRevenue = toNumber(sale.net_amount);

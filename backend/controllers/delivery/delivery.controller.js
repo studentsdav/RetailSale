@@ -1173,7 +1173,7 @@ exports.acceptOrder = async (req, res) => {
             charges: orderCharges,
             charge_total: toAmount(chargeSubtotal),
             charge_tax_total: toAmount(chargeTaxTotal),
-            total_discount: subscriptionAllocation.totalCoveredAmount + subscriptionTaxAmount + resolvedCouponDiscountAmount,
+            total_discount: subscriptionAllocation.totalCoveredAmount - subscriptionTaxAmount + resolvedCouponDiscountAmount,
             round_off_amount: 0,
             net_amount: finalPayableNetAmount,
             status: 'COMPLETED',

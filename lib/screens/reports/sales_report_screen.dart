@@ -163,6 +163,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       final amount = charge.amount;
       final taxAmount = charge.taxAmount;
       if (amount == 0 && taxAmount == 0) continue;
+      if (amount < 0) continue; // Skip negative charges / discounts
 
       double rate = 0;
       if (amount != 0) {
@@ -202,6 +203,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         final amount = charge.amount;
         final taxAmount = charge.taxAmount;
         if (amount == 0 && taxAmount == 0) continue;
+        if (amount < 0) continue; // Skip negative charges / discounts
         double rate = 0;
         if (amount != 0) {
           rate = ((taxAmount / amount) * 100).roundToDouble();
@@ -379,7 +381,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   // Taxed Sales After GST = Net Sales (Standard) − Non-Tax Sales
   // Computed at bill level for consistency with discount allocation
-  double get _taxSaleTotal => _headerRevenueTotal - _nonTaxSaleTotal;
+  double get _taxSaleTotal => _headerItemNetAmount - _nonTaxSaleTotal;
   double get _headerTaxableTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + _taxableSaleValue(sale));
   double get _headerCgstTotal =>
@@ -396,6 +398,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalDiscount);
   double get _headerChargeTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.chargeTotal);
+  double get _headerChargeTaxTotal => _billWiseSales.fold<double>(
+        0,
+        (sum, sale) => sum + sale.charges.fold<double>(0, (s, ch) => s + ch.taxAmount),
+      );
+  double get _headerItemTaxTotal => _headerTaxTotal - _headerChargeTaxTotal;
+  double get _headerItemNetAmount => _headerRevenueTotal - _headerChargeTotal - _headerChargeTaxTotal;
 
   List<SalesReport> get _billWiseSales {
     final query = _itemSearchCtrl.text.trim().toLowerCase();
@@ -1762,9 +1770,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   Widget _buildSummaryRow() {
     final subTotal = _billWiseSales.fold<double>(0, (s, sale) => s + sale.subTotal);
     final discount = _headerDiscountTotal;
-    final charges  = _headerChargeTotal;
-    final gst      = _headerTaxTotal;
-    final netSales = _headerRevenueTotal;
+    final gst      = _headerItemTaxTotal;
+    final netSales = _headerItemNetAmount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1817,17 +1824,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       icon: Icons.local_offer_outlined,
                       isDeduction: true,
                     ),
-                    _breakdownOp(
-                      charges >= 0 ? '+' : '−',
-                      charges >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
-                    ),
-                    _breakdownChip(
-                      label: charges >= 0 ? 'Charges' : 'Charge Adj.',
-                      value: charges.abs(),
-                      accent: charges >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
-                      icon: charges >= 0 ? Icons.add_circle_outline : Icons.remove_circle_outline,
-                      isDeduction: charges < 0,
-                    ),
                     _breakdownOp('+', const Color(0xFF2563EB)),
                     _breakdownChip(
                       label: 'GST',
@@ -1860,7 +1856,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             SizedBox(width: 220, child: _metricCard('Total CGST', _headerCgstTotal, const Color(0xFF2563EB))),
             SizedBox(width: 220, child: _metricCard('Total SGST', _headerSgstTotal, const Color(0xFF7C3AED))),
             SizedBox(width: 220, child: _metricCard('Total IGST', _headerIgstTotal, const Color(0xFF0EA5E9))),
-            SizedBox(width: 220, child: _metricCard('GST Total', _headerTaxTotal, const Color(0xFFEA580C))),
+            SizedBox(width: 220, child: _metricCard('GST Total', _headerItemTaxTotal, const Color(0xFFEA580C))),
             SizedBox(
               width: 220,
               child: _metricCard('Total Discount', _headerDiscountTotal, const Color(0xFFDC2626),
@@ -1877,7 +1873,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     : 'charges reversed due to returns',
               ),
             ),
-            SizedBox(width: 220, child: _metricCard('Net Sales (Standard)', _headerRevenueTotal, const Color(0xFFEA580C))),
+            SizedBox(width: 220, child: _metricCard('Charges GST', _headerChargeTaxTotal, const Color(0xFF7C3AED))),
+            SizedBox(width: 220, child: _metricCard('Net Sales (Standard)', _headerItemNetAmount, const Color(0xFFEA580C))),
             SizedBox(width: 220, child: _metricCard('Taxed Sales After GST', _taxSaleTotal, const Color(0xFF16A34A))),
             SizedBox(width: 220, child: _metricCard('Non-Tax Sales', _nonTaxSaleTotal, const Color(0xFF64748B))),
             SizedBox(width: 220, child: _metricCard('Subscription Realized', ctrl.summary.subscriptionRealized, const Color(0xFF0EA5E9))),
