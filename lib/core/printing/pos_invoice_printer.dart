@@ -1110,12 +1110,12 @@ class PosInvoicePrinter {
     if (_couponSavingsAmount(order) > 0.0009) {
       return 'Coupon Discount';
     }
+    if (order.schemeDiscount > 0.0009) {
+      return 'Scheme Discount';
+    }
     final mode = order.paymentMode.toUpperCase();
     if (mode == 'SUBSCRIPTION') {
       return 'Subscription Adjusted Amount';
-    }
-    if (mode == 'SCHEME') {
-      return 'Scheme Savings';
     }
     return 'Total Savings';
   }
@@ -1633,14 +1633,28 @@ class PosInvoicePrinter {
       return chargeCoupon;
     }
 
-    return order.items.fold<double>(
-      0,
-      (sum, item) => sum + item.lineDiscount,
-    );
+    return 0.0;
   }
 
   static double _displaySavingsAmount(SaleOrder order) {
-    return _couponSavingsAmount(order);
+    final coupon = _couponSavingsAmount(order);
+    if (coupon > 0.0009) {
+      return coupon;
+    }
+    if (order.schemeDiscount > 0.0009) {
+      return order.schemeDiscount;
+    }
+    final lineDiscount = order.items.fold<double>(
+      0,
+      (sum, item) => sum + item.lineDiscount,
+    );
+    if (lineDiscount > 0.0009) {
+      return lineDiscount;
+    }
+    if (order.manualDiscountAmount > 0.0009) {
+      return order.manualDiscountAmount;
+    }
+    return 0.0;
   }
 
   static bool _showSubscriptionAdjustmentRow(SaleOrder order, double subscriptionAdjustment) {
@@ -1736,7 +1750,8 @@ class PosInvoicePrinter {
 
   static double _displayItemTaxableAmount(SaleOrder order, SaleItem item) {
     final taxable = _taxableAmountForItem(item);
-    if (item.lineDiscount > 0.0009 || taxable <= 0.0009) {
+    final isFree = item.isSchemeFree || item.isAdvanceFree;
+    if (isFree || item.lineDiscount > 0.0009 || taxable <= 0.0009) {
       return taxable;
     }
     final totalLineDiscount = order.items.fold<double>(0, (sum, i) => sum + i.lineDiscount);
@@ -1744,7 +1759,7 @@ class PosInvoicePrinter {
       return taxable;
     }
     if (order.couponDiscountAmount > 0.0009) {
-      final grossItemTotal = order.items.fold<double>(
+      final grossItemTotal = order.items.where((i) => !(i.isSchemeFree || i.isAdvanceFree)).fold<double>(
         0,
         (sum, entry) => sum + entry.amount,
       );

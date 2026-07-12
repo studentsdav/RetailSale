@@ -1,4 +1,4 @@
-﻿const { Op } = require('sequelize');
+const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
 const { insertLedger } = require('../../services/stockLedger.service');
@@ -421,6 +421,9 @@ exports.placeOrder = async (req, res) => {
             console.warn('[DELIVERY] Subscription allocation preview failed:', allocErr.message);
         }
 
+        const couponCharge = (charges || []).find(c => c.code === 'COUPON_DISCOUNT');
+        const couponDiscountAmount = couponCharge ? Math.abs(toAmount(couponCharge.amount)) : 0;
+
         const order = await req.propertyDb.models.customer_orders.create({
             outlet_id: actualOutletId,
             customer_name,
@@ -440,7 +443,9 @@ exports.placeOrder = async (req, res) => {
             gstin: gstin || null,
             charges: charges || null,
             subscription_allocation: subscriptionAllocationPreview,
-            payment_gateway_details: payment_gateway_details || null
+            payment_gateway_details: payment_gateway_details || null,
+            coupon_code: coupon_code || null,
+            coupon_discount_amount: toAmount(couponDiscountAmount)
         }, { transaction: t });
 
         // Retailer notification: new order received
@@ -995,8 +1000,12 @@ exports.acceptOrder = async (req, res) => {
         };
 
         const gatewayDetails = parseJsonObject(order.payment_gateway_details);
-        const appCouponDiscountAmount = Math.max(
+        const couponCharge = (order.charges || []).find(c => c.code === 'COUPON_DISCOUNT');
+        const couponDiscountAmountFromCharges = couponCharge ? Math.abs(toAmount(couponCharge.amount)) : 0;
+        const resolvedCouponDiscountAmount = Math.max(
+            toAmount(order.coupon_discount_amount || 0),
             toAmount(gatewayDetails.coupon_discount_amount || 0),
+            couponDiscountAmountFromCharges,
             0
         );
 
@@ -1019,6 +1028,21 @@ exports.acceptOrder = async (req, res) => {
             }
         }
 
+        // Calculate non-subscription subtotal for coupon discount distribution
+        let nonSubscriptionSubTotal = 0.0;
+        for (const item of finalItems) {
+            const isFree = item._subscription_free === true || item.is_advance_free === true;
+            if (!isFree) {
+                const itemQty = toAmount(item.qty);
+                const itemRate = toAmount(item.reference_rate || item.rate);
+                nonSubscriptionSubTotal += itemQty * itemRate;
+            }
+        }
+
+        const discountRatio = (resolvedCouponDiscountAmount > 0 && nonSubscriptionSubTotal > 0)
+            ? Math.max(0, (nonSubscriptionSubTotal - resolvedCouponDiscountAmount) / nonSubscriptionSubTotal)
+            : 1.0;
+
         // Process items tax breakup
         let itemsTaxTotal = 0.0;
         for (const item of finalItems) {
@@ -1026,8 +1050,15 @@ exports.acceptOrder = async (req, res) => {
             const itemRate = toAmount(item.reference_rate || item.rate);
             const itemAmount = itemQty * itemRate;
             const itemTaxPercent = parseFloat(item.tax_percent || 0.0);
-            const itemTaxableAmount = parseFloat(item.taxable_amount || itemAmount || 0.0);
-            const itemTaxAmount = parseFloat(item.tax_amount || (itemTaxableAmount * itemTaxPercent / 100) || 0.0);
+
+            const isFree = item._subscription_free === true || item.is_advance_free === true;
+            let itemTaxableAmount;
+            if (isFree) {
+                itemTaxableAmount = itemAmount;
+            } else {
+                itemTaxableAmount = toAmount(itemAmount * discountRatio);
+            }
+            const itemTaxAmount = toAmount(itemTaxableAmount * itemTaxPercent / 100);
 
             itemsTaxTotal += itemTaxAmount;
 
@@ -1088,17 +1119,19 @@ exports.acceptOrder = async (req, res) => {
                 copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxCgst));
                 copy.tax_amount = copy.taxAmount;
                 copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-                copy.tax_amount = copy.taxAmount;
+                copy.taxable_amount = copy.taxableAmount;
             } else if (copy.code === 'SGST') {
                 copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxSgst));
                 copy.tax_amount = copy.taxAmount;
                 copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
                 copy.tax_amount = copy.taxAmount;
+                copy.taxable_amount = copy.taxableAmount;
             } else if (copy.code === 'IGST') {
                 copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxIgst));
                 copy.tax_amount = copy.taxAmount;
                 copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
                 copy.tax_amount = copy.taxAmount;
+                copy.taxable_amount = copy.taxableAmount;
             }
             return copy;
         });
@@ -1106,8 +1139,7 @@ exports.acceptOrder = async (req, res) => {
         // 2. Prepare POS Sale parameters
         const isPrepaid = order.payment_status === 'PAID';
         const isCredit = order.payment_mode === 'CREDIT';
-        const resolvedCouponDiscountAmount = appCouponDiscountAmount;
-        const finalPayableNetAmount = Math.max(0, derivedNetAmount - (subscriptionAllocation.totalCoveredAmount + subscriptionTaxAmount));
+        const finalPayableNetAmount = Math.max(0, derivedNetAmount - subscriptionAllocation.totalCoveredAmount - resolvedCouponDiscountAmount);
         const amountPaid = isPrepaid ? finalPayableNetAmount : 0;
         const balanceDue = isPrepaid ? 0 : finalPayableNetAmount;
         const paymentMode = isPrepaid ? 'UPI' : (isCredit ? 'CREDIT' : 'CASH');
@@ -1141,7 +1173,7 @@ exports.acceptOrder = async (req, res) => {
             charges: orderCharges,
             charge_total: toAmount(chargeSubtotal),
             charge_tax_total: toAmount(chargeTaxTotal),
-            total_discount: subscriptionAllocation.totalCoveredAmount + subscriptionTaxAmount,
+            total_discount: subscriptionAllocation.totalCoveredAmount + subscriptionTaxAmount + resolvedCouponDiscountAmount,
             round_off_amount: 0,
             net_amount: finalPayableNetAmount,
             status: 'COMPLETED',
@@ -1158,8 +1190,15 @@ exports.acceptOrder = async (req, res) => {
             const itemRate = toAmount(item.reference_rate || item.rate);
             const itemAmount = itemQty * itemRate;
             const itemTaxPercent = parseFloat(item.tax_percent || 0.0);
-            const itemTaxableAmount = parseFloat(item.taxable_amount || itemAmount || 0.0);
-            const itemTaxAmount = parseFloat(item.tax_amount || (itemTaxableAmount * itemTaxPercent / 100) || 0.0);
+
+            const isFree = item._subscription_free === true || item.is_advance_free === true;
+            let itemTaxableAmount;
+            if (isFree) {
+                itemTaxableAmount = itemAmount;
+            } else {
+                itemTaxableAmount = toAmount(itemAmount * discountRatio);
+            }
+            const itemTaxAmount = toAmount(itemTaxableAmount * itemTaxPercent / 100);
             const itemLineTotal = itemTaxableAmount + itemTaxAmount;
             const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemTaxableAmount);
 

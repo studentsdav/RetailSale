@@ -4259,8 +4259,8 @@ class _SaleScreenState extends State<SaleScreen> {
                         : '')))
             .toList();
         bool refundEnabled = false;
-        bool adjustPreviousCredit = previousOutstanding > 0;
-        bool adjustAdvance = availableAdvance > 0 && _subscriptionItemAdvanceDiscount == 0;
+        bool adjustPreviousCredit = false;
+        bool adjustAdvance = false;
 
         double readLineAmount(_EditablePaymentLine line) =>
             double.tryParse(line.amountCtrl.text.trim()) ?? 0;

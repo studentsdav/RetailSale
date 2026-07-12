@@ -158,6 +158,16 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.JSONB,
             allowNull: true,
             defaultValue: null
+        },
+        coupon_code: {
+            type: DataTypes.STRING(80),
+            allowNull: true,
+            defaultValue: null
+        },
+        coupon_discount_amount: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: true,
+            defaultValue: 0.00
         }
     }, {
         timestamps: true,

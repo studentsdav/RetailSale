@@ -1130,7 +1130,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           'rate': rate,
           'amount': itemTotal,
           'tax_percent': itemTaxPercent,
-          'taxable_amount': itemTotal,
+          'taxable_amount': discountedItemTotal,
           'tax_amount': itemTaxAmount,
         });
       });
