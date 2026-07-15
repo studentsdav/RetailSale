@@ -2,6 +2,7 @@ const audit = require('../../services/audit.service');
 const { insertLedger } = require('../../services/stockLedger.service');
 const { createLedgerEntry } = require('../../services/cashLedger.service');
 const { Op } = require('sequelize');
+const { normalizeDateKey } = require('../../utils/dateQuery');
 
 function deriveRefundStatus(total, refunded) {
     const totalAmount = Number(total) || 0;
@@ -16,10 +17,11 @@ exports.getGrnsByDate = async (req, res) => {
     try {
         const { date } = req.query;
         const outlet_id = req.user.outlet_id;
+        const normalizedDate = normalizeDateKey(date);
 
         const where = { outlet_id };
         if (date) {
-            where.receipt_date = date;
+            where.receipt_date = normalizedDate || date;
         }
 
         const grns = await req.propertyDb.models.goods_receipts.findAll({

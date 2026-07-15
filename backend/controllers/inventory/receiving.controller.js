@@ -1,6 +1,7 @@
 const audit = require('../../services/audit.service');
 const { insertLedger } = require('../../services/stockLedger.service');
 const numberingHelper = require('./numberingSettingsV2.controller');
+const { normalizeDateKey } = require('../../utils/dateQuery');
 
 function deriveHeaderStatus(items) {
     const statuses = items.map(item => String(item.line_status || 'CLOSED').trim().toUpperCase());
@@ -518,6 +519,7 @@ exports.getReceivingByDate = async (req, res) => {
 
         const outlet_id = req.user.outlet_id;
         const { date } = req.query;
+        const normalizedDate = normalizeDateKey(date);
 
         if (!date) {
             return res.status(400).json({
@@ -529,7 +531,7 @@ exports.getReceivingByDate = async (req, res) => {
         const data = await req.propertyDb.models.goods_receipts.findAll({
             where: {
                 outlet_id,
-                receipt_date: date,
+                receipt_date: normalizedDate || date,
                 status: {
                     [require('sequelize').Op.ne]: 'CANCELLED'
                 }

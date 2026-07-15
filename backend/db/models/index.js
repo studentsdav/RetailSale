@@ -81,6 +81,14 @@ propertyDb.models.goods_receipt_items =
 propertyDb.models.sales_headers =
     require('../../models/property/salesHeader.model')(propertyDb, DataTypes);
 
+// LUCKY DRAW CAMPAIGNS
+propertyDb.models.lucky_draw_campaigns =
+    require('../../models/property/luckyDrawCampaign.model')(propertyDb, DataTypes);
+propertyDb.models.customer_draw_progress =
+    require('../../models/property/customerDrawProgress.model')(propertyDb, DataTypes);
+propertyDb.models.draw_vouchers =
+    require('../../models/property/drawVoucher.model')(propertyDb, DataTypes);
+
 propertyDb.models.sales_items =
     require('../../models/property/salesItem.model')(propertyDb, DataTypes);
 

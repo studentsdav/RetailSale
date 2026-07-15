@@ -71,6 +71,7 @@ class SaleOrder {
   final List<SaleItem> items;
   final bool itemsPreSplit;
   final int? orderId;
+  final List<dynamic>? luckyDrawVouchers;
 
   SaleOrder({
     required this.saleNo,
@@ -138,6 +139,7 @@ class SaleOrder {
     this.selectedSchemes = const [],
     this.affectStock = true,
     this.itemsPreSplit = false,
+    this.luckyDrawVouchers,
   });
 
   Map<String, dynamic> toJson() {
@@ -203,6 +205,7 @@ class SaleOrder {
         'affect_stock': affectStock,
         'selected_schemes': selectedSchemes.map((scheme) => scheme.toJson()).toList(),
         'items_pre_split': itemsPreSplit,
+        'lucky_draw_vouchers': luckyDrawVouchers,
       },
       'items': items.map((e) => e.toJson()).toList(),
     };
@@ -342,6 +345,7 @@ class SaleOrder {
           .map((entry) => SaleScheme.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),
       itemsPreSplit: json['items_pre_split'] == true,
+      luckyDrawVouchers: json['lucky_draw_vouchers'] as List?,
       items: (json['items'] as List? ?? const [])
           .map((entry) => SaleItem.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),

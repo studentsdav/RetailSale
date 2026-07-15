@@ -1,5 +1,6 @@
 const audit = require('../../services/audit.service');
 const { Op, Sequelize } = require('sequelize');
+const { normalizeDateKey } = require('../../utils/dateQuery');
 
 function normalizeLineStatus(value) {
     const status = String(value || 'CLOSED').trim().toUpperCase();
@@ -197,11 +198,12 @@ exports.getPoByDate = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
         const { date } = req.query;
+        const normalizedDate = normalizeDateKey(date);
 
         const data = await req.propertyDb.models.purchase_orders.findAll({
             where: {
                 outlet_id,
-                po_date: date,
+                po_date: normalizedDate || date,
                 status: {
                     [Op.in]: ['OPEN', 'PARTIAL']
                 }

@@ -2711,6 +2711,71 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 72,
+    description: "Create lucky draw campaigns, customer progress, and draw vouchers tables",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        -- Create lucky_draw_campaigns table
+        CREATE TABLE IF NOT EXISTS lucky_draw_campaigns (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+          threshold_amount DECIMAL(12, 2) NOT NULL DEFAULT 2000.00,
+          start_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          draw_date TIMESTAMP NOT NULL,
+          winner_voucher_id INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Create customer_draw_progress table
+        CREATE TABLE IF NOT EXISTS customer_draw_progress (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          campaign_id INTEGER NOT NULL REFERENCES lucky_draw_campaigns(id) ON DELETE CASCADE,
+          customer_phone VARCHAR(50) NOT NULL,
+          customer_name VARCHAR(150),
+          accumulated_spend DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT uq_outlet_campaign_customer UNIQUE (outlet_id, campaign_id, customer_phone)
+        );
+
+        -- Create draw_vouchers table
+        CREATE TABLE IF NOT EXISTS draw_vouchers (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          campaign_id INTEGER NOT NULL REFERENCES lucky_draw_campaigns(id) ON DELETE CASCADE,
+          customer_phone VARCHAR(50) NOT NULL,
+          customer_name VARCHAR(150),
+          sale_id INTEGER REFERENCES sales_headers(id) ON DELETE SET NULL,
+          voucher_code VARCHAR(100) NOT NULL UNIQUE,
+          is_winner BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Add winner_voucher_id foreign key constraint to lucky_draw_campaigns table
+        ALTER TABLE lucky_draw_campaigns
+        ADD CONSTRAINT fk_lucky_draw_winner
+        FOREIGN KEY (winner_voucher_id)
+        REFERENCES draw_vouchers(id)
+        ON DELETE SET NULL;
+
+        -- Create indexes
+        CREATE INDEX IF NOT EXISTS idx_lucky_draw_campaigns_outlet ON lucky_draw_campaigns(outlet_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_draw_progress_lookup ON customer_draw_progress(outlet_id, campaign_id, customer_phone);
+        CREATE INDEX IF NOT EXISTS idx_draw_vouchers_sale ON draw_vouchers(sale_id);
+        CREATE INDEX IF NOT EXISTS idx_draw_vouchers_lookup ON draw_vouchers(outlet_id, campaign_id);
+
+        COMMIT;
+      `);
+    }
   }
 ];
 

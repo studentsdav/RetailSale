@@ -1757,10 +1757,15 @@ class _SaleScreenState extends State<SaleScreen> {
     try {
       final parts = cleaned.split(RegExp(r'[\-\/]'));
       if (parts.length == 2) {
-        final month = int.tryParse(parts[0]);
-        final year = int.tryParse(parts[1]);
-        if (month != null && year != null && month >= 1 && month <= 12) {
-          return DateTime(year, month + 1, 0);
+        final first = int.tryParse(parts[0]);
+        final second = int.tryParse(parts[1]);
+        if (first != null && second != null) {
+          if (first >= 1000 && second >= 1 && second <= 12) {
+            return DateTime(first, second + 1, 0);
+          }
+          if (second >= 1000 && first >= 1 && first <= 12) {
+            return DateTime(second, first + 1, 0);
+          }
         }
       }
     } catch (_) {}
@@ -1771,10 +1776,42 @@ class _SaleScreenState extends State<SaleScreen> {
         final second = int.tryParse(parts[1]);
         final third = int.tryParse(parts[2]);
         if (first != null && second != null && third != null) {
-          if (third > 1000) {
-            return DateTime(third, second, first);
-          } else if (first > 1000) {
-            return DateTime(first, second, third);
+          if (third >= 1000) {
+            final looksLikeMonthFirst = first >= 1 && first <= 12 && second >= 1 && second <= 31;
+            final looksLikeDayFirst = first >= 1 && first <= 31 && second >= 1 && second <= 12;
+
+            if (looksLikeMonthFirst && !looksLikeDayFirst) {
+              final candidate = DateTime(third, first, second);
+              if (candidate.year == third && candidate.month == first && candidate.day == second) {
+                return candidate;
+              }
+            }
+
+            if (looksLikeDayFirst && !looksLikeMonthFirst) {
+              final candidate = DateTime(third, second, first);
+              if (candidate.year == third && candidate.month == second && candidate.day == first) {
+                return candidate;
+              }
+            }
+
+            if (first >= 1 && first <= 12) {
+              final candidate = DateTime(third, first, second);
+              if (candidate.year == third && candidate.month == first && candidate.day == second) {
+                return candidate;
+              }
+            }
+
+            if (second >= 1 && second <= 12) {
+              final candidate = DateTime(third, second, first);
+              if (candidate.year == third && candidate.month == second && candidate.day == first) {
+                return candidate;
+              }
+            }
+          } else if (first >= 1000) {
+            final candidate = DateTime(first, second, third);
+            if (candidate.year == first && candidate.month == second && candidate.day == third) {
+              return candidate;
+            }
           }
         }
       }
@@ -5612,6 +5649,7 @@ class _SaleScreenState extends State<SaleScreen> {
       notes: details['notes']?.toString(),
       itemsPreSplit: details['items_pre_split'] == true,
       items: items,
+      luckyDrawVouchers: details['lucky_draw_vouchers'],
     );
   }
 

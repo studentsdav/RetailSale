@@ -6,17 +6,13 @@ const lastRunDateByOutlet = new Map();
 let globalLastRunDate = null;
 
 function todayStr() {
-    try {
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        return formatter.format(new Date());
-    } catch (e) {
-        return new Date().toISOString().split('T')[0];
-    }
+    const now = new Date();
+    const offsetMs = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(now.getTime() + offsetMs);
+    const y = ist.getUTCFullYear();
+    const m = String(ist.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(ist.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
 
 function log(msg, isError = false) {

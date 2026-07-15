@@ -2902,6 +2902,84 @@ class PosInvoicePrinter {
       ),
     );
   }
+
+  static pw.Widget _buildThermalVoucherTicket(
+    SaleOrder order,
+    Map<String, dynamic> voucher,
+    pw.Font regular,
+    pw.Font bold, {
+    required bool isCustomerCopy,
+  }) {
+    final bodyStyle = pw.TextStyle(font: regular, fontSize: 8.5, color: PdfColors.black);
+    final boldStyle = pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black);
+    final titleStyle = pw.TextStyle(font: bold, fontSize: 12.0, color: PdfColors.black);
+
+    final campaignName = voucher['campaign_name']?.toString() ?? 'Lucky Draw';
+    final customerPhone = voucher['customer_phone']?.toString() ?? '--';
+    final voucherCode = voucher['code']?.toString() ?? voucher['voucher_code']?.toString() ?? 'LD-A7X9-123';
+
+    return pw.DefaultTextStyle(
+      style: bodyStyle,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Text('------------------------------------------', textAlign: pw.TextAlign.center, maxLines: 1),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(vertical: 2),
+            child: pw.Text(
+              'LUCKY DRAW TICKET',
+              textAlign: pw.TextAlign.center,
+              style: titleStyle,
+            ),
+          ),
+          pw.Text('------------------------------------------', textAlign: pw.TextAlign.center, maxLines: 1),
+          pw.SizedBox(height: 6),
+          pw.Row(
+            children: [
+              pw.Text('Campaign: ', style: boldStyle),
+              pw.Expanded(child: pw.Text(campaignName)),
+            ],
+          ),
+          pw.SizedBox(height: 3),
+          pw.Row(
+            children: [
+              pw.Text('Customer: ', style: boldStyle),
+              pw.Expanded(child: pw.Text(customerPhone)),
+            ],
+          ),
+          pw.SizedBox(height: 3),
+          pw.Row(
+            children: [
+              pw.Text('Code: ', style: boldStyle),
+              pw.Expanded(
+                child: pw.Text(voucherCode, style: pw.TextStyle(font: bold, fontSize: 11.0, color: PdfColors.black)),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text('------------------------------------------', textAlign: pw.TextAlign.center, maxLines: 1),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(vertical: 2),
+            child: pw.Text(
+              isCustomerCopy ? '[ CUSTOMER COPY ]' : '[ STORE DROP-BOX COPY ]',
+              textAlign: pw.TextAlign.center,
+              style: boldStyle,
+            ),
+          ),
+          if (isCustomerCopy)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 1),
+              child: pw.Text(
+                'Keep this safe for the draw!',
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey700),
+              ),
+            ),
+          pw.Text('------------------------------------------', textAlign: pw.TextAlign.center, maxLines: 1),
+        ],
+      ),
+    );
+  }
 }
 
 class _InvoiceContext {

@@ -20,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         recovery_pin_hash: {
-            type: DataTypes.STRING(50),
+            type: DataTypes.STRING(255),
             allowNull: false
         },
         contact_email: {

@@ -62,6 +62,7 @@ import '../reports/loyalty_report_screen.dart';
 import '../reports/subscription_report_screen.dart';
 import '../reports/sales_report_screen.dart';
 import '../reports/store_analysis_screen.dart';
+import '../reports/lucky_draw_campaign_screen.dart';
 import '../reports/brand_analysis_screen.dart';
 import '../reports/source_analysis_screen.dart';
 import '../reports/payment_analysis_screen.dart';
@@ -92,6 +93,8 @@ class MainDashboardScreen extends StatefulWidget {
 class _MainDashboardScreenState extends State<MainDashboardScreen> {
   // USER SESSION
   final Set<int> _shownNotificationIds = {};
+  bool _hasPendingDraw = false;
+  String _pendingCampaignName = '';
 
   final DateTime _loginTime =
       DateTime.now().subtract(const Duration(hours: 3, minutes: 20));
@@ -794,6 +797,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           ),
         };
       });
+      _checkLuckyDrawCampaignStatus();
     } catch (e) {
       if (e
               .toString()
@@ -816,6 +820,113 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         }
       }
     }
+  }
+
+  Future<void> _checkLuckyDrawCampaignStatus() async {
+    try {
+      final res = await ApiClient.get('/api/lucky-draw/campaigns/active');
+      if (res['success'] == true && res['data'] != null) {
+        final status = res['data']['status']?.toString();
+        final name = res['data']['name']?.toString() ?? 'Lucky Draw';
+        if (status == 'PENDING_RESULT') {
+          setState(() {
+            _hasPendingDraw = true;
+            _pendingCampaignName = name;
+          });
+          return;
+        }
+      }
+      setState(() {
+        _hasPendingDraw = false;
+        _pendingCampaignName = '';
+      });
+    } catch (_) {}
+  }
+
+  Widget _buildLuckyDrawPendingBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFEF2F2), Color(0xFFFEE2E2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFCA5A5), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.red.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.red,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Lucky Draw Pending Winner Declaration!',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF991B1B),
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Please declare the winner for campaign "$_pendingCampaignName" to reset counters and resume raffle ticket issuance at POS checkout.',
+                  style: const TextStyle(
+                    color: Color(0xFF7F1D1D),
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LuckyDrawCampaignScreen()),
+              );
+            },
+            icon: const Icon(Icons.casino_outlined, size: 18),
+            label: const Text(
+              'Draw Winner',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1010,6 +1121,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                 child: Column(
                   children: [
                     _buildBackupStatusBanner(),
+                    if (_hasPendingDraw) ...[
+                      _buildLuckyDrawPendingBanner(),
+                      const SizedBox(height: 12),
+                    ],
                     _kpiRow(),
                     const SizedBox(height: 12),
                     _lowStockAlert(),
@@ -2083,6 +2198,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   context,
                   MaterialPageRoute(
                       builder: (_) => const StoreAnalysisScreen()));
+            }),
+            _drawerItem(Icons.confirmation_number_outlined, 'Lucky Draw Campaigns',
+                permission: 'REPORTS', onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const LuckyDrawCampaignScreen()));
             }),
             _drawerItem(Icons.analytics_outlined, 'Brand Analysis',
                 permission: 'REPORTS', onTap: () {

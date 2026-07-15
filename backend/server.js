@@ -49,6 +49,7 @@ const { startBackupJob } = require("./jobs/backupJob");
 const { startLoyaltyExpiryJob } = require("./jobs/loyaltyExpiryJob");
 const { startAnalyticsRefreshJob } = require("./jobs/analyticsRefreshJob");
 const { startSubscriptionDeliveryJob } = require("./jobs/subscriptionDeliveryJob");
+const { startLuckyDrawJob } = require("./jobs/luckyDrawJob");
 const CLIENT_FILE = path.join(rootDir, "client.json");
 // body limits
 app.use(express.json({
@@ -197,6 +198,7 @@ if (!fs.existsSync(licensePath)) {
         startLoyaltyExpiryJob(propertyDb);
         startAnalyticsRefreshJob(propertyDb);
         startSubscriptionDeliveryJob(propertyDb);
+        startLuckyDrawJob(propertyDb);
         
         // Start background WhatsApp message queue worker
         const { startWhatsappQueueJob } = require('./jobs/whatsappQueueJob');
@@ -221,6 +223,7 @@ app.use('/api/purchase-orders', require('./routes/purchase.routes'));
 app.use('/api/receiving', require('./routes/receiving.routes'));
 app.use('/api/suppliers', require('./routes/supplier.routes'));
 app.use('/api/sales', require('./routes/sales.routes'));
+app.use('/api/lucky-draw', require('./routes/luckyDraw.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes'));
 app.use('/api/users', require('./routes/user.routes'));
 app.use('/api/reports', require('./routes/reports.routes'));

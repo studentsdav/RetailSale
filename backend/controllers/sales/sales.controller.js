@@ -4,6 +4,7 @@ const { createLedgerEntry, recalculateLedgerBalances } = require('../../services
 const { applyLoyaltyOnCompletedSale } = require('../../services/loyalty.service');
 const { Op, fn, col, where: sqlWhere } = require('sequelize');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
+const { normalizeDateKey } = require('../../utils/dateQuery');
 
 const resolveOutletId = async (req) => {
     const rawId = req.body?.outlet_id || req.body?.outletCode || req.body?.outlet_code || 
@@ -75,20 +76,12 @@ function dateOnly(value) {
 function formatDateLocalYmd(value) {
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) return null;
-    try {
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        return formatter.format(d);
-    } catch (err) {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    }
+    const offsetMs = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(d.getTime() + offsetMs);
+    const y = ist.getUTCFullYear();
+    const m = String(ist.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(ist.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 function dateOnlyString(value) {
@@ -2203,6 +2196,13 @@ async function allocateItemAdvanceConsumption({ req, header, items, transaction 
 
 function parseDateOnly(value) {
     if (!value) return null;
+    const normalized = normalizeDateKey(value);
+    if (normalized) {
+        const date = new Date(`${normalized}T00:00:00`);
+        if (!Number.isNaN(date.getTime())) {
+            return date;
+        }
+    }
     let date;
     if (typeof value === 'string') {
         const trimmed = value.trim();
@@ -3083,11 +3083,12 @@ async function recordSaleModificationPayment({
 exports.getNextSaleNo = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
+        const normalizedDate = normalizeDateKey(req.query.date);
         const resolved = await numberingHelper.getEffectiveSetting({
             db: req.propertyDb,
             outlet_id,
             module: 'SALES',
-            date: req.query.date || new Date().toISOString()
+            date: normalizedDate || req.query.date || new Date().toISOString()
         });
 
         if (!resolved) {
@@ -3136,6 +3137,7 @@ exports.getNextSaleNo = async (req, res) => {
 
 exports.createSale = async (req, res) => {
     const t = await req.propertyDb.transaction();
+    let luckyDrawVouchers = [];
 
     try {
         const { header, items } = req.body;
@@ -3475,6 +3477,97 @@ exports.createSale = async (req, res) => {
             user_id: req.user.id
         });
 
+        // --- LUCKY DRAW INTERCEPTION HOOK ---
+        if (status === 'COMPLETED' && referenceSale.customer_phone) {
+            try {
+                const activeCampaign = await req.propertyDb.models.lucky_draw_campaigns.findOne({
+                    where: { status: 'ACTIVE' }
+                });
+                const pendingCampaign = await req.propertyDb.models.lucky_draw_campaigns.findOne({
+                    where: { status: 'PENDING_RESULT' }
+                });
+
+                // Voucher generation is paused if there is a pending campaign or if no active campaign exists
+                if (activeCampaign && !pendingCampaign) {
+                    const customerPhone = referenceSale.customer_phone.trim();
+                    if (customerPhone.length > 0) {
+                        const customerName = referenceSale.customer_name ? referenceSale.customer_name.trim() : null;
+                        const netAmount = Number(referenceSale.net_amount || 0);
+
+                        let [progress, created] = await req.propertyDb.models.customer_draw_progress.findOrCreate({
+                            where: {
+                                campaign_id: activeCampaign.id,
+                                customer_phone: customerPhone
+                            },
+                            defaults: {
+                                outlet_id: req.user.outlet_id,
+                                customer_name: customerName,
+                                accumulated_spend: 0.00
+                            },
+                            transaction: t
+                        });
+
+                        const totalSpend = Number(progress.accumulated_spend || 0) + netAmount;
+                        const threshold = Number(activeCampaign.threshold_amount || 2000.00);
+                        const eligibleTickets = Math.floor(totalSpend / threshold);
+
+                        if (eligibleTickets > 0) {
+                            const generated = [];
+                            for (let i = 0; i < eligibleTickets; i++) {
+                                let code = '';
+                                let attempts = 0;
+                                while (attempts < 10) {
+                                    const randPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+                                    const randPart2 = Math.random().toString(36).substring(2, 5).toUpperCase();
+                                    code = `LD-${randPart1}-${randPart2}`;
+
+                                    const exists = await req.propertyDb.models.draw_vouchers.findOne({
+                                        where: { voucher_code: code },
+                                        transaction: t,
+                                        bypassOutletFilter: true
+                                    });
+                                    if (!exists) break;
+                                    attempts++;
+                                }
+
+                                const voucher = await req.propertyDb.models.draw_vouchers.create({
+                                    outlet_id: req.user.outlet_id,
+                                    campaign_id: activeCampaign.id,
+                                    customer_phone: customerPhone,
+                                    customer_name: customerName,
+                                    sale_id: referenceSale.id,
+                                    voucher_code: code,
+                                    is_winner: false
+                                }, { transaction: t });
+
+                                generated.push({
+                                    code: voucher.voucher_code,
+                                    campaign_name: activeCampaign.name,
+                                    customer_phone: customerPhone,
+                                    customer_name: customerName
+                                });
+                            }
+
+                            luckyDrawVouchers = generated;
+
+                            const newSpend = totalSpend % threshold;
+                            await progress.update({
+                                customer_name: customerName || progress.customer_name,
+                                accumulated_spend: newSpend
+                            }, { transaction: t });
+                        } else {
+                            await progress.update({
+                                customer_name: customerName || progress.customer_name,
+                                accumulated_spend: totalSpend
+                            }, { transaction: t });
+                        }
+                    }
+                }
+            } catch (ldErr) {
+                console.error('[LUCKY DRAW CHECKOUT HOOK FAIL]', ldErr.message);
+            }
+        }
+
         await t.commit();
 
         // Trigger WhatsApp Checkout Billing alert asynchronously
@@ -3502,7 +3595,8 @@ exports.createSale = async (req, res) => {
                 free_sale_id: freeSale?.id || null,
                 free_sale_no: freeSale?.sale_no || null,
                 sale_ids: createdSales.map((sale) => sale.id),
-                sale_nos: createdSales.map((sale) => sale.sale_no)
+                sale_nos: createdSales.map((sale) => sale.sale_no),
+                lucky_draw_vouchers: luckyDrawVouchers
             }
         });
     } catch (error) {
@@ -4519,6 +4613,27 @@ exports.getSaleDetails = async (req, res) => {
                 saleJson.refund_payment_mode = paidRefunds[0].payment_mode;
                 saleJson.refund_paid_at = paidRefunds[0].updated_at || paidRefunds[0].refund_date;
             }
+        }
+
+        // Load all lucky draw vouchers for this sale
+        try {
+            const vouchers = await req.propertyDb.models.draw_vouchers.findAll({
+                where: { sale_id: sale.id, outlet_id },
+                include: [{
+                    model: req.propertyDb.models.lucky_draw_campaigns,
+                    as: 'campaign',
+                    attributes: ['name']
+                }]
+            });
+            saleJson.lucky_draw_vouchers = vouchers.map(v => ({
+                code: v.voucher_code,
+                campaign_name: v.campaign?.name || 'Lucky Draw',
+                customer_phone: v.customer_phone,
+                customer_name: v.customer_name
+            }));
+        } catch (ldErr) {
+            console.error('[LUCKY DRAW DETAILS FETCH FAIL]', ldErr.message);
+            saleJson.lucky_draw_vouchers = [];
         }
 
         res.json({ success: true, data: saleJson });

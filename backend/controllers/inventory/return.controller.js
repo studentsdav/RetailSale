@@ -1,12 +1,14 @@
 const audit = require('../../services/audit.service');
 const { insertLedger } = require('../../services/stockLedger.service');
+const { normalizeDateKey } = require('../../utils/dateQuery');
 
 exports.getIndentsByDate = async (req, res) => {
     const { date } = req.query;
     const outlet_id = req.user.outlet_id;
+    const normalizedDate = normalizeDateKey(date);
 
     const indents = await req.propertyDb.models.issue_headers.findAll({
-        where: { issue_date: date, outlet_id },
+        where: { issue_date: normalizedDate || date, outlet_id },
         attributes: ['id', 'issue_no']
     });
 
