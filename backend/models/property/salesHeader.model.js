@@ -20,6 +20,7 @@ module.exports = (sequelize, DataTypes) => {
         billing_country: DataTypes.STRING,
         billing_tax_mode: DataTypes.STRING,
         bill_format: DataTypes.STRING,
+        sale_source: DataTypes.STRING,
         tax_percent: DataTypes.DECIMAL(7, 2),
         scheme_id: DataTypes.INTEGER,
         scheme_name: DataTypes.STRING,

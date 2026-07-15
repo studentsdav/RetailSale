@@ -181,6 +181,10 @@ propertyDb.models.customer_orders =
     require('../../models/property/customerOrder.model')(propertyDb, DataTypes);
 propertyDb.models.delivery_customers =
     require('../../models/property/deliveryCustomer.model')(propertyDb, DataTypes);
+propertyDb.models.sale_sources =
+    require('../../models/property/saleSource.model')(propertyDb, DataTypes);
+propertyDb.models.payment_methods =
+    require('../../models/property/paymentMethod.model')(propertyDb, DataTypes);
 
 // BOM & ASSEMBLY
 propertyDb.models.item_boms =

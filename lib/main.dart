@@ -20,6 +20,7 @@ import 'controllers/security/recovery_controller.dart';
 import 'controllers/inventory/bom_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/config/app_brand.dart';
+import 'core/config/date_time_service.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'package:flutter/services.dart';
@@ -33,6 +34,8 @@ import 'screens/inventory/goods_receiving_screen.dart';
 import 'screens/inventory/damage_item_screen.dart';
 import 'screens/reports/sales_report_screen.dart';
 import 'screens/reports/brand_analysis_screen.dart';
+import 'screens/reports/source_analysis_screen.dart';
+import 'screens/reports/payment_analysis_screen.dart';
 import 'screens/reports/cash_ledger_screen.dart';
 import 'screens/reports/stock_balance_screen.dart';
 import 'screens/reports/supplier_payments_report_screen.dart';
@@ -43,10 +46,17 @@ final GlobalKey<ScaffoldMessengerState> globalSnackbarKey =
 final GlobalKey<NavigatorState> globalNavigatorKey =
     GlobalKey<NavigatorState>();
 
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.init();
   await AppConfig.init();
+
+  // ── Trusted Clock ──────────────────────────────────────────────────────
+  // Anchor the app's clock to PostgreSQL server time so that sales/reports
+  // always use the correct date, even if the system clock drifted (e.g.
+  // PC woke from sleep with wrong BIOS date like year 2002 or May 2025).
+  await DateTimeService.instance.init();
 
   runApp(
     MultiProvider(
@@ -63,6 +73,7 @@ void main() async {
     ),
   );
 }
+
 
 class MyApp extends StatelessWidget {
   final Widget? homeWidget;
@@ -344,6 +355,12 @@ class MyApp extends StatelessWidget {
             const SingleActivator(LogicalKeyboardKey.keyA, alt: true): () {
               globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const BrandAnalysisScreen()));
             },
+            const SingleActivator(LogicalKeyboardKey.keyS, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const SourceAnalysisScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyP, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const PaymentAnalysisScreen()));
+            },
             const SingleActivator(LogicalKeyboardKey.keyK, alt: true): () {
               globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const StockBalanceScreen()));
             },
@@ -359,8 +376,45 @@ class MyApp extends StatelessWidget {
           ),
         );
       },
-      home: homeWidget ?? const SplashScreen(),
+      home: AppLifecycleObserver(
+        child: homeWidget ?? const SplashScreen(),
+      ),
     );
   }
 }
+/// Mixin that auto-resync DateTimeService when app resumes from background/sleep.
+/// Usage: wrap MaterialApp home with this widget:
+///   home: AppLifecycleObserver(child: SplashScreen())
+class AppLifecycleObserver extends StatefulWidget {
+  final Widget child;
+  const AppLifecycleObserver({super.key, required this.child});
 
+  @override
+  State<AppLifecycleObserver> createState() => _AppLifecycleObserverState();
+}
+
+class _AppLifecycleObserverState extends State<AppLifecycleObserver>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Re-sync clock when app comes back from background / PC wakes from sleep.
+      DateTimeService.instance.resync();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}

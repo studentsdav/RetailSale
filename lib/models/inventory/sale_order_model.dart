@@ -13,6 +13,7 @@ class SaleOrder {
   final String billingCountry;
   final String billingTaxMode;
   final String billFormat;
+  final String? saleSource;
   final String? customerName;
   final String? customerPhone;
   final String? doctorName;
@@ -80,6 +81,7 @@ class SaleOrder {
     required this.billingCountry,
     required this.billingTaxMode,
     required this.billFormat,
+    this.saleSource,
     this.customerName,
     this.customerPhone,
     this.doctorName,
@@ -148,6 +150,7 @@ class SaleOrder {
         'billing_country': billingCountry,
         'billing_tax_mode': billingTaxMode,
         'bill_format': billFormat,
+        'sale_source': saleSource,
         'customer_name': customerName,
         'customer_phone': customerPhone,
         'doctor_name': doctorName,
@@ -267,6 +270,7 @@ class SaleOrder {
       billingCountry: json['billing_country']?.toString() ?? 'India',
       billingTaxMode: json['billing_tax_mode']?.toString() ?? 'CGST_SGST',
       billFormat: json['bill_format']?.toString() ?? 'A4',
+      saleSource: json['sale_source']?.toString(),
       customerName: json['customer_name']?.toString(),
       customerPhone: json['customer_phone']?.toString(),
       doctorName: json['doctor_name']?.toString(),

@@ -14,6 +14,7 @@ import '../../core/settings/local_preferences.dart';
 import '../../models/auth/permission_service.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../models/settings/app_branding_model.dart';
+import '../../controllers/sales/sales_controller.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -50,6 +51,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _didLoadBranding = false;
   bool _isCreatingEncBackup = false;
   AppBrandingModel _branding = AppBrandingModel.defaults();
+  List<Map<String, dynamic>> _settingsSaleSources = [];
+  List<Map<String, dynamic>> _settingsPaymentMethods = [];
+  bool _loadingSettingsData = false;
 
   bool get _isAdmin => PermissionService.user?.role == 'ADMIN';
 
@@ -76,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         () => context.read<AppBrandingController>().loadFromServer());
     Future.microtask(_loadPrinters);
     Future.microtask(_loadLocalPreferences);
+    Future.microtask(_loadSettingsData);
   }
 
   Future<void> _loadLocalPreferences() async {
@@ -314,7 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Scaffold(
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? const Color(0xFF121214)
@@ -329,6 +334,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Tab(text: 'Billing & Print'),
               Tab(text: 'Branding'),
               Tab(text: 'Keyboard Shortcuts'),
+              Tab(text: 'Sale & Payment'),
             ],
           ),
         ),
@@ -1101,11 +1107,371 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ], constraints),
+
+                // 6. SALE & PAYMENT TAB
+                buildTabBody([
+                  _customSection(
+                    'Sale Channels & Payment Options',
+                    'Manage customized sale channels and payment options used during checkouts.',
+                    [
+                      if (_loadingSettingsData)
+                        const Padding(
+                          padding: EdgeInsets.all(24.0),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else ...[
+                        _saleSourcesSettingsSection(),
+                        const Divider(),
+                        _paymentMethodsSettingsSection(),
+                      ]
+                    ],
+                  ),
+                ], constraints),
               ],
             );
           },
         ),
       ),
+    );
+  }
+
+  Future<void> _loadSettingsData() async {
+    setState(() => _loadingSettingsData = true);
+    try {
+      final salesCtrl = SalesController();
+      final sources = await salesCtrl.listSaleSources();
+      final methods = await salesCtrl.listPaymentMethods();
+      setState(() {
+        _settingsSaleSources = sources;
+        _settingsPaymentMethods = methods;
+      });
+    } catch (_) {}
+    setState(() => _loadingSettingsData = false);
+  }
+
+  Future<void> _toggleSourceActive(int id, String name, bool val) async {
+    try {
+      final salesCtrl = SalesController();
+      await salesCtrl.updateSaleSource(id, name: name, isActive: val);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sale source status updated')),
+      );
+      _loadSettingsData();
+    } catch (e) {
+      showErrorSnackbar(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  Future<void> _deleteSource(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Sale Source'),
+        content: const Text('Are you sure you want to delete this sale source? This will fail if it has already been used in sales.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final salesCtrl = SalesController();
+      await salesCtrl.deleteSaleSource(id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sale source deleted successfully')),
+      );
+      _loadSettingsData();
+    } catch (e) {
+      showErrorSnackbar(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  Future<void> _showAddEditSourceDialog({Map<String, dynamic>? source}) async {
+    final isEdit = source != null;
+    final nameCtrl = TextEditingController(text: isEdit ? source['name'] : '');
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isEdit ? 'Edit Sale Source' : 'Add Sale Source'),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Source Name', hintText: 'e.g. Flipkart, Amazon, Meesho'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              try {
+                final salesCtrl = SalesController();
+                if (isEdit) {
+                  await salesCtrl.updateSaleSource(source['id'], name: name, isActive: source['is_active'] == true);
+                } else {
+                  await salesCtrl.createSaleSource(name);
+                }
+                if (context.mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(isEdit ? 'Sale source updated' : 'Sale source added')),
+                );
+                _loadSettingsData();
+              } catch (e) {
+                showErrorSnackbar(e.toString().replaceFirst('Exception: ', ''));
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _togglePaymentMethodActive(int id, String name, bool val) async {
+    try {
+      final salesCtrl = SalesController();
+      await salesCtrl.updatePaymentMethod(id, name: name, isActive: val);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment method status updated')),
+      );
+      _loadSettingsData();
+    } catch (e) {
+      showErrorSnackbar(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  Future<void> _deletePaymentMethod(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Payment Method'),
+        content: const Text('Are you sure you want to delete this payment method? This will fail if it has already been used in sales.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final salesCtrl = SalesController();
+      await salesCtrl.deletePaymentMethod(id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment method deleted successfully')),
+      );
+      _loadSettingsData();
+    } catch (e) {
+      showErrorSnackbar(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  Future<void> _showAddEditPaymentMethodDialog({Map<String, dynamic>? method}) async {
+    final isEdit = method != null;
+    final nameCtrl = TextEditingController(text: isEdit ? method['name'] : '');
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isEdit ? 'Edit Payment Method' : 'Add Payment Method'),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Payment Method Name', hintText: 'e.g. PHONEPE, GPAY, PAYTM'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              try {
+                final salesCtrl = SalesController();
+                if (isEdit) {
+                  await salesCtrl.updatePaymentMethod(method['id'], name: name, isActive: method['is_active'] == true);
+                } else {
+                  await salesCtrl.createPaymentMethod(name);
+                }
+                if (context.mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(isEdit ? 'Payment method updated' : 'Payment method added')),
+                );
+                _loadSettingsData();
+              } catch (e) {
+                showErrorSnackbar(e.toString().replaceFirst('Exception: ', ''));
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _saleSourcesSettingsSection() {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Sale Sources / Channels',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              FilledButton.icon(
+                onPressed: () => _showAddEditSourceDialog(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Source'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _settingsSaleSources.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('No custom sale sources added yet.')),
+              )
+            : ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _settingsSaleSources.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final src = _settingsSaleSources[index];
+                  final isSystem = src['is_system'] == true;
+                  final isActive = src['is_active'] == true;
+
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                    title: Text(src['name'].toString()),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isSystem)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'System',
+                              style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        Switch.adaptive(
+                          value: isActive,
+                          onChanged: isSystem
+                              ? null
+                              : (val) => _toggleSourceActive(src['id'], src['name'], val),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: isSystem
+                              ? null
+                              : () => _showAddEditSourceDialog(source: src),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: isSystem
+                              ? null
+                              : () => _deleteSource(src['id']),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ],
+    );
+  }
+
+  Widget _paymentMethodsSettingsSection() {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Payment Methods',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              FilledButton.icon(
+                onPressed: () => _showAddEditPaymentMethodDialog(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Method'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _settingsPaymentMethods.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('No custom payment methods added yet.')),
+              )
+            : ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _settingsPaymentMethods.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final method = _settingsPaymentMethods[index];
+                  final isSystem = method['is_system'] == true;
+                  final isActive = method['is_active'] == true;
+
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                    title: Text(method['name'].toString()),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isSystem)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'System',
+                              style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        Switch.adaptive(
+                          value: isActive,
+                          onChanged: isSystem
+                              ? null
+                              : (val) => _togglePaymentMethodActive(method['id'], method['name'], val),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: isSystem
+                              ? null
+                              : () => _showAddEditPaymentMethodDialog(method: method),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: isSystem
+                              ? null
+                              : () => _deletePaymentMethod(method['id']),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ],
     );
   }
 

@@ -63,6 +63,8 @@ import '../reports/subscription_report_screen.dart';
 import '../reports/sales_report_screen.dart';
 import '../reports/store_analysis_screen.dart';
 import '../reports/brand_analysis_screen.dart';
+import '../reports/source_analysis_screen.dart';
+import '../reports/payment_analysis_screen.dart';
 import '../reports/ai_query_analytics_screen.dart';
 import '../reports/stock_ledger_report_screen.dart';
 import '../reports/supplier_payments_report_screen.dart';
@@ -2088,6 +2090,20 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   context,
                   MaterialPageRoute(
                       builder: (_) => const BrandAnalysisScreen()));
+            }),
+            _drawerItem(Icons.source_outlined, 'Sale Source Analysis',
+                permission: 'REPORTS', onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const SourceAnalysisScreen()));
+            }),
+            _drawerItem(Icons.payments_outlined, 'Payment Method Analysis',
+                permission: 'REPORTS', onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const PaymentAnalysisScreen()));
             }),
             _drawerItem(Icons.auto_awesome, 'AI Query Analytics',
                 permission: 'REPORTS', isBeta: true, onTap: () {

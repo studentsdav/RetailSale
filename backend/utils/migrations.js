@@ -2662,6 +2662,55 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 71,
+    description: "Add sale_sources and payment_methods tables and sales_headers sale_source column",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        
+        -- Create sale_sources table
+        CREATE TABLE IF NOT EXISTS sale_sources (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(100) NOT NULL UNIQUE,
+          is_system BOOLEAN DEFAULT FALSE,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Seed default sale sources
+        INSERT INTO sale_sources (name, is_system) VALUES 
+          ('Store', TRUE), 
+          ('App', TRUE) 
+        ON CONFLICT (name) DO NOTHING;
+
+        -- Add sale_source to sales_headers
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS sale_source VARCHAR(100) DEFAULT 'Store';
+
+        -- Create payment_methods table
+        CREATE TABLE IF NOT EXISTS payment_methods (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(100) NOT NULL UNIQUE,
+          is_system BOOLEAN DEFAULT FALSE,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Seed default payment methods
+        INSERT INTO payment_methods (name, is_system) VALUES 
+          ('CASH', TRUE), 
+          ('CARD', TRUE), 
+          ('UPI', TRUE), 
+          ('BANK', TRUE), 
+          ('CREDIT', TRUE) 
+        ON CONFLICT (name) DO NOTHING;
+
+        COMMIT;
+      `);
+    }
   }
 ];
 

@@ -211,6 +211,9 @@ if (!fs.existsSync(licensePath)) {
 
 // routes
 
+// No-auth: Flutter uses this at startup to anchor its internal clock against DB time
+app.use('/api/system/server-time', require('./routes/systemTime.routes'));
+
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/public', require('./routes/public.routes'));
 app.use('/api/inventory', require('./routes/inventory.routes'));

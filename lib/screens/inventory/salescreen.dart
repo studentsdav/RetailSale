@@ -77,6 +77,9 @@ class _SaleScreenState extends State<SaleScreen> {
   final ScrollController _schemeStripScrollController = ScrollController();
 
   DateTime _saleDate = DateTime.now();
+  List<String> _availableSaleSources = ['Store', 'App'];
+  String _selectedSaleSource = 'Store';
+  List<String> _availablePaymentMethods = ['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT'];
   String _paymentMode = 'CASH';
   String _manualDiscountType = 'AMOUNT';
   String _schemeUsageMode = 'APPLY_NOW';
@@ -189,6 +192,7 @@ class _SaleScreenState extends State<SaleScreen> {
       await propertyCtrl.load();
       await settingsCtrl.load();
       await _loadCashierName();
+      await _loadSaleSettings();
       _saleNo.text = await ctrl.getNextSaleNo();
       _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
       _applyBillingDefaults();
@@ -212,6 +216,44 @@ class _SaleScreenState extends State<SaleScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _loadSaleSettings() async {
+    try {
+      final sources = await ctrl.listSaleSources();
+      final activeSources = sources
+          .where((e) => e['is_active'] == true)
+          .map((e) => e['name'].toString())
+          .toList();
+      if (activeSources.isNotEmpty) {
+        setState(() {
+          _availableSaleSources = activeSources;
+          if (!_availableSaleSources.contains(_selectedSaleSource)) {
+            _selectedSaleSource = _availableSaleSources.contains('Store')
+                ? 'Store'
+                : _availableSaleSources.first;
+          }
+        });
+      }
+    } catch (_) {}
+
+    try {
+      final methods = await ctrl.listPaymentMethods();
+      final activeMethods = methods
+          .where((e) => e['is_active'] == true)
+          .map((e) => e['name'].toString().toUpperCase())
+          .toList();
+      if (activeMethods.isNotEmpty) {
+        setState(() {
+          _availablePaymentMethods = activeMethods;
+          if (!_availablePaymentMethods.contains(_paymentMode.toUpperCase())) {
+            _paymentMode = _availablePaymentMethods.contains('CASH')
+                ? 'CASH'
+                : _availablePaymentMethods.first;
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadCashierName() async {
@@ -256,6 +298,10 @@ class _SaleScreenState extends State<SaleScreen> {
       _billingCountry = order.billingCountry;
       _taxMode = order.billingTaxMode;
       _billFormat = settingsCtrl.settings?.billFormat ?? order.billFormat;
+      if (order.saleSource != null && !_availableSaleSources.contains(order.saleSource)) {
+        _availableSaleSources.add(order.saleSource!);
+      }
+      _selectedSaleSource = order.saleSource ?? (order.orderId != null ? 'App' : 'Store');
       _paymentMode = order.paymentMode;
       _paymentRef.text = order.paymentReference ?? '';
       _amountPaid.text = order.amountPaid.toStringAsFixed(2);
@@ -2777,53 +2823,129 @@ class _SaleScreenState extends State<SaleScreen> {
   Future<void> _showCustomerPickerDialog() async {
     await ctrl.refreshCustomers();
     SaleCustomer? selected = _selectedCustomer;
+    String currentSearchText = '';
+
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Select Customer'),
-        content: SizedBox(
-          width: 420,
-          child: DropdownSearch<SaleCustomer>(
-            selectedItem: selected,
-            items: (filter, _) async => filter.isEmpty
-                ? ctrl.customers
-                : await ctrl.searchCustomers(filter),
-            itemAsString: (customer) => customer.displayLabel,
-            compareFn: (first, second) => first.id == second.id,
-            popupProps: const PopupProps.menu(showSearchBox: true),
-            decoratorProps: const DropDownDecoratorProps(
-              decoration: InputDecoration(
-                labelText: 'Search Existing Customer',
-                hintText: 'Search by name or mobile',
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Select Customer'),
+                IconButton(
+                  icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.green),
+                  tooltip: 'Add Customer',
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      if (mounted) {
+                        _showCustomerDialog(clearSelection: true, preFillText: currentSearchText);
+                      }
+                    });
+                  },
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: DropdownSearch<SaleCustomer>(
+                selectedItem: selected,
+                items: (filter, _) async {
+                  currentSearchText = filter;
+                  return filter.isEmpty
+                      ? ctrl.customers
+                      : await ctrl.searchCustomers(filter);
+                },
+                itemAsString: (customer) => customer.displayLabel,
+                compareFn: (first, second) => first.id == second.id,
+                popupProps: PopupProps.menu(
+                  showSearchBox: true,
+                  emptyBuilder: (context, searchEntry) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'No customer found for "$searchEntry"',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context); // Close popup
+                                Future.delayed(const Duration(milliseconds: 100), () {
+                                  if (dialogContext.mounted) {
+                                    Navigator.pop(dialogContext); // Close dialog
+                                  }
+                                  Future.delayed(const Duration(milliseconds: 100), () {
+                                    if (mounted) {
+                                      _showCustomerDialog(clearSelection: true, preFillText: searchEntry);
+                                    }
+                                  });
+                                });
+                              },
+                              icon: const Icon(Icons.person_add_alt_1_rounded),
+                              label: const Text('Add New Customer'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                decoratorProps: const DropDownDecoratorProps(
+                  decoration: InputDecoration(
+                    labelText: 'Search Existing Customer',
+                    hintText: 'Search by name or mobile',
+                  ),
+                ),
+                onChanged: (customer) => selected = customer,
               ),
             ),
-            onChanged: (customer) => selected = customer,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Close'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (selected != null) {
-                _applyCustomer(selected!);
-              }
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Use Customer'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (selected != null) {
+                    _applyCustomer(selected!);
+                  }
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('Use Customer'),
+              ),
+            ],
+          );
+        }
       ),
     );
   }
 
-  Future<void> _showCustomerDialog({bool clearSelection = true}) async {
-    final nameCtrl = TextEditingController(text: _customerName.text);
-    final phoneCtrl = TextEditingController(text: _customerPhone.text);
-    final addressCtrl = TextEditingController(text: _customerAddress.text);
-    final gstCtrl = TextEditingController(text: _customerGstin.text);
+  Future<void> _showCustomerDialog({bool clearSelection = true, String? preFillText}) async {
+    String initialName = clearSelection ? '' : _customerName.text;
+    String initialPhone = clearSelection ? '' : _customerPhone.text;
+
+    if (clearSelection && preFillText != null && preFillText.trim().isNotEmpty) {
+      final text = preFillText.trim();
+      final phoneRegex = RegExp(r'^[+\d\s()-]+$');
+      if (phoneRegex.hasMatch(text) && text.replaceAll(RegExp(r'\D'), '').length >= 5) {
+        initialPhone = text;
+      } else {
+        initialName = text;
+      }
+    }
+
+    final nameCtrl = TextEditingController(text: initialName);
+    final phoneCtrl = TextEditingController(text: initialPhone);
+    final addressCtrl = TextEditingController(text: clearSelection ? '' : _customerAddress.text);
+    final gstCtrl = TextEditingController(text: clearSelection ? '' : _customerGstin.text);
 
     await showDialog<void>(
       context: context,
@@ -4401,6 +4523,30 @@ class _SaleScreenState extends State<SaleScreen> {
                         ),
                       ],
                       const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: _availableSaleSources.contains(_selectedSaleSource)
+                            ? _selectedSaleSource
+                            : (_availableSaleSources.isNotEmpty ? _availableSaleSources.first : 'Store'),
+                        decoration: const InputDecoration(
+                          labelText: 'Sale Source / Channel',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _availableSaleSources
+                            .map(
+                              (src) => DropdownMenuItem(
+                                value: src,
+                                child: Text(src),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            _selectedSaleSource = value ?? 'Store';
+                          });
+                          setState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       ...List.generate(lines.length, (index) {
                         final line = lines[index];
                         return Padding(
@@ -4409,14 +4555,12 @@ class _SaleScreenState extends State<SaleScreen> {
                             children: [
                               Expanded(
                                 child: DropdownButtonFormField<String>(
-                                  initialValue: line.method,
+                                  initialValue: [..._availablePaymentMethods, 'CASH ON DELIVERY'].contains(line.method.toUpperCase())
+                                      ? line.method.toUpperCase()
+                                      : _availablePaymentMethods.first,
                                   items: [
-                                    'CASH',
-                                    'CARD',
-                                    'UPI',
-                                    'BANK',
-                                    'CREDIT',
-                                    if (_orderType == 'DELIVERY') 'CASH ON DELIVERY'
+                                    ..._availablePaymentMethods,
+                                    if (_orderType == 'DELIVERY' && !_availablePaymentMethods.contains('CASH ON DELIVERY')) 'CASH ON DELIVERY'
                                   ]
                                       .map(
                                         (method) => DropdownMenuItem(
@@ -4900,6 +5044,7 @@ class _SaleScreenState extends State<SaleScreen> {
       billingCountry: _billingCountry,
       billingTaxMode: _taxMode,
       billFormat: _billFormat,
+      saleSource: _selectedSaleSource,
       customerName:
           _customerName.text.trim().isEmpty ? null : _customerName.text.trim(),
       customerPhone: _customerPhone.text.trim().isEmpty
@@ -5423,6 +5568,7 @@ class _SaleScreenState extends State<SaleScreen> {
       billingCountry: details['billing_country']?.toString() ?? 'India',
       billingTaxMode: details['billing_tax_mode']?.toString() ?? 'CGST_SGST',
       billFormat: _billFormat, // Always use current settings format for reprints
+      saleSource: details['sale_source']?.toString(),
       customerName: details['customer_name']?.toString(),
       customerPhone: details['customer_phone']?.toString(),
       customerAddress: details['customer_address']?.toString(),
@@ -9413,14 +9559,15 @@ class _SaleScreenState extends State<SaleScreen> {
                 width: 150,
                 child: DropdownButtonFormField<String>(
                   key: ValueKey('paymentMode-$_paymentMode'),
-                  initialValue: _paymentMode,
-                  items: const [
-                    DropdownMenuItem(value: 'CASH', child: Text('Cash')),
-                    DropdownMenuItem(value: 'CARD', child: Text('Card')),
-                    DropdownMenuItem(value: 'UPI', child: Text('UPI')),
-                    DropdownMenuItem(value: 'BANK', child: Text('Bank')),
-                    DropdownMenuItem(value: 'CREDIT', child: Text('Credit')),
-                  ],
+                  value: _availablePaymentMethods.contains(_paymentMode.toUpperCase()) ? _paymentMode.toUpperCase() : _availablePaymentMethods.first,
+                  items: _availablePaymentMethods
+                      .map(
+                        (method) => DropdownMenuItem(
+                          value: method,
+                          child: Text(method),
+                        ),
+                      )
+                      .toList(),
                   onChanged: (value) {
                     setState(() {
                       _paymentMode = value ?? 'CASH';
@@ -9430,6 +9577,27 @@ class _SaleScreenState extends State<SaleScreen> {
                     });
                   },
                   decoration: const InputDecoration(labelText: 'Payment'),
+                ),
+              ),
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('saleSource-$_selectedSaleSource'),
+                  value: _availableSaleSources.contains(_selectedSaleSource) ? _selectedSaleSource : _availableSaleSources.first,
+                  items: _availableSaleSources
+                      .map(
+                        (src) => DropdownMenuItem(
+                          value: src,
+                          child: Text(src),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedSaleSource = value ?? 'Store';
+                    });
+                  },
+                  decoration: const InputDecoration(labelText: 'Sale Source'),
                 ),
               ),
               _compactField(_amountPaid, 'Amount Paid', width: 130),

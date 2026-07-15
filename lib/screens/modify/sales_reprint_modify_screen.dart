@@ -27,6 +27,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   DateTime _fromDate = DateTime.now().subtract(const Duration(days: 7));
   DateTime _toDate = DateTime.now();
   bool _loading = false;
+  List<String> _availablePaymentMethods = ['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT'];
   List<Map<String, dynamic>> _sales = const [];
   Map<String, dynamic>? _selectedSale;
   Map<String, dynamic>? _selectedDetails;
@@ -59,6 +60,18 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
 
   Future<void> _loadInitial() async {
     await propertyCtrl.load();
+    try {
+      final methods = await ctrl.listPaymentMethods();
+      final activeMethods = methods
+          .where((e) => e['is_active'] == true)
+          .map((e) => e['name'].toString().toUpperCase())
+          .toList();
+      if (activeMethods.isNotEmpty) {
+        setState(() {
+          _availablePaymentMethods = activeMethods;
+        });
+      }
+    } catch (_) {}
     await _loadSales();
   }
 
@@ -477,7 +490,6 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     required double currentPaid,
     required double currentDue,
   }) async {
-    final allowedModes = const ['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT'];
     final initialLines = _decodePaymentLines(
       currentReference,
       fallbackMode: initialMode,
@@ -496,6 +508,14 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         ? (initialLines[1]['amount'] as double).toStringAsFixed(2)
         : '0.00';
     bool useSecond = initialLines.length > 1;
+
+    final allowedModes = List<String>.from(_availablePaymentMethods);
+    if (!allowedModes.contains(mode1)) {
+      allowedModes.add(mode1);
+    }
+    if (useSecond && !allowedModes.contains(mode2)) {
+      allowedModes.add(mode2);
+    }
 
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -554,8 +574,14 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                     children: [
                       Checkbox(
                         value: useSecond,
-                        onChanged: (value) =>
-                            setInnerState(() => useSecond = value ?? false),
+                        onChanged: (value) {
+                          setInnerState(() {
+                            useSecond = value ?? false;
+                            if (useSecond && !allowedModes.contains(mode2)) {
+                              allowedModes.add(mode2);
+                            }
+                          });
+                        },
                       ),
                       const Text('Use second payment method'),
                     ],

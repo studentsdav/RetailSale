@@ -1,4 +1,7 @@
 class ApiEndpoints {
+  /// Trusted server time — no auth required. Flutter anchors its internal clock here.
+  static const serverTime = '/api/system/server-time';
+
   static const login = '/api/auth/login';
 
   static const items = '/api/inventory/items';
@@ -123,4 +126,8 @@ class ApiEndpoints {
   static const String whatsappLogs = '/api/whatsapp/logs';
   static const String whatsappAudience = '/api/whatsapp/campaigns/audience';
   static const String whatsappBilling = '/api/whatsapp/billing/dashboard';
+
+  // Sale Sources & Payment Methods
+  static const saleSources = '/api/sales/sources';
+  static const paymentMethods = '/api/sales/payment-methods';
 }

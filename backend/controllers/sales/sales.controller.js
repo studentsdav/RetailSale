@@ -2554,6 +2554,7 @@ async function createSaleVersion({
         billing_country: header.billing_country || 'India',
         billing_tax_mode: header.billing_tax_mode || 'CGST_SGST',
         bill_format: header.bill_format || 'A4',
+        sale_source: header.sale_source || 'Store',
         tax_percent: header.tax_percent || 0,
         scheme_id: header.scheme_id || null,
         scheme_name: header.scheme_name || null,

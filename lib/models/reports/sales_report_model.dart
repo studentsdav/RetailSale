@@ -151,6 +151,7 @@ class SalesReport {
   final String paymentMode;
   final String paymentReference;
   final String orderType;
+  final String saleSource;
   final String billingTaxMode;
   final String schemeName;
   final double totalQty;
@@ -181,6 +182,7 @@ class SalesReport {
     required this.paymentMode,
     required this.paymentReference,
     required this.orderType,
+    required this.saleSource,
     required this.billingTaxMode,
     required this.schemeName,
     required this.totalQty,
@@ -213,6 +215,7 @@ class SalesReport {
       paymentMode: json['payment_mode'] ?? '',
       paymentReference: json['payment_reference'] ?? '',
       orderType: json['order_type'] ?? '',
+      saleSource: json['sale_source'] ?? 'Store',
       billingTaxMode: json['billing_tax_mode'] ?? '',
       schemeName: json['scheme_name'] ?? '',
       totalQty: _toDouble(json['total_qty']),

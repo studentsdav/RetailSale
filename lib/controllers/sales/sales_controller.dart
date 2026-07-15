@@ -713,4 +713,52 @@ class SalesController extends ChangeNotifier {
     );
     return Map<String, dynamic>.from(res);
   }
+
+  Future<List<Map<String, dynamic>>> listSaleSources() async {
+    final res = await ApiClient.get(ApiEndpoints.saleSources);
+    return (res['data'] as List? ?? const [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createSaleSource(String name) async {
+    final res = await ApiClient.post(ApiEndpoints.saleSources, {'name': name});
+    return Map<String, dynamic>.from(res['data'] ?? const {});
+  }
+
+  Future<Map<String, dynamic>> updateSaleSource(int id, {required String name, required bool isActive}) async {
+    final res = await ApiClient.put('${ApiEndpoints.saleSources}/$id', {
+      'name': name,
+      'is_active': isActive,
+    });
+    return Map<String, dynamic>.from(res['data'] ?? const {});
+  }
+
+  Future<void> deleteSaleSource(int id) async {
+    await ApiClient.delete('${ApiEndpoints.saleSources}/$id');
+  }
+
+  Future<List<Map<String, dynamic>>> listPaymentMethods() async {
+    final res = await ApiClient.get(ApiEndpoints.paymentMethods);
+    return (res['data'] as List? ?? const [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createPaymentMethod(String name) async {
+    final res = await ApiClient.post(ApiEndpoints.paymentMethods, {'name': name});
+    return Map<String, dynamic>.from(res['data'] ?? const {});
+  }
+
+  Future<Map<String, dynamic>> updatePaymentMethod(int id, {required String name, required bool isActive}) async {
+    final res = await ApiClient.put('${ApiEndpoints.paymentMethods}/$id', {
+      'name': name,
+      'is_active': isActive,
+    });
+    return Map<String, dynamic>.from(res['data'] ?? const {});
+  }
+
+  Future<void> deletePaymentMethod(int id) async {
+    await ApiClient.delete('${ApiEndpoints.paymentMethods}/$id');
+  }
 }

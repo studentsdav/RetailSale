@@ -1,11 +1,24 @@
-﻿const router = require('express').Router();
+const router = require('express').Router();
 const auth = require('../middlewares/auth.middleware');
 const license = require('../middlewares/license.middleware');
 const ctrl = require('../controllers/sales/sales.controller');
 const loyaltyCtrl = require('../controllers/sales/loyalty.controller');
+const settingsCtrl = require('../controllers/sales/saleSettings.controller');
 const { getSubscriptionDraftOrdersToday } = require('../jobs/subscriptionDeliveryJob');
 
 router.use(auth, license('INVENTORY'));
+
+// Sale Sources
+router.get('/sources', settingsCtrl.listSaleSources);
+router.post('/sources', settingsCtrl.createSaleSource);
+router.put('/sources/:id', settingsCtrl.updateSaleSource);
+router.delete('/sources/:id', settingsCtrl.deleteSaleSource);
+
+// Payment Methods
+router.get('/payment-methods', settingsCtrl.listPaymentMethods);
+router.post('/payment-methods', settingsCtrl.createPaymentMethod);
+router.put('/payment-methods/:id', settingsCtrl.updatePaymentMethod);
+router.delete('/payment-methods/:id', settingsCtrl.deletePaymentMethod);
 
 router.get('/next-sale-no', ctrl.getNextSaleNo);
 router.get('/subscription-drafts-today', getSubscriptionDraftOrdersToday);
