@@ -1992,10 +1992,10 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             SizedBox(
               width: 220,
               child: _metricCard(
-                'Cash Net Sales',
+                'Net Revenue',
                 _headerRevenueTotal - ctrl.summary.subscriptionRealized,
                 const Color(0xFF0D9488),
-                subtitle: 'Total Revenue - Subscription Sale',
+                subtitle: 'Total Revenue - Subscription (all payment methods)',
               ),
             ),
           ],
@@ -2591,8 +2591,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                   ),
                                   const DataColumn(
                                     label: Tooltip(
-                                      message: 'Net Amount - Subscription Sale (Total cash/online collected for this bill)',
-                                      child: Text('Cash Net', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.w700)),
+                                      message: 'Net Amount - Subscription Sale (Total revenue collected for this bill across all payment methods)',
+                                      child: Text('Net Revenue', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.w700)),
                                     ),
                                   ),
                                 ],
@@ -2980,7 +2980,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                     ),
                                     DataCell(
                                       Text(
-                                        _money(_itemWiseSalesTotal - ctrl.summary.subscriptionRealized),
+                                        _money(_itemWiseSalesTotal),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w800,
                                         ),
@@ -3076,8 +3076,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                               ),
                               const DataColumn(
                                 label: Tooltip(
-                                  message: 'Net Amount - Subscription Sale (Total cash/online collected for this date)',
-                                  child: Text('Cash Net', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.w700)),
+                                  message: 'Net Amount - Subscription Sale (Total revenue collected for this date across all payment methods)',
+                                  child: Text('Net Revenue', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.w700)),
                                 ),
                               ),
                             ],
