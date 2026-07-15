@@ -1073,10 +1073,27 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           children: [
             Expanded(
               child: _statCard(
-                'Today Revenue',
+                'Today Revenue (No Sub)',
                 'Rs. ${todayRevenue.toStringAsFixed(0)}',
                 Icons.payments_outlined,
                 const Color(0xFF2563EB),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SalesReportScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _statCard(
+                'Today Revenue (With Sub)',
+                'Rs. ${(todayRevenue + todaySubscriptionAmount).toStringAsFixed(0)}',
+                Icons.payments_outlined,
+                const Color(0xFF0EA5E9),
                 onTap: () {
                   Navigator.push(
                     context,

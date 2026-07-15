@@ -3,7 +3,14 @@ exports.getClosingReport = async (req, res) => {
     const outlet_id = req.user.outlet_id;
     const { from_date, to_date } = req.query;
 
-    const startDate = from_date || new Date().toISOString().substring(0, 10);
+    let startDate = from_date;
+    if (!startDate) {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        startDate = `${y}-${m}-${day}`;
+    }
     const endDate = to_date || startDate;
 
     const [rows] = await req.propertyDb.query(`

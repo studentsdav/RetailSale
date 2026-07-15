@@ -6560,7 +6560,8 @@ exports.returnSale = async (req, res) => {
         }
 
         // Generate Credit Note Number
-        const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const nowCN = new Date();
+        const todayStr = `${nowCN.getFullYear()}${String(nowCN.getMonth() + 1).padStart(2, '0')}${String(nowCN.getDate()).padStart(2, '0')}`;
         const cnCount = await req.propertyDb.models.sales_credit_notes.count({
             where: { outlet_id, credit_note_date: new Date() },
             transaction: t

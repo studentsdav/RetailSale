@@ -1299,6 +1299,14 @@ class PosInvoicePrinter {
     final qtyUnitRate =
         '${_qty(item.qty)} ${item.unit.trim()} x ${_money(_displayRate(item))}';
 
+    double itemDiscount = item.lineDiscount;
+    if (itemDiscount <= 0 && !item.isSchemeFree && !item.isAdvanceFree) {
+      final diff = (item.qty * item.rate) - item.taxableAmount;
+      if (diff > 0.01) {
+        itemDiscount = diff;
+      }
+    }
+
     // 2. Build the secondary detail string separated by pipes (|) for a clean look
     final detailParts = <String>[
       if (hsnOrCode.isNotEmpty) 'HSN $hsnOrCode',
@@ -1310,7 +1318,7 @@ class PosInvoicePrinter {
             '${item.taxAmount > 0 ? ' = ${_money(item.taxAmount)}' : ''}'
       else
         'GST NILL',
-      if (item.lineDiscount > 0) 'Disc ${_money(item.lineDiscount)}',
+      if (itemDiscount > 0.01) 'Disc ${_money(itemDiscount)}',
     ];
 
     return pw.Padding(

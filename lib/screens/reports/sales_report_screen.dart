@@ -22,6 +22,26 @@ class SalesReportScreen extends StatefulWidget {
   State<SalesReportScreen> createState() => _SalesReportScreenState();
 }
 
+class PaymentBreakdownRow {
+  final DateTime saleDate;
+  final String saleNo;
+  final String paymentMode;
+  final double taxedSales;
+  final double nonTaxSales;
+  final double tax;
+  final double netAmount;
+
+  PaymentBreakdownRow({
+    required this.saleDate,
+    required this.saleNo,
+    required this.paymentMode,
+    required this.taxedSales,
+    required this.nonTaxSales,
+    required this.tax,
+    required this.netAmount,
+  });
+}
+
 class _SalesReportScreenState extends State<SalesReportScreen> {
   final ctrl = SalesReportController();
   final purchaseCtrl = StockInReportController();
@@ -384,16 +404,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   double get _taxSaleTotal => _headerItemNetAmount - _nonTaxSaleTotal;
   double get _headerTaxableTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + _taxableSaleValue(sale));
+  // All figures from header-level columns (consistent with DB, dashboard, and payment breakdown)
   double get _headerCgstTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.cgstAmount);
   double get _headerSgstTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.sgstAmount);
   double get _headerIgstTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.igstAmount);
-  double get _headerTaxTotal =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalTax);
-  double get _headerRevenueTotal =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.netAmount);
   double get _headerDiscountTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalDiscount);
   double get _headerChargeTotal =>
@@ -402,8 +419,22 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         0,
         (sum, sale) => sum + sale.charges.fold<double>(0, (s, ch) => s + ch.taxAmount),
       );
+  // Total tax from header (same source as dashboard todayGst)
+  double get _headerTaxTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalTax);
+  // Item GST only (header total_tax minus charge GST)
   double get _headerItemTaxTotal => _headerTaxTotal - _headerChargeTaxTotal;
-  double get _headerItemNetAmount => _headerRevenueTotal - _headerChargeTotal - _headerChargeTaxTotal;
+  // Total Revenue = sum of header net_amount (matches payment breakdown)
+  double get _headerRevenueTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.netAmount);
+  // Net Sales = Revenue − Charges − ChargesGST
+  double get _headerItemNetAmount =>
+      _headerRevenueTotal - _headerChargeTotal - _headerChargeTaxTotal;
+  // Item-level taxable for Taxable Value card only
+  double get _headerItemTaxableTotal => _billWiseSales.fold<double>(
+        0,
+        (sum, sale) => sum + sale.items.fold<double>(0, (s, item) => s + item.taxableAmount),
+      );
 
   List<SalesReport> get _billWiseSales {
     final query = _itemSearchCtrl.text.trim().toLowerCase();
@@ -471,10 +502,71 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       ctrl.paymentModes.fold<int>(0, (sum, entry) => sum + entry.count);
   double get _paymentWiseAmountTotal =>
       ctrl.paymentModes.fold<double>(0, (sum, entry) => sum + entry.amount);
-  double get _paymentReportTaxSaleTotal => _billWiseSales.fold<double>(
-      0, (sum, sale) => sum + _billWiseTaxSaleValue(sale));
-  double get _paymentReportNonTaxSaleTotal => _billWiseSales.fold<double>(
-      0, (sum, sale) => sum + _billWiseNonTaxSaleValue(sale));
+  List<PaymentBreakdownRow> get _paymentBreakdownRows {
+    final List<PaymentBreakdownRow> rows = [];
+    for (final sale in _billWiseSales) {
+      final double subAmount = sale.subscription;
+      final double cashAmount = sale.netAmount - subAmount;
+
+      if (sale.paymentMode == 'SUBSCRIPTION') {
+        rows.add(PaymentBreakdownRow(
+          saleDate: sale.saleDate,
+          saleNo: sale.saleNo,
+          paymentMode: 'SUBSCRIPTION',
+          taxedSales: _billWiseTaxSaleValue(sale),
+          nonTaxSales: _billWiseNonTaxSaleValue(sale),
+          tax: sale.totalTax,
+          netAmount: sale.netAmount,
+        ));
+      } else if (subAmount > 0) {
+        final double totalBillNet = sale.netAmount;
+        final double subRatio = totalBillNet > 0 ? (subAmount / totalBillNet) : 0;
+        final double cashRatio = 1.0 - subRatio;
+
+        rows.add(PaymentBreakdownRow(
+          saleDate: sale.saleDate,
+          saleNo: sale.saleNo,
+          paymentMode: 'SUBSCRIPTION',
+          taxedSales: _billWiseTaxSaleValue(sale) * subRatio,
+          nonTaxSales: _billWiseNonTaxSaleValue(sale) * subRatio,
+          tax: sale.totalTax * subRatio,
+          netAmount: subAmount,
+        ));
+
+        if (cashAmount > 0) {
+          rows.add(PaymentBreakdownRow(
+            saleDate: sale.saleDate,
+            saleNo: sale.saleNo,
+            paymentMode: sale.paymentMode,
+            taxedSales: _billWiseTaxSaleValue(sale) * cashRatio,
+            nonTaxSales: _billWiseNonTaxSaleValue(sale) * cashRatio,
+            tax: sale.totalTax * cashRatio,
+            netAmount: cashAmount,
+          ));
+        }
+      } else {
+        rows.add(PaymentBreakdownRow(
+          saleDate: sale.saleDate,
+          saleNo: sale.saleNo,
+          paymentMode: sale.paymentMode,
+          taxedSales: _billWiseTaxSaleValue(sale),
+          nonTaxSales: _billWiseNonTaxSaleValue(sale),
+          tax: sale.totalTax,
+          netAmount: sale.netAmount,
+        ));
+      }
+    }
+    return rows;
+  }
+
+  double get _paymentReportTaxSaleTotal => _paymentBreakdownRows.fold<double>(
+      0, (sum, row) => sum + row.taxedSales);
+  double get _paymentReportNonTaxSaleTotal => _paymentBreakdownRows.fold<double>(
+      0, (sum, row) => sum + row.nonTaxSales);
+  double get _paymentReportTaxTotal => _paymentBreakdownRows.fold<double>(
+      0, (sum, row) => sum + row.tax);
+  double get _paymentReportNetTotal => _paymentBreakdownRows.fold<double>(
+      0, (sum, row) => sum + row.netAmount);
   double get _itemWiseLineCountTotal =>
       _groupedRows.fold<double>(0, (sum, row) => sum + row.lineCount);
   double get _itemWiseQtyTotal =>
@@ -637,6 +729,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           igstAmount: _saleIgstAmount(sale),
           taxAmount: sale.totalTax,
           netAmount: sale.netAmount,
+          subscription: sale.subscription,
           paymentModes: {sale.paymentMode},
           subTotal: sale.subTotal,
           discount: sale.totalDiscount,
@@ -650,6 +743,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           igstAmount: current.igstAmount + _saleIgstAmount(sale),
           taxAmount: current.taxAmount + sale.totalTax,
           netAmount: current.netAmount + sale.netAmount,
+          subscription: current.subscription + sale.subscription,
           paymentModes: Set<String>.from(current.paymentModes)..add(sale.paymentMode),
           subTotal: current.subTotal + sale.subTotal,
           discount: current.discount + sale.totalDiscount,
@@ -1443,9 +1537,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       _pdfSummaryBlock('Total CGST', summary.cgstAmount),
                       _pdfSummaryBlock('Total SGST', summary.sgstAmount),
                       _pdfSummaryBlock('Non-Tax Sales', _nonTaxSaleTotal),
-                      _pdfSummaryBlock('Subscription Sale', ctrl.summary.subscriptionRealized),
+                      _pdfSummaryBlock('Sub Sale (Adv.)', ctrl.summary.subscriptionRealized),
                       _pdfSummaryBlock('Charges', summary.chargeTotal),
-                      _pdfSummaryBlock('Net Sales', summary.totalRevenue + ctrl.summary.subscriptionRealized),
+                      _pdfSummaryBlock('Cash Net', summary.totalRevenue - ctrl.summary.subscriptionRealized),
                     ],
                   ),
                 ),
@@ -1517,7 +1611,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  'Net Sales = Sub-Total − Discount + Charges + GST  •  Total Revenue = Net Sales + Subscription.',
+                  'Net Sales = Sub-Total − Discount + GST (Includes Subscription)  •  Subscription = Advance-Paid Sale  •  Cash Net = Net Sales − Subscription',
                   style: TextStyle(
                     color: Color(0xFF64748B),
                     fontSize: 12,
@@ -1769,9 +1863,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   Widget _buildSummaryRow() {
     final subTotal = _billWiseSales.fold<double>(0, (s, sale) => s + sale.subTotal);
-    final discount = _headerDiscountTotal;
-    final gst      = _headerItemTaxTotal;
-    final netSales = _headerItemNetAmount;
+    final discount = _headerDiscountTotal;   // header total_discount
+    final gst      = _headerItemTaxTotal;    // header total_tax minus charge GST
+    final netSales = _headerItemNetAmount;   // Revenue − Charges − ChargeGST
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1856,7 +1950,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             SizedBox(width: 220, child: _metricCard('Total CGST', _headerCgstTotal, const Color(0xFF2563EB))),
             SizedBox(width: 220, child: _metricCard('Total SGST', _headerSgstTotal, const Color(0xFF7C3AED))),
             SizedBox(width: 220, child: _metricCard('Total IGST', _headerIgstTotal, const Color(0xFF0EA5E9))),
-            SizedBox(width: 220, child: _metricCard('GST Total', _headerItemTaxTotal, const Color(0xFFEA580C))),
+            SizedBox(width: 220, child: _metricCard('GST Total', _headerTaxTotal, const Color(0xFFEA580C))),
             SizedBox(
               width: 220,
               child: _metricCard('Total Discount', _headerDiscountTotal, const Color(0xFFDC2626),
@@ -1877,14 +1971,31 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             SizedBox(width: 220, child: _metricCard('Net Sales (Standard)', _headerItemNetAmount, const Color(0xFFEA580C))),
             SizedBox(width: 220, child: _metricCard('Taxed Sales After GST', _taxSaleTotal, const Color(0xFF16A34A))),
             SizedBox(width: 220, child: _metricCard('Non-Tax Sales', _nonTaxSaleTotal, const Color(0xFF64748B))),
-            SizedBox(width: 220, child: _metricCard('Subscription Realized', ctrl.summary.subscriptionRealized, const Color(0xFF0EA5E9))),
+            SizedBox(
+              width: 220,
+              child: _metricCard(
+                'Subscription Sale (Advance Paid)',
+                ctrl.summary.subscriptionRealized,
+                const Color(0xFF0EA5E9),
+                subtitle: 'Actual sale — advance collected, GST applicable',
+              ),
+            ),
             SizedBox(
               width: 220,
               child: _metricCard(
                 'Total Revenue',
-                _headerRevenueTotal + ctrl.summary.subscriptionRealized,
+                _headerRevenueTotal,
                 const Color(0xFF16A34A),
-                subtitle: 'Net Sales + Subscription',
+                subtitle: 'Net Sales + Charges',
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: _metricCard(
+                'Cash Net Sales',
+                _headerRevenueTotal - ctrl.summary.subscriptionRealized,
+                const Color(0xFF0D9488),
+                subtitle: 'Total Revenue - Subscription Sale',
               ),
             ),
           ],
@@ -2087,17 +2198,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 DataColumn(label: Text('Tax')),
                 DataColumn(label: Text('Net Amount')),
               ],
-              rows: _billWiseSales
+              rows: _paymentBreakdownRows
                   .map(
-                    (sale) => DataRow(
+                    (row) => DataRow(
                       color: WidgetStateProperty.all(
-                        _paymentColor(sale.paymentMode).withOpacity(0.10),
+                        _paymentColor(row.paymentMode).withOpacity(0.10),
                       ),
                       cells: [
                         DataCell(
-                          Text(DateFormat('dd-MM-yyyy').format(sale.saleDate)),
+                          Text(DateFormat('dd-MM-yyyy').format(row.saleDate)),
                         ),
-                        DataCell(Text(_maskedBillNo(sale.saleNo))),
+                        DataCell(Text(_maskedBillNo(row.saleNo))),
                         DataCell(
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -2105,29 +2216,29 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: _paymentColor(sale.paymentMode)
+                              color: _paymentColor(row.paymentMode)
                                   .withOpacity(0.14),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
-                              sale.paymentMode,
+                              row.paymentMode,
                               style: TextStyle(
-                                color: _paymentColor(sale.paymentMode),
+                                color: _paymentColor(row.paymentMode),
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                         ),
                         DataCell(
-                          Text(_money(_billWiseTaxSaleValue(sale))),
+                          Text(_money(row.taxedSales)),
                         ),
                         DataCell(
-                          Text(_money(_billWiseNonTaxSaleValue(sale))),
+                          Text(_money(row.nonTaxSales)),
                         ),
-                        DataCell(Text(_money(sale.totalTax))),
+                        DataCell(Text(_money(row.tax))),
                         DataCell(
                           Text(
-                            _money(sale.netAmount),
+                            _money(row.netAmount),
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ),
@@ -2161,13 +2272,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       ),
                       DataCell(
                         Text(
-                          _money(_billWiseTaxTotal),
+                          _money(_paymentReportTaxTotal),
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
                       DataCell(
                         Text(
-                          _money(_billWiseNetTotal),
+                          _money(_paymentReportNetTotal),
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -2424,7 +2535,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Bills: ${rows.length} | Sales: ${_money(_billWiseNetTotal)}',
+            'Bills: ${rows.length} | Net Sales: ${_money(_billWiseNetTotal)} | Subscription Sale: ${_money(ctrl.summary.subscriptionRealized)} | Cash Net: ${_money(_billWiseNetTotal - ctrl.summary.subscriptionRealized)}',
             style: const TextStyle(color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 12),
@@ -2472,6 +2583,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                   const DataColumn(label: Text('IGST')),
                                   const DataColumn(label: Text('Tax')),
                                   const DataColumn(label: Text('Net Amount')),
+                                  const DataColumn(
+                                    label: Tooltip(
+                                      message: 'Subscription = advance-paid sale. Customer GST applicable. Counted in total sales.',
+                                      child: Text('Sub Sale', style: TextStyle(color: Color(0xFF0EA5E9))),
+                                    ),
+                                  ),
+                                  const DataColumn(
+                                    label: Tooltip(
+                                      message: 'Net Amount - Subscription Sale (Total cash/online collected for this bill)',
+                                      child: Text('Cash Net', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.w700)),
+                                    ),
+                                  ),
                                 ],
                                 rows: [
                                   ...rows.map(
@@ -2512,6 +2635,16 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                             _money(sale.netAmount),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(Text(_money(sale.subscription))),
+                                        DataCell(
+                                          Text(
+                                            _money(sale.netAmount - sale.subscription),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF0D9488),
                                             ),
                                           ),
                                         ),
@@ -2602,6 +2735,24 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w800,
                                             color: Color(0xFF16A34A),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(ctrl.summary.subscriptionRealized),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            color: Color(0xFF0EA5E9),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseNetTotal - ctrl.summary.subscriptionRealized),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            color: Color(0xFF0D9488),
                                           ),
                                         ),
                                       ),
@@ -2829,7 +2980,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                     ),
                                     DataCell(
                                       Text(
-                                        _money(_itemWiseSalesTotal),
+                                        _money(_itemWiseSalesTotal - ctrl.summary.subscriptionRealized),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w800,
                                         ),
@@ -2869,7 +3020,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Days: ${rows.length} | Sales: ${_money(_dateWiseNetTotal)}',
+            'Days: ${rows.length} | Net Sales: ${_money(_dateWiseNetTotal)} | Subscription Sale (Advance Paid): ${_money(ctrl.summary.subscriptionRealized)} | Cash Net: ${_money(_dateWiseNetTotal - ctrl.summary.subscriptionRealized)}',
             style: const TextStyle(color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 12),
@@ -2917,6 +3068,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                               const DataColumn(label: Text('IGST')),
                               const DataColumn(label: Text('Tax')),
                               const DataColumn(label: Text('Net Amount')),
+                              const DataColumn(
+                                label: Tooltip(
+                                  message: 'Subscription = advance-paid sale. Customer GST applicable. Counted in total sales.',
+                                  child: Text('Sub Sale', style: TextStyle(color: Color(0xFF0EA5E9))),
+                                ),
+                              ),
+                              const DataColumn(
+                                label: Tooltip(
+                                  message: 'Net Amount - Subscription Sale (Total cash/online collected for this date)',
+                                  child: Text('Cash Net', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.w700)),
+                                ),
+                              ),
                             ],
                             rows: [
                               ...rows.map(
@@ -2948,6 +3111,16 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                         _money(row.netAmount),
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w800),
+                                      ),
+                                    ),
+                                    DataCell(Text(_money(row.subscription))),
+                                    DataCell(
+                                      Text(
+                                        _money(row.netAmount - row.subscription),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF0D9488),
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -3034,6 +3207,24 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w800,
                                             color: Color(0xFF16A34A))),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      _money(ctrl.summary.subscriptionRealized),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF0EA5E9),
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      _money(_dateWiseNetTotal - ctrl.summary.subscriptionRealized),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF0D9488),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -3520,6 +3711,7 @@ class _DateWiseSalesRow {
   final double igstAmount;
   final double taxAmount;
   final double netAmount;
+  final double subscription;
   final Set<String> paymentModes;
   final double subTotal;
   final double discount;
@@ -3533,6 +3725,7 @@ class _DateWiseSalesRow {
     required this.igstAmount,
     required this.taxAmount,
     required this.netAmount,
+    required this.subscription,
     required this.paymentModes,
     required this.subTotal,
     required this.discount,
@@ -3546,6 +3739,7 @@ class _DateWiseSalesRow {
     double? igstAmount,
     double? taxAmount,
     double? netAmount,
+    double? subscription,
     Set<String>? paymentModes,
     double? subTotal,
     double? discount,
@@ -3559,6 +3753,7 @@ class _DateWiseSalesRow {
       igstAmount: igstAmount ?? this.igstAmount,
       taxAmount: taxAmount ?? this.taxAmount,
       netAmount: netAmount ?? this.netAmount,
+      subscription: subscription ?? this.subscription,
       paymentModes: paymentModes ?? this.paymentModes,
       subTotal: subTotal ?? this.subTotal,
       discount: discount ?? this.discount,

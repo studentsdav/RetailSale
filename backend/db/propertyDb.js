@@ -1,5 +1,11 @@
 const { Sequelize } = require('sequelize');
-require('pg');
+const pg = require('pg');
+
+// Override parsing for TIMESTAMP WITHOUT TIME ZONE (OID 1114) to parse in local timezone
+pg.types.setTypeParser(pg.types.builtins.TIMESTAMP, (stringValue) => {
+    return stringValue ? new Date(stringValue.replace(' ', 'T')) : null;
+});
+
 const loadConfig = require("../utils/decryptConfig");
 
 // Calculate local timezone offset dynamically (e.g., +05:30 or -05:00)

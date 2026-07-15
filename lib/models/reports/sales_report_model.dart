@@ -165,6 +165,7 @@ class SalesReport {
   final double netAmount;
   final double estimatedCost;
   final double estimatedProfit;
+  final double subscription;
   final List<SalesReportCharge> charges;
   final List<SalesReportItem> items;
 
@@ -194,6 +195,7 @@ class SalesReport {
     required this.netAmount,
     required this.estimatedCost,
     required this.estimatedProfit,
+    required this.subscription,
     required this.charges,
     required this.items,
   });
@@ -225,6 +227,7 @@ class SalesReport {
       netAmount: _toDouble(json['net_amount']),
       estimatedCost: _toDouble(json['estimated_cost']),
       estimatedProfit: _toDouble(json['estimated_profit']),
+      subscription: _toDouble(json['subscription_amount'] ?? json['subscription']),
       charges: (json['charges'] as List? ?? [])
           .map((e) => SalesReportCharge.fromJson(e))
           .toList(),

@@ -7,7 +7,14 @@ exports.createExpense = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
         const created_by = req.user.id;
-        const expense_date = req.body.expense_date || new Date().toISOString().slice(0, 10);
+        let expense_date = req.body.expense_date;
+        if (!expense_date) {
+            const d = new Date();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            expense_date = `${y}-${m}-${day}`;
+        }
         const category = String(req.body.category || '').trim();
         const amount = Number(req.body.amount) || 0;
         const note = String(req.body.note || '').trim() || null;

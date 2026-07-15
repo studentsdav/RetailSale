@@ -54,7 +54,10 @@ function startOfMonth(dateValue) {
 
 function formatDayKey(dateValue) {
     const date = startOfDay(dateValue);
-    return date.toISOString().slice(0, 10);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
 
 function formatMonthKey(dateValue) {
@@ -178,15 +181,22 @@ exports.getSalesReport = async (req, res) => {
 
         const sales = await req.propertyDb.models.sales_headers.findAll({
             where,
-            include: [{
-                model: req.propertyDb.models.sales_items,
-                as: 'items',
-                include: [{
-                    model: req.propertyDb.models.item_master,
-                    as: 'item',
-                    attributes: ['rate', 'retail_sale_price', 'item_group', 'sub_category', 'brand']
-                }]
-            }],
+            include: [
+                {
+                    model: req.propertyDb.models.sales_items,
+                    as: 'items',
+                    include: [{
+                        model: req.propertyDb.models.item_master,
+                        as: 'item',
+                        attributes: ['rate', 'retail_sale_price', 'item_group', 'sub_category', 'brand']
+                    }]
+                },
+                {
+                    model: req.propertyDb.models.milk_subscription_consumptions,
+                    as: 'consumptions',
+                    required: false
+                }
+            ],
             order: [['sale_date', 'DESC'], ['id', 'DESC']]
         });
 
@@ -234,11 +244,13 @@ exports.getSalesReport = async (req, res) => {
         let totalSubscriptionAmount = 0;
         if (from_date && to_date) {
             const subConsumption = await req.propertyDb.query(`
-                SELECT COALESCE(SUM(covered_amount), 0) as total_subscription_amount
-                FROM milk_subscription_consumptions
-                WHERE outlet_id = :outletId
-                  AND txn_date BETWEEN :fromDate AND :toDate
-                  AND status != 'CANCELLED'
+                SELECT COALESCE(SUM(c.covered_amount), 0) as total_subscription_amount
+                FROM milk_subscription_consumptions c
+                LEFT JOIN sales_headers sh ON c.sale_id = sh.id
+                WHERE c.outlet_id = :outletId
+                  AND c.txn_date BETWEEN :fromDate AND :toDate
+                  AND c.status != 'CANCELLED'
+                  AND NOT (c.status = 'PENDING' AND c.excess_qty > 0 AND sh.payment_mode != 'SUBSCRIPTION')
             `, {
                 replacements: {
                     outletId: outlet_id,
@@ -292,6 +304,21 @@ exports.getSalesReport = async (req, res) => {
         const data = allRecords.map((rec) => {
             if (rec.type === 'SALE') {
                 const sale = rec.record;
+                
+                // Subscription calculations
+                const subItems = sale.items.filter(i => i.is_advance_free);
+                const subscriptionSubtotal = subItems.reduce((sum, i) => sum + toNumber(i.amount), 0);
+                const subscriptionTax = subItems.reduce((sum, i) => sum + toNumber(i.tax_amount), 0);
+                const subscriptionTaxable = subItems.reduce((sum, i) => sum + toNumber(i.taxable_amount), 0);
+                const subscriptionNet = subItems.reduce((sum, i) => sum + toNumber(i.net_amount), 0);
+
+                // Add subscription back to taxable, GST, and net_amount, and subtract subtotal from discount
+                const isFullSubscriptionSale = sale.payment_mode === 'SUBSCRIPTION';
+                sale.total_discount = isFullSubscriptionSale ? 0 : Math.max(toNumber(sale.total_discount) - subscriptionSubtotal, 0);
+                sale.taxable_amount = toNumber(sale.taxable_amount) + subscriptionTaxable;
+                sale.total_tax = toNumber(sale.total_tax) + subscriptionTax;
+                sale.net_amount = toNumber(sale.net_amount) + subscriptionNet;
+
                 const saleDate = normalizeDate(sale.sale_date);
                 const charges = safeArray(sale.charges);
                 const saleTaxBreakup = safeArray(sale.tax_breakup);
@@ -299,16 +326,42 @@ exports.getSalesReport = async (req, res) => {
                 const chargeSplit = sumChargeTotals(charges);
                 const saleTaxSplit = aggregateTaxes({ sale, taxAccumulator });
 
+                // Add subscription tax to the GST split and tax summary map
+                saleTaxSplit.gst += subscriptionTax;
+                subItems.forEach((item) => {
+                    safeArray(item.tax_breakup).forEach((tax) => {
+                        const summaryKey = String(tax.label || tax.code || 'Other Tax');
+                        const amount = toNumber(tax.tax_amount);
+                        taxAccumulator[summaryKey] = (taxAccumulator[summaryKey] || 0) + amount;
+                    });
+                });
+
                 const lineItems = sale.items.map((item) => {
                     const qty = toNumber(item.qty);
                     const saleRate = toNumber(item.rate);
                     const lineAmount = toNumber(item.amount);
-                    const lineNetAmount = toNumber(item.net_amount);
-                    const lineTaxAmount = toNumber(item.tax_amount);
-                    const lineDiscount = toNumber(item.line_discount);
+                    const dbNetAmount = toNumber(item.net_amount);
+                    
+                    let effectiveDiscount = 0;
+                    let effectiveNetAmount = 0;
+                    let effectiveTaxableAmount = 0;
+                    let effectiveTaxAmount = 0;
+
+                    if (item.is_advance_free) {
+                        effectiveDiscount = 0; // Subscription is not a discount!
+                        effectiveNetAmount = dbNetAmount;
+                        effectiveTaxableAmount = toNumber(item.taxable_amount);
+                        effectiveTaxAmount = toNumber(item.tax_amount);
+                    } else {
+                        effectiveDiscount = Math.max(lineAmount + toNumber(item.tax_amount) - dbNetAmount, 0);
+                        effectiveNetAmount = dbNetAmount;
+                        effectiveTaxableAmount = toNumber(item.taxable_amount);
+                        effectiveTaxAmount = toNumber(item.tax_amount);
+                    }
+
                     const itemCostRate = toNumber(item.item?.rate);
                     const lineCost = itemCostRate * qty;
-                    const lineProfit = lineNetAmount - lineCost;
+                    const lineProfit = effectiveNetAmount - lineCost;
 
                     totalQty += qty;
                     estimatedCost += lineCost;
@@ -325,14 +378,16 @@ exports.getSalesReport = async (req, res) => {
                     }
 
                     itemZoneMap[itemName].zones[zone.key] = roundAmount(
-                        itemZoneMap[itemName].zones[zone.key] + lineNetAmount
+                        itemZoneMap[itemName].zones[zone.key] + effectiveNetAmount
                     );
                     itemZoneMap[itemName].total_qty = roundAmount(
                         itemZoneMap[itemName].total_qty + qty
                     );
                     itemZoneMap[itemName].total_sales = roundAmount(
-                        itemZoneMap[itemName].total_sales + lineNetAmount
+                        itemZoneMap[itemName].total_sales + effectiveNetAmount
                     );
+
+                    const itemTaxBreakup = safeArray(item.tax_breakup);
 
                     return {
                         item_code: item.item_code,
@@ -346,15 +401,15 @@ exports.getSalesReport = async (req, res) => {
                         qty,
                         rate: saleRate,
                         amount: lineAmount,
-                        line_discount: lineDiscount,
-                        taxable_amount: toNumber(item.taxable_amount),
-                        tax_amount: lineTaxAmount,
-                        line_total: toNumber(item.line_total),
-                        net_amount: lineNetAmount,
+                        line_discount: roundAmount(effectiveDiscount),
+                        taxable_amount: roundAmount(effectiveTaxableAmount),
+                        tax_amount: roundAmount(effectiveTaxAmount),
+                        line_total: roundAmount(effectiveNetAmount),
+                        net_amount: roundAmount(effectiveNetAmount),
                         cost_rate: itemCostRate,
                         estimated_cost: lineCost,
-                        estimated_profit: lineProfit,
-                        tax_breakup: safeArray(item.tax_breakup)
+                        estimated_profit: roundAmount(lineProfit),
+                        tax_breakup: itemTaxBreakup
                     };
                 });
 
@@ -382,18 +437,39 @@ exports.getSalesReport = async (req, res) => {
                 profit = roundAmount(profit + salePositiveProfit);
                 loss = roundAmount(loss + saleLoss);
 
-                const paymentKey = String(sale.payment_mode || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
-                if (!paymentModeSummary[paymentKey]) {
-                    paymentModeSummary[paymentKey] = {
-                        payment_mode: paymentKey,
-                        amount: 0,
-                        sales_count: 0
-                    };
+                // Split payment breakdown between SUBSCRIPTION and CASH/ONLINE
+                if (subscriptionNet > 0) {
+                    const subKey = 'SUBSCRIPTION';
+                    if (!paymentModeSummary[subKey]) {
+                        paymentModeSummary[subKey] = {
+                            payment_mode: subKey,
+                            amount: 0,
+                            sales_count: 0
+                        };
+                    }
+                    paymentModeSummary[subKey].amount = roundAmount(
+                        paymentModeSummary[subKey].amount + subscriptionNet
+                    );
+                    paymentModeSummary[subKey].sales_count += 1;
                 }
-                paymentModeSummary[paymentKey].amount = roundAmount(
-                    paymentModeSummary[paymentKey].amount + saleNetRevenue
-                );
-                paymentModeSummary[paymentKey].sales_count += 1;
+
+                const cashPortion = Math.max(saleNetRevenue - subscriptionNet, 0);
+                if (cashPortion > 0 || !isFullSubscriptionSale) {
+                    const paymentKey = String(sale.payment_mode || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+                    if (paymentKey !== 'SUBSCRIPTION') {
+                        if (!paymentModeSummary[paymentKey]) {
+                            paymentModeSummary[paymentKey] = {
+                                payment_mode: paymentKey,
+                                amount: 0,
+                                sales_count: 0
+                            };
+                        }
+                        paymentModeSummary[paymentKey].amount = roundAmount(
+                            paymentModeSummary[paymentKey].amount + cashPortion
+                        );
+                        paymentModeSummary[paymentKey].sales_count += 1;
+                    }
+                }
 
                 timeZoneMap[zone.key].sales_count += 1;
                 timeZoneMap[zone.key].total_sales = roundAmount(
@@ -418,6 +494,10 @@ exports.getSalesReport = async (req, res) => {
                     store[key].profit = roundAmount(store[key].profit + salePositiveProfit);
                     store[key].loss = roundAmount(store[key].loss + saleLoss);
                 }
+
+                const subscriptionAmount = (sale.consumptions || [])
+                    .filter(c => !(c.status === 'PENDING' && toNumber(c.excess_qty) > 0 && sale.payment_mode !== 'SUBSCRIPTION'))
+                    .reduce((sum, c) => sum + toNumber(c.covered_amount), 0);
 
                 return {
                     id: sale.id,
@@ -449,6 +529,7 @@ exports.getSalesReport = async (req, res) => {
                     estimated_cost: saleEstimatedCost,
                     estimated_profit: saleProfit,
                     estimated_loss: saleLoss,
+                    subscription_amount: roundAmount(subscriptionAmount),
                     charges,
                     tax_breakup: saleTaxBreakup,
                     items: lineItems
@@ -622,6 +703,7 @@ exports.getSalesReport = async (req, res) => {
                     estimated_cost: 0,
                     estimated_profit: saleProfit,
                     estimated_loss: 0,
+                    subscription_amount: 0,
                     charges: [],
                     tax_breakup: cnTaxBreakup,
                     items: lineItems

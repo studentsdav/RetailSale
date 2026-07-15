@@ -320,12 +320,14 @@ FROM item_stock;
     `, { replacements: { outletId }, type: QueryTypes.SELECT }),
     db.query(`
       SELECT
-        txn_date,
-        covered_qty,
-        covered_amount
-      FROM milk_subscription_consumptions
-      WHERE outlet_id = :outletId
-        AND status != 'CANCELLED'
+        c.txn_date,
+        c.covered_qty,
+        c.covered_amount
+      FROM milk_subscription_consumptions c
+      LEFT JOIN sales_headers sh ON c.sale_id = sh.id
+      WHERE c.outlet_id = :outletId
+        AND c.status != 'CANCELLED'
+        AND NOT (c.status = 'PENDING' AND c.excess_qty > 0 AND sh.payment_mode != 'SUBSCRIPTION')
     `, { replacements: { outletId }, type: QueryTypes.SELECT })
   ]);
 
@@ -410,6 +412,19 @@ FROM item_stock;
   let todayGst = 0;
 
   for (const sale of sales) {
+    const subItems = (sale.items || []).filter(i => i.is_advance_free);
+    const subscriptionSubtotal = subItems.reduce((sum, i) => sum + toNumber(i.amount), 0);
+    const subscriptionTax = subItems.reduce((sum, i) => sum + toNumber(i.tax_amount), 0);
+    const subscriptionTaxable = subItems.reduce((sum, i) => sum + toNumber(i.taxable_amount), 0);
+    const subscriptionNet = subItems.reduce((sum, i) => sum + toNumber(i.net_amount), 0);
+
+    // Subtract subscription subtotal from discount, but ADD subscription to taxable, tax, and net_amount
+    const isFullSubscriptionSale = sale.payment_mode === 'SUBSCRIPTION';
+    sale.total_discount = isFullSubscriptionSale ? 0 : Math.max(toNumber(sale.total_discount) - subscriptionSubtotal, 0);
+    sale.taxable_amount = toNumber(sale.taxable_amount) + subscriptionTaxable;
+    sale.total_tax = toNumber(sale.total_tax) + subscriptionTax;
+    sale.net_amount = toNumber(sale.net_amount) + subscriptionNet;
+
     const saleDate = normalizeDate(sale.sale_date);
     let saleProfit = 0;
     let saleLoss = 0;
@@ -479,17 +494,7 @@ FROM item_stock;
     if (fitsRange(cDate, currentDayStart, currentDayEnd)) {
       todaySubscriptionAmount = roundAmount(todaySubscriptionAmount + cAmount);
       todaySubscriptionQty = roundAmount(todaySubscriptionQty + cQty);
-      todayRevenue = roundAmount(todayRevenue + cAmount);
-      todayTaxableRevenue = roundAmount(todayTaxableRevenue + cAmount);
     }
-
-    grandRevenue = roundAmount(grandRevenue + cAmount);
-    grandTaxableRevenue = roundAmount(grandTaxableRevenue + cAmount);
-
-    addPeriod('day', cDate, cAmount, 0, 0);
-    addPeriod('week', cDate, cAmount, 0, 0);
-    addPeriod('month', cDate, cAmount, 0, 0);
-    addPeriod('year', cDate, cAmount, 0, 0);
   }
 
   let cashInTotal = 0;

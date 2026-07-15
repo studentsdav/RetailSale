@@ -23,7 +23,8 @@ async function getStockBalance(db, outlet_id, item_code) {
 exports.getNextAssemblyNo = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-        const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+        const nowAsm = new Date();
+        const todayStr = `${nowAsm.getFullYear()}${String(nowAsm.getMonth() + 1).padStart(2, '0')}${String(nowAsm.getDate()).padStart(2, '0')}`; // YYYYMMDD
         
         const count = await req.propertyDb.models.assembly_headers.count({
             where: {
@@ -139,7 +140,8 @@ exports.createAssembly = async (req, res) => {
         const totalCost = compositeCost * producedQty;
 
         // 4. Generate Assembly Number
-        const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const nowAsm = new Date();
+        const todayStr = `${nowAsm.getFullYear()}${String(nowAsm.getMonth() + 1).padStart(2, '0')}${String(nowAsm.getDate()).padStart(2, '0')}`;
         const count = await req.propertyDb.models.assembly_headers.count({
             where: {
                 outlet_id,
