@@ -13,7 +13,7 @@ exports.listSaleSources = async (req, res) => {
 
 exports.createSaleSource = async (req, res) => {
     try {
-        const { name } = req.body;
+        const { name, commission_rate, gst_rate_on_commission, tds_rate, tcs_rate } = req.body;
         if (!name || name.trim().length === 0) {
             return res.status(400).json({ success: false, message: 'Name is required' });
         }
@@ -27,7 +27,11 @@ exports.createSaleSource = async (req, res) => {
         const created = await req.propertyDb.models.sale_sources.create({
             name: trimmedName,
             is_system: false,
-            is_active: true
+            is_active: true,
+            commission_rate: parseFloat(commission_rate || 0),
+            gst_rate_on_commission: parseFloat(gst_rate_on_commission || 0),
+            tds_rate: parseFloat(tds_rate || 0),
+            tcs_rate: parseFloat(tcs_rate || 0)
         });
         res.json({ success: true, data: created });
     } catch (error) {
@@ -38,7 +42,7 @@ exports.createSaleSource = async (req, res) => {
 exports.updateSaleSource = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, is_active } = req.body;
+        const { name, is_active, commission_rate, gst_rate_on_commission, tds_rate, tcs_rate } = req.body;
         const source = await req.propertyDb.models.sale_sources.findByPk(id);
         if (!source) {
             return res.status(404).json({ success: false, message: 'Source not found' });
@@ -46,15 +50,19 @@ exports.updateSaleSource = async (req, res) => {
         if (source.is_system) {
             return res.status(400).json({ success: false, message: 'System sources cannot be modified' });
         }
-        // Check if any bills are made with this source
-        const usedInBills = await req.propertyDb.models.sales_headers.findOne({
-            where: { sale_source: source.name }
-        });
-        if (usedInBills) {
-            return res.status(400).json({ success: false, message: 'Cannot edit source as it has already been used in sales' });
-        }
+        
         const trimmedName = name ? name.trim() : source.name;
-        if (name && trimmedName !== source.name) {
+        const nameChanged = trimmedName !== source.name;
+
+        if (nameChanged) {
+            // Check if any bills are made with this source name
+            const usedInBills = await req.propertyDb.models.sales_headers.findOne({
+                where: { sale_source: source.name }
+            });
+            if (usedInBills) {
+                return res.status(400).json({ success: false, message: 'Cannot edit source name as it has already been used in sales' });
+            }
+
             const existing = await req.propertyDb.models.sale_sources.findOne({
                 where: { name: trimmedName }
             });
@@ -62,9 +70,14 @@ exports.updateSaleSource = async (req, res) => {
                 return res.status(400).json({ success: false, message: 'Source name already exists' });
             }
         }
+
         await source.update({
             name: trimmedName,
-            is_active: is_active !== undefined ? is_active : source.is_active
+            is_active: is_active !== undefined ? is_active : source.is_active,
+            commission_rate: commission_rate !== undefined ? parseFloat(commission_rate || 0) : source.commission_rate,
+            gst_rate_on_commission: gst_rate_on_commission !== undefined ? parseFloat(gst_rate_on_commission || 0) : source.gst_rate_on_commission,
+            tds_rate: tds_rate !== undefined ? parseFloat(tds_rate || 0) : source.tds_rate,
+            tcs_rate: tcs_rate !== undefined ? parseFloat(tcs_rate || 0) : source.tcs_rate
         });
         res.json({ success: true, data: source });
     } catch (error) {

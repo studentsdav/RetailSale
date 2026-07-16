@@ -2776,6 +2776,55 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 73,
+    description: "Add commission, tcs, tds, and net payout columns to sale_sources and sales_headers",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        -- Add columns to sale_sources
+        ALTER TABLE sale_sources ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5, 2) DEFAULT 0.00;
+        ALTER TABLE sale_sources ADD COLUMN IF NOT EXISTS gst_rate_on_commission DECIMAL(5, 2) DEFAULT 0.00;
+        ALTER TABLE sale_sources ADD COLUMN IF NOT EXISTS tds_rate DECIMAL(5, 2) DEFAULT 0.00;
+        ALTER TABLE sale_sources ADD COLUMN IF NOT EXISTS tcs_rate DECIMAL(5, 2) DEFAULT 0.00;
+
+        -- Add columns to sales_headers
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5, 2) DEFAULT 0.00;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS gst_rate_on_commission DECIMAL(5, 2) DEFAULT 0.00;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS tds_rate DECIMAL(5, 2) DEFAULT 0.00;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS tcs_rate DECIMAL(5, 2) DEFAULT 0.00;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS commission_amount DECIMAL(12, 2) DEFAULT 0.00;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS commission_tax_amount DECIMAL(12, 2) DEFAULT 0.00;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS tcs_amount DECIMAL(12, 2) DEFAULT 0.00;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS tds_amount DECIMAL(12, 2) DEFAULT 0.00;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS net_payout DECIMAL(12, 2) DEFAULT 0.00;
+
+        -- Seed standard sale sources Amazon and Flipkart
+        INSERT INTO sale_sources (name, is_system, commission_rate, gst_rate_on_commission, tds_rate, tcs_rate, created_at, updated_at)
+        VALUES ('Amazon', FALSE, 15.00, 18.00, 1.00, 1.00, NOW(), NOW())
+        ON CONFLICT (name) DO UPDATE 
+        SET commission_rate = 15.00, gst_rate_on_commission = 18.00, tds_rate = 1.00, tcs_rate = 1.00, updated_at = NOW();
+
+        INSERT INTO sale_sources (name, is_system, commission_rate, gst_rate_on_commission, tds_rate, tcs_rate, created_at, updated_at)
+        VALUES ('Flipkart', FALSE, 12.00, 18.00, 1.00, 1.00, NOW(), NOW())
+        ON CONFLICT (name) DO UPDATE 
+        SET commission_rate = 12.00, gst_rate_on_commission = 18.00, tds_rate = 1.00, tcs_rate = 1.00, updated_at = NOW();
+
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 74,
+    description: "Add description column to lucky_draw_campaigns table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE lucky_draw_campaigns
+        ADD COLUMN IF NOT EXISTS description TEXT;
+      `);
+    }
   }
 ];
 

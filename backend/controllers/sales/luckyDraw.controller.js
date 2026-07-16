@@ -6,12 +6,34 @@ exports.listCampaigns = async (req, res) => {
             include: [{
                 model: req.propertyDb.models.draw_vouchers,
                 as: 'winner',
-                attributes: ['voucher_code', 'customer_name', 'customer_phone'],
+                attributes: ['voucher_code', 'customer_name', 'customer_phone', 'sale_id'],
                 required: false
             }],
             order: [['created_at', 'DESC']]
         });
-        res.json({ success: true, data: campaigns });
+
+        const plainCampaigns = [];
+        for (const campaign of campaigns) {
+            const plain = campaign.get({ plain: true });
+            if (plain.winner) {
+                let address = '';
+                if (plain.winner.sale_id) {
+                    const sale = await req.propertyDb.models.sales_headers.findByPk(plain.winner.sale_id);
+                    if (sale) address = sale.customer_address || '';
+                }
+                if (!address && plain.winner.customer_phone) {
+                    const latestSale = await req.propertyDb.models.sales_headers.findOne({
+                        where: { customer_phone: plain.winner.customer_phone },
+                        order: [['created_at', 'DESC']]
+                    });
+                    if (latestSale) address = latestSale.customer_address || '';
+                }
+                plain.winner.customer_address = address;
+            }
+            plainCampaigns.push(plain);
+        }
+
+        res.json({ success: true, data: plainCampaigns });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -21,16 +43,37 @@ exports.getActiveCampaign = async (req, res) => {
     try {
         const campaign = await req.propertyDb.models.lucky_draw_campaigns.findOne({
             where: {
-                status: { [Op.in]: ['ACTIVE', 'PENDING_RESULT'] }
+                status: { [Op.in]: ['ACTIVE', 'PENDING_RESULT', 'PAUSED'] }
             },
             include: [{
                 model: req.propertyDb.models.draw_vouchers,
                 as: 'winner',
-                attributes: ['voucher_code', 'customer_name', 'customer_phone'],
+                attributes: ['voucher_code', 'customer_name', 'customer_phone', 'sale_id'],
                 required: false
             }]
         });
-        res.json({ success: true, data: campaign });
+
+        if (campaign) {
+            const plainCampaign = campaign.get({ plain: true });
+            if (plainCampaign.winner) {
+                let address = '';
+                if (plainCampaign.winner.sale_id) {
+                    const sale = await req.propertyDb.models.sales_headers.findByPk(plainCampaign.winner.sale_id);
+                    if (sale) address = sale.customer_address || '';
+                }
+                if (!address && plainCampaign.winner.customer_phone) {
+                    const latestSale = await req.propertyDb.models.sales_headers.findOne({
+                        where: { customer_phone: plainCampaign.winner.customer_phone },
+                        order: [['created_at', 'DESC']]
+                    });
+                    if (latestSale) address = latestSale.customer_address || '';
+                }
+                plainCampaign.winner.customer_address = address;
+            }
+            return res.json({ success: true, data: plainCampaign });
+        }
+
+        res.json({ success: true, data: null });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -38,7 +81,7 @@ exports.getActiveCampaign = async (req, res) => {
 
 exports.createCampaign = async (req, res) => {
     try {
-        const { name, threshold_amount, draw_date } = req.body;
+        const { name, threshold_amount, draw_date, description } = req.body;
 
         if (!name || !threshold_amount || !draw_date) {
             return res.status(400).json({ success: false, message: 'Name, threshold amount, and draw date are required.' });
@@ -61,6 +104,7 @@ exports.createCampaign = async (req, res) => {
         const campaign = await req.propertyDb.models.lucky_draw_campaigns.create({
             outlet_id: req.user.outlet_id,
             name: name.trim(),
+            description: description ? description.trim() : null,
             threshold_amount: Number(threshold_amount),
             draw_date: new Date(draw_date),
             status: 'ACTIVE'
@@ -175,12 +219,27 @@ exports.drawWinner = async (req, res) => {
 
         await t.commit();
 
+        let address = '';
+        if (winner.sale_id) {
+            const sale = await req.propertyDb.models.sales_headers.findByPk(winner.sale_id, { transaction: t });
+            if (sale) address = sale.customer_address || '';
+        }
+        if (!address) {
+            const latestSale = await req.propertyDb.models.sales_headers.findOne({
+                where: { customer_phone: winner.customer_phone },
+                order: [['created_at', 'DESC']],
+                transaction: t
+            });
+            if (latestSale) address = latestSale.customer_address || '';
+        }
+
         res.json({
             success: true,
             data: {
                 voucher_code: winner.voucher_code,
                 customer_name: winner.customer_name,
-                customer_phone: winner.customer_phone
+                customer_phone: winner.customer_phone,
+                customer_address: address
             }
         });
     } catch (error) {
@@ -193,7 +252,7 @@ exports.completeCampaign = async (req, res) => {
     const t = await req.propertyDb.transaction();
     try {
         const { id } = req.params;
-        const { next_campaign_name, next_threshold_amount, next_draw_date } = req.body;
+        const { next_campaign_name, next_threshold_amount, next_draw_date, next_description } = req.body;
 
         const oldCampaign = await req.propertyDb.models.lucky_draw_campaigns.findOne({
             where: { id },
@@ -214,6 +273,7 @@ exports.completeCampaign = async (req, res) => {
             newCampaign = await req.propertyDb.models.lucky_draw_campaigns.create({
                 outlet_id: req.user.outlet_id,
                 name: next_campaign_name.trim(),
+                description: next_description ? next_description.trim() : null,
                 threshold_amount: Number(next_threshold_amount),
                 draw_date: new Date(next_draw_date),
                 status: 'ACTIVE'
@@ -225,6 +285,172 @@ exports.completeCampaign = async (req, res) => {
         res.json({
             success: true,
             message: 'Campaign completed successfully.',
+            data: {
+                old_campaign: oldCampaign,
+                new_campaign: newCampaign
+            }
+        });
+    } catch (error) {
+        await t.rollback();
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getCampaignParticipants = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const campaign = await req.propertyDb.models.lucky_draw_campaigns.findByPk(id);
+        if (!campaign) {
+            return res.status(404).json({ success: false, message: 'Campaign not found.' });
+        }
+
+        // Fetch all progress records for this campaign
+        const progressRecords = await req.propertyDb.models.customer_draw_progress.findAll({
+            where: { campaign_id: id },
+            order: [['accumulated_spend', 'DESC']]
+        });
+
+        const participants = [];
+        for (const record of progressRecords) {
+            // Find all vouchers for this customer in this campaign
+            const vouchers = await req.propertyDb.models.draw_vouchers.findAll({
+                where: { campaign_id: id, customer_phone: record.customer_phone }
+            });
+
+            // Find the customer's latest address from sales_headers
+            const latestSale = await req.propertyDb.models.sales_headers.findOne({
+                where: { customer_phone: record.customer_phone },
+                attributes: ['customer_address'],
+                order: [['created_at', 'DESC']]
+            });
+
+            const campaignThreshold = Number(campaign.threshold_amount || 2000.00);
+            const accumulated = Number(record.accumulated_spend || 0);
+            const voucherCount = vouchers.length;
+            const totalPurchase = accumulated + (voucherCount * campaignThreshold);
+
+            participants.push({
+                customer_name: record.customer_name || 'Walk-in',
+                customer_phone: record.customer_phone,
+                accumulated_spend: accumulated,
+                voucher_count: voucherCount,
+                voucher_codes: vouchers.map(v => v.voucher_code),
+                total_purchase: totalPurchase,
+                customer_address: latestSale?.customer_address || ''
+            });
+        }
+
+        res.json({ success: true, data: participants });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getCampaignSalesTrend = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const campaign = await req.propertyDb.models.lucky_draw_campaigns.findByPk(id);
+        if (!campaign) {
+            return res.status(404).json({ success: false, message: 'Campaign not found.' });
+        }
+
+        const startDate = campaign.start_date;
+        const endDate = campaign.status === 'COMPLETED' ? campaign.draw_date : new Date();
+
+        const sequelize = req.propertyDb;
+        const sales = await req.propertyDb.models.sales_headers.findAll({
+            attributes: [
+                [sequelize.fn('DATE', sequelize.col('created_at')), 'date'],
+                [sequelize.fn('SUM', sequelize.col('net_amount')), 'total_sales']
+            ],
+            where: {
+                created_at: {
+                    [Op.between]: [startDate, endDate]
+                },
+                status: 'COMPLETED'
+            },
+            group: [sequelize.fn('DATE', sequelize.col('created_at'))],
+            order: [[sequelize.fn('DATE', sequelize.col('created_at')), 'ASC']],
+            raw: true
+        });
+
+        res.json({ success: true, data: sales });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.pauseCampaign = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const campaign = await req.propertyDb.models.lucky_draw_campaigns.findByPk(id);
+        if (!campaign) {
+            return res.status(404).json({ success: false, message: 'Campaign not found.' });
+        }
+        if (campaign.status !== 'ACTIVE') {
+            return res.status(400).json({ success: false, message: 'Only active campaigns can be paused.' });
+        }
+        await campaign.update({ status: 'PAUSED' });
+        res.json({ success: true, message: 'Campaign paused successfully.', data: campaign });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.resumeCampaign = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const campaign = await req.propertyDb.models.lucky_draw_campaigns.findByPk(id);
+        if (!campaign) {
+            return res.status(404).json({ success: false, message: 'Campaign not found.' });
+        }
+        if (campaign.status !== 'PAUSED') {
+            return res.status(400).json({ success: false, message: 'Only paused campaigns can be resumed.' });
+        }
+        await campaign.update({ status: 'ACTIVE' });
+        res.json({ success: true, message: 'Campaign resumed successfully.', data: campaign });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.stopCampaign = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const { id } = req.params;
+        const { next_campaign_name, next_threshold_amount, next_draw_date, next_description } = req.body;
+
+        const oldCampaign = await req.propertyDb.models.lucky_draw_campaigns.findOne({
+            where: { id },
+            transaction: t
+        });
+
+        if (!oldCampaign) {
+            await t.rollback();
+            return res.status(404).json({ success: false, message: 'Campaign not found.' });
+        }
+
+        // Mark old as COMPLETED (without winner)
+        await oldCampaign.update({ status: 'COMPLETED', winner_voucher_id: null }, { transaction: t });
+
+        let newCampaign = null;
+        if (next_campaign_name && next_threshold_amount && next_draw_date) {
+            newCampaign = await req.propertyDb.models.lucky_draw_campaigns.create({
+                outlet_id: req.user.outlet_id,
+                name: next_campaign_name.trim(),
+                description: next_description ? next_description.trim() : null,
+                threshold_amount: Number(next_threshold_amount),
+                draw_date: new Date(next_draw_date),
+                status: 'ACTIVE'
+            }, { transaction: t });
+        }
+
+        await t.commit();
+
+        res.json({
+            success: true,
+            message: 'Campaign stopped successfully without winner.',
             data: {
                 old_campaign: oldCampaign,
                 new_campaign: newCampaign

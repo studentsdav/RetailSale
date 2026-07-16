@@ -535,6 +535,13 @@ class PosInvoicePrinter {
           ),
           pw.SizedBox(height: 4),
           pw.Text(data.thankYouMessage, textAlign: pw.TextAlign.center),
+          if (order.luckyDrawVouchers != null && order.luckyDrawVouchers!.isNotEmpty) ...[
+            pw.SizedBox(height: 8),
+            _buildThermalVoucherTicketEmbedded(order, order.luckyDrawVouchers!, regular, bold, data.property, isCustomerCopy: true),
+            pw.SizedBox(height: 8),
+            _buildThermalVoucherTicketEmbedded(order, order.luckyDrawVouchers!, regular, bold, data.property, isCustomerCopy: false),
+            pw.SizedBox(height: 8),
+          ],
         ],
       ),
     );
@@ -2903,81 +2910,257 @@ class PosInvoicePrinter {
     );
   }
 
-  static pw.Widget _buildThermalVoucherTicket(
-    SaleOrder order,
-    Map<String, dynamic> voucher,
-    pw.Font regular,
-    pw.Font bold, {
-    required bool isCustomerCopy,
-  }) {
-    final bodyStyle = pw.TextStyle(font: regular, fontSize: 8.5, color: PdfColors.black);
-    final boldStyle = pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black);
-    final titleStyle = pw.TextStyle(font: bold, fontSize: 12.0, color: PdfColors.black);
-
-    final campaignName = voucher['campaign_name']?.toString() ?? 'Lucky Draw';
-    final customerPhone = voucher['customer_phone']?.toString() ?? '--';
-    final voucherCode = voucher['code']?.toString() ?? voucher['voucher_code']?.toString() ?? 'LD-A7X9-123';
-
-    return pw.DefaultTextStyle(
-      style: bodyStyle,
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+  static pw.Widget _buildScissorsIcon() {
+    return pw.Container(
+      width: 16,
+      height: 8,
+      child: pw.Stack(
+        alignment: pw.Alignment.center,
         children: [
-          pw.Text('------------------------------------------', textAlign: pw.TextAlign.center, maxLines: 1),
-          pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(vertical: 2),
-            child: pw.Text(
-              'LUCKY DRAW TICKET',
-              textAlign: pw.TextAlign.center,
-              style: titleStyle,
-            ),
-          ),
-          pw.Text('------------------------------------------', textAlign: pw.TextAlign.center, maxLines: 1),
-          pw.SizedBox(height: 6),
-          pw.Row(
-            children: [
-              pw.Text('Campaign: ', style: boldStyle),
-              pw.Expanded(child: pw.Text(campaignName)),
-            ],
-          ),
-          pw.SizedBox(height: 3),
-          pw.Row(
-            children: [
-              pw.Text('Customer: ', style: boldStyle),
-              pw.Expanded(child: pw.Text(customerPhone)),
-            ],
-          ),
-          pw.SizedBox(height: 3),
-          pw.Row(
-            children: [
-              pw.Text('Code: ', style: boldStyle),
-              pw.Expanded(
-                child: pw.Text(voucherCode, style: pw.TextStyle(font: bold, fontSize: 11.0, color: PdfColors.black)),
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text('------------------------------------------', textAlign: pw.TextAlign.center, maxLines: 1),
-          pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(vertical: 2),
-            child: pw.Text(
-              isCustomerCopy ? '[ CUSTOMER COPY ]' : '[ STORE DROP-BOX COPY ]',
-              textAlign: pw.TextAlign.center,
-              style: boldStyle,
-            ),
-          ),
-          if (isCustomerCopy)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 1),
-              child: pw.Text(
-                'Keep this safe for the draw!',
-                textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey700),
+          pw.Positioned(
+            left: 0,
+            top: 0,
+            child: pw.Container(
+              width: 4,
+              height: 4,
+              decoration: pw.BoxDecoration(
+                shape: pw.BoxShape.circle,
+                border: pw.Border.all(width: 0.8, color: PdfColors.black),
               ),
             ),
-          pw.Text('------------------------------------------', textAlign: pw.TextAlign.center, maxLines: 1),
+          ),
+          pw.Positioned(
+            left: 0,
+            bottom: 0,
+            child: pw.Container(
+              width: 4,
+              height: 4,
+              decoration: pw.BoxDecoration(
+                shape: pw.BoxShape.circle,
+                border: pw.Border.all(width: 0.8, color: PdfColors.black),
+              ),
+            ),
+          ),
+          pw.Positioned(
+            left: 3,
+            top: 1.5,
+            child: pw.Transform.rotate(
+              angle: 0.25,
+              child: pw.Container(
+                width: 10,
+                height: 0.8,
+                color: PdfColors.black,
+              ),
+            ),
+          ),
+          pw.Positioned(
+            left: 3,
+            bottom: 1.5,
+            child: pw.Transform.rotate(
+              angle: -0.25,
+              child: pw.Container(
+                width: 10,
+                height: 0.8,
+                color: PdfColors.black,
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  static pw.Widget _buildCutLineWithScissors() {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Expanded(
+            child: pw.Divider(
+              height: 0,
+              thickness: 0.7,
+              borderStyle: pw.BorderStyle.dashed,
+              color: PdfColors.black,
+            ),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 6),
+            child: _buildScissorsIcon(),
+          ),
+          pw.Expanded(
+            child: pw.Divider(
+              height: 0,
+              thickness: 0.7,
+              borderStyle: pw.BorderStyle.dashed,
+              color: PdfColors.black,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildThermalVoucherTicketEmbedded(
+    SaleOrder order,
+    List<dynamic> vouchers,
+    pw.Font regular,
+    pw.Font bold,
+    PropertyInfo? property, {
+    required bool isCustomerCopy,
+  }) {
+    if (vouchers.isEmpty) return pw.SizedBox();
+
+    final firstVoucher = Map<String, dynamic>.from(vouchers.first as Map);
+    final bodyStyle = pw.TextStyle(font: regular, fontSize: 8.5, color: _thermalSecondary);
+    final boldStyle = pw.TextStyle(font: bold, fontSize: 8.5, color: _thermalPrimary);
+    final titleStyle = pw.TextStyle(font: bold, fontSize: 10.0, color: _thermalPrimary);
+
+    final campaignName = firstVoucher['campaign_name']?.toString() ?? 'Lucky Draw';
+    final campaignDesc = firstVoucher['campaign_description']?.toString() ?? '';
+    final customerPhone = firstVoucher['customer_phone']?.toString() ?? '--';
+    final customerName = firstVoucher['customer_name']?.toString() ?? 'Walk-in';
+    final billNo = order.saleNo;
+
+    // Group voucher codes
+    final List<String> codes = vouchers.map((v) {
+      final vMap = Map<String, dynamic>.from(v as Map);
+      return (vMap['code'] ?? vMap['voucher_code'] ?? '').toString();
+    }).where((c) => c.isNotEmpty).toList();
+
+    // Store Info
+    final String storeName = property?.propertyName ?? '';
+    final String storeAddress = property?.address ?? '';
+    final String storeCity = property?.city ?? '';
+    final String storePin = property?.pinCode ?? '';
+    final String storePhone = property?.mobile ?? '';
+    final String cityPin = '$storeCity $storePin'.trim();
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+      children: [
+        _buildCutLineWithScissors(),
+        pw.SizedBox(height: 4),
+        // Rounded grey container with thin border - watermark style background
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.grey100, // Halftone background watermark representation
+            borderRadius: pw.BorderRadius.circular(6),
+            border: pw.Border.all(color: PdfColors.grey300, width: 0.8),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              if (storeName.isNotEmpty) ...[
+                pw.Text(
+                  storeName.toUpperCase(),
+                  style: pw.TextStyle(font: bold, fontSize: 9.5, color: _thermalPrimary),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.SizedBox(height: 1.5),
+              ],
+              if (storeAddress.isNotEmpty) ...[
+                pw.Text(
+                  storeAddress,
+                  style: pw.TextStyle(font: regular, fontSize: 7.0, color: _thermalSecondary),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.SizedBox(height: 1.5),
+              ],
+              if (cityPin.isNotEmpty) ...[
+                pw.Text(
+                  cityPin,
+                  style: pw.TextStyle(font: regular, fontSize: 7.0, color: _thermalSecondary),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.SizedBox(height: 1.5),
+              ],
+              if (storePhone.isNotEmpty) ...[
+                pw.Text(
+                  'Phone: $storePhone',
+                  style: pw.TextStyle(font: regular, fontSize: 7.0, color: _thermalSecondary),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.SizedBox(height: 3),
+              ],
+              pw.Text(
+                isCustomerCopy ? 'LUCKY DRAW TICKET (CUSTOMER COPY)' : 'LUCKY DRAW TICKET (STORE COPY)',
+                style: titleStyle,
+                textAlign: pw.TextAlign.center,
+              ),
+              if (campaignDesc.isNotEmpty) ...[
+                pw.SizedBox(height: 3),
+                pw.Text(
+                  campaignDesc,
+                  style: pw.TextStyle(font: regular, fontSize: 7.5, color: _thermalSecondary),
+                  textAlign: pw.TextAlign.center,
+                ),
+              ],
+              pw.SizedBox(height: 6),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Campaign:', style: boldStyle),
+                  pw.Text(campaignName, style: bodyStyle),
+                ],
+              ),
+              pw.SizedBox(height: 3),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Bill No:', style: boldStyle),
+                  pw.Text(billNo, style: bodyStyle),
+                ],
+              ),
+              pw.SizedBox(height: 3),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Customer Name:', style: boldStyle),
+                  pw.Text(customerName, style: bodyStyle),
+                ],
+              ),
+              pw.SizedBox(height: 3),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Customer Phone:', style: boldStyle),
+                  pw.Text(customerPhone, style: bodyStyle),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+              pw.Divider(height: 0, thickness: 0.5, color: PdfColors.grey300),
+              pw.SizedBox(height: 4),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Ticket Code:', style: boldStyle),
+                  pw.Text(codes.isNotEmpty ? codes.first : 'LD-A7X9-123', style: pw.TextStyle(font: bold, fontSize: 10.0, color: _thermalPrimary)),
+                ],
+              ),
+              pw.SizedBox(height: 6),
+              if (isCustomerCopy)
+                pw.Text(
+                  'Keep this bill safe to claim your prize!',
+                  style: pw.TextStyle(font: regular, fontSize: 7.5, color: _thermalSecondary),
+                  textAlign: pw.TextAlign.center,
+                )
+              else
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(top: 8),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Customer: _________', style: pw.TextStyle(font: regular, fontSize: 7.5, color: _thermalSecondary)),
+                      pw.Text('Cashier: _________', style: pw.TextStyle(font: regular, fontSize: 7.5, color: _thermalSecondary)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

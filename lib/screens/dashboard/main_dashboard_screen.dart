@@ -68,6 +68,7 @@ import '../reports/source_analysis_screen.dart';
 import '../reports/payment_analysis_screen.dart';
 import '../reports/ai_query_analytics_screen.dart';
 import '../reports/stock_ledger_report_screen.dart';
+import '../reports/commission_report_screen.dart';
 import '../reports/supplier_payments_report_screen.dart';
 import '../reports/refund_pending_report_screen.dart';
 import '../reports/stock_transfer_report_screen.dart';
@@ -285,7 +286,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to upload backup to cloud. Please try again.'),
+            content:
+                Text('Failed to upload backup to cloud. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -344,9 +346,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     final hours = _hoursSinceLastUpload;
     final isSafe = hours < 12;
     final bgColor = isSafe ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2);
-    final borderColor = isSafe ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5);
-    final textColor = isSafe ? const Color(0xFF166534) : const Color(0xFF991B1B);
-    final iconColor = isSafe ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
+    final borderColor =
+        isSafe ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5);
+    final textColor =
+        isSafe ? const Color(0xFF166534) : const Color(0xFF991B1B);
+    final iconColor =
+        isSafe ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -397,14 +402,16 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDC2626)),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Color(0xFFDC2626)),
                     ),
                   )
                 : FilledButton.icon(
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFFDC2626),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -413,7 +420,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     icon: const Icon(Icons.cloud_upload, size: 16),
                     label: const Text(
                       "Upload Data",
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
           ],
@@ -637,19 +645,22 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         if (!isTokenValid) {
           await TokenStorage.clear();
           _notificationTimer?.cancel();
-          Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => const LoginScreen()));
+          Navigator.push(context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()));
           return;
         }
         try {
           final res = await ApiClient.get('/api/notifications');
           for (final n in res['data']) {
             final id = n['id'] as int? ?? 0;
-            if (id > 0 && n['is_read'] == false && !_shownNotificationIds.contains(id)) {
+            if (id > 0 &&
+                n['is_read'] == false &&
+                !_shownNotificationIds.contains(id)) {
               _shownNotificationIds.add(id);
-              NotificationService.show(id, n['title']?.toString() ?? 'Notification', n['message']?.toString() ?? '');
+              NotificationService.show(
+                  id,
+                  n['title']?.toString() ?? 'Notification',
+                  n['message']?.toString() ?? '');
             }
           }
         } catch (e) {
@@ -700,7 +711,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         netSubscription = safeDouble(data['kpis']['netSubscription']);
         netDebit = safeDouble(data['kpis']['netDebit']);
         todaySubscriptionQty = safeDouble(data['kpis']['todaySubscriptionQty']);
-        todaySubscriptionAmount = safeDouble(data['kpis']['todaySubscriptionAmount']);
+        todaySubscriptionAmount =
+            safeDouble(data['kpis']['todaySubscriptionAmount']);
         todayDiscount = safeDouble(data['kpis']['todayDiscount']);
         todayRevenue = safeDouble(data['kpis']['todayRevenue']);
         todayCollection = safeDouble(data['kpis']['todayCollection']);
@@ -813,8 +825,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(
-                builder: (context) => const LoginScreen()),
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
             (route) => false,
           );
         }
@@ -915,7 +926,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const LuckyDrawCampaignScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const LuckyDrawCampaignScreen()),
               );
             },
             icon: const Icon(Icons.casino_outlined, size: 18),
@@ -1504,7 +1516,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     );
   }
 
-  Widget _statCard(String label, String value, IconData icon, Color color, {VoidCallback? onTap}) {
+  Widget _statCard(String label, String value, IconData icon, Color color,
+      {VoidCallback? onTap}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1532,7 +1545,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(label, style: const TextStyle(color: Color(0xFF64748B))),
+                    Text(label,
+                        style: const TextStyle(color: Color(0xFF64748B))),
                     const SizedBox(height: 4),
                     Text(value,
                         style: TextStyle(
@@ -1638,7 +1652,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     (item) => DataRow(
                       cells: [
                         DataCell(Text(item.itemName)),
-                        DataCell(Text(item.brand.isNotEmpty ? item.brand : '—')),
+                        DataCell(
+                            Text(item.brand.isNotEmpty ? item.brand : '—')),
                         DataCell(_heatCell(item.zones['MORNING']?.sales ?? 0)),
                         DataCell(
                             _heatCell(item.zones['AFTERNOON']?.sales ?? 0)),
@@ -1829,8 +1844,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             }),
             _drawerItem(Icons.download, 'Receive from Vendor',
                 permission: 'STOCK_IN', onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const GoodsReceivingScreen()));
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const GoodsReceivingScreen()));
             }),
             if (_showRetailSalesSection)
               _drawerItem(Icons.point_of_sale, 'Retail Sales',
@@ -1839,20 +1856,29 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     MaterialPageRoute(builder: (_) => const SaleScreen()));
               }),
             if (_showRetailSalesSection) ...[
-              _drawerItem(Icons.shopping_bag_outlined, 'Customer App (Delivery)',
+              _drawerItem(
+                  Icons.shopping_bag_outlined, 'Customer App (Delivery)',
                   permission: 'RETAIL_SALES', isBeta: true, onTap: () {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const CustomerAppScreen()));
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const CustomerAppScreen()));
               }),
-              _drawerItem(Icons.admin_panel_settings_outlined, 'Supplier / Retailer Console',
+              _drawerItem(Icons.admin_panel_settings_outlined,
+                  'Supplier / Retailer Console',
                   permission: 'RETAIL_SALES', isBeta: true, onTap: () {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const RetailerConsoleScreen()));
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const RetailerConsoleScreen()));
               }),
-              _drawerItem(Icons.delivery_dining_outlined, 'Rider Delivery Portal',
+              _drawerItem(
+                  Icons.delivery_dining_outlined, 'Rider Delivery Portal',
                   permission: 'RETAIL_SALES', isBeta: true, onTap: () {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const RiderConsoleScreen()));
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const RiderConsoleScreen()));
               }),
             ],
             _drawerItem(Icons.upload, 'Stock Dispatch', permission: 'STOCK_OUT',
@@ -1862,8 +1888,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             }),
             _drawerItem(Icons.swap_horiz, 'Stock Transfer',
                 permission: 'STOCK_OUT', onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const StockTransferScreen()));
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const StockTransferScreen()));
             }),
             _drawerItem(Icons.build, 'Product Assembly',
                 permission: 'STOCK_OUT', onTap: () {
@@ -1872,10 +1900,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             }),
             _drawerItem(Icons.undo, 'Return Department Items',
                 permission: 'RETURN', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const ReturnIssueScreen()));
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ReturnIssueScreen()));
             }),
             _drawerItem(
               Icons.assignment_return,
@@ -2056,7 +2082,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                       builder: (_) => const SupplierMasterScreen()));
             }),
 
-            _drawerItem(Icons.settings_suggest_outlined, 'Document Sequence Settings',
+            _drawerItem(
+                Icons.settings_suggest_outlined, 'Document Sequence Settings',
                 permission: 'NUMBERING_SETTINGS', onTap: () {
               Navigator.push(
                   context,
@@ -2175,8 +2202,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             if (_showRetailSalesReportSection)
               _drawerItem(Icons.water_drop, 'Subscription Report',
                   permission: 'REPORTS', onTap: () {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const SubscriptionReportScreen()));
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const SubscriptionReportScreen()));
               }),
             _drawerItem(Icons.local_offer_outlined, 'Scheme Report',
                 permission: 'REPORTS', onTap: () {
@@ -2199,8 +2228,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   MaterialPageRoute(
                       builder: (_) => const StoreAnalysisScreen()));
             }),
-            _drawerItem(Icons.confirmation_number_outlined, 'Lucky Draw Campaigns',
-                permission: 'REPORTS', onTap: () {
+            _drawerItem(
+                Icons.confirmation_number_outlined, 'Lucky Draw Campaigns',
+                isBeta: true, permission: 'REPORTS', onTap: () {
               Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -2219,6 +2249,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   context,
                   MaterialPageRoute(
                       builder: (_) => const SourceAnalysisScreen()));
+            }),
+            _drawerItem(Icons.percent_outlined, 'Commission Report',
+                permission: 'REPORTS', onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const CommissionReportScreen()));
             }),
             _drawerItem(Icons.payments_outlined, 'Payment Method Analysis',
                 permission: 'REPORTS', onTap: () {
@@ -2589,8 +2626,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                             Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (context) =>
-                                        const LoginScreen()));
+                                    builder: (context) => const LoginScreen()));
                           } catch (e) {
                             setDialogState(() => loading = false);
 
@@ -3004,8 +3040,3 @@ double _safeDouble(dynamic value) {
   if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '') ?? 0;
 }
-
-
-
-
-

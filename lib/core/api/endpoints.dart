@@ -58,6 +58,7 @@ class ApiEndpoints {
 
   static const returnReport = '/api/reports/return';
   static const supplierPaymentsReport = '/api/reports/supplier-payments';
+  static const commissionReport = '/api/reports/commission';
 
   static const requestReport = '/api/reports/request';
 

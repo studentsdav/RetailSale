@@ -35,6 +35,7 @@ import 'screens/inventory/damage_item_screen.dart';
 import 'screens/reports/sales_report_screen.dart';
 import 'screens/reports/brand_analysis_screen.dart';
 import 'screens/reports/source_analysis_screen.dart';
+import 'screens/reports/commission_report_screen.dart';
 import 'screens/reports/payment_analysis_screen.dart';
 import 'screens/reports/cash_ledger_screen.dart';
 import 'screens/reports/stock_balance_screen.dart';
@@ -363,6 +364,9 @@ class MyApp extends StatelessWidget {
             },
             const SingleActivator(LogicalKeyboardKey.keyK, alt: true): () {
               globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const StockBalanceScreen()));
+            },
+            const SingleActivator(LogicalKeyboardKey.keyO, alt: true): () {
+              globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const CommissionReportScreen()));
             },
           },
           child: Listener(

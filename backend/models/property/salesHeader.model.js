@@ -58,7 +58,16 @@ module.exports = (sequelize, DataTypes) => {
         is_deleted: DataTypes.BOOLEAN,
         modified_by: DataTypes.INTEGER,
         modified_at: DataTypes.DATE,
-        modification_note: DataTypes.TEXT
+        modification_note: DataTypes.TEXT,
+        commission_rate: DataTypes.DECIMAL(5, 2),
+        gst_rate_on_commission: DataTypes.DECIMAL(5, 2),
+        tds_rate: DataTypes.DECIMAL(5, 2),
+        tcs_rate: DataTypes.DECIMAL(5, 2),
+        commission_amount: DataTypes.DECIMAL(12, 2),
+        commission_tax_amount: DataTypes.DECIMAL(12, 2),
+        tcs_amount: DataTypes.DECIMAL(12, 2),
+        tds_amount: DataTypes.DECIMAL(12, 2),
+        net_payout: DataTypes.DECIMAL(12, 2)
     }, {
         tableName: 'sales_headers',
         timestamps: true,

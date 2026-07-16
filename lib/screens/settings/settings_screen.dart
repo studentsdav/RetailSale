@@ -1190,13 +1190,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _showAddEditSourceDialog({Map<String, dynamic>? source}) async {
     final isEdit = source != null;
     final nameCtrl = TextEditingController(text: isEdit ? source['name'] : '');
+    final commissionCtrl = TextEditingController(text: isEdit ? (source['commission_rate'] ?? 0.0).toString() : '0.0');
+    final gstCtrl = TextEditingController(text: isEdit ? (source['gst_rate_on_commission'] ?? 0.0).toString() : '0.0');
+    final tdsCtrl = TextEditingController(text: isEdit ? (source['tds_rate'] ?? 0.0).toString() : '0.0');
+    final tcsCtrl = TextEditingController(text: isEdit ? (source['tcs_rate'] ?? 0.0).toString() : '0.0');
+
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(isEdit ? 'Edit Sale Source' : 'Add Sale Source'),
-        content: TextField(
-          controller: nameCtrl,
-          decoration: const InputDecoration(labelText: 'Source Name', hintText: 'e.g. Flipkart, Amazon, Meesho'),
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Source Name', hintText: 'e.g. Flipkart, Amazon, Meesho'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: commissionCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Commission Rate (%)', hintText: '0.00'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: gstCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'GST on Commission (%)', hintText: '0.00'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: tdsCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'TDS Rate (%)', hintText: '0.00'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: tcsCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'TCS Rate (%)', hintText: '0.00'),
+                ),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
@@ -1204,12 +1243,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               final name = nameCtrl.text.trim();
               if (name.isEmpty) return;
+              final commission = double.tryParse(commissionCtrl.text.trim()) ?? 0.0;
+              final gst = double.tryParse(gstCtrl.text.trim()) ?? 0.0;
+              final tds = double.tryParse(tdsCtrl.text.trim()) ?? 0.0;
+              final tcs = double.tryParse(tcsCtrl.text.trim()) ?? 0.0;
+
               try {
                 final salesCtrl = SalesController();
                 if (isEdit) {
-                  await salesCtrl.updateSaleSource(source['id'], name: name, isActive: source['is_active'] == true);
+                  await salesCtrl.updateSaleSource(
+                    source['id'],
+                    name: name,
+                    isActive: source['is_active'] == true,
+                    commissionRate: commission,
+                    gstRateOnCommission: gst,
+                    tdsRate: tds,
+                    tcsRate: tcs,
+                  );
                 } else {
-                  await salesCtrl.createSaleSource(name);
+                  await salesCtrl.createSaleSource(
+                    name,
+                    commissionRate: commission,
+                    gstRateOnCommission: gst,
+                    tdsRate: tds,
+                    tcsRate: tcs,
+                  );
                 }
                 if (context.mounted) Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(

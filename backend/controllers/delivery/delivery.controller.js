@@ -1144,12 +1144,23 @@ exports.acceptOrder = async (req, res) => {
         const balanceDue = isPrepaid ? 0 : finalPayableNetAmount;
         const paymentMode = isPrepaid ? 'UPI' : (isCredit ? 'CREDIT' : 'CASH');
 
+        const { calculateCommissionFields } = require('../../utils/commissionHelper');
+        const commFields = await calculateCommissionFields(
+            req.propertyDb,
+            'App',
+            derivedSubTotal,
+            finalPayableNetAmount,
+            t
+        );
+
         // 3. Create POS sales_headers entry
         const saleHeader = await req.propertyDb.models.sales_headers.create({
             outlet_id,
             sale_no: saleNo,
             sale_date: new Date(),
             customer_name: order.customer_name,
+            sale_source: 'App',
+            ...commFields,
             customer_phone: order.customer_phone,
             customer_address: order.customer_address,
             payment_mode: paymentMode,

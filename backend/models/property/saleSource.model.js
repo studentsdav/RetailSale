@@ -17,6 +17,22 @@ module.exports = (sequelize, DataTypes) => {
         is_active: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
+        },
+        commission_rate: {
+            type: DataTypes.DECIMAL(5, 2),
+            defaultValue: 0.00
+        },
+        gst_rate_on_commission: {
+            type: DataTypes.DECIMAL(5, 2),
+            defaultValue: 0.00
+        },
+        tds_rate: {
+            type: DataTypes.DECIMAL(5, 2),
+            defaultValue: 0.00
+        },
+        tcs_rate: {
+            type: DataTypes.DECIMAL(5, 2),
+            defaultValue: 0.00
         }
     }, {
         timestamps: true,

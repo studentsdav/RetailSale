@@ -35,6 +35,10 @@ module.exports = (sequelize, DataTypes) => {
         winner_voucher_id: {
             type: DataTypes.INTEGER,
             allowNull: true
+        },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: true
         }
     }, {
         tableName: 'lucky_draw_campaigns',

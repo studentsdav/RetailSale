@@ -721,21 +721,62 @@ class SalesController extends ChangeNotifier {
         .toList();
   }
 
-  Future<Map<String, dynamic>> createSaleSource(String name) async {
-    final res = await ApiClient.post(ApiEndpoints.saleSources, {'name': name});
+  Future<Map<String, dynamic>> createSaleSource(
+    String name, {
+    double commissionRate = 0.0,
+    double gstRateOnCommission = 0.0,
+    double tdsRate = 0.0,
+    double tcsRate = 0.0,
+  }) async {
+    final res = await ApiClient.post(ApiEndpoints.saleSources, {
+      'name': name,
+      'commission_rate': commissionRate,
+      'gst_rate_on_commission': gstRateOnCommission,
+      'tds_rate': tdsRate,
+      'tcs_rate': tcsRate,
+    });
     return Map<String, dynamic>.from(res['data'] ?? const {});
   }
 
-  Future<Map<String, dynamic>> updateSaleSource(int id, {required String name, required bool isActive}) async {
+  Future<Map<String, dynamic>> updateSaleSource(
+    int id, {
+    required String name,
+    required bool isActive,
+    double commissionRate = 0.0,
+    double gstRateOnCommission = 0.0,
+    double tdsRate = 0.0,
+    double tcsRate = 0.0,
+  }) async {
     final res = await ApiClient.put('${ApiEndpoints.saleSources}/$id', {
       'name': name,
       'is_active': isActive,
+      'commission_rate': commissionRate,
+      'gst_rate_on_commission': gstRateOnCommission,
+      'tds_rate': tdsRate,
+      'tcs_rate': tcsRate,
     });
     return Map<String, dynamic>.from(res['data'] ?? const {});
   }
 
   Future<void> deleteSaleSource(int id) async {
     await ApiClient.delete('${ApiEndpoints.saleSources}/$id');
+  }
+
+  Future<Map<String, dynamic>> getCommissionReport({
+    required DateTime fromDate,
+    required DateTime toDate,
+    String? saleSource,
+  }) async {
+    final Map<String, String> queryParams = {
+      'from_date': fromDate.toIso8601String(),
+      'to_date': toDate.toIso8601String(),
+    };
+    if (saleSource != null && saleSource != 'ALL') {
+      queryParams['sale_source'] = saleSource;
+    }
+    final uri = Uri(path: ApiEndpoints.commissionReport, queryParameters: queryParams);
+    final res = await ApiClient.get(uri.toString());
+    return Map<String, dynamic>.from(res ?? const {});
   }
 
   Future<List<Map<String, dynamic>>> listPaymentMethods() async {

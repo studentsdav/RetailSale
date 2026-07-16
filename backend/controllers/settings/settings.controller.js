@@ -1,6 +1,11 @@
 const audit = require('../../services/audit.service');
 
 const TRANSACTION_TABLES = [
+    // Lucky Draw Campaign tables (dependent children first)
+    'draw_vouchers',
+    'customer_draw_progress',
+    'lucky_draw_campaigns',
+
     // 1. Supplier Return tables (dependent children first)
     'supplier_return_refunds',
     'supplier_return_items',

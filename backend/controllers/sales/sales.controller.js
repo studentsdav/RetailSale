@@ -2536,6 +2536,16 @@ async function createSaleVersion({
         }
     }
 
+    const { calculateCommissionFields } = require('../../utils/commissionHelper');
+    const baseAmount = toAmount(header.taxable_amount ?? header.sub_total ?? netAmount);
+    const commFields = await calculateCommissionFields(
+        req.propertyDb,
+        header.sale_source || 'Store',
+        baseAmount,
+        netAmount,
+        transaction
+    );
+
     const sale = await req.propertyDb.models.sales_headers.create({
         outlet_id,
         sale_no: header.sale_no,
@@ -2593,6 +2603,7 @@ async function createSaleVersion({
         modified_by: overrides.modified_by ?? null,
         modified_at: overrides.modified_at ?? null,
         modification_note: header.modification_note || overrides.modification_note || null,
+        ...commFields,
         ...overrides
     }, { transaction });
 
@@ -3543,6 +3554,7 @@ exports.createSale = async (req, res) => {
                                 generated.push({
                                     code: voucher.voucher_code,
                                     campaign_name: activeCampaign.name,
+                                    campaign_description: activeCampaign.description,
                                     customer_phone: customerPhone,
                                     customer_name: customerName
                                 });
@@ -3889,12 +3901,19 @@ exports.updateSalePaymentMode = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid sale id' });
         }
 
-        const allowedModes = new Set(['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT']);
+        const dbMethods = await req.propertyDb.models.payment_methods.findAll({
+            where: { is_active: true },
+            transaction: t
+        });
+        const allowedModes = new Set([
+            'CASH', 'CARD', 'UPI', 'BANK', 'CREDIT',
+            ...dbMethods.map(m => String(m.name).trim().toUpperCase())
+        ]);
         if (!allowedModes.has(paymentModeInput) && paymentLinesRaw.length === 0) {
             await t.rollback();
             return res.status(400).json({
                 success: false,
-                message: 'Invalid payment mode. Allowed: CASH, CARD, UPI, BANK, CREDIT'
+                message: `Invalid payment mode. Allowed: ${[...allowedModes].join(', ')}`
             });
         }
 
@@ -4622,12 +4641,13 @@ exports.getSaleDetails = async (req, res) => {
                 include: [{
                     model: req.propertyDb.models.lucky_draw_campaigns,
                     as: 'campaign',
-                    attributes: ['name']
+                    attributes: ['name', 'description']
                 }]
             });
             saleJson.lucky_draw_vouchers = vouchers.map(v => ({
                 code: v.voucher_code,
                 campaign_name: v.campaign?.name || 'Lucky Draw',
+                campaign_description: v.campaign?.description,
                 customer_phone: v.customer_phone,
                 customer_name: v.customer_name
             }));
