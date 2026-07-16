@@ -2825,6 +2825,16 @@ COMMIT;
         ADD COLUMN IF NOT EXISTS description TEXT;
       `);
     }
+  },
+  {
+    version: 75,
+    description: "Add allow_creditors column to lucky_draw_campaigns table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE lucky_draw_campaigns
+        ADD COLUMN IF NOT EXISTS allow_creditors BOOLEAN NOT NULL DEFAULT TRUE;
+      `);
+    }
   }
 ];
 

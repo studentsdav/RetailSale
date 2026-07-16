@@ -81,7 +81,7 @@ exports.getActiveCampaign = async (req, res) => {
 
 exports.createCampaign = async (req, res) => {
     try {
-        const { name, threshold_amount, draw_date, description } = req.body;
+        const { name, threshold_amount, draw_date, description, allow_creditors } = req.body;
 
         if (!name || !threshold_amount || !draw_date) {
             return res.status(400).json({ success: false, message: 'Name, threshold amount, and draw date are required.' });
@@ -105,6 +105,7 @@ exports.createCampaign = async (req, res) => {
             outlet_id: req.user.outlet_id,
             name: name.trim(),
             description: description ? description.trim() : null,
+            allow_creditors: allow_creditors !== undefined ? Boolean(allow_creditors) : true,
             threshold_amount: Number(threshold_amount),
             draw_date: new Date(draw_date),
             status: 'ACTIVE'
@@ -252,7 +253,7 @@ exports.completeCampaign = async (req, res) => {
     const t = await req.propertyDb.transaction();
     try {
         const { id } = req.params;
-        const { next_campaign_name, next_threshold_amount, next_draw_date, next_description } = req.body;
+        const { next_campaign_name, next_threshold_amount, next_draw_date, next_description, next_allow_creditors } = req.body;
 
         const oldCampaign = await req.propertyDb.models.lucky_draw_campaigns.findOne({
             where: { id },
@@ -274,6 +275,7 @@ exports.completeCampaign = async (req, res) => {
                 outlet_id: req.user.outlet_id,
                 name: next_campaign_name.trim(),
                 description: next_description ? next_description.trim() : null,
+                allow_creditors: next_allow_creditors !== undefined ? Boolean(next_allow_creditors) : true,
                 threshold_amount: Number(next_threshold_amount),
                 draw_date: new Date(next_draw_date),
                 status: 'ACTIVE'
@@ -419,7 +421,7 @@ exports.stopCampaign = async (req, res) => {
     const t = await req.propertyDb.transaction();
     try {
         const { id } = req.params;
-        const { next_campaign_name, next_threshold_amount, next_draw_date, next_description } = req.body;
+        const { next_campaign_name, next_threshold_amount, next_draw_date, next_description, next_allow_creditors } = req.body;
 
         const oldCampaign = await req.propertyDb.models.lucky_draw_campaigns.findOne({
             where: { id },
@@ -440,6 +442,7 @@ exports.stopCampaign = async (req, res) => {
                 outlet_id: req.user.outlet_id,
                 name: next_campaign_name.trim(),
                 description: next_description ? next_description.trim() : null,
+                allow_creditors: next_allow_creditors !== undefined ? Boolean(next_allow_creditors) : true,
                 threshold_amount: Number(next_threshold_amount),
                 draw_date: new Date(next_draw_date),
                 status: 'ACTIVE'

@@ -309,6 +309,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
     final nextDescriptionCtrl = TextEditingController(text: 'Win pressure cooker, cup, mug, or more!');
     DateTime selectedDate = DateTime.now().add(const Duration(days: 30));
     bool startNextCampaign = true;
+    bool nextAllowCreditors = true;
 
     showDialog(
       context: context,
@@ -380,6 +381,23 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: nextAllowCreditors,
+                            onChanged: (val) {
+                              setDialogState(() => nextAllowCreditors = val ?? false);
+                            },
+                          ),
+                          const Expanded(
+                            child: Text(
+                              'Applicable for Creditors (Credit > 0)',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       ListTile(
                         shape: RoundedRectangleBorder(
                           side: BorderSide(color: Colors.grey.shade300),
@@ -424,6 +442,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                               'next_threshold_amount': double.tryParse(nextThresholdCtrl.text) ?? 2000.0,
                               'next_draw_date': selectedDate.toIso8601String(),
                               'next_description': nextDescriptionCtrl.text.trim(),
+                              'next_allow_creditors': nextAllowCreditors,
                             }
                           : <String, dynamic>{};
 
@@ -489,6 +508,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
     final nextDescriptionCtrl = TextEditingController(text: 'Win pressure cooker, cup, mug, or more!');
     DateTime selectedDate = DateTime.now().add(const Duration(days: 30));
     bool startNextCampaign = false;
+    bool nextAllowCreditors = true;
 
     showDialog(
       context: context,
@@ -560,6 +580,23 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: nextAllowCreditors,
+                            onChanged: (val) {
+                              setDialogState(() => nextAllowCreditors = val ?? false);
+                            },
+                          ),
+                          const Expanded(
+                            child: Text(
+                              'Applicable for Creditors (Credit > 0)',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       ListTile(
                         shape: RoundedRectangleBorder(
                           side: BorderSide(color: Colors.grey.shade300),
@@ -601,6 +638,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                               'next_threshold_amount': double.tryParse(nextThresholdCtrl.text) ?? 2000.0,
                               'next_draw_date': selectedDate.toIso8601String(),
                               'next_description': nextDescriptionCtrl.text.trim(),
+                              'next_allow_creditors': nextAllowCreditors,
                             }
                           : <String, dynamic>{};
 
@@ -634,6 +672,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
     final thresholdCtrl = TextEditingController(text: '2000');
     final descriptionCtrl = TextEditingController(text: 'Win pressure cooker, cup, mug, or more!');
     DateTime selectedDate = DateTime.now().add(const Duration(days: 30));
+    bool allowCreditors = true;
 
     showDialog(
       context: context,
@@ -682,6 +721,23 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                       ),
                     ),
                     const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: allowCreditors,
+                          onChanged: (val) {
+                            setDialogState(() => allowCreditors = val ?? false);
+                          },
+                        ),
+                        const Expanded(
+                          child: Text(
+                            'Applicable for Creditors (Credit > 0)',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     ListTile(
                       shape: RoundedRectangleBorder(
                         side: BorderSide(color: Colors.grey.shade300),
@@ -724,6 +780,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                         'threshold_amount': double.tryParse(thresholdCtrl.text) ?? 2000.0,
                         'draw_date': selectedDate.toIso8601String(),
                         'description': descriptionCtrl.text.trim(),
+                        'allow_creditors': allowCreditors,
                       });
                       if (res['success'] == true) {
                         Navigator.pop(dialogContext);

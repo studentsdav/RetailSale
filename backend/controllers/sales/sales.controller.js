@@ -3505,73 +3505,91 @@ exports.createSale = async (req, res) => {
                         const customerName = referenceSale.customer_name ? referenceSale.customer_name.trim() : null;
                         const netAmount = Number(referenceSale.net_amount || 0);
 
-                        let [progress, created] = await req.propertyDb.models.customer_draw_progress.findOrCreate({
-                            where: {
-                                campaign_id: activeCampaign.id,
-                                customer_phone: customerPhone
-                            },
-                            defaults: {
-                                outlet_id: req.user.outlet_id,
-                                customer_name: customerName,
-                                accumulated_spend: 0.00
-                            },
-                            transaction: t
-                        });
+                        // Check credit eligibility
+                        let isEligible = true;
+                        if (activeCampaign.allow_creditors === false) {
+                            const outstanding = await req.propertyDb.models.sales_headers.sum('balance_due', {
+                                where: {
+                                    customer_phone: customerPhone,
+                                    outlet_id: req.user.outlet_id,
+                                    status: 'COMPLETED'
+                                },
+                                transaction: t
+                            }) || 0;
+                            if (Number(outstanding) > 0.009) {
+                                isEligible = false;
+                            }
+                        }
 
-                        const totalSpend = Number(progress.accumulated_spend || 0) + netAmount;
-                        const threshold = Number(activeCampaign.threshold_amount || 2000.00);
-                        const eligibleTickets = Math.floor(totalSpend / threshold);
+                        if (isEligible) {
+                            let [progress, created] = await req.propertyDb.models.customer_draw_progress.findOrCreate({
+                                where: {
+                                    campaign_id: activeCampaign.id,
+                                    customer_phone: customerPhone
+                                },
+                                defaults: {
+                                    outlet_id: req.user.outlet_id,
+                                    customer_name: customerName,
+                                    accumulated_spend: 0.00
+                                },
+                                transaction: t
+                            });
 
-                        if (eligibleTickets > 0) {
-                            const generated = [];
-                            for (let i = 0; i < eligibleTickets; i++) {
-                                let code = '';
-                                let attempts = 0;
-                                while (attempts < 10) {
-                                    const randPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-                                    const randPart2 = Math.random().toString(36).substring(2, 5).toUpperCase();
-                                    code = `LD-${randPart1}-${randPart2}`;
+                            const totalSpend = Number(progress.accumulated_spend || 0) + netAmount;
+                            const threshold = Number(activeCampaign.threshold_amount || 2000.00);
+                            const eligibleTickets = Math.floor(totalSpend / threshold);
 
-                                    const exists = await req.propertyDb.models.draw_vouchers.findOne({
-                                        where: { voucher_code: code },
-                                        transaction: t,
-                                        bypassOutletFilter: true
+                            if (eligibleTickets > 0) {
+                                const generated = [];
+                                for (let i = 0; i < eligibleTickets; i++) {
+                                    let code = '';
+                                    let attempts = 0;
+                                    while (attempts < 10) {
+                                        const randPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+                                        const randPart2 = Math.random().toString(36).substring(2, 5).toUpperCase();
+                                        code = `LD-${randPart1}-${randPart2}`;
+
+                                        const exists = await req.propertyDb.models.draw_vouchers.findOne({
+                                            where: { voucher_code: code },
+                                            transaction: t,
+                                            bypassOutletFilter: true
+                                        });
+                                        if (!exists) break;
+                                        attempts++;
+                                    }
+
+                                    const voucher = await req.propertyDb.models.draw_vouchers.create({
+                                        outlet_id: req.user.outlet_id,
+                                        campaign_id: activeCampaign.id,
+                                        customer_phone: customerPhone,
+                                        customer_name: customerName,
+                                        sale_id: referenceSale.id,
+                                        voucher_code: code,
+                                        is_winner: false
+                                    }, { transaction: t });
+
+                                    generated.push({
+                                        code: voucher.voucher_code,
+                                        campaign_name: activeCampaign.name,
+                                        campaign_description: activeCampaign.description,
+                                        customer_phone: customerPhone,
+                                        customer_name: customerName
                                     });
-                                    if (!exists) break;
-                                    attempts++;
                                 }
 
-                                const voucher = await req.propertyDb.models.draw_vouchers.create({
-                                    outlet_id: req.user.outlet_id,
-                                    campaign_id: activeCampaign.id,
-                                    customer_phone: customerPhone,
-                                    customer_name: customerName,
-                                    sale_id: referenceSale.id,
-                                    voucher_code: code,
-                                    is_winner: false
+                                luckyDrawVouchers = generated;
+
+                                const newSpend = totalSpend % threshold;
+                                await progress.update({
+                                    customer_name: customerName || progress.customer_name,
+                                    accumulated_spend: newSpend
                                 }, { transaction: t });
-
-                                generated.push({
-                                    code: voucher.voucher_code,
-                                    campaign_name: activeCampaign.name,
-                                    campaign_description: activeCampaign.description,
-                                    customer_phone: customerPhone,
-                                    customer_name: customerName
-                                });
+                            } else {
+                                await progress.update({
+                                    customer_name: customerName || progress.customer_name,
+                                    accumulated_spend: totalSpend
+                                }, { transaction: t });
                             }
-
-                            luckyDrawVouchers = generated;
-
-                            const newSpend = totalSpend % threshold;
-                            await progress.update({
-                                customer_name: customerName || progress.customer_name,
-                                accumulated_spend: newSpend
-                            }, { transaction: t });
-                        } else {
-                            await progress.update({
-                                customer_name: customerName || progress.customer_name,
-                                accumulated_spend: totalSpend
-                            }, { transaction: t });
                         }
                     }
                 }
