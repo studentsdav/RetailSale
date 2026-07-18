@@ -2014,7 +2014,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   }
 
   Widget _creditTab() {
-    final customers = ctrl.creditCustomers;
+    final customers = ctrl.creditCustomers.where((customer) {
+      return customer.totalAdvance > 0.009 || customer.totalOutstanding > 0.009;
+    }).toList();
 
     Widget buildKpiCard({
       required String title,
