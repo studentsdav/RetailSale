@@ -1150,6 +1150,7 @@ exports.acceptOrder = async (req, res) => {
             'App',
             derivedSubTotal,
             finalPayableNetAmount,
+            finalItems,
             t
         );
 

@@ -11,6 +11,9 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/reports/finance_hub_controller.dart';
 import '../../models/reports/finance_models.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/endpoints.dart';
+import 'credit_analysis_screen.dart';
 
 class CashLedgerScreen extends StatefulWidget {
   const CashLedgerScreen({super.key});
@@ -50,10 +53,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   final openingNoteCtrl = TextEditingController();
   final alertDaysCtrl = TextEditingController(text: '7');
 
-  String ledgerType = '';
+    String ledgerType = '';
   String ledgerPaymentMethod = '';
   String deliveryStatus = '';
   String expiryStatus = 'ALL';
+
+  final Set<String> _expandedBillsCustomers = {};
+  final Set<String> _expandedAdvancesCustomers = {};
 
   @override
   void initState() {
@@ -727,6 +733,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     );
   }
 
+  // ignore: unused_element
   Future<void> _showAdvanceDialog(
     CreditCustomerReport customer, {
     AdvanceEntry? advance,
@@ -850,6 +857,164 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   );
                 },
                 child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showRefundAdvanceDialog(CreditCustomerReport customer) async {
+    final nonSubAdvance = customer.advances.where((e) {
+      if (e.availableAmount <= 0.009) return false;
+      final isSubMode = e.paymentMode.toUpperCase() == 'SUBSCRIPTION';
+      final isSubRef = e.referenceNo.toUpperCase().contains('SUBSCRIPTION');
+      final isSubNote = e.note.toLowerCase().contains('subscription');
+      return !(isSubMode || isSubRef || isSubNote);
+    }).fold<double>(0, (sum, e) => sum + e.availableAmount);
+
+    final amountCtrl = TextEditingController(text: nonSubAdvance.toStringAsFixed(2));
+    final refCtrl = TextEditingController();
+    final noteCtrl = TextEditingController(text: 'Refund of customer advance');
+    String paymentMode = 'CASH';
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Refund Customer Advance'),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(customer.customerName),
+                    subtitle: Text(
+                      'Available Non-Subscription Advance: ${_money(nonSubAdvance)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Refund Amount',
+                      prefixText: 'Rs. ',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: paymentMode,
+                    items: const ['CASH', 'CARD', 'UPI', 'BANK']
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(e),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => paymentMode = value ?? 'CASH'),
+                    decoration: const InputDecoration(labelText: 'Refund Method / Payment Mode'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: refCtrl,
+                    decoration: const InputDecoration(labelText: 'Reference No (Optional)'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: noteCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'Note'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                ),
+                onPressed: () async {
+                  final refundAmount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                  if (refundAmount <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter a valid refund amount')),
+                    );
+                    return;
+                  }
+                  if (refundAmount > nonSubAdvance) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Refund cannot exceed available non-subscription advance of ${_money(nonSubAdvance)}')),
+                    );
+                    return;
+                  }
+
+                  // Distribute the refund amount across non-subscription advances
+                  final advancesToRefund = customer.advances.where((e) {
+                    if (e.availableAmount <= 0.009) return false; // Ignore fully refunded leftovers
+                    final isSubMode = e.paymentMode.toUpperCase() == 'SUBSCRIPTION';
+                    final isSubRef = e.referenceNo.toUpperCase().contains('SUBSCRIPTION');
+                    final isSubNote = e.note.toLowerCase().contains('subscription');
+                    return !(isSubMode || isSubRef || isSubNote);
+                  }).toList();
+
+                  // Sort by ID to consume oldest first
+                  advancesToRefund.sort((a, b) => a.id.compareTo(b.id));
+
+                  double remainingRefund = refundAmount;
+
+                  try {
+                    for (final adv in advancesToRefund) {
+                      final currentAvailable = adv.availableAmount;
+                      if (currentAvailable <= 0) continue;
+
+                      final deduct = currentAvailable < remainingRefund ? currentAvailable : remainingRefund;
+
+                      // Make a POST call to the new refund endpoint on the backend
+                      await ApiClient.post(
+                        '${ApiEndpoints.financeAdvances}/${adv.id}/refund',
+                        {
+                          'amount': deduct,
+                          'payment_mode': paymentMode,
+                          'reference_no': refCtrl.text.trim(),
+                          'note': noteCtrl.text.trim(),
+                        },
+                      );
+
+                      remainingRefund -= deduct;
+                      if (remainingRefund <= 0.009) break;
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to process refund: $e')),
+                      );
+                    }
+                    return;
+                  }
+
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  
+                  await ctrl.loadCreditReport(
+                    fromDate: fromDate,
+                    toDate: toDate,
+                    customer: creditSearchCtrl.text,
+                  );
+                },
+                child: const Text('Confirm Refund'),
               ),
             ],
           );
@@ -1700,7 +1865,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             return const Center(child: CircularProgressIndicator());
           return Column(
             children: [
-              _filterCard(),
+              if (_tabController.index != 0) _filterCard(),
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
@@ -1849,317 +2014,741 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   }
 
   Widget _creditTab() {
-    final visibleCustomers = ctrl.creditCustomers
-        .map<Map<String, dynamic>>(
-          (customer) => {
-            'customer': customer,
-            'bills': customer.bills
-                .where((bill) => bill.outstanding > 0.009)
-                .toList(growable: false),
-          },
-        )
-        .where(
-          (entry) =>
-              (entry['bills'] as List).isNotEmpty ||
-              (entry['customer'] as CreditCustomerReport).totalAdvance > 0.009,
-        )
-        .toList(growable: false);
+    final customers = ctrl.creditCustomers;
+
+    Widget buildKpiCard({
+      required String title,
+      required String value,
+      required IconData icon,
+      required Color color,
+    }) {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget miniSummaryText(String label, String value, {bool isHighlight = false}) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isHighlight ? Colors.red.shade50 : Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isHighlight ? Colors.red.shade100 : Colors.grey.shade200),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$label: ', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isHighlight ? Colors.red.shade700 : Colors.black87)),
+          ],
+        ),
+      );
+    }
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
+          constraints: const BoxConstraints(maxWidth: 1000),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _summaryWrap([
-                _summaryCard(
-                    'Credit Bills', '${ctrl.totalCreditBills}', Colors.blue),
-                _summaryCard(
-                    'Outstanding', _money(ctrl.totalOutstanding), Colors.red),
-                _summaryCard('Advance', _money(ctrl.totalAdvance), Colors.green),
-              ]),
-              const SizedBox(height: 12),
-              ...visibleCustomers.map(
-                (entry) {
-                  final customer = entry['customer'] as CreditCustomerReport;
-                  final bills = entry['bills'] as List<CreditBill>;
-                  return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: ExpansionTile(
-                    tilePadding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    title: Text(
-                      customer.customerName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      '${customer.customerPhone} - Outstanding ${_money(customer.totalOutstanding)} - Advance ${_money(customer.totalAdvance)}',
-                    ),
+              // KPIs Grid
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = constraints.maxWidth > 750 ? 3 : 1;
+                  return GridView.count(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: cols == 3 ? 2.6 : 3.2,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Outstanding Bills (${bills.length})',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                                color: Colors.grey.shade700,
-                              ),
+                      buildKpiCard(
+                        title: 'Total Outstanding',
+                        value: _money(ctrl.totalOutstanding),
+                        icon: Icons.money_off_rounded,
+                        color: const Color(0xFFEF4444),
+                      ),
+                      buildKpiCard(
+                        title: 'Total Advance',
+                        value: _money(ctrl.totalAdvance),
+                        icon: Icons.account_balance_wallet_rounded,
+                        color: const Color(0xFF16A34A),
+                      ),
+                      buildKpiCard(
+                        title: 'Net Outstanding',
+                        value: _money(ctrl.totalOutstanding - ctrl.totalAdvance),
+                        icon: Icons.payments_rounded,
+                        color: const Color(0xFF2563EB),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // Search Bar Card
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: creditSearchCtrl,
+                          decoration: InputDecoration(
+                            hintText: 'Search customer name or phone number...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            suffixIcon: creditSearchCtrl.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      creditSearchCtrl.clear();
+                                      _loadCurrentTab();
+                                    },
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
-                            if (customer.totalOutstanding > 0.009)
-                              FilledButton.icon(
-                                onPressed: () => _showBulkRepaymentDialog(customer, bills),
-                                icon: const Icon(Icons.account_balance_wallet_outlined, size: 16),
-                                label: const Text('Bulk Repay'),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.blue.shade700,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                              ),
-                          ],
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                          onSubmitted: (_) => _loadCurrentTab(),
                         ),
                       ),
-                      const Divider(height: 1),
-                      const SizedBox(height: 12),
-                      ...bills.map(
-                        (bill) => Container(
-                          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFD),
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                alignment: WrapAlignment.spaceBetween,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        bill.billNo,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${_fmtDate(bill.billDate)} - ${_money(bill.amount)}',
-                                      ),
-                                    ],
-                                  ),
-                                  _statusChip(bill.paymentStatus),
-                                  FilledButton.tonal(
-                                    onPressed: () => _showRepaymentDialog(bill),
-                                    child: const Text('Repayment'),
-                                  ),
-                                  FilledButton.tonal(
-                                    onPressed: bill.outstanding > 0.009
-                                        ? () => _showWaiveOffDialog(bill)
-                                        : null,
-                                    child: const Text('Waive Off'),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
-                              Wrap(
-                                spacing: 16,
-                                runSpacing: 12,
-                                children: [
-                                  _summaryCard(
-                                    'Initial Paid',
-                                    _money(bill.initialPaid),
-                                    Colors.blueGrey,
-                                  ),
-                                  _summaryCard(
-                                    'Repaid',
-                                    _money(bill.repaymentTotal),
-                                    Colors.green,
-                                  ),
-                                  _summaryCard(
-                                    'Total Paid',
-                                    _money(bill.totalPaid),
-                                    Colors.blue,
-                                  ),
-                                  _summaryCard(
-                                    'Outstanding',
-                                    _money(bill.outstanding),
-                                    Colors.red,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
-                              if (bill.payments.isEmpty)
-                                const Text('No repayment transactions yet.')
-                              else
-                                ...bill.payments.map(
-                                  (payment) => Container(
-                                    margin: const EdgeInsets.only(bottom: 10),
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                        color: Colors.black12,
-                                      ),
-                                    ),
-                                    child: Wrap(
-                                      alignment: WrapAlignment.spaceBetween,
-                                      runSpacing: 8,
-                                      children: [
-                                        Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              '${_paymentModeLabel(payment.paymentMode)} - ${_money(payment.amount)}',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                            Text(
-                                              '${_fmtDate(payment.paymentDate)} - ${payment.referenceNo}',
-                                            ),
-                                            if (payment.note.trim().isNotEmpty)
-                                              Text(payment.note),
-                                          ],
-                                        ),
-                                        IconButton(
-                                          onPressed: () => _showRepaymentDialog(
-                                            bill,
-                                            payment: payment,
-                                          ),
-                                          icon: const Icon(Icons.edit_outlined),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        onPressed: _loadCurrentTab,
+                        icon: const Icon(Icons.search, size: 16),
+                        label: const Text('Search'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                       ),
                     ],
                   ),
-                );
-                },
+                ),
               ),
-              ...visibleCustomers
-                  .where(
-                    (entry) =>
-                        (entry['customer'] as CreditCustomerReport)
-                            .advances
-                            .isNotEmpty,
-                  )
-                  .map(
-                    (entry) {
-                      final customer = entry['customer'] as CreditCustomerReport;
-                      return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
+              const SizedBox(height: 20),
+
+              // Customer List Section Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text(
+                          'Customer Credit Accounts',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        Text(
+                          '(${customers.length} Customers)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CreditAnalysisScreen(),
+                        ),
+                      ).then((_) {
+                        _loadCurrentTab();
+                      });
+                    },
+                    icon: const Icon(Icons.analytics_outlined, size: 18),
+                    label: const Text('Credit Analysis'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF2563EB),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              alignment: WrapAlignment.spaceBetween,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: [
-                                Column(
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              if (customers.isEmpty)
+                _emptyCard('No customer credit records found.')
+              else
+                ...customers.map((customer) {
+                  final hasOutstanding = customer.totalOutstanding > 0.009;
+                  final unpaidBills = customer.bills.where((b) => b.outstanding > 0.009).toList();
+                  final isBillsExpanded = _expandedBillsCustomers.contains(customer.customerPhone);
+                  final isAdvancesExpanded = _expandedAdvancesCustomers.contains(customer.customerPhone);
+
+                  // Extract Initials
+                  String initials = '';
+                  if (customer.customerName.trim().isNotEmpty) {
+                    final parts = customer.customerName.trim().split(' ');
+                    if (parts.length > 1) {
+                      initials = (parts[0][0] + parts[1][0]).toUpperCase();
+                    } else if (parts[0].isNotEmpty) {
+                      initials = parts[0][0].toUpperCase();
+                    }
+                  }
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header Customer Row
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: const Color(0xFFEFF6FF),
+                                child: Text(
+                                  initials,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF2563EB),
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      '${customer.customerName} Advances',
+                                      customer.customerName,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
+                                        color: Color(0xFF1E293B),
                                       ),
                                     ),
-                                    Text(
-                                      'Available ${_money(customer.totalAdvance)}',
-                                    ),
-                                  ],
-                                ),
-                                FilledButton.tonal(
-                                  onPressed: () => _showAdvanceDialog(customer),
-                                  child: const Text('Add Advance'),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            ...customer.advances.map(
-                              (advance) => Container(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: Colors.black12,
-                                  ),
-                                ),
-                                child: Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  runSpacing: 8,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                    const SizedBox(height: 2),
+                                    Row(
                                       children: [
+                                        Icon(Icons.phone, size: 12, color: Colors.grey.shade500),
+                                        const SizedBox(width: 4),
                                         Text(
-                                          '${advance.paymentMode} - ${_money(advance.originalAmount)}',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
+                                          customer.customerPhone,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey.shade600,
                                           ),
                                         ),
-                                        Text(
-                                          '${_fmtDate(advance.advanceDate)} - Available ${_money(advance.availableAmount)}',
-                                        ),
-                                        if (advance.referenceNo.trim().isNotEmpty)
-                                          Text(advance.referenceNo),
-                                        if (advance.note.trim().isNotEmpty)
-                                          Text(advance.note),
                                       ],
                                     ),
-                                    if (advance.paymentMode.trim().toUpperCase() !=
-                                            'SUBSCRIPTION')
-                                      IconButton(
-                                        onPressed: () =>
-                                            _showAdvanceDialog(customer, advance: advance),
-                                        icon: const Icon(Icons.edit_outlined),
+                                    if (customer.customerGstin.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'GST: ${customer.customerGstin}',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade700,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                       ),
+                                    ],
                                   ],
                                 ),
                               ),
+                              // Balance Summary on Right
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Outstanding: ',
+                                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                      ),
+                                      Text(
+                                        _money(customer.totalOutstanding),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: hasOutstanding ? const Color(0xFFEF4444) : Colors.grey.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Advance: ',
+                                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                      ),
+                                      Text(
+                                        _money(customer.totalAdvance),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF16A34A),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
+
+                          // Actions Row
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 10,
+                            children: [
+                              (() {
+                                final nonSubAdvance = customer.advances.where((e) {
+                                  if (e.availableAmount <= 0.009) return false;
+                                  final isSubMode = e.paymentMode.toUpperCase() == 'SUBSCRIPTION';
+                                  final isSubRef = e.referenceNo.toUpperCase().contains('SUBSCRIPTION');
+                                  final isSubNote = e.note.toLowerCase().contains('subscription');
+                                  return !(isSubMode || isSubRef || isSubNote);
+                                }).fold<double>(0, (sum, e) => sum + e.availableAmount);
+                                if (nonSubAdvance <= 0.009) return const SizedBox.shrink();
+                                return FilledButton.icon(
+                                  onPressed: () => _showRefundAdvanceDialog(customer),
+                                  icon: const Icon(Icons.keyboard_return_rounded, size: 16),
+                                  label: const Text('Refund Advance'),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFFDC2626),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                );
+                              })(),
+                              FilledButton.icon(
+                                onPressed: hasOutstanding
+                                    ? () => _showBulkRepaymentDialog(customer, unpaidBills)
+                                    : null,
+                                icon: const Icon(Icons.payment, size: 16),
+                                label: const Text('Bulk Pay'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2563EB),
+                                  disabledBackgroundColor: Colors.grey.shade100,
+                                  disabledForegroundColor: Colors.grey.shade400,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    if (isBillsExpanded) {
+                                      _expandedBillsCustomers.remove(customer.customerPhone);
+                                    } else {
+                                      _expandedBillsCustomers.add(customer.customerPhone);
+                                    }
+                                  });
+                                },
+                                icon: Icon(
+                                  isBillsExpanded ? Icons.expand_less : Icons.expand_more,
+                                  size: 16,
+                                ),
+                                label: Text('Show Bills (${unpaidBills.length})'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: isBillsExpanded ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                                  side: BorderSide(
+                                    color: isBillsExpanded ? const Color(0xFF2563EB) : Colors.grey.shade300,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    if (isAdvancesExpanded) {
+                                      _expandedAdvancesCustomers.remove(customer.customerPhone);
+                                    } else {
+                                      _expandedAdvancesCustomers.add(customer.customerPhone);
+                                    }
+                                  });
+                                },
+                                icon: Icon(
+                                  isAdvancesExpanded ? Icons.expand_less : Icons.expand_more,
+                                  size: 16,
+                                ),
+                                label: Text('Show Advances (${customer.advances.length})'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: isAdvancesExpanded ? const Color(0xFF16A34A) : Colors.grey.shade700,
+                                  side: BorderSide(
+                                    color: isAdvancesExpanded ? const Color(0xFF16A34A) : Colors.grey.shade300,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // Bills Expanded Section
+                          if (isBillsExpanded) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade100),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Outstanding Bills Ledger',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  if (unpaidBills.isEmpty)
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 12),
+                                      child: Center(
+                                        child: Text(
+                                          'No outstanding bills for this customer.',
+                                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    ...unpaidBills.map((bill) {
+                                      return Container(
+                                        margin: const EdgeInsets.symmetric(vertical: 6),
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: Colors.grey.shade200),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      bill.billNo,
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 14,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      '${_fmtDate(bill.billDate)} - Total: ${_money(bill.amount)}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey.shade600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                _statusChip(bill.paymentStatus),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 10),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 6,
+                                              children: [
+                                                miniSummaryText('Initial Paid', _money(bill.initialPaid)),
+                                                miniSummaryText('Repaid', _money(bill.repaymentTotal)),
+                                                miniSummaryText('Total Paid', _money(bill.totalPaid)),
+                                                miniSummaryText('Outstanding', _money(bill.outstanding), isHighlight: true),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.end,
+                                              children: [
+                                                TextButton.icon(
+                                                  onPressed: () => _showRepaymentDialog(bill),
+                                                  icon: const Icon(Icons.payment, size: 14),
+                                                  label: const Text('Repayment', style: TextStyle(fontSize: 12)),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                TextButton.icon(
+                                                  onPressed: bill.outstanding > 0.009
+                                                      ? () => _showWaiveOffDialog(bill)
+                                                      : null,
+                                                  icon: const Icon(Icons.money_off, size: 14),
+                                                  label: const Text('Waive Off', style: TextStyle(fontSize: 12)),
+                                                  style: TextButton.styleFrom(
+                                                    foregroundColor: const Color(0xFFEF4444),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            if (bill.payments.isNotEmpty) ...[
+                                              const Divider(height: 16),
+                                              const Text(
+                                                'Repayment History',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF64748B),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              ...bill.payments.map((payment) {
+                                                return Container(
+                                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                                  padding: const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFF8FAFC),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    border: Border.all(color: Colors.grey.shade100),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    children: [
+                                                      Expanded(
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Text(
+                                                              '${_paymentModeLabel(payment.paymentMode)} - ${_money(payment.amount)}',
+                                                              style: const TextStyle(
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 11,
+                                                              ),
+                                                            ),
+                                                            Text(
+                                                              '${_fmtDate(payment.paymentDate)} - Ref: ${payment.referenceNo}',
+                                                              style: const TextStyle(
+                                                                fontSize: 10,
+                                                                color: Color(0xFF64748B),
+                                                              ),
+                                                            ),
+                                                            if (payment.note.trim().isNotEmpty)
+                                                              Text(
+                                                                payment.note,
+                                                                style: const TextStyle(
+                                                                  fontSize: 10,
+                                                                  fontStyle: FontStyle.italic,
+                                                                ),
+                                                              ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      IconButton(
+                                                        padding: EdgeInsets.zero,
+                                                        constraints: const BoxConstraints(),
+                                                        icon: const Icon(Icons.edit_outlined, size: 14, color: Colors.blue),
+                                                        onPressed: () => _showRepaymentDialog(bill, payment: payment),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }),
+                                            ],
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                ],
+                              ),
                             ),
                           ],
-                        ),
+
+                          // Advances Expanded Section
+                          if (isAdvancesExpanded) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.green.shade50),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Advances & Credit Transactions',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Color(0xFF166534),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  if (customer.advances.isEmpty)
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 12),
+                                      child: Center(
+                                        child: Text(
+                                          'No advance transactions found.',
+                                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    ...customer.advances.map((advance) {
+                                      return Container(
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: Colors.grey.shade200),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    '${advance.paymentMode} - Original: ${_money(advance.originalAmount)}',
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 13,
+                                                      color: Color(0xFF15803D),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    '${_fmtDate(advance.advanceDate)} - Available: ${_money(advance.availableAmount)} | Refunded: ${_money(advance.originalAmount - advance.availableAmount)}',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey.shade700,
+                                                    ),
+                                                  ),
+                                                  if (advance.referenceNo.trim().isNotEmpty)
+                                                    Text(
+                                                      'Ref: ${advance.referenceNo}',
+                                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                                    ),
+                                                  if (advance.note.trim().isNotEmpty)
+                                                    Text(
+                                                      advance.note,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontStyle: FontStyle.italic,
+                                                        color: Colors.grey.shade600,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    );
-                    },
-                  ),
-              if (visibleCustomers.isEmpty)
-                _emptyCard('No credit bills found for the selected filters.'),
-              const SizedBox(height: 16),
+                    ),
+                  );
+                }),
             ],
           ),
         ),

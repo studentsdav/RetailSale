@@ -191,6 +191,8 @@ propertyDb.models.delivery_customers =
     require('../../models/property/deliveryCustomer.model')(propertyDb, DataTypes);
 propertyDb.models.sale_sources =
     require('../../models/property/saleSource.model')(propertyDb, DataTypes);
+propertyDb.models.commission_rules =
+    require('../../models/property/commissionRule.model')(propertyDb, DataTypes);
 propertyDb.models.payment_methods =
     require('../../models/property/paymentMethod.model')(propertyDb, DataTypes);
 

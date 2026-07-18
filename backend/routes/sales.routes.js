@@ -4,9 +4,16 @@ const license = require('../middlewares/license.middleware');
 const ctrl = require('../controllers/sales/sales.controller');
 const loyaltyCtrl = require('../controllers/sales/loyalty.controller');
 const settingsCtrl = require('../controllers/sales/saleSettings.controller');
+const commissionRulesCtrl = require('../controllers/sales/commissionRules.controller');
 const { getSubscriptionDraftOrdersToday } = require('../jobs/subscriptionDeliveryJob');
 
 router.use(auth, license('INVENTORY'));
+
+// Commission Rules
+router.get('/commission-rules', commissionRulesCtrl.listCommissionRules);
+router.post('/commission-rules', commissionRulesCtrl.createCommissionRule);
+router.put('/commission-rules/:id', commissionRulesCtrl.updateCommissionRule);
+router.delete('/commission-rules/:id', commissionRulesCtrl.deleteCommissionRule);
 
 // Sale Sources
 router.get('/sources', settingsCtrl.listSaleSources);

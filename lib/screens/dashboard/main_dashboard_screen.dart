@@ -64,6 +64,7 @@ import '../reports/sales_report_screen.dart';
 import '../reports/store_analysis_screen.dart';
 import '../reports/lucky_draw_campaign_screen.dart';
 import '../reports/brand_analysis_screen.dart';
+import '../reports/scheme_analysis_screen.dart';
 import '../reports/source_analysis_screen.dart';
 import '../reports/payment_analysis_screen.dart';
 import '../reports/ai_query_analytics_screen.dart';
@@ -2213,6 +2214,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   context,
                   MaterialPageRoute(
                       builder: (_) => const SchemeReportScreen()));
+            }),
+            _drawerItem(Icons.analytics_outlined, 'Scheme Analysis',
+                permission: 'REPORTS', onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const SchemeAnalysisScreen()));
             }),
             _drawerItem(Icons.workspace_premium_outlined, 'Loyalty Report',
                 permission: 'REPORTS', onTap: () {

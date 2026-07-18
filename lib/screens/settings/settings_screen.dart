@@ -15,6 +15,7 @@ import '../../models/auth/permission_service.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../models/settings/app_branding_model.dart';
 import '../../controllers/sales/sales_controller.dart';
+import 'commission_rules_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -1378,10 +1379,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'Sale Sources / Channels',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
-              FilledButton.icon(
-                onPressed: () => _showAddEditSourceDialog(),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Source'),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const CommissionRulesScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.rule_folder_rounded, size: 18),
+                    label: const Text('Configure Commission Rules'),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: () => _showAddEditSourceDialog(),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Source'),
+                  ),
+                ],
               ),
             ],
           ),

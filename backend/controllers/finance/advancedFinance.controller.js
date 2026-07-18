@@ -1109,6 +1109,72 @@ exports.updateAdvance = async (req, res) => {
     }
 };
 
+exports.refundAdvance = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+
+    try {
+        const advance = await req.propertyDb.models.customer_advances.findOne({
+            where: {
+                id: req.params.id,
+                outlet_id: req.user.outlet_id
+            },
+            transaction: t
+        });
+
+        if (!advance) throw new Error('Advance entry not found');
+
+        const amount = toAmount(req.body.amount);
+        const payment_mode = String(req.body.payment_mode || 'CASH').trim().toUpperCase();
+        const reference_no = String(req.body.reference_no || '').trim() || null;
+        const note = String(req.body.note || '').trim() || null;
+
+        if (amount <= 0) throw new Error('Refund amount must be greater than 0');
+        if (amount > toAmount(advance.available_amount)) {
+            throw new Error(`Refund amount cannot exceed available advance of ${advance.available_amount}`);
+        }
+
+        const newAvailable = toAmount(advance.available_amount - amount);
+
+        await advance.update({
+            available_amount: newAvailable,
+            updated_by: req.user.id
+        }, { transaction: t });
+
+        await createLedgerEntry({
+            db: req.propertyDb,
+            outlet_id: req.user.outlet_id,
+            txn_date: dateKey(new Date()),
+            transaction_type: 'CUSTOMER_ADVANCE_REFUND',
+            reference_type: 'ADVANCE',
+            reference_id: advance.id,
+            reference_no,
+            party_name: advance.customer_name || 'Customer',
+            payment_method: payment_mode,
+            amount_out: amount,
+            notes: note || `Advance refund to ${advance.customer_name}`,
+            created_by: req.user.id,
+            transaction: t
+        });
+
+        // Append refund details directly to the advance note!
+        const refundNote = `(Refunded Rs. ${amount.toFixed(2)})`;
+        const updatedNote = advance.note 
+            ? `${advance.note} ${refundNote}`.trim()
+            : refundNote;
+
+        await advance.update({
+            note: updatedNote,
+            updated_by: req.user.id
+        }, { transaction: t });
+
+        await t.commit();
+        res.json({ success: true, data: advance });
+    } catch (error) {
+        await t.rollback();
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
 exports.applyAdvance = async (req, res) => {
     const t = await req.propertyDb.transaction();
 
@@ -1456,8 +1522,7 @@ exports.getCreditReport = async (req, res) => {
             order: [['sale_date', 'DESC'], ['id', 'DESC']]
         });
         const advanceWhere = {
-            outlet_id: req.user.outlet_id,
-            available_amount: { [Op.gt]: 0 }
+            outlet_id: req.user.outlet_id
         };
         const customerAdvanceMatch = buildCustomerMatch(String(req.query.customer || req.query.search || '').trim());
         if (customerAdvanceMatch) Object.assign(advanceWhere, customerAdvanceMatch);

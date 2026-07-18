@@ -880,6 +880,7 @@ async function loadSubscriptionConsumptionRows(req, subscription, transaction = 
             const coveredQty = toAmount(item.qty);
             if (coveredQty <= 0) continue;
             const rate = toAmount(item.rate);
+            const netAmount = toAmount(item.net_amount || item.line_total);
             fallbackRows.push(
                 req.propertyDb.models.milk_subscription_consumptions.build(
                     {
@@ -895,7 +896,7 @@ async function loadSubscriptionConsumptionRows(req, subscription, transaction = 
                         excess_qty: 0,
                         daily_allowed_qty: toAmount(subscription.daily_allowed_qty),
                         rate,
-                        covered_amount: coveredQty * rate,
+                        covered_amount: netAmount || (coveredQty * rate),
                         excess_amount: 0,
                         settlement_id: null,
                         status: 'CONSUMED',
@@ -1317,9 +1318,11 @@ function buildSubscriptionMetrics(subscription, consumptions = []) {
             activeDays.add(txnDate);
         }
         consumedQty += coveredQty;
-        consumedValue += coveredQty * rate;
-        if (rate > 0) {
-            lastPositiveRate = rate;
+        const rowCoveredAmount = toAmount(row.covered_amount);
+        consumedValue += rowCoveredAmount > 0 ? rowCoveredAmount : (coveredQty * rate);
+        const effectiveRate = (rowCoveredAmount > 0 && coveredQty > 0) ? (rowCoveredAmount / coveredQty) : rate;
+        if (effectiveRate > 0) {
+            lastPositiveRate = effectiveRate;
         }
     }
 
@@ -1355,20 +1358,27 @@ function buildSubscriptionMetrics(subscription, consumptions = []) {
         bonus_value: Number(bonusValue.toFixed(2)),
         discount_amount: Number(appliedDiscountAmount.toFixed(2)),
         discount_pending_amount: Number(pendingDiscountAmount.toFixed(2)),
-        daily_breakdown: cleanedRows.map((row) => ({
-            id: row.id,
-            txn_date: row.txn_date,
-            sale_id: row.sale_id,
-            sale_no: row.sale_no,
-            item_id: row.item_id,
-            item_name: row.item_name,
-            cart_qty: toAmount(row.cart_qty),
-            covered_qty: toAmount(row.covered_qty),
-            excess_qty: toAmount(row.excess_qty),
-            rate: toAmount(row.rate),
-            covered_amount: toAmount(row.covered_qty) * toAmount(row.rate),
-            status: row.status
-        }))
+        daily_breakdown: cleanedRows.map((row) => {
+            const rowCoveredQty = toAmount(row.covered_qty);
+            const rowCoveredAmount = toAmount(row.covered_amount);
+            const displayRate = (rowCoveredAmount > 0 && rowCoveredQty > 0)
+                ? parseFloat((rowCoveredAmount / rowCoveredQty).toFixed(2))
+                : toAmount(row.rate);
+            return {
+                id: row.id,
+                txn_date: row.txn_date,
+                sale_id: row.sale_id,
+                sale_no: row.sale_no,
+                item_id: row.item_id,
+                item_name: row.item_name,
+                cart_qty: toAmount(row.cart_qty),
+                covered_qty: rowCoveredQty,
+                excess_qty: toAmount(row.excess_qty),
+                rate: displayRate,
+                covered_amount: rowCoveredAmount > 0 ? rowCoveredAmount : (rowCoveredQty * toAmount(row.rate)),
+                status: row.status
+            };
+        })
     };
 }
 
@@ -2543,6 +2553,7 @@ async function createSaleVersion({
         header.sale_source || 'Store',
         baseAmount,
         netAmount,
+        saleItems,
         transaction
     );
 
@@ -3535,61 +3546,56 @@ exports.createSale = async (req, res) => {
                                 transaction: t
                             });
 
-                            const totalSpend = Number(progress.accumulated_spend || 0) + netAmount;
-                            const threshold = Number(activeCampaign.threshold_amount || 2000.00);
-                            const eligibleTickets = Math.floor(totalSpend / threshold);
+                            // Check if a voucher already exists for this sale
+                            const existingVoucher = await req.propertyDb.models.draw_vouchers.findOne({
+                                where: {
+                                    campaign_id: activeCampaign.id,
+                                    sale_id: referenceSale.id
+                                },
+                                transaction: t
+                            });
 
-                            if (eligibleTickets > 0) {
-                                const generated = [];
-                                for (let i = 0; i < eligibleTickets; i++) {
-                                    let code = '';
-                                    let attempts = 0;
-                                    while (attempts < 10) {
-                                        const randPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-                                        const randPart2 = Math.random().toString(36).substring(2, 5).toUpperCase();
-                                        code = `LD-${randPart1}-${randPart2}`;
+                            if (!existingVoucher) {
+                                let code = '';
+                                let attempts = 0;
+                                while (attempts < 10) {
+                                    const randPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+                                    const randPart2 = Math.random().toString(36).substring(2, 5).toUpperCase();
+                                    code = `LD-${randPart1}-${randPart2}`;
 
-                                        const exists = await req.propertyDb.models.draw_vouchers.findOne({
-                                            where: { voucher_code: code },
-                                            transaction: t,
-                                            bypassOutletFilter: true
-                                        });
-                                        if (!exists) break;
-                                        attempts++;
-                                    }
-
-                                    const voucher = await req.propertyDb.models.draw_vouchers.create({
-                                        outlet_id: req.user.outlet_id,
-                                        campaign_id: activeCampaign.id,
-                                        customer_phone: customerPhone,
-                                        customer_name: customerName,
-                                        sale_id: referenceSale.id,
-                                        voucher_code: code,
-                                        is_winner: false
-                                    }, { transaction: t });
-
-                                    generated.push({
-                                        code: voucher.voucher_code,
-                                        campaign_name: activeCampaign.name,
-                                        campaign_description: activeCampaign.description,
-                                        customer_phone: customerPhone,
-                                        customer_name: customerName
+                                    const exists = await req.propertyDb.models.draw_vouchers.findOne({
+                                        where: { voucher_code: code },
+                                        transaction: t,
+                                        bypassOutletFilter: true
                                     });
+                                    if (!exists) break;
+                                    attempts++;
                                 }
 
-                                luckyDrawVouchers = generated;
+                                const voucher = await req.propertyDb.models.draw_vouchers.create({
+                                    outlet_id: req.user.outlet_id,
+                                    campaign_id: activeCampaign.id,
+                                    customer_phone: customerPhone,
+                                    customer_name: customerName,
+                                    sale_id: referenceSale.id,
+                                    voucher_code: code,
+                                    is_winner: false
+                                }, { transaction: t });
 
-                                const newSpend = totalSpend % threshold;
-                                await progress.update({
-                                    customer_name: customerName || progress.customer_name,
-                                    accumulated_spend: newSpend
-                                }, { transaction: t });
-                            } else {
-                                await progress.update({
-                                    customer_name: customerName || progress.customer_name,
-                                    accumulated_spend: totalSpend
-                                }, { transaction: t });
+                                luckyDrawVouchers = [{
+                                    code: voucher.voucher_code,
+                                    campaign_name: activeCampaign.name,
+                                    campaign_description: activeCampaign.description,
+                                    customer_phone: customerPhone,
+                                    customer_name: customerName
+                                }];
                             }
+
+                            // Always accumulate the spend progress total
+                            await progress.update({
+                                customer_name: customerName || progress.customer_name,
+                                accumulated_spend: Number(progress.accumulated_spend || 0) + netAmount
+                            }, { transaction: t });
                         }
                     }
                 }

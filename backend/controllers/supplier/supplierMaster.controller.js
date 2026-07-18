@@ -244,7 +244,6 @@ exports.updateSupplier = async (req, res) => {
             user_id: req.user.id
         });
 
-
         res.json({ success: true, data: supplier });
 
     } catch (err) {
@@ -268,8 +267,6 @@ exports.deleteSupplier = async (req, res) => {
 
         await supplier.update({ is_active: false });
 
-
-
         await audit.log({
             req,
             module: 'SUPPLIER_MASTER',
@@ -289,27 +286,47 @@ exports.deleteSupplier = async (req, res) => {
     }
 };
 
-
 exports.getNextSupplierCode = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
 
-        const last = await req.propertyDb.models.supplier_master.findOne({
+        const suppliers = await req.propertyDb.models.supplier_master.findAll({
             where: { outlet_id },
-            order: [['id', 'DESC']],
-            attributes: ['supplier_code'],
+            attributes: ['supplier_code']
         });
 
-        let nextNum = 1;
+        const usedCodes = new Set();
+        let maxNum = 0;
 
-        if (last?.supplier_code) {
-            const num = parseInt(last.supplier_code.replace(/[^\d]/g, '')) || 0;
-            nextNum = num + 1;
+        for (const row of suppliers) {
+            const code = String(row.supplier_code || '').trim();
+            if (!code) continue;
+            usedCodes.add(code.toUpperCase());
+
+            const match = code.match(/(\d+)$/);
+            if (match) {
+                const num = parseInt(match[1], 10);
+                if (Number.isFinite(num) && num > maxNum) {
+                    maxNum = num;
+                }
+            } else {
+                const digits = parseInt(code.replace(/[^\d]/g, '')) || 0;
+                if (digits > maxNum) {
+                    maxNum = digits;
+                }
+            }
+        }
+
+        let nextNum = maxNum + 1;
+        let nextCode = `sup${nextNum}`;
+        while (usedCodes.has(nextCode.toUpperCase())) {
+            nextNum += 1;
+            nextCode = `sup${nextNum}`;
         }
 
         res.json({
             success: true,
-            data: `sup${nextNum}`,
+            data: nextCode,
         });
 
     } catch (err) {

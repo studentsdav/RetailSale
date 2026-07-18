@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/ui_preferences_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 import '../../models/inventory/item_model.dart';
 import '../../models/inventory/sale_customer_model.dart';
 
@@ -75,7 +76,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   Future<void> _bootstrap() async {
+    // Yield execution to allow build phase to finish
+    await Future.delayed(Duration.zero);
+    if (!mounted) return;
     setState(() => _loading = true);
+    try {
+      final settingsCtrl = context.read<SystemSettingsController>();
+      if (settingsCtrl.settings == null) {
+        await settingsCtrl.load();
+      }
+    } catch (_) {}
     await _ctrl.loadInitialData();
     _applyInitialCustomer();
     await _reloadSubscriptions();
@@ -2172,6 +2182,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final showHomeDelivery = context.read<SystemSettingsController>().settings?.enableAppSubscription == true;
+    if (!showHomeDelivery && _deliveryType == 'HOME') {
+      _deliveryType = 'PICKUP';
+    }
     final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
     final activeCount = _subscriptions
         .where((row) => row['active_subscription'] == true)
@@ -2599,15 +2613,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                           decoration: const InputDecoration(
                                             labelText: 'Delivery Type',
                                           ),
-                                          items: const [
-                                            DropdownMenuItem(
+                                          items: [
+                                            const DropdownMenuItem(
                                               value: 'PICKUP',
                                               child: Text('Store Pickup'),
                                             ),
-                                            DropdownMenuItem(
-                                              value: 'HOME',
-                                              child: Text('Home Delivery'),
-                                            ),
+                                            if (showHomeDelivery)
+                                              const DropdownMenuItem(
+                                                value: 'HOME',
+                                                child: Text('Home Delivery'),
+                                              ),
                                           ],
                                           onChanged: (val) {
                                             if (val != null) {

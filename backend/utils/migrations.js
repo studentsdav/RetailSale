@@ -2835,6 +2835,35 @@ COMMIT;
         ADD COLUMN IF NOT EXISTS allow_creditors BOOLEAN NOT NULL DEFAULT TRUE;
       `);
     }
+  },
+  {
+    version: 76,
+    description: "Create commission_rules table for hierarchical rule engine",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        CREATE TABLE IF NOT EXISTS commission_rules (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          platform_id INTEGER NOT NULL REFERENCES sale_sources(id) ON DELETE CASCADE,
+          category_id INTEGER REFERENCES item_groups(id) ON DELETE SET NULL,
+          product_id INTEGER REFERENCES item_master(id) ON DELETE CASCADE,
+          min_price DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          max_price DECIMAL(12, 2) NOT NULL DEFAULT 9999999.99,
+          percentage_fee DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+          fixed_fee DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          priority INTEGER NOT NULL DEFAULT 0,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_commission_rules_lookup ON commission_rules (outlet_id, platform_id, is_active);
+
+        COMMIT;
+      `);
+    }
   }
 ];
 

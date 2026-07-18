@@ -90,6 +90,7 @@ class ApiEndpoints {
   static const financeExpiryReport = '/api/finance/expiry-report';
   static const paySupplierBill = '/api/suppliers/bills/pay';
   static const sales = '/api/sales';
+  static const commissionRules = '/api/sales/commission-rules';
   static const salesSchemes = '/api/sales/schemes';
   static const salesCustomers = '/api/sales/customers';
   static const salesRefunds = '/api/sales/refunds';

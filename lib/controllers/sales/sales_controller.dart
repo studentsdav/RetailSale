@@ -762,6 +762,32 @@ class SalesController extends ChangeNotifier {
     await ApiClient.delete('${ApiEndpoints.saleSources}/$id');
   }
 
+  Future<List<Map<String, dynamic>>> listCommissionRules({int? platformId}) async {
+    final Map<String, String> queryParams = {};
+    if (platformId != null) {
+      queryParams['platform_id'] = platformId.toString();
+    }
+    final uri = Uri(path: ApiEndpoints.commissionRules, queryParameters: queryParams);
+    final res = await ApiClient.get(uri.toString());
+    return (res['data'] as List? ?? const [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createCommissionRule(Map<String, dynamic> data) async {
+    final res = await ApiClient.post(ApiEndpoints.commissionRules, data);
+    return Map<String, dynamic>.from(res['data'] ?? const {});
+  }
+
+  Future<Map<String, dynamic>> updateCommissionRule(int id, Map<String, dynamic> data) async {
+    final res = await ApiClient.put('${ApiEndpoints.commissionRules}/$id', data);
+    return Map<String, dynamic>.from(res['data'] ?? const {});
+  }
+
+  Future<void> deleteCommissionRule(int id) async {
+    await ApiClient.delete('${ApiEndpoints.commissionRules}/$id');
+  }
+
   Future<Map<String, dynamic>> getCommissionReport({
     required DateTime fromDate,
     required DateTime toDate,
