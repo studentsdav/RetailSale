@@ -345,7 +345,7 @@ exports.getIssueByDate = async (req, res) => {
                 'issue_date'
             ],
 
-            order: [['created_at', 'DESC']]
+            order: [['id', 'DESC']]
         });
 
         res.json({

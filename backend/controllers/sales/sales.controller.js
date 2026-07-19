@@ -5300,13 +5300,23 @@ exports.createSubscription = async (req, res) => {
         const existingSubscriptions = await req.propertyDb.models.milk_subscriptions.findAll({
             where: {
                 outlet_id: req.user.outlet_id,
-                item_id: itemId,
                 status: { [Op.ne]: 'CANCELLED' }
             },
+            include: [
+                {
+                    model: req.propertyDb.models.item_master,
+                    as: 'item',
+                    required: false
+                }
+            ],
             order: [['start_date', 'DESC'], ['id', 'DESC']],
             transaction: t
         });
         const duplicateMatch = existingSubscriptions.find((row) => {
+            // Must be the exact same item variant (item_code is unique per variant)
+            const rowItemCode = row.item ? row.item.item_code : '';
+            if (rowItemCode !== item.item_code) return false;
+
             const rowIdentity = normalizeCustomerIdentity(row.toJSON());
             const samePhone = identity.customer_phone && rowIdentity.customer_phone
                 ? identity.customer_phone === rowIdentity.customer_phone
@@ -5333,6 +5343,10 @@ exports.createSubscription = async (req, res) => {
         }
 
         const overlappingMatch = existingSubscriptions.find((row) => {
+            // Must be the exact same item variant (item_code is unique per variant)
+            const rowItemCode = row.item ? row.item.item_code : '';
+            if (rowItemCode !== item.item_code) return false;
+
             const rowIdentity = normalizeCustomerIdentity(row.toJSON());
             const samePhone = identity.customer_phone && rowIdentity.customer_phone
                 ? identity.customer_phone === rowIdentity.customer_phone

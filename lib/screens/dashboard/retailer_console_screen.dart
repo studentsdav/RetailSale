@@ -3750,7 +3750,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                           children: [
                                             Expanded(
                                               child: Text(
-                                                '•  ${item['item_name']} x ${qty.toStringAsFixed(0)}',
+                                                (item['brand'] ?? '').toString().isNotEmpty
+                                                    ? '•  ${item["item_name"]} (${item["brand"]}) x ${qty.toStringAsFixed(0)}'
+                                                    : '•  ${item["item_name"]} x ${qty.toStringAsFixed(0)}',
                                                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600, decoration: TextDecoration.lineThrough),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -3792,7 +3794,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                           children: [
                                             Expanded(
                                               child: Text(
-                                                '•  ${item['item_name']} x ${qty.toStringAsFixed(0)}',
+                                                (item['brand'] ?? '').toString().isNotEmpty
+                                                    ? '•  ${item["item_name"]} (${item["brand"]}) x ${qty.toStringAsFixed(0)}'
+                                                    : '•  ${item["item_name"]} x ${qty.toStringAsFixed(0)}',
                                                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -3833,7 +3837,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                           children: [
                                             Expanded(
                                               child: Text(
-                                                '•  ${item['item_name']} x ${item['qty']}',
+                                                (item['brand'] ?? '').toString().isNotEmpty
+                                                    ? '•  ${item["item_name"]} (${item["brand"]}) x ${item['qty']}'
+                                                    : '•  ${item["item_name"]} x ${item['qty']}',
                                                 style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -4704,7 +4710,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             children: [
                                               Expanded(
                                                 child: Text(
-                                                  '•  ${itMap['item_name']} x ${itMap['qty']}',
+                                                  (itMap['brand'] ?? '').toString().isNotEmpty
+                                                      ? '•  ${itMap["item_name"]} (${itMap["brand"]}) x ${itMap['qty']}'
+                                                      : '•  ${itMap["item_name"]} x ${itMap['qty']}',
                                                   style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
                                                   overflow: TextOverflow.ellipsis,
                                                 ),

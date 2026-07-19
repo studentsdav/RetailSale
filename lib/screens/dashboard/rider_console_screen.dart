@@ -954,7 +954,9 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        '•  ${item['item_name']} x ${item['qty']}',
+                        (item['brand'] ?? '').toString().isNotEmpty
+                            ? '•  ${item["item_name"]} (${item["brand"]}) x ${item["qty"]}'
+                            : '•  ${item["item_name"]} x ${item["qty"]}',
                         style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
                         overflow: TextOverflow.ellipsis,
                       ),

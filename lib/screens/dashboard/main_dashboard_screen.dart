@@ -158,6 +158,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   bool _showNotifications = true;
   bool _isSyncing = false;
   String _userRole = '';
+  String _drawerSearchQuery = '';
 
   String get _businessType => (user?.outletType ?? '').toUpperCase();
   bool get _isRetailBusiness =>
@@ -1761,650 +1762,813 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   // ================= DRAWER =================
+  IconData _getCategoryIcon(String name) {
+    switch (name) {
+      case 'Operations':
+        return Icons.business_center_outlined;
+      case 'Modify':
+        return Icons.edit_outlined;
+      case 'Masters':
+      case 'Masters & Departments':
+        return Icons.folder_shared_outlined;
+      case 'Stock View':
+        return Icons.inventory_2_outlined;
+      case 'Reports':
+        return Icons.analytics_outlined;
+      default:
+        return Icons.settings_outlined;
+    }
+  }
+
   Widget _buildInventoryDrawer() {
-    // replace with logged-in user data
     final userName = user?.username ?? "";
     final userRole = user?.role ?? "";
     final userEmail = user?.name ?? "";
     final hotelName = user?.propertyName ?? "";
 
-    return Drawer(
-      child: ListView(
-        children: [
-          // ================= HEADER =================
-          UserAccountsDrawerHeader(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-            ),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              backgroundImage: (property?.logoPath != null &&
-                      property!.logoPath!.isNotEmpty &&
-                      File(property!.logoPath!).existsSync())
-                  ? FileImage(File(property!.logoPath!))
-                  : null,
-              child: (property?.logoPath != null &&
-                      property!.logoPath!.isNotEmpty &&
-                      File(property!.logoPath!).existsSync())
-                  ? null
-                  : userName.isNotEmpty
-                      ? Text(
-                          userName.substring(0, 1).toUpperCase(),
-                          style: const TextStyle(color: Colors.black),
-                        )
-                      : const Icon(Icons.person),
-            ),
-            accountName: Text(
-              userRole,
-              style: const TextStyle(
-                  color: Colors.black, fontWeight: FontWeight.bold),
-            ),
-            accountEmail: Text(
-              '$userEmail | $userName',
-              style: const TextStyle(color: Colors.black),
-            ),
-            otherAccountsPictures: [
-              IconButton(
-                tooltip: 'Profile',
-                onPressed: () {
-                  // Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                  // );
-                },
-                icon: const Icon(Icons.person),
-              ),
-            ],
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textPrimaryColor = isDark ? Colors.white : const Color(0xFF1E293B);
+    final textSecondaryColor = isDark ? Colors.white70 : const Color(0xFF64748B);
+
+    final List<Map<String, dynamic>> allDrawerItems = [
+      // Operations
+      {
+        'category': 'Operations',
+        'icon': Icons.shopping_cart_checkout,
+        'label': 'Purchase Order',
+        'permission': 'PURCHASE_ORDER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseOrderScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.assignment_outlined,
+        'label': 'Item Request',
+        'permission': 'ITEM_REQUEST',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockRequestScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.download,
+        'label': 'Receive from Vendor',
+        'permission': 'STOCK_IN',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GoodsReceivingScreen())),
+      },
+      if (_showRetailSalesSection) ...[
+        {
+          'category': 'Operations',
+          'icon': Icons.point_of_sale,
+          'label': 'Retail Sales',
+          'permission': 'RETAIL_SALES',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SaleScreen())),
+        },
+        {
+          'category': 'Operations',
+          'icon': Icons.shopping_bag_outlined,
+          'label': 'Customer App (Delivery)',
+          'permission': 'RETAIL_SALES',
+          'isBeta': true,
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerAppScreen())),
+        },
+        {
+          'category': 'Operations',
+          'icon': Icons.admin_panel_settings_outlined,
+          'label': 'Supplier / Retailer Console',
+          'permission': 'RETAIL_SALES',
+          'isBeta': true,
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RetailerConsoleScreen())),
+        },
+        {
+          'category': 'Operations',
+          'icon': Icons.delivery_dining_outlined,
+          'label': 'Rider Delivery Portal',
+          'permission': 'RETAIL_SALES',
+          'isBeta': true,
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RiderConsoleScreen())),
+        },
+      ],
+      {
+        'category': 'Operations',
+        'icon': Icons.upload,
+        'label': 'Stock Dispatch',
+        'permission': 'STOCK_OUT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockIssueScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.swap_horiz,
+        'label': 'Stock Transfer',
+        'permission': 'STOCK_OUT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockTransferScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.build,
+        'label': 'Product Assembly',
+        'permission': 'STOCK_OUT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AssemblyScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.undo,
+        'label': 'Return Department Items',
+        'permission': 'RETURN',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReturnIssueScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.assignment_return,
+        'label': 'Return Purchase to Vendor',
+        'permission': 'RETURN',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierReturnScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.warning_amber,
+        'label': 'Damage Items',
+        'permission': 'DAMAGE',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamageItemScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.payment,
+        'label': 'Vendor Payment',
+        'permission': 'SUPPLIER_PAYMENT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierPaymentScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.account_balance_wallet,
+        'label': 'Vendor Return Refund',
+        'permission': 'SUPPLIER_PAYMENT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierReturnRefundScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.assignment_return_outlined,
+        'label': 'Pending Refunds',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RefundPendingReportScreen())),
+      },
+      if (userRole == 'ADMIN')
+        {
+          'category': 'Operations',
+          'icon': Icons.verified_user_outlined,
+          'label': 'Approval Center',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ApprovalCenterScreen())),
+        },
+      {
+        'category': 'Operations',
+        'icon': Icons.history_edu,
+        'label': 'My Submissions Status',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SubmittedStatusScreen())),
+      },
+
+      // Modify
+      if (PermissionService.can('MODIFY_REQUEST') || PermissionService.can('REPRINT_REQUEST'))
+        {
+          'category': 'Modify',
+          'icon': Icons.edit_note,
+          'label': 'Modify Request',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RequestModifyScreen())),
+        },
+      if (PermissionService.can('MODIFY_PURCHASE') || PermissionService.can('REPRINT_PURCHASE'))
+        {
+          'category': 'Modify',
+          'icon': Icons.assignment,
+          'label': 'Modify Purchase Order',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseOrderModifyScreen())),
+        },
+      if (PermissionService.can('MODIFY_RECEIVING') || PermissionService.can('REPRINT_RECEIVING'))
+        {
+          'category': 'Modify',
+          'icon': Icons.inventory_2,
+          'label': 'Modify Receiving (GRN)',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ModifyReceivingScreen())),
+        },
+      if (PermissionService.can('RETAIL_SALES') || PermissionService.can('REPRINT_SALES_BILL'))
+        {
+          'category': 'Modify',
+          'icon': Icons.receipt_long,
+          'label': 'Reprint / Modify Sales Bill',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SalesReprintModifyScreen())),
+        },
+      if (PermissionService.can('MODIFY_ISSUE') || PermissionService.can('REPRINT_ISSUE'))
+        {
+          'category': 'Modify',
+          'icon': Icons.outbox,
+          'label': 'Modify Stock Dispatch',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const IssueModifyScreen())),
+        },
+
+      // Masters & Departments
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.inventory_2_outlined,
+        'label': 'Item Master',
+        'permission': 'ITEM_MASTER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ItemMasterScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.store,
+        'label': 'Vendor Master',
+        'permission': 'SUPPLIER_MASTER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierMasterScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.settings_suggest_outlined,
+        'label': 'Document Sequence Settings',
+        'permission': 'NUMBERING_SETTINGS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentSequenceScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.business_outlined,
+        'label': 'Property Information',
+        'permission': 'PROPERTY_INFORMATION',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PropertyInfoScreen(outletid: 0))),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.location_on_outlined,
+        'label': _isHospitalityBusiness ? 'Department' : 'Location',
+        'permission': 'STOCK_LOCATION',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockLocationScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.supervised_user_circle,
+        'label': 'User Management',
+        'permission': 'USER_MANAGEMENT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UserManagementScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.stars_outlined,
+        'label': 'Loyalty Program',
+        'permission': 'SETTINGS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoyaltyMasterConfigScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.chat_bubble_outline,
+        'label': 'WhatsApp Integration',
+        'permission': 'SETTINGS',
+        'isBeta': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WhatsAppDashboardScreen())),
+      },
+
+      // Stock View
+      {
+        'category': 'Stock View',
+        'icon': Icons.inventory_2,
+        'label': 'Stock Balance',
+        'permission': 'STOCK_BALANCE',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockBalanceScreen())),
+      },
+      {
+        'category': 'Stock View',
+        'icon': Icons.warning,
+        'label': 'Damage Summary',
+        'permission': 'DAMAGE_SUMMARY',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamageSummaryScreen())),
+      },
+
+      // Reports
+      {
+        'category': 'Reports',
+        'icon': Icons.receipt_long,
+        'label': 'Receiving Report',
+        'permission': 'STOCK_IN_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockInReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.receipt,
+        'label': 'Stock Dispatch Report',
+        'permission': 'STOCK_OUT_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockOutReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.swap_horiz,
+        'label': 'Stock Transfer Report',
+        'permission': 'STOCK_OUT_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockTransferReportScreen())),
+      },
+      if (_showRetailSalesReportSection) ...[
+        {
+          'category': 'Reports',
+          'icon': Icons.point_of_sale,
+          'label': 'Retail Sales Report',
+          'permission': 'RETAIL_SALES_REPORT',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SalesReportScreen())),
+        },
+        {
+          'category': 'Reports',
+          'icon': Icons.water_drop,
+          'label': 'Subscription Report',
+          'permission': 'REPORTS',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionReportScreen())),
+        },
+      ],
+      {
+        'category': 'Reports',
+        'icon': Icons.local_offer_outlined,
+        'label': 'Scheme Report',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SchemeReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.analytics_outlined,
+        'label': 'Scheme Analysis',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SchemeAnalysisScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.workspace_premium_outlined,
+        'label': 'Loyalty Report',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoyaltyReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.insights_outlined,
+        'label': 'Store Analysis',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StoreAnalysisScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.confirmation_number_outlined,
+        'label': 'Lucky Draw Campaigns',
+        'permission': 'REPORTS',
+        'isBeta': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LuckyDrawCampaignScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.analytics_outlined,
+        'label': 'Brand Analysis',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BrandAnalysisScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.source_outlined,
+        'label': 'Sale Source Analysis',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SourceAnalysisScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.percent_outlined,
+        'label': 'Commission Report',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommissionReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.payments_outlined,
+        'label': 'Payment Method Analysis',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentAnalysisScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.auto_awesome,
+        'label': 'AI Query Analytics',
+        'permission': 'REPORTS',
+        'isBeta': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiQueryAnalyticsScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.inventory,
+        'label': 'Closing Report',
+        'permission': 'CLOSING_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ClosingReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.receipt_long_outlined,
+        'label': 'Stock Ledger Report',
+        'permission': 'CLOSING_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockLedgerReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.payment_outlined,
+        'label': 'Vendor Payment Report',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierPaymentsReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.store,
+        'label': 'Vendor Purchase Order',
+        'permission': 'PURCHASE_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.account_balance,
+        'label': 'Finance & Reports',
+        'permission': 'REPORTS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashLedgerScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.refresh,
+        'label': 'Return Report',
+        'permission': 'RETURN_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReturnReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.outbond_rounded,
+        'label': 'Request Report',
+        'permission': 'REQUEST_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RequestReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.warehouse,
+        'label': 'Damage Report',
+        'permission': 'DAMAGE_REPORT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamageReportSumScreen())),
+      },
+
+      // System
+      {
+        'category': 'System',
+        'icon': Icons.help_outline,
+        'label': 'Help',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen())),
+      },
+      {
+        'category': 'System',
+        'icon': Icons.settings,
+        'label': 'Settings',
+        'permission': 'SETTINGS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+      },
+      {
+        'category': 'System',
+        'icon': Icons.lock_reset,
+        'label': 'Change Password',
+        'onTap': () {
+          Navigator.pop(context);
+          _changePassword(userName);
+        },
+      },
+      {
+        'category': 'System',
+        'icon': Icons.logout,
+        'label': 'Logout',
+        'onTap': () async {
+          await TokenStorage.clear();
+          _notificationTimer?.cancel();
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+        },
+      },
+      if (PermissionService.can('SYSTEM_UPDATE'))
+        {
+          'category': 'System',
+          'icon': Icons.system_update_alt,
+          'label': 'Check for Updates',
+          'permission': 'SYSTEM_UPDATE',
+          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemUpdateScreen())),
+        },
+    ];
+
+    final categories = [
+      'Operations',
+      'Modify',
+      _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+      'Stock View',
+      'Reports',
+      'System',
+    ];
+
+    final isSearching = _drawerSearchQuery.trim().isNotEmpty;
+    final searchQuery = _drawerSearchQuery.trim().toLowerCase();
+
+    final matchingItems = !isSearching
+        ? <Map<String, dynamic>>[]
+        : allDrawerItems.where((item) {
+            final label = (item['label'] as String).toLowerCase();
+            final category = (item['category'] as String).toLowerCase();
+            final perm = item['permission'] as String?;
+            if (perm != null && !PermissionService.can(perm)) return false;
+            return label.contains(searchQuery) || category.contains(searchQuery);
+          }).toList();
+
+    Widget buildHeader() {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(20, 48, 20, 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDark
+                ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                : [const Color(0xFFF8FAFC), const Color(0xFFF1F5F9)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-
-          // ================= STOCK OPERATIONS =================
-          if (_hasAnyPermission([
-            'PURCHASE_ORDER',
-            'ITEM_REQUEST',
-            'STOCK_IN',
-            'STOCK_OUT',
-            'RETAIL_SALES',
-            'RETURN',
-            'DAMAGE',
-            'SUPPLIER_PAYMENT'
-          ])) ...[
-            _sectionTitle('Operations'),
-            _drawerItem(Icons.shopping_cart_checkout, 'Purchase Order',
-                permission: 'PURCHASE_ORDER', onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PurchaseOrderScreen()),
-              );
-            }),
-            _drawerItem(Icons.assignment_outlined, 'Item Request',
-                permission: 'ITEM_REQUEST', onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const StockRequestScreen()),
-              );
-            }),
-            _drawerItem(Icons.download, 'Receive from Vendor',
-                permission: 'STOCK_IN', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const GoodsReceivingScreen()));
-            }),
-            if (_showRetailSalesSection)
-              _drawerItem(Icons.point_of_sale, 'Retail Sales',
-                  permission: 'RETAIL_SALES', onTap: () {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const SaleScreen()));
-              }),
-            if (_showRetailSalesSection) ...[
-              _drawerItem(
-                  Icons.shopping_bag_outlined, 'Customer App (Delivery)',
-                  permission: 'RETAIL_SALES', isBeta: true, onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const CustomerAppScreen()));
-              }),
-              _drawerItem(Icons.admin_panel_settings_outlined,
-                  'Supplier / Retailer Console',
-                  permission: 'RETAIL_SALES', isBeta: true, onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const RetailerConsoleScreen()));
-              }),
-              _drawerItem(
-                  Icons.delivery_dining_outlined, 'Rider Delivery Portal',
-                  permission: 'RETAIL_SALES', isBeta: true, onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const RiderConsoleScreen()));
-              }),
-            ],
-            _drawerItem(Icons.upload, 'Stock Dispatch', permission: 'STOCK_OUT',
-                onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const StockIssueScreen()));
-            }),
-            _drawerItem(Icons.swap_horiz, 'Stock Transfer',
-                permission: 'STOCK_OUT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const StockTransferScreen()));
-            }),
-            _drawerItem(Icons.build, 'Product Assembly',
-                permission: 'STOCK_OUT', onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const AssemblyScreen()));
-            }),
-            _drawerItem(Icons.undo, 'Return Department Items',
-                permission: 'RETURN', onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const ReturnIssueScreen()));
-            }),
-            _drawerItem(
-              Icons.assignment_return,
-              'Return Purchase to Vendor',
-              permission: 'RETURN',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const SupplierReturnScreen(),
-                  ),
-                );
-              },
+          border: Border(
+            bottom: BorderSide(
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              width: 1,
             ),
-            _drawerItem(Icons.warning_amber, 'Damage Items',
-                permission: 'DAMAGE', onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const DamageItemScreen()));
-            }),
-            _drawerItem(Icons.payment, 'Vendor Payment',
-                permission: 'SUPPLIER_PAYMENT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SupplierPaymentScreen()));
-            }),
-            _drawerItem(Icons.account_balance_wallet, 'Vendor Return Refund',
-                permission: 'SUPPLIER_PAYMENT', onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SupplierReturnRefundScreen(),
-                ),
-              );
-            }),
-            _drawerItem(Icons.assignment_return_outlined, 'Pending Refunds',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const RefundPendingReportScreen(),
-                ),
-              );
-            }),
-            if (userRole == 'ADMIN')
-              _drawerItem(
-                Icons.verified_user_outlined,
-                'Approval Center',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ApprovalCenterScreen(),
-                    ),
-                  );
-                },
-              ),
-            _drawerItem(
-              Icons.history_edu,
-              'My Submissions Status',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const SubmittedStatusScreen(),
-                  ),
-                );
-              },
-            ),
-            const Divider(),
-          ],
-
-          if (_hasAnyPermission([
-            'MODIFY_REQUEST',
-            'MODIFY_PURCHASE',
-            'MODIFY_RECEIVING',
-            'MODIFY_ISSUE',
-            'REPRINT_REQUEST',
-            'REPRINT_PURCHASE',
-            'REPRINT_RECEIVING',
-            'REPRINT_ISSUE',
-            'RETAIL_SALES',
-            'REPRINT_SALES_BILL'
-          ])) ...[
-            _sectionTitle('Modify'),
-            if (PermissionService.can('MODIFY_REQUEST') ||
-                PermissionService.can('REPRINT_REQUEST'))
-              _drawerItem(
-                Icons.edit_note,
-                'Modify Request',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const RequestModifyScreen()),
-                  );
-                },
-              ),
-            if (PermissionService.can('MODIFY_PURCHASE') ||
-                PermissionService.can('REPRINT_PURCHASE'))
-              _drawerItem(
-                Icons.assignment,
-                'Modify Purchase Order',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const PurchaseOrderModifyScreen()),
-                  );
-                },
-              ),
-            if (PermissionService.can('MODIFY_RECEIVING') ||
-                PermissionService.can('REPRINT_RECEIVING'))
-              _drawerItem(
-                Icons.inventory_2,
-                'Modify Receiving (GRN)',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ModifyReceivingScreen()),
-                  );
-                },
-              ),
-            if (PermissionService.can('RETAIL_SALES') ||
-                PermissionService.can('REPRINT_SALES_BILL'))
-              _drawerItem(
-                Icons.receipt_long,
-                'Reprint / Modify Sales Bill',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SalesReprintModifyScreen(),
-                    ),
-                  );
-                },
-              ),
-            if (PermissionService.can('MODIFY_ISSUE') ||
-                PermissionService.can('REPRINT_ISSUE'))
-              _drawerItem(
-                Icons.outbox,
-                'Modify Stock Dispatch',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const IssueModifyScreen()),
-                  );
-                },
-              ),
-            const Divider(),
-          ],
-
-          if (_hasAnyPermission([
-            'ITEM_MASTER',
-            'SUPPLIER_MASTER',
-            'NUMBERING_SETTINGS',
-            'PROPERTY_INFORMATION',
-            'STOCK_LOCATION',
-            'USER_MANAGEMENT',
-            'SETTINGS'
-          ])) ...[
-            // ================= MASTERS =================
-            _sectionTitle(
-                _isHospitalityBusiness ? 'Masters & Departments' : 'Masters'),
-
-            _drawerItem(Icons.inventory_2_outlined, 'Item Master',
-                permission: 'ITEM_MASTER', onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const ItemMasterScreen()));
-            }),
-            _drawerItem(Icons.store, 'Vendor Master',
-                permission: 'SUPPLIER_MASTER', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SupplierMasterScreen()));
-            }),
-
-            _drawerItem(
-                Icons.settings_suggest_outlined, 'Document Sequence Settings',
-                permission: 'NUMBERING_SETTINGS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const DocumentSequenceScreen()));
-            }),
-
-            _drawerItem(Icons.business_outlined, 'Property Information',
-                permission: 'PROPERTY_INFORMATION', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const PropertyInfoScreen(
-                            outletid: 0,
-                          )));
-            }),
-
-            _drawerItem(Icons.location_on_outlined,
-                _isHospitalityBusiness ? 'Department' : 'Location',
-                permission: 'STOCK_LOCATION', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const StockLocationScreen()));
-            }),
-
-            _drawerItem(Icons.supervised_user_circle, 'User Management',
-                permission: 'USER_MANAGEMENT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const UserManagementScreen()));
-            }),
-            _drawerItem(Icons.stars_outlined, 'Loyalty Program',
-                permission: 'SETTINGS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const LoyaltyMasterConfigScreen()));
-            }),
-            _drawerItem(Icons.chat_bubble_outline, 'WhatsApp Integration',
-                permission: 'SETTINGS', isBeta: true, onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const WhatsAppDashboardScreen()));
-            }),
-
-            const Divider(),
-          ],
-
-          if (_hasAnyPermission([
-            'STOCK_BALANCE',
-            'DAMAGE_SUMMARY',
-          ])) ...[
-            _sectionTitle('Stock View'),
-            _drawerItem(Icons.inventory_2, 'Stock Balance',
-                permission: 'STOCK_BALANCE', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const StockBalanceScreen()));
-            }),
-            _drawerItem(Icons.warning, 'Damage Summary',
-                permission: 'DAMAGE_SUMMARY', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const DamageSummaryScreen()));
-            }),
-            const Divider(),
-          ],
-
-          if (_hasAnyPermission([
-            'REPORTS',
-            'STOCK_IN_REPORT',
-            'STOCK_OUT_REPORT',
-            'RETAIL_SALES_REPORT',
-            'CLOSING_REPORT',
-            'PURCHASE_REPORT',
-            'RETURN_REPORT',
-            'REQUEST_REPORT',
-            'DAMAGE_REPORT'
-          ])) ...[
-            // ================= REPORTS =================
-            _sectionTitle('Reports'),
-            _drawerItem(Icons.receipt_long, 'Receiving Report',
-                permission: 'STOCK_IN_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const StockInReportScreen()));
-            }),
-            _drawerItem(Icons.receipt, 'Stock Dispatch Report',
-                permission: 'STOCK_OUT_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const StockOutReportScreen()));
-            }),
-            _drawerItem(Icons.swap_horiz, 'Stock Transfer Report',
-                permission: 'STOCK_OUT_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const StockTransferReportScreen()));
-            }),
-            if (_showRetailSalesReportSection)
-              _drawerItem(Icons.point_of_sale, 'Retail Sales Report',
-                  permission: 'RETAIL_SALES_REPORT', onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const SalesReportScreen()));
-              }),
-            if (_showRetailSalesReportSection)
-              _drawerItem(Icons.water_drop, 'Subscription Report',
-                  permission: 'REPORTS', onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const SubscriptionReportScreen()));
-              }),
-            _drawerItem(Icons.local_offer_outlined, 'Scheme Report',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SchemeReportScreen()));
-            }),
-            _drawerItem(Icons.analytics_outlined, 'Scheme Analysis',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SchemeAnalysisScreen()));
-            }),
-            _drawerItem(Icons.workspace_premium_outlined, 'Loyalty Report',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const LoyaltyReportScreen()));
-            }),
-            _drawerItem(Icons.insights_outlined, 'Store Analysis',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const StoreAnalysisScreen()));
-            }),
-            _drawerItem(
-                Icons.confirmation_number_outlined, 'Lucky Draw Campaigns',
-                isBeta: true, permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const LuckyDrawCampaignScreen()));
-            }),
-            _drawerItem(Icons.analytics_outlined, 'Brand Analysis',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const BrandAnalysisScreen()));
-            }),
-            _drawerItem(Icons.source_outlined, 'Sale Source Analysis',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SourceAnalysisScreen()));
-            }),
-            _drawerItem(Icons.percent_outlined, 'Commission Report',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const CommissionReportScreen()));
-            }),
-            _drawerItem(Icons.payments_outlined, 'Payment Method Analysis',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const PaymentAnalysisScreen()));
-            }),
-            _drawerItem(Icons.auto_awesome, 'AI Query Analytics',
-                permission: 'REPORTS', isBeta: true, onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const AiQueryAnalyticsScreen()));
-            }),
-            _drawerItem(Icons.inventory, 'Closing Report',
-                permission: 'CLOSING_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const ClosingReportScreen()));
-            }),
-            _drawerItem(Icons.receipt_long_outlined, 'Stock Ledger Report',
-                permission: 'CLOSING_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const StockLedgerReportScreen()));
-            }),
-            _drawerItem(Icons.payment_outlined, 'Vendor Payment Report',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SupplierPaymentsReportScreen()));
-            }),
-            _drawerItem(Icons.store, 'Vendor Purchase Order',
-                permission: 'PURCHASE_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const PurchaseReportScreen()));
-            }),
-            _drawerItem(Icons.account_balance, 'Finance & Reports',
-                permission: 'REPORTS', onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const CashLedgerScreen(),
-                ),
-              );
-            }),
-            _drawerItem(Icons.refresh, 'Return Report',
-                permission: 'RETURN_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const ReturnReportScreen()));
-            }),
-            _drawerItem(Icons.outbond_rounded, 'Request Report',
-                permission: 'REQUEST_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const RequestReportScreen()));
-            }),
-            _drawerItem(Icons.warehouse, 'Damage Report',
-                permission: 'DAMAGE_REPORT', onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const DamageReportSumScreen()));
-            }),
-
-            const Divider(),
-          ],
-
-          if (_hasAnyPermission(['SETTINGS'])) ...[
-            _sectionTitle('System'),
-            _drawerItem(Icons.help_outline, 'Help', onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const HelpScreen()));
-            }),
-            _drawerItem(Icons.settings, 'Settings', permission: 'SETTINGS',
-                onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()));
-            }),
-            _drawerItem(Icons.lock_reset, 'Change Password', onTap: () async {
-              Navigator.pop(context);
-              _changePassword(userName);
-            }),
-            _drawerItem(Icons.logout, 'Logout', onTap: () async {
-              await TokenStorage.clear();
-              _notificationTimer?.cancel();
-
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-            }),
-          ],
-          // ================= FOOTER =================
-
-          if (PermissionService.can('SYSTEM_UPDATE')) ...[
-            const Divider(),
-            _drawerItem(
-              Icons.system_update_alt,
-              'Check for Updates',
-              permission: 'SYSTEM_UPDATE',
-              onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const SystemUpdateScreen()));
-              },
-            ),
-          ],
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Expanded(
-                  child: Text(
-                    hotelName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withOpacity(0.5),
+                      width: 2,
+                    ),
+                  ),
+                  child: CircleAvatar(
+                    radius: 28,
+                    backgroundColor: theme.colorScheme.primary,
+                    backgroundImage: (property?.logoPath != null &&
+                            property!.logoPath!.isNotEmpty &&
+                            File(property!.logoPath!).existsSync())
+                        ? FileImage(File(property!.logoPath!))
+                        : null,
+                    child: (property?.logoPath != null &&
+                            property!.logoPath!.isNotEmpty &&
+                            File(property!.logoPath!).existsSync())
+                        ? null
+                        : userName.isNotEmpty
+                            ? Text(
+                                userName.substring(0, 1).toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              )
+                            : const Icon(Icons.person, color: Colors.white),
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('v $currentVersion',
-                        style: const TextStyle(fontSize: 12)),
-                    const SizedBox(height: 4),
-                    const Text('Build: 2025-12-04',
-                        style: TextStyle(fontSize: 11)),
-                  ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          userRole.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.2,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        userName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            Text(
+              userEmail,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: textSecondaryColor,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget buildFooter() {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+          border: Border(
+            top: BorderSide(
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
           ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.business_outlined,
+                  size: 14,
+                  color: textSecondaryColor,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    hotelName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: textPrimaryColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'v$currentVersion',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: textSecondaryColor,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  'Build: 2025-12-04',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: textSecondaryColor.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Drawer(
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+      child: Column(
+        children: [
+          buildHeader(),
+
+          // Search Field
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: TextField(
+                style: TextStyle(color: textPrimaryColor, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search Menu...',
+                  hintStyle: TextStyle(color: textSecondaryColor.withOpacity(0.7), fontSize: 14),
+                  prefixIcon: Icon(Icons.search_outlined, color: textSecondaryColor, size: 20),
+                  suffixIcon: _drawerSearchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear_outlined, color: textSecondaryColor, size: 18),
+                          onPressed: () {
+                            setState(() {
+                              _drawerSearchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                ),
+                onChanged: (val) {
+                  setState(() {
+                    _drawerSearchQuery = val;
+                  });
+                },
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                if (isSearching) ...[
+                  if (matchingItems.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Center(
+                        child: Text(
+                          'No menu items found',
+                          style: TextStyle(color: textSecondaryColor, fontSize: 14),
+                        ),
+                      ),
+                    )
+                  else
+                    ...matchingItems.map((item) {
+                      return _drawerItem(
+                        item['icon'] as IconData,
+                        '${item['label']} (${item['category']})',
+                        permission: item['permission'] as String?,
+                        isBeta: item['isBeta'] as bool? ?? false,
+                        isNew: item['isNew'] as bool? ?? false,
+                        isDeprecated: item['isDeprecated'] as bool? ?? false,
+                        isFutureUpdate: item['isFutureUpdate'] as bool? ?? false,
+                        onTap: item['onTap'] as VoidCallback?,
+                        isSubItem: false,
+                      );
+                    }),
+                ] else ...[
+                  ...categories.map((categoryName) {
+                    final categoryItems = allDrawerItems.where((item) {
+                      if (item['category'] != categoryName) return false;
+                      final perm = item['permission'] as String?;
+                      if (perm != null && !PermissionService.can(perm)) return false;
+                      return true;
+                    }).toList();
+
+                    if (categoryItems.isEmpty) return const SizedBox();
+
+                    return Theme(
+                      data: theme.copyWith(
+                        dividerColor: Colors.transparent,
+                      ),
+                      child: ExpansionTile(
+                        key: PageStorageKey<String>(categoryName),
+                        leading: Icon(
+                          _getCategoryIcon(categoryName),
+                          color: isDark ? Colors.white70 : const Color(0xFF475569),
+                          size: 20,
+                        ),
+                        title: Text(
+                          categoryName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: textPrimaryColor,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        children: categoryItems.map((item) {
+                          return _drawerItem(
+                            item['icon'] as IconData,
+                            item['label'] as String,
+                            permission: item['permission'] as String?,
+                            isBeta: item['isBeta'] as bool? ?? false,
+                            isNew: item['isNew'] as bool? ?? false,
+                            isDeprecated: item['isDeprecated'] as bool? ?? false,
+                            isFutureUpdate: item['isFutureUpdate'] as bool? ?? false,
+                            onTap: item['onTap'] as VoidCallback?,
+                            isSubItem: true,
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  }),
+                ],
+              ],
+            ),
+          ),
+
+          // FOOTER
+          buildFooter(),
         ],
       ),
     );
@@ -2419,68 +2583,96 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     bool isNew = false,
     bool isDeprecated = false,
     bool isFutureUpdate = false,
+    bool isSubItem = false,
   }) {
     if (permission != null && !PermissionService.can(permission)) {
       return const SizedBox();
     }
 
-    InlineSpan? badge;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textPrimaryColor = isDark ? Colors.white : const Color(0xFF1E293B);
+    final textSecondaryColor = isDark ? Colors.white70 : const Color(0xFF64748B);
+
+    Widget? badgeWidget;
     if (isBeta) {
-      badge = const TextSpan(
-        text: ' (Beta)',
-        style: TextStyle(
-          color: Colors.red,
-          fontStyle: FontStyle.italic,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      );
+      badgeWidget = _buildBadge('BETA', Colors.red);
     } else if (isNew) {
-      badge = const TextSpan(
-        text: ' (New)',
-        style: TextStyle(
-          color: Colors.green,
-          fontStyle: FontStyle.italic,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      );
+      badgeWidget = _buildBadge('NEW', Colors.green);
     } else if (isDeprecated) {
-      badge = const TextSpan(
-        text: ' (Deprecated)',
-        style: TextStyle(
-          color: Colors.grey,
-          fontStyle: FontStyle.italic,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      );
+      badgeWidget = _buildBadge('DEP', Colors.grey);
     } else if (isFutureUpdate) {
-      badge = const TextSpan(
-        text: ' (Future Update)',
-        style: TextStyle(
-          color: Colors.orange,
-          fontStyle: FontStyle.italic,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      );
+      badgeWidget = _buildBadge('UPCOMING', Colors.orange);
     }
 
-    return ListTile(
-      leading: Icon(ic),
-      title: badge != null
-          ? Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(text: label),
-                  badge,
-                ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: isSubItem ? 20 : 16,
+            vertical: 0,
+          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          leading: Icon(
+            ic,
+            size: isSubItem ? 18 : 22,
+            color: isSubItem 
+                ? (isDark ? Colors.white60 : const Color(0xFF64748B))
+                : (isDark ? Colors.white : const Color(0xFF334155)),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: isSubItem ? 13 : 14,
+                    fontWeight: isSubItem ? FontWeight.w500 : FontWeight.w600,
+                    color: textPrimaryColor,
+                  ),
+                ),
               ),
-            )
-          : Text(label),
-      trailing: const Icon(Icons.chevron_right, size: 20),
-      onTap: onTap ?? () => Navigator.of(context).pop(),
+              if (badgeWidget != null) ...[
+                const SizedBox(width: 8),
+                badgeWidget,
+              ],
+            ],
+          ),
+          trailing: isSubItem 
+              ? null 
+              : Icon(
+                  Icons.arrow_forward_ios_outlined, 
+                  size: 12, 
+                  color: textSecondaryColor.withOpacity(0.5),
+                ),
+          onTap: onTap ?? () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.3), width: 0.5),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 

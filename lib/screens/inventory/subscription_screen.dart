@@ -2502,7 +2502,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                             }).toList();
                                           },
                                           itemAsString: (item) =>
-                                              '${item.itemCode} - ${item.itemName}',
+                                              item.brand.isNotEmpty
+                                                  ? '${item.itemCode} - ${item.itemName} (${item.brand})'
+                                                  : '${item.itemCode} - ${item.itemName}',
                                           compareFn: (a, b) => a.id == b.id,
                                           popupProps: const PopupProps.menu(
                                             showSearchBox: true,
@@ -2877,9 +2879,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                     )
                                   else
                                     ...visibleSubscriptions.map((subscription) {
-                                      final itemName = subscription['item_name']
+                                      final brand = subscription['item']?['brand']?.toString() ?? '';
+                                      final itemNameRaw = subscription['item_name']
                                               ?.toString() ??
                                           '';
+                                      final itemName = brand.isNotEmpty
+                                          ? '$itemNameRaw ($brand)'
+                                          : itemNameRaw;
                                       final cust = subscription['customer_name']
                                                   ?.toString()
                                                   .trim()

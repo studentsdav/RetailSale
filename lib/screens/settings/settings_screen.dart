@@ -320,7 +320,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Scaffold(
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? const Color(0xFF121214)
@@ -331,6 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             isScrollable: true,
             tabs: [
               Tab(text: 'Operations'),
+              Tab(text: 'Security & Gateways'),
               Tab(text: 'Appearance'),
               Tab(text: 'Billing & Print'),
               Tab(text: 'Branding'),
@@ -344,6 +345,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
             return TabBarView(
               children: [
                 // 1. OPERATIONS TAB
+                buildTabBody([
+                  _customSection(
+                    'Inventory Settings',
+                    'Configure behaviors and triggers for product inventory management.',
+                    [
+                      _settingRow(
+                        title: 'Enable Auto Reorder Alert',
+                        description: 'Notify when stock falls below specified reorder thresholds',
+                        control: Switch.adaptive(
+                          value: s.autoReorder,
+                          onChanged: (v) => setState(() => s.autoReorder = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Allow Negative Stock',
+                        description: 'Allow issue/sale transactions even if current stock is zero or insufficient',
+                        control: Switch.adaptive(
+                          value: s.allowNegativeStock,
+                          onChanged: (v) => setState(() => s.allowNegativeStock = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Show Item Images in Sales',
+                        description: 'Display item photographs directly on the POS sale screen',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: s.enableItemImagesInSales,
+                          onChanged: (v) => setState(() => s.enableItemImagesInSales = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Subscription Delivery',
+                    'Manage automated workflows for daily recurring orders.',
+                    [
+                      _settingRow(
+                        title: 'Enable App Subscription Delivery',
+                        description: 'Daily subscription orders are auto-accepted into retailer console instead of being drafts',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: s.enableAppSubscription,
+                          onChanged: (v) => setState(() => s.enableAppSubscription = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Approval Rules',
+                    'Set authorization constraints for warehouse managers.',
+                    [
+                      _settingRow(
+                        title: 'Damage Approval Required',
+                        description: 'Require manager approval/authorization before writing off damaged items',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: s.damageApprovalRequired,
+                          onChanged: (v) => setState(() => s.damageApprovalRequired = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Audit & Compliance',
+                    'Maintain system logs and dashboard communication.',
+                    [
+                      _settingRow(
+                        title: 'Enable Audit Log',
+                        description: 'Log all warehouse stock updates, edits, and deletions for security review',
+                        control: Switch.adaptive(
+                          value: s.enableAuditLog,
+                          onChanged: (v) => setState(() => s.enableAuditLog = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Show Notifications',
+                        description: 'Show app alerts and desktop warnings in the administrator console',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: _showNotifications,
+                          onChanged: (v) => setState(() => _showNotifications = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                ], constraints),
+
+                // 2. SECURITY & GATEWAYS TAB
                 buildTabBody([
                   if (AppConfig.isLocalServer)
                     _customSection(
@@ -416,52 +505,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ],
                     ),
-                  _customSection(
-                    'Inventory Settings',
-                    'Configure behaviors and triggers for product inventory management.',
-                    [
-                      _settingRow(
-                        title: 'Enable Auto Reorder Alert',
-                        description: 'Notify when stock falls below specified reorder thresholds',
-                        control: Switch.adaptive(
-                          value: s.autoReorder,
-                          onChanged: (v) => setState(() => s.autoReorder = v),
-                        ),
-                      ),
-                      _settingRow(
-                        title: 'Allow Negative Stock',
-                        description: 'Allow issue/sale transactions even if current stock is zero or insufficient',
-                        control: Switch.adaptive(
-                          value: s.allowNegativeStock,
-                          onChanged: (v) => setState(() => s.allowNegativeStock = v),
-                        ),
-                      ),
-                      _settingRow(
-                        title: 'Show Item Images in Sales',
-                        description: 'Display item photographs directly on the POS sale screen',
-                        isLast: true,
-                        control: Switch.adaptive(
-                          value: s.enableItemImagesInSales,
-                          onChanged: (v) => setState(() => s.enableItemImagesInSales = v),
-                        ),
-                      ),
-                    ],
-                  ),
-                  _customSection(
-                    'Subscription Delivery',
-                    'Manage automated workflows for daily recurring orders.',
-                    [
-                      _settingRow(
-                        title: 'Enable App Subscription Delivery',
-                        description: 'Daily subscription orders are auto-accepted into retailer console instead of being drafts',
-                        isLast: true,
-                        control: Switch.adaptive(
-                          value: s.enableAppSubscription,
-                          onChanged: (v) => setState(() => s.enableAppSubscription = v),
-                        ),
-                      ),
-                    ],
-                  ),
                   _customSection(
                     'Payment Gateway & UPI (Beta)',
                     'Configure digital checkout APIs and direct merchant QR billing.',
@@ -538,44 +581,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                             onChanged: (val) => s.merchantUpiId = val.trim(),
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  _customSection(
-                    'Approval Rules',
-                    'Set authorization constraints for warehouse managers.',
-                    [
-                      _settingRow(
-                        title: 'Damage Approval Required',
-                        description: 'Require manager approval/authorization before writing off damaged items',
-                        isLast: true,
-                        control: Switch.adaptive(
-                          value: s.damageApprovalRequired,
-                          onChanged: (v) => setState(() => s.damageApprovalRequired = v),
-                        ),
-                      ),
-                    ],
-                  ),
-                  _customSection(
-                    'Audit & Compliance',
-                    'Maintain system logs and dashboard communication.',
-                    [
-                      _settingRow(
-                        title: 'Enable Audit Log',
-                        description: 'Log all warehouse stock updates, edits, and deletions for security review',
-                        control: Switch.adaptive(
-                          value: s.enableAuditLog,
-                          onChanged: (v) => setState(() => s.enableAuditLog = v),
-                        ),
-                      ),
-                      _settingRow(
-                        title: 'Show Notifications',
-                        description: 'Show app alerts and desktop warnings in the administrator console',
-                        isLast: true,
-                        control: Switch.adaptive(
-                          value: _showNotifications,
-                          onChanged: (v) => setState(() => _showNotifications = v),
                         ),
                       ),
                     ],

@@ -917,7 +917,9 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
 
                                           return ListTile(
                                             contentPadding: EdgeInsets.zero,
-                                            title: Text(item.itemName),
+                                            title: Text(item.brand != null && item.brand!.trim().isNotEmpty
+                                                  ? '${item.itemName} (${item.brand!.trim()})'
+                                                  : item.itemName),
                                             subtitle: Text(
                                               '${item.itemCode} • Qty ${item.qty.toStringAsFixed(2)}$returnSuffix • Rate ${item.rate.toStringAsFixed(2)}',
                                             ),
@@ -985,8 +987,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           Tooltip(
                                             message: 'Close modify screen',
                                             child: SizedBox(
-                                              width: 170,
-                                              height: 56,
+                                              width: 120,
+                                              height: 40,
                                               child: OutlinedButton.icon(
                                                 onPressed: _closeScreen,
                                                 icon: const Icon(
@@ -1000,8 +1002,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           Tooltip(
                                             message: 'Print selected bill',
                                             child: SizedBox(
-                                              width: 180,
-                                              height: 56,
+                                              width: 120,
+                                              height: 40,
                                               child: FilledButton.icon(
                                                 onPressed: _printSelected,
                                                 icon: const Icon(
@@ -1016,8 +1018,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                             message:
                                                 'Correct bill payment mode and sync ledger',
                                             child: SizedBox(
-                                              width: 210,
-                                              height: 56,
+                                              width: 160,
+                                              height: 40,
                                               child: FilledButton.icon(
                                                 onPressed:
                                                     _modifyPaymentSelected,
@@ -1033,8 +1035,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           Tooltip(
                                             message: 'Open bill in modify mode',
                                             child: SizedBox(
-                                              width: 190,
-                                              height: 56,
+                                              width: 120,
+                                              height: 40,
                                               child: FilledButton.icon(
                                                 onPressed: _modifySelected,
                                                 icon: const Icon(
@@ -1048,8 +1050,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           Tooltip(
                                             message: 'Return items from this bill',
                                             child: SizedBox(
-                                              width: 170,
-                                              height: 56,
+                                              width: 120,
+                                              height: 40,
                                               child: FilledButton.icon(
                                                 onPressed: _showReturnDialog,
                                                 icon: const Icon(

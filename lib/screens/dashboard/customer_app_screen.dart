@@ -4123,7 +4123,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                  children: [
                                                    Expanded(
                                                      child: Text(
-                                                       '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
+                                                       (it['brand'] ?? '').toString().isNotEmpty
+                                                           ? '•  ${it["item_name"]} (${it["brand"]}) x ${q.toStringAsFixed(0)}'
+                                                           : '•  ${it["item_name"]} x ${q.toStringAsFixed(0)}',
                                                        style: TextStyle(
                                                            fontSize: 13,
                                                            color: Colors.grey.shade600,
@@ -4172,7 +4174,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                  children: [
                                                    Expanded(
                                                      child: Text(
-                                                       '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
+                                                       (it['brand'] ?? '').toString().isNotEmpty
+                                                           ? '•  ${it["item_name"]} (${it["brand"]}) x ${q.toStringAsFixed(0)}'
+                                                           : '•  ${it["item_name"]} x ${q.toStringAsFixed(0)}',
                                                        style: TextStyle(
                                                            fontSize: 13,
                                                            fontWeight: FontWeight.w500,
@@ -4212,7 +4216,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                  children: [
                                                    Expanded(
                                                      child: Text(
-                                                       '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
+                                                       (it['brand'] ?? '').toString().isNotEmpty
+                                                           ? '•  ${it["item_name"]} (${it["brand"]}) x ${q.toStringAsFixed(0)}'
+                                                           : '•  ${it["item_name"]} x ${q.toStringAsFixed(0)}',
                                                        style: TextStyle(
                                                            fontSize: 13,
                                                            color: Colors

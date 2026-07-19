@@ -2653,6 +2653,7 @@ class _SaleScreenState extends State<SaleScreen> {
             discountApplicable: false,
             schemeApplicable: false,
             isAdvanceFree: true,
+            brand: source.brand,
           ),
         );
         _itemAdvanceAppliedQtyByItem[itemId] =
@@ -2822,6 +2823,7 @@ class _SaleScreenState extends State<SaleScreen> {
           schemeApplicable: false,
           isSchemeFree: true,
           appliedSchemeId: scheme.id,
+          brand: it.brand,
         );
 
         if (take >= it.qty - 1e-9) {
