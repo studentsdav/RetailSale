@@ -94,5 +94,10 @@ class PurchaseReportController extends ChangeNotifier {
     toDate = DateTime.now();
     notifyListeners();
   }
+
+  Future<Map<String, dynamic>> loadPoDetails(int poId) async {
+    final res = await ApiClient.get('/api/purchase-orders/$poId/details');
+    return Map<String, dynamic>.from(res['data'] ?? const {});
+  }
 }
 

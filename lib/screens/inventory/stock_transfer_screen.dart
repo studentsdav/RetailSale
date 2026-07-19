@@ -190,7 +190,7 @@ class _StockTransferScreenState extends State<StockTransferScreen> {
                                           List<Item>.from(itemCtrl.list),
                                       selectedItem: _sourceItem,
                                       itemAsString: (item) =>
-                                          '${item.itemName} (${item.itemCode})',
+                                          '${item.itemName} (${item.itemCode})${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
                                       compareFn: (a, b) => a.id == b.id,
                                       popupProps: const PopupProps.menu(
                                         showSearchBox: true,
@@ -237,7 +237,7 @@ class _StockTransferScreenState extends State<StockTransferScreen> {
                                           List<Item>.from(itemCtrl.list),
                                       selectedItem: _looseItem,
                                       itemAsString: (item) =>
-                                          '${item.itemName} (${item.itemCode})',
+                                          '${item.itemName} (${item.itemCode})${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
                                       compareFn: (a, b) => a.id == b.id,
                                       popupProps: const PopupProps.menu(
                                         showSearchBox: true,
@@ -372,7 +372,7 @@ class _StockTransferScreenState extends State<StockTransferScreen> {
   Widget _buildTransferPreview() {
     final looseItemText = _looseItem == null
         ? '-'
-        : '${_looseItem!.itemName} (${_looseItem!.itemCode})';
+        : '${_looseItem!.itemName} (${_looseItem!.itemCode})${_looseItem!.brand.isNotEmpty ? ' (${_looseItem!.brand})' : ''}';
 
     return Container(
       width: double.infinity,
@@ -457,7 +457,7 @@ class _StockTransferScreenState extends State<StockTransferScreen> {
               Expanded(
                 child: _previewCard(
                   title: 'Source Item',
-                  value: _sourceItem!.itemName,
+                  value: _sourceItem!.brand.isNotEmpty ? '${_sourceItem!.itemName} (${_sourceItem!.brand})' : _sourceItem!.itemName,
                   subtitle: _sourceItem!.itemCode,
                   icon: Icons.local_shipping_outlined,
                   accent: const Color(0xFF0F766E),
@@ -479,7 +479,11 @@ class _StockTransferScreenState extends State<StockTransferScreen> {
               Expanded(
                 child: _previewCard(
                   title: 'Loose Item',
-                  value: _looseItem?.itemName ?? 'Not selected',
+                  value: _looseItem == null
+                      ? 'Not selected'
+                      : (_looseItem!.brand.isNotEmpty
+                          ? '${_looseItem!.itemName} (${_looseItem!.brand})'
+                          : _looseItem!.itemName),
                   subtitle: looseItemText,
                   icon: Icons.inventory_2_outlined,
                   accent: const Color(0xFFB45309),

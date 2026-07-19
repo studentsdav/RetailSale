@@ -210,7 +210,7 @@ exports.listAssemblies = async (req, res) => {
                 {
                     model: req.propertyDb.models.item_master,
                     as: 'parent_item',
-                    attributes: ['item_code', 'item_name', 'unit']
+                    attributes: ['item_code', 'item_name', 'brand', 'unit']
                 }
             ],
             order: [['created_at', 'DESC']]
@@ -233,7 +233,7 @@ exports.getAssemblyDetails = async (req, res) => {
                 {
                     model: req.propertyDb.models.item_master,
                     as: 'parent_item',
-                    attributes: ['item_code', 'item_name', 'unit']
+                    attributes: ['item_code', 'item_name', 'brand', 'unit']
                 },
                 {
                     model: req.propertyDb.models.assembly_items,
@@ -242,7 +242,7 @@ exports.getAssemblyDetails = async (req, res) => {
                         {
                             model: req.propertyDb.models.item_master,
                             as: 'component_item',
-                            attributes: ['item_code', 'item_name', 'unit']
+                            attributes: ['item_code', 'item_name', 'brand', 'unit']
                         }
                     ]
                 }

@@ -47,6 +47,7 @@ class DamageReportModel {
 
 class DamageItemModel {
   final String itemName;
+  final String brand;
   final String unit;
   final double qty;
   final double rate;
@@ -55,6 +56,7 @@ class DamageItemModel {
 
   DamageItemModel({
     required this.itemName,
+    required this.brand,
     required this.unit,
     required this.qty,
     required this.rate,
@@ -65,6 +67,7 @@ class DamageItemModel {
   factory DamageItemModel.fromJson(Map<String, dynamic> json) {
     return DamageItemModel(
       itemName: json['item']['item_name'],
+      brand: json['item']['brand'] ?? '',
       unit: json['item']['unit'],
       qty: double.parse(json['qty'].toString()),
       rate: double.parse(json['rate'].toString()),

@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:excel/excel.dart' as exc;
 import 'package:flutter/material.dart';
@@ -218,7 +218,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
                   ? '#DCFCE7'
                   : '#E2E8F0';
       final values = [
-        item.name,
+        '${item.name}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
         item.category,
         item.unit,
         _qty(item.reorder),
@@ -304,7 +304,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
                   ),
                   children: [
                     for (final value in [
-                      item.name,
+                       '${item.name}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
                       item.category,
                       item.unit,
                       _qty(item.reorder),
@@ -598,7 +598,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
                     return DataRow(
                       color: WidgetStateProperty.all(_rowShade(item)),
                       cells: [
-                        DataCell(Text(item.name)),
+                         DataCell(Text('${item.name}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}')),
                         DataCell(Text(item.category)),
                         DataCell(Text(item.unit)),
                         DataCell(Text(_qty(item.reorder))),

@@ -313,7 +313,7 @@ exports.getRequestDetails = async (req, res) => {
             include: [{
                 model: req.propertyDb.models.item_master,
                 as: 'item_master',
-                attributes: ['item_name', 'unit']
+                attributes: ['item_name', 'brand', 'unit']
             }]
         }]
     });

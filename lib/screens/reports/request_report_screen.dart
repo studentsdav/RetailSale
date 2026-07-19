@@ -492,7 +492,7 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
                         ),
                         cells: [
                           DataCell(Text(
-                            item.itemName,
+                            '${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           )),
                           DataCell(Text(item.qty.toString())),
@@ -738,7 +738,7 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
           cell.cellStyle = exc.CellStyle(backgroundColorHex: bgColor);
         }
 
-        setCell(0, exc.TextCellValue(item.itemName));
+        setCell(0, exc.TextCellValue('${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}'));
         setCell(1, exc.DoubleCellValue(item.qty));
         setCell(2, exc.DoubleCellValue(item.rate));
         setCell(3, exc.DoubleCellValue(item.amount));
@@ -864,7 +864,7 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
                 cellStyle: const pw.TextStyle(fontSize: 9),
                 data: header.items.map((item) {
                   return [
-                    item.itemName,
+                    '${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
                     item.qty.toString(),
                     item.rate.toStringAsFixed(2),
                     item.amount.toStringAsFixed(2),

@@ -4,6 +4,7 @@ exports.getStockBalance = async (req, res) => {
         const [rows] = await req.propertyDb.query(`
   SELECT
     im.item_name       AS name,
+    im.brand           AS brand,
     im.item_group      AS category,
     im.unit,
     im.min_level       AS reorder,
@@ -27,6 +28,7 @@ exports.getStockBalance = async (req, res) => {
   GROUP BY
     im.id,
     im.item_name,
+    im.brand,
     im.item_group,
     im.unit,
     im.min_level,

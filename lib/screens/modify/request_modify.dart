@@ -277,7 +277,7 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
                 return pw.TableRow(
                   children: [
                     _cell("${i + 1}"),
-                    _cell(r.name),
+                    _cell(r.brand.isNotEmpty ? '${r.name} (${r.brand})' : r.name),
                     _cell(r.unit),
                     _cell(r.qty.toString()),
                     _cell(r.rate.toStringAsFixed(2)),
@@ -544,7 +544,9 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
                             }),
                             cells: [
                               DataCell(Text("${i + 1}")),
-                              DataCell(Text(item['item_master']['item_name'])),
+                              DataCell(Text(
+                                '${item['item_master']['item_name']}${item['item_master']['brand'] != null && item['item_master']['brand'].toString().isNotEmpty ? ' (${item['item_master']['brand']})' : ''}'
+                              )),
                               DataCell(Text(item['item_master']['unit'] ?? "")),
                               DataCell(
                                 SizedBox(

@@ -83,6 +83,7 @@ class _BOMSetupDialogState extends State<BOMSetupDialog> {
         componentItemId: _selectedComponent!.id,
         itemCode: _selectedComponent!.itemCode,
         itemName: _selectedComponent!.itemName,
+        brand: _selectedComponent!.brand,
         unit: _selectedComponent!.unit,
         rate: _selectedComponent!.rate,
         quantity: qty,
@@ -203,7 +204,7 @@ class _BOMSetupDialogState extends State<BOMSetupDialog> {
                                      item.itemCode.toLowerCase().contains(filter.toLowerCase())))
                                 .toList();
                           },
-                          itemAsString: (item) => '[${item.itemCode}] ${item.itemName} (Rs. ${item.rate.toStringAsFixed(2)})',
+                          itemAsString: (item) => '[${item.itemCode}] ${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''} (Rs. ${item.rate.toStringAsFixed(2)})',
                           compareFn: (a, b) => a.id == b.id,
                           popupProps: const PopupProps.menu(
                             showSearchBox: true,
@@ -271,7 +272,7 @@ class _BOMSetupDialogState extends State<BOMSetupDialog> {
                                 final comp = _components[idx];
                                 return ListTile(
                                   dense: true,
-                                  title: Text(comp.itemName),
+                                  title: Text('${comp.itemName}${comp.brand.isNotEmpty ? ' (${comp.brand})' : ''}'),
                                   subtitle: Text('${comp.itemCode} | Cost: Rs. ${comp.rate.toStringAsFixed(2)} per ${comp.unit}'),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,

@@ -347,6 +347,7 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                 DataColumn(label: Text('Supplier')),
                 DataColumn(label: Text('Status')),
                 DataColumn(label: Text('Total')),
+                DataColumn(label: Text('Actions')),
               ],
               rows: ctrl.list.map((po) {
                 return DataRow(cells: [
@@ -355,6 +356,10 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                   DataCell(Text(po.supplierName)),
                   DataCell(Text(po.status)),
                   DataCell(Text(po.totalAmount.toStringAsFixed(2))),
+                  DataCell(TextButton(
+                    onPressed: () => _showPoDetails(po.id, po.poNo),
+                    child: const Text('Show Items'),
+                  )),
                 ]);
               }).toList(),
             ),
@@ -362,6 +367,111 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
         ),
       );
     });
+  }
+
+  Future<void> _showPoDetails(int poId, String poNo) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const Center(
+          child: CircularProgressIndicator(),
+        );
+      },
+    );
+
+    Map<String, dynamic> poDetails;
+    try {
+      poDetails = await ctrl.loadPoDetails(poId);
+      if (!mounted) return;
+      Navigator.pop(context); // Close progress indicator
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close progress indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to load purchase order details')),
+      );
+      return;
+    }
+
+    final items = (poDetails['items'] as List? ?? const [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Items of PO $poNo'),
+        content: SizedBox(
+          width: 900,
+          height: 500,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Date: ${poDetails['po_date'] ?? ''}'),
+              Text('Status: ${poDetails['status'] ?? ''}'),
+              const SizedBox(height: 16),
+              const Text('Items List', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              if (items.isEmpty)
+                const Text('No items found.')
+              else
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.vertical,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
+                        ),
+                        columns: const [
+                          DataColumn(label: Text('Item')),
+                          DataColumn(label: Text('Brand')),
+                          DataColumn(label: Text('Unit')),
+                          DataColumn(label: Text('Qty')),
+                          DataColumn(label: Text('Rate')),
+                          DataColumn(label: Text('Tax %')),
+                          DataColumn(label: Text('Amount')),
+                        ],
+                        rows: items.map((item) {
+                          final name = (item['item_name'] ?? '').toString();
+                          final brand = (item['brand'] ?? '').toString();
+                          final unit = (item['unit'] ?? '').toString();
+                          final qty = double.tryParse(item['qty']?.toString() ?? '') ?? 0;
+                          final rate = double.tryParse(item['rate']?.toString() ?? '') ?? 0;
+                          final tax = double.tryParse(item['tax']?.toString() ?? '') ?? 0;
+                          final amount = double.tryParse(item['amount']?.toString() ?? '') ?? 0;
+
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(brand.isNotEmpty ? '$name ($brand)' : name)),
+                              DataCell(Text(brand)),
+                              DataCell(Text(unit)),
+                              DataCell(Text(qty.toString())),
+                              DataCell(Text(rate.toStringAsFixed(2))),
+                              DataCell(Text(tax.toStringAsFixed(2))),
+                              DataCell(Text(amount.toStringAsFixed(2))),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ================= COMMON =================

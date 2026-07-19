@@ -41,7 +41,7 @@ exports.getDamageReport = async (req, res) => {
                         {
                             model: req.propertyDb.models.item_master,
                             as: 'item',
-                            attributes: ['item_name', 'unit']
+                            attributes: ['item_name', 'brand', 'unit']
                         }
                     ]
                 }

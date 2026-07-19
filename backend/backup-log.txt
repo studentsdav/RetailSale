@@ -4119,3 +4119,97 @@ TypeError: argument handler must be a function
 2026-07-19T10:25:56.640Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-07-19T10:25:56.704Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-07-19T10:25:56.713Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T10:30:00.040Z [INFO] Hourly backup job started.
+2026-07-19T10:30:00.114Z [INFO] Hourly backup job started.
+2026-07-19T10:30:00.126Z [INFO] Hourly backup job started.
+2026-07-19T10:30:00.571Z [INFO] Backup created. File size: 0.04 MB
+2026-07-19T10:30:00.571Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T10:30:00.578Z [INFO] Backup created. File size: 0.04 MB
+2026-07-19T10:30:00.578Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T10:30:00.583Z [INFO] Backup created. File size: 0.04 MB
+2026-07-19T10:30:00.584Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T10:30:00.642Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-07-19T10:30:00.663Z [INFO] Hourly backup job execution finished.
+2026-07-19T10:30:00.671Z [INFO] Cloud Sync disabled for outlet [OUTLET202604212159]. Bypassing upload.
+2026-07-19T10:30:00.690Z [INFO] Hourly backup job execution finished.
+2026-07-19T10:30:00.696Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-07-19T10:30:00.713Z [INFO] Hourly backup job execution finished.
+2026-07-19T10:52:24.373Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T10:52:24.427Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T10:52:24.448Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:08:10.895Z [ERROR] [FATAL] Uncaught Exception: Unexpected identifier 'res'
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\inventory\requestWorkflow.controller.js:310
+    res.json({ success: true, data: header });
+    ^^^
+
+SyntaxError: Unexpected identifier 'res'
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\inventory.routes.js:16:21)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-07-19T11:08:23.629Z [ERROR] [FATAL] Uncaught Exception: Unexpected token ')'
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\inventory\requestWorkflow.controller.js:299
+        });
+         ^
+
+SyntaxError: Unexpected token ')'
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\inventory.routes.js:16:21)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-07-19T11:08:46.155Z [ERROR] [FATAL] Uncaught Exception: Unexpected token '!'
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\inventory\issue.controller.js:285
+        if (!issue) {
+            ^
+
+SyntaxError: Unexpected token '!'
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\inventory.routes.js:12:19)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-07-19T11:09:07.715Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:09:07.781Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:09:07.796Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:16:05.815Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:16:05.875Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:16:05.883Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:30:00.054Z [INFO] Hourly backup job started.
+2026-07-19T11:30:00.191Z [INFO] Hourly backup job started.
+2026-07-19T11:30:00.208Z [INFO] Hourly backup job started.
+2026-07-19T11:30:00.773Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T11:30:00.774Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T11:30:00.785Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T11:30:00.786Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T11:30:00.792Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T11:30:00.793Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T11:30:00.851Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-07-19T11:30:00.971Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-07-19T11:30:01.020Z [INFO] Hourly backup job execution finished.
+2026-07-19T11:30:01.031Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-07-19T11:30:01.082Z [INFO] Hourly backup job execution finished.
+2026-07-19T11:30:09.223Z [INFO] Cloud upload sequence completed successfully.
+2026-07-19T11:30:09.277Z [INFO] Hourly backup job execution finished.
+2026-07-19T11:30:19.927Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:30:20.008Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:30:20.018Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:54:57.371Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:54:57.434Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T11:54:57.448Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

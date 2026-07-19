@@ -8,6 +8,7 @@ exports.getDamageReport = async (req, res) => {
       SELECT
         dh.damage_date   AS date,
         im.item_name     AS item,
+        im.brand         AS brand,
         im.item_group    AS category,
         di.qty           AS qty,
         di.rate          AS rate,

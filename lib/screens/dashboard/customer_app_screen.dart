@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -1266,6 +1266,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           'item_id': itemId,
           'item_code': item['item_code'],
           'item_name': item['item_name'],
+          'brand': item['brand'] ?? '',
           'unit': item['unit'] ?? '',
           'qty': qty,
           'rate': rate,
@@ -3518,7 +3519,11 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     title: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item['item_name'] ?? 'Product'),
+                        Text(
+                          (item['brand'] ?? '').toString().isNotEmpty
+                              ? '${item['item_name'] ?? 'Product'} (${item['brand']})'
+                              : (item['item_name'] ?? 'Product'),
+                        ),
                         if (sub != null && remainingQty > 0)
                           Container(
                             margin: const EdgeInsets.only(top: 4),
@@ -4986,7 +4991,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                               children: [
                                                 Expanded(
                                                   child: Text(
-                                                    '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
+                                                    (it['brand'] ?? '').toString().isNotEmpty
+                                                        ? '•  ${it['item_name']} (${it['brand']}) x ${q.toStringAsFixed(0)}'
+                                                        : '•  ${it['item_name']} x ${q.toStringAsFixed(0)}',
                                                     style: TextStyle(
                                                         fontSize: 13,
                                                         color: Colors
@@ -5338,7 +5345,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            sub['item_name'] ?? 'Milk Service',
+                            (sub['item']?['brand'] ?? '').toString().isNotEmpty
+                                ? '${sub['item_name'] ?? 'Milk Service'} (${sub['item']['brand']})'
+                                : (sub['item_name'] ?? 'Milk Service'),
                             style: theme.textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
@@ -5585,7 +5594,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Transactions — ${sub['item_name'] ?? 'Subscription'}',
+                        (sub['item']?['brand'] ?? '').toString().isNotEmpty
+                          ? 'Transactions — ${sub['item_name'] ?? 'Subscription'} (${sub['item']['brand']})'
+                          : 'Transactions — ${sub['item_name'] ?? 'Subscription'}',
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                     ),
@@ -5707,7 +5718,12 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Item: ${sub['item_name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  (sub['item']?['brand'] ?? '').toString().isNotEmpty
+                      ? 'Item: ${sub['item_name']} (${sub['item']['brand']})'
+                      : 'Item: ${sub['item_name']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 4),
                 Text('Daily: ${dailyQty.toStringAsFixed(1)} $unit  |  Rate: Rs. ${rate.toStringAsFixed(2)}/unit',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
@@ -6605,7 +6621,12 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                               final isSelected = itemId == _selectedItemId;
                               return ListTile(
                                 dense: true,
-                                title: Text(item['item_name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w500)),
+                                title: Text(
+                                  (item['brand'] ?? '').toString().isNotEmpty
+                                      ? '${item['item_name'] ?? ''} (${item['brand']})'
+                                      : (item['item_name']?.toString() ?? ''),
+                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                ),
                                 subtitle: Text('Rs. ${item['retail_sale_price'] ?? item['rate']}/unit'),
                                 selected: isSelected,
                                 selectedColor: Colors.blue.shade700,

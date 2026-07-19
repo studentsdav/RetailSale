@@ -293,7 +293,7 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
                       rows: header.items.map((e) {
                         return DataRow(
                           cells: [
-                            DataCell(Text(e.itemName)),
+                            DataCell(Text('${e.itemName}${e.brand.isNotEmpty ? ' (${e.brand})' : ''}')),
                             DataCell(Text(e.unit)),
                             DataCell(Text(e.qty.toString())),
                             DataCell(Text(e.rate.toStringAsFixed(2))),
@@ -512,7 +512,7 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
           cell.cellStyle = exc.CellStyle(backgroundColorHex: bgColor);
         }
 
-        setCell(0, exc.TextCellValue(item.itemName));
+        setCell(0, exc.TextCellValue('${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}'));
         setCell(1, exc.TextCellValue(item.unit));
         setCell(2, exc.DoubleCellValue(item.qty));
         setCell(3, exc.DoubleCellValue(item.rate));
@@ -651,7 +651,7 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
                 cellStyle: const pw.TextStyle(fontSize: 9),
                 data: header.items.map((item) {
                   return [
-                    item.itemName,
+                    '${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
                     item.unit,
                     item.qty.toString(),
                     item.rate.toStringAsFixed(2),

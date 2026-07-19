@@ -223,11 +223,12 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
       final remainingQty = originalQty - returnedQty;
       if (remainingQty <= 0) continue; // Item is already fully returned
 
+      final brand = rawItem['item']?['brand']?.toString() ?? '';
       itemsState[itemId] = {
         'selected': true, // Default to selected
         'qty': remainingQty, // Default to remaining quantity
         'maxQty': remainingQty,
-        'name': rawItem['item_name']?.toString() ?? '',
+        'name': '${rawItem['item_name']?.toString() ?? ''}${brand.isNotEmpty ? ' ($brand)' : ''}',
         'code': rawItem['item_code']?.toString() ?? '',
       };
     }

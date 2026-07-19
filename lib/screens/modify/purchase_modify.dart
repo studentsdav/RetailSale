@@ -613,7 +613,9 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                             }),
                             cells: [
                               DataCell(Text("${i + 1}")),
-                              DataCell(Text(item['item_name'])),
+                              DataCell(Text(
+                                '${item['item_name']}${item['brand'] != null && item['brand'].toString().isNotEmpty ? ' (${item['brand']})' : ''}'
+                              )),
                               DataCell(
                                 SizedBox(
                                   width: 80,

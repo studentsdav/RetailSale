@@ -3,6 +3,7 @@ class BOMItem {
   final int componentItemId;
   final String itemCode;
   final String itemName;
+  final String brand;
   final String unit;
   final double rate;
   final double quantity;
@@ -13,6 +14,7 @@ class BOMItem {
     required this.componentItemId,
     required this.itemCode,
     required this.itemName,
+    this.brand = '',
     required this.unit,
     required this.rate,
     required this.quantity,
@@ -25,6 +27,7 @@ class BOMItem {
       componentItemId: json['component_item_id'] ?? 0,
       itemCode: json['item_code'] ?? '',
       itemName: json['item_name'] ?? '',
+      brand: json['brand'] ?? '',
       unit: json['unit'] ?? '',
       rate: double.tryParse(json['rate']?.toString() ?? '0') ?? 0.0,
       quantity: double.tryParse(json['quantity']?.toString() ?? '0') ?? 0.0,
@@ -38,6 +41,7 @@ class BOMItem {
       'component_item_id': componentItemId,
       'item_code': itemCode,
       'item_name': itemName,
+      'brand': brand,
       'unit': unit,
       'rate': rate,
       'quantity': quantity,
@@ -76,6 +80,7 @@ class AssemblyHeader {
   final int parentItemId;
   final String parentItemName;
   final String parentItemCode;
+  final String parentBrand;
   final String parentUnit;
   final double qty;
   final double compositeCost;
@@ -92,6 +97,7 @@ class AssemblyHeader {
     required this.parentItemId,
     required this.parentItemName,
     required this.parentItemCode,
+    this.parentBrand = '',
     required this.parentUnit,
     required this.qty,
     required this.compositeCost,
@@ -115,6 +121,7 @@ class AssemblyHeader {
       parentItemId: json['parent_item_id'] ?? 0,
       parentItemName: parent['item_name'] ?? '',
       parentItemCode: parent['item_code'] ?? '',
+      parentBrand: parent['brand'] ?? '',
       parentUnit: parent['unit'] ?? '',
       qty: double.tryParse(json['qty']?.toString() ?? '0') ?? 0.0,
       compositeCost: double.tryParse(json['composite_cost']?.toString() ?? '0') ?? 0.0,
@@ -132,6 +139,7 @@ class AssemblyItem {
   final int componentItemId;
   final String componentItemName;
   final String componentItemCode;
+  final String componentBrand;
   final String componentUnit;
   final double qtyRequired;
   final double qtyUsed;
@@ -143,6 +151,7 @@ class AssemblyItem {
     required this.componentItemId,
     required this.componentItemName,
     required this.componentItemCode,
+    this.componentBrand = '',
     required this.componentUnit,
     required this.qtyRequired,
     required this.qtyUsed,
@@ -157,6 +166,7 @@ class AssemblyItem {
       componentItemId: json['component_item_id'] ?? 0,
       componentItemName: comp['item_name'] ?? '',
       componentItemCode: comp['item_code'] ?? '',
+      componentBrand: comp['brand'] ?? '',
       componentUnit: comp['unit'] ?? '',
       qtyRequired: double.tryParse(json['qty_required']?.toString() ?? '0') ?? 0.0,
       qtyUsed: double.tryParse(json['qty_used']?.toString() ?? '0') ?? 0.0,

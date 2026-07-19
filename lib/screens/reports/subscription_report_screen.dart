@@ -231,7 +231,11 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
                   bold: true,
                   onTap: () => _showTimeline(row),
                 ),
-                _ReportCell((row['item_name'] ?? '').toString()),
+                _ReportCell(() {
+                  final brand = row['item']?['brand']?.toString() ?? '';
+                  final itemName = row['item_name'] ?? '';
+                  return brand.isNotEmpty ? '$itemName ($brand)' : '$itemName';
+                }()),
                 _ReportCell((row['start_date'] ?? '').toString()),
                 _ReportCell((row['end_date'] ?? '').toString()),
                 _ReportCell(totalDays.toStringAsFixed(totalDays % 1 == 0 ? 0 : 2),
@@ -287,7 +291,11 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Item: ${row['item_name'] ?? ''}'),
+                Text(() {
+                  final brand = row['item']?['brand']?.toString() ?? '';
+                  final itemName = row['item_name'] ?? '';
+                  return brand.isNotEmpty ? 'Item: $itemName ($brand)' : 'Item: $itemName';
+                }()),
                 Text('Period: ${row['start_date']} to ${row['end_date']}'),
                 const SizedBox(height: 16),
                 const Text('Consumption',
@@ -387,7 +395,11 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
       final entry = _rows[row];
       final values = [
         entry['customer_name'] ?? entry['customer_phone'] ?? '',
-        entry['item_name'] ?? '',
+        (() {
+          final brand = entry['item']?['brand']?.toString() ?? '';
+          final itemName = entry['item_name'] ?? '';
+          return brand.isNotEmpty ? '$itemName ($brand)' : '$itemName';
+        }()).toString(),
         entry['start_date'] ?? '',
         entry['end_date'] ?? '',
         entry['total_days'] ?? '',
@@ -454,7 +466,11 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
             data: _rows.map((row) {
               return [
                 row['customer_name'] ?? row['customer_phone'] ?? '',
-                row['item_name'] ?? '',
+                (() {
+                  final brand = row['item']?['brand']?.toString() ?? '';
+                  final itemName = row['item_name'] ?? '';
+                  return brand.isNotEmpty ? '$itemName ($brand)' : '$itemName';
+                }()).toString(),
                 row['start_date'] ?? '',
                 row['end_date'] ?? '',
                 row['total_days'] ?? '',

@@ -292,7 +292,7 @@ exports.getIssueDetails = async (req, res) => {
                         {
                             as: 'item_master',
                             model: req.propertyDb.models.item_master,
-                            attributes: ['item_code', 'item_name', 'unit']
+                            attributes: ['item_code', 'item_name', 'brand', 'unit']
                         }
                     ]
                 }

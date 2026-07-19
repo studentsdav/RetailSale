@@ -1,5 +1,6 @@
 class StockItem {
   final String name;
+  final String brand;
   final String category;
   final String unit;
   final double qty;
@@ -8,6 +9,7 @@ class StockItem {
 
   StockItem({
     required this.name,
+    required this.brand,
     required this.category,
     required this.unit,
     required this.qty,
@@ -21,6 +23,7 @@ class StockItem {
 
     return StockItem(
       name: json['name'] ?? '',
+      brand: json['brand'] ?? '',
       category: json['category'] ?? '',
       unit: json['unit'] ?? '',
       qty: toDouble(json['qty']),

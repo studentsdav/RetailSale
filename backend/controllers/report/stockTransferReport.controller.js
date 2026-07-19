@@ -17,10 +17,12 @@ exports.getStockTransferReport = async (req, res) => {
                 MIN(sl.txn_date) AS transfer_date,
                 MAX(CASE WHEN sl.qty_out > 0 THEN sl.item_code END) AS source_item_code,
                 MAX(CASE WHEN sl.qty_out > 0 THEN im.item_name END) AS source_item_name,
+                MAX(CASE WHEN sl.qty_out > 0 THEN im.brand END) AS source_brand,
                 MAX(CASE WHEN sl.qty_out > 0 THEN im.unit END) AS source_unit,
                 COALESCE(MAX(CASE WHEN sl.qty_out > 0 THEN sl.qty_out END), 0) AS pack_count,
                 MAX(CASE WHEN sl.qty_in > 0 THEN sl.item_code END) AS loose_item_code,
                 MAX(CASE WHEN sl.qty_in > 0 THEN im.item_name END) AS loose_item_name,
+                MAX(CASE WHEN sl.qty_in > 0 THEN im.brand END) AS loose_brand,
                 MAX(CASE WHEN sl.qty_in > 0 THEN im.unit END) AS loose_unit,
                 COALESCE(MAX(CASE WHEN sl.qty_in > 0 THEN sl.qty_in END), 0) AS loose_qty
             FROM stock_ledger sl

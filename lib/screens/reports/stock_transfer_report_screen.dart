@@ -108,13 +108,15 @@ class _StockTransferReportScreenState extends State<StockTransferReportScreen> {
 
     for (var index = 0; index < rows.length; index++) {
       final row = rows[index];
+      final sourceBrand = row['source_brand'] != null && row['source_brand'].toString().isNotEmpty ? ' (${row['source_brand']})' : '';
+      final looseBrand = row['loose_brand'] != null && row['loose_brand'].toString().isNotEmpty ? ' (${row['loose_brand']})' : '';
       final values = [
         _dateText(row['transfer_date']),
         '${row['ref_no'] ?? ''}',
-        '${row['source_item_name'] ?? row['source_item_code'] ?? ''}',
+        '${row['source_item_name'] ?? row['source_item_code'] ?? ''}$sourceBrand',
         '${row['source_unit'] ?? ''}',
         _fmt(row['pack_count']),
-        '${row['loose_item_name'] ?? row['loose_item_code'] ?? ''}',
+        '${row['loose_item_name'] ?? row['loose_item_code'] ?? ''}$looseBrand',
         '${row['loose_unit'] ?? ''}',
         _fmt(row['loose_qty']),
       ];
@@ -170,13 +172,15 @@ class _StockTransferReportScreenState extends State<StockTransferReportScreen> {
               'Loose Qty',
             ],
             data: rows.map((row) {
+              final sourceBrand = row['source_brand'] != null && row['source_brand'].toString().isNotEmpty ? ' (${row['source_brand']})' : '';
+              final looseBrand = row['loose_brand'] != null && row['loose_brand'].toString().isNotEmpty ? ' (${row['loose_brand']})' : '';
               return [
                 _dateText(row['transfer_date']),
                 '${row['ref_no'] ?? ''}',
-                '${row['source_item_name'] ?? row['source_item_code'] ?? ''}',
+                '${row['source_item_name'] ?? row['source_item_code'] ?? ''}$sourceBrand',
                 '${row['source_unit'] ?? ''}',
                 _fmt(row['pack_count']),
-                '${row['loose_item_name'] ?? row['loose_item_code'] ?? ''}',
+                '${row['loose_item_name'] ?? row['loose_item_code'] ?? ''}$looseBrand',
                 '${row['loose_unit'] ?? ''}',
                 _fmt(row['loose_qty']),
               ];
@@ -267,17 +271,19 @@ class _StockTransferReportScreenState extends State<StockTransferReportScreen> {
                                   DataColumn(label: Text('Loose Qty')),
                                 ],
                                 rows: rows.map((row) {
+                                  final sourceBrand = row['source_brand'] != null && row['source_brand'].toString().isNotEmpty ? ' (${row['source_brand']})' : '';
+                                  final looseBrand = row['loose_brand'] != null && row['loose_brand'].toString().isNotEmpty ? ' (${row['loose_brand']})' : '';
                                   return DataRow(
                                     cells: [
                                       DataCell(Text(_dateText(row['transfer_date']))),
                                       DataCell(Text('${row['ref_no'] ?? ''}')),
                                       DataCell(Text(
-                                        '${row['source_item_name'] ?? row['source_item_code'] ?? ''}',
+                                        '${row['source_item_name'] ?? row['source_item_code'] ?? ''}$sourceBrand',
                                       )),
                                       DataCell(Text('${row['source_unit'] ?? ''}')),
                                       DataCell(Text(_fmt(row['pack_count']))),
                                       DataCell(Text(
-                                        '${row['loose_item_name'] ?? row['loose_item_code'] ?? ''}',
+                                        '${row['loose_item_name'] ?? row['loose_item_code'] ?? ''}$looseBrand',
                                       )),
                                       DataCell(Text('${row['loose_unit'] ?? ''}')),
                                       DataCell(Text(

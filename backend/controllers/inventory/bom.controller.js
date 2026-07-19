@@ -81,7 +81,7 @@ exports.getBOM = async (req, res) => {
                 {
                     model: req.propertyDb.models.item_master,
                     as: 'component_item',
-                    attributes: ['id', 'item_code', 'item_name', 'rate', 'unit', 'retail_sale_price']
+                    attributes: ['id', 'item_code', 'item_name', 'brand', 'rate', 'unit', 'retail_sale_price']
                 }
             ]
         });
@@ -99,6 +99,7 @@ exports.getBOM = async (req, res) => {
                 component_item_id: c.component_item_id,
                 item_code: cItem?.item_code || '',
                 item_name: cItem?.item_name || '',
+                brand: cItem?.brand || '',
                 unit: cItem?.unit || '',
                 rate: rate,
                 quantity: quantity,

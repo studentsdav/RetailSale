@@ -211,7 +211,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Finished Good: [${details.parentItemCode}] ${details.parentItemName}'),
+                  Text('Finished Good: [${details.parentItemCode}] ${details.parentItemName}${details.parentBrand.isNotEmpty ? ' (${details.parentBrand})' : ''}'),
                   Text('Produced Qty: ${details.qty.toStringAsFixed(2)} ${details.parentUnit}'),
                   Text('Assembly Date: ${details.assemblyDate}'),
                   Text('Composite Cost per unit: Rs. ${details.compositeCost.toStringAsFixed(2)}'),
@@ -227,7 +227,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                         final usage = details.items[idx];
                         return ListTile(
                           dense: true,
-                          title: Text(usage.componentItemName),
+                          title: Text('${usage.componentItemName}${usage.componentBrand.isNotEmpty ? ' (${usage.componentBrand})' : ''}'),
                           subtitle: Text(usage.componentItemCode),
                           trailing: Text(
                             '${usage.qtyUsed.toStringAsFixed(2)} ${usage.componentUnit} @ Rs. ${usage.rate.toStringAsFixed(2)} = Rs. ${usage.totalCost.toStringAsFixed(2)}',
@@ -350,7 +350,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                                   item.itemCode.toLowerCase().contains(filter.toLowerCase()))
                               .toList();
                         },
-                        itemAsString: (item) => '[${item.itemCode}] ${item.itemName}',
+                        itemAsString: (item) => '[${item.itemCode}] ${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
                         compareFn: (a, b) => a.id == b.id,
                         popupProps: const PopupProps.menu(showSearchBox: true),
                         decoratorProps: const DropDownDecoratorProps(
@@ -440,7 +440,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                                 return TableRow(
                                   children: [
                                     Padding(padding: const EdgeInsets.all(8), child: Text(comp.itemCode)),
-                                    Padding(padding: const EdgeInsets.all(8), child: Text(comp.itemName)),
+                                    Padding(padding: const EdgeInsets.all(8), child: Text('${comp.itemName}${comp.brand.isNotEmpty ? ' (${comp.brand})' : ''}')),
                                     Padding(padding: const EdgeInsets.all(8), child: Text('${comp.quantity} ${comp.unit}')),
                                     Padding(padding: const EdgeInsets.all(8), child: Text('$totalReq ${comp.unit}')),
                                     Padding(
@@ -597,7 +597,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                                         cells: [
                                           DataCell(Text(asm.assemblyNo)),
                                           DataCell(Text(_formatDate(asm.assemblyDate))),
-                                          DataCell(Text('[${asm.parentItemCode}] ${asm.parentItemName}')),
+                                          DataCell(Text('[${asm.parentItemCode}] ${asm.parentItemName}${asm.parentBrand.isNotEmpty ? ' (${asm.parentBrand})' : ''}')),
                                           DataCell(Text('${asm.qty.toStringAsFixed(2)} ${asm.parentUnit}')),
                                           DataCell(
                                             Text(

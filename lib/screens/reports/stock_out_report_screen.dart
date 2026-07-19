@@ -347,7 +347,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
           index.isEven ? Colors.grey.shade50 : Colors.white),
       cells: ctrl.reportType == 'summary'
           ? [
-              DataCell(Text(e['item_name'] ?? '')),
+              DataCell(Text('${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}')),
               DataCell(Text(e['brand'] ?? '')),
               DataCell(Text(e['unit'] ?? '')),
               DataCell(Text(e['total_qty'].toString())),
@@ -359,7 +359,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
               )),
             ]
           : [
-              DataCell(Text(e['item_name'] ?? '')),
+              DataCell(Text('${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}')),
               DataCell(Text(e['brand'] ?? '')),
               DataCell(Text(e['unit'] ?? '')),
               DataCell(Text(e['qty'].toString())),
@@ -487,7 +487,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
       }
 
       if (ctrl.reportType == 'summary') {
-        setCell(0, exc.TextCellValue(e['item_name'] ?? ''));
+        setCell(0, exc.TextCellValue('${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}'));
         setCell(1, exc.TextCellValue(e['brand'] ?? ''));
         setCell(2, exc.TextCellValue(e['unit'] ?? ''));
         setCell(
@@ -496,7 +496,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
         setCell(
             5, exc.DoubleCellValue(double.parse(e['net_amount'].toString())));
       } else {
-        setCell(0, exc.TextCellValue(e['item_name'] ?? ''));
+        setCell(0, exc.TextCellValue('${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}'));
         setCell(1, exc.TextCellValue(e['brand'] ?? ''));
         setCell(2, exc.TextCellValue(e['unit'] ?? ''));
         setCell(3, exc.DoubleCellValue(double.parse(e['qty'].toString())));
@@ -574,7 +574,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
               data: ctrl.data.map((e) {
                 if (ctrl.reportType == 'summary') {
                   return [
-                    e['item_name'] ?? '',
+                    '${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}',
                     e['brand'] ?? '',
                     e['unit'] ?? '',
                     e['total_qty'].toString(),
@@ -583,7 +583,7 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
                   ];
                 } else {
                   return [
-                    e['item_name'] ?? '',
+                    '${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}',
                     e['brand'] ?? '',
                     e['unit'] ?? '',
                     e['qty'].toString(),

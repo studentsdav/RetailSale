@@ -24,12 +24,14 @@ class RequestItem {
 
 class RequestItemReport {
   final String itemName;
+  final String brand;
   final double qty;
   final double rate;
   final double amount;
 
   RequestItemReport({
     required this.itemName,
+    required this.brand,
     required this.qty,
     required this.rate,
     required this.amount,
@@ -38,6 +40,7 @@ class RequestItemReport {
   factory RequestItemReport.fromJson(Map<String, dynamic> json) {
     return RequestItemReport(
       itemName: json['item_name'] ?? '',
+      brand: json['brand'] ?? '',
       qty: double.parse(json['qty'].toString()),
       rate: double.parse(json['rate'].toString()),
       amount: double.parse(json['amount'].toString()),
@@ -49,6 +52,7 @@ class RequestItemnew {
   final int id;
   final int itemId;
   final String name;
+  final String brand;
   final String unit;
   final double qty;
   final double rate;
@@ -57,6 +61,7 @@ class RequestItemnew {
     required this.id,
     required this.itemId,
     required this.name,
+    required this.brand,
     required this.unit,
     required this.qty,
     required this.rate,
@@ -67,6 +72,7 @@ class RequestItemnew {
       id: json['id'],
       itemId: json['item_id'],
       name: json['item_master']?['item_name'] ?? '',
+      brand: json['item_master']?['brand'] ?? '',
       unit: json['item_master']?['unit'] ?? '',
       qty: double.tryParse(json['qty'].toString()) ?? 0,
       rate: double.tryParse(json['rate'].toString()) ?? 0,

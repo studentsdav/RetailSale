@@ -287,7 +287,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                 return pw.TableRow(
                   children: [
                     _cell("${i + 1}"),
-                    _cell(r['item_name']),
+                    _cell('${r['item_name'] ?? ''}${r['brand'] != null && r['brand'].toString().isNotEmpty ? ' (${r['brand']})' : ''}'),
                     _cell(r['unit'] ?? ""),
                     _cell(qty.toString()),
                     _cell(rate.toStringAsFixed(2)),
@@ -582,7 +582,9 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                             }),
                             cells: [
                               DataCell(Text("${i + 1}")),
-                              DataCell(Text(item['item_name'])),
+                              DataCell(Text(
+                                '${item['item_name'] ?? ''}${item['brand'] != null && item['brand'].toString().isNotEmpty ? ' (${item['brand']})' : ''}'
+                              )),
                               DataCell(Text(item['unit'] ?? "")),
                               DataCell(
                                 SizedBox(

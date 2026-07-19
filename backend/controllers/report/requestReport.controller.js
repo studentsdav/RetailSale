@@ -60,7 +60,7 @@ exports.getRequestReport = async (req, res) => {
                         {
                             model: req.propertyDb.models.item_master,
                             as: 'item_master',
-                            attributes: ['item_name']
+                            attributes: ['item_name', 'brand']
                         }
                     ]
                 }
@@ -81,6 +81,7 @@ exports.getRequestReport = async (req, res) => {
 
                 return {
                     item_name: i.item_master?.item_name || '',
+                    brand: i.item_master?.brand || '',
                     qty: Number(i.qty),
                     rate: Number(i.rate),
                     amount

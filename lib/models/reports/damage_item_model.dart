@@ -1,6 +1,7 @@
 class DamageItem {
   final DateTime date;
   final String item;
+  final String brand;
   final String category;
   final double qty;
   final double rate;
@@ -10,6 +11,7 @@ class DamageItem {
   DamageItem({
     required this.date,
     required this.item,
+    required this.brand,
     required this.category,
     required this.qty,
     required this.rate,
@@ -21,6 +23,7 @@ class DamageItem {
     return DamageItem(
       date: DateTime.parse(json['date']),
       item: json['item'] ?? '',
+      brand: json['brand'] ?? '',
       category: json['category'] ?? '',
       qty: double.parse((json['qty'].toString())),
       rate: (double.parse(json['rate']) ?? 0).toDouble(),

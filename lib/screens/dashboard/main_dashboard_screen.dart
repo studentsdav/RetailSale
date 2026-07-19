@@ -2171,7 +2171,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           ])) ...[
             // ================= REPORTS =================
             _sectionTitle('Reports'),
-            _drawerItem(Icons.receipt_long, 'Purchase Report',
+            _drawerItem(Icons.receipt_long, 'Receiving Report',
                 permission: 'STOCK_IN_REPORT', onTap: () {
               Navigator.push(
                   context,

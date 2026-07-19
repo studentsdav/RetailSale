@@ -456,7 +456,8 @@ class _SchemeReportScreenState extends State<SchemeReportScreen> {
                         DataColumn(label: Text('Amount')),
                       ],
                       rows: items.map((item) {
-                        final name = (item['item_name'] ?? '').toString();
+                        final brand = item['item']?['brand']?.toString() ?? '';
+                        final name = '${item['item_name'] ?? ''}${brand.isNotEmpty ? ' ($brand)' : ''}';
                         final qty = _num(item['qty']);
                         final rate = _num(item['rate']);
                         final amount = _num(item['net_amount'] ?? item['line_total']);

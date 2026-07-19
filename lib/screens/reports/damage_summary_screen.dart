@@ -195,7 +195,7 @@ class _DamageSummaryScreenState extends State<DamageSummaryScreen> {
                       ),
                       cells: [
                         DataCell(Text(DateFormat('dd-MMM').format(e.date))),
-                        DataCell(Text(e.item)),
+                        DataCell(Text('${e.item}${e.brand.isNotEmpty ? ' (${e.brand})' : ''}')),
                         DataCell(Text(e.category)),
                         DataCell(Text(e.qty.toString())),
                         DataCell(Text(e.rate.toStringAsFixed(2))),

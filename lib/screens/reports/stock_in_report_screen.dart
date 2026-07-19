@@ -69,7 +69,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
       appBar: AppBar(
-        title: const Text('Purchase Report'),
+        title: const Text('Receiving Report'),
         centerTitle: true,
         actions: [
           ElevatedButton.icon(
@@ -313,8 +313,12 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                         runSpacing: 10,
                         children: [
                           _headerChip(
-                            "Bill: ${header.billNo}",
+                            "Receiving No: ${header.grnNo}",
                             Colors.deepOrange,
+                          ),
+                          _headerChip(
+                            "Supplier Invoice: ${header.supplierBill.isEmpty ? '--' : header.supplierBill}",
+                            Colors.blueGrey,
                           ),
                           _headerChip(
                             "Date: ${DateFormat('dd-MMM-yyyy').format(header.date)}",
@@ -349,7 +353,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                               borderRadius: BorderRadius.circular(30),
                             ),
                             child: Text(
-                              "Invoice #$invNo",
+                              "Receiving No: ${header.grnNo} | Supplier Invoice: ${header.supplierBill.isEmpty ? '--' : header.supplierBill}",
                               style:
                                   const TextStyle(fontWeight: FontWeight.w600),
                             ),
@@ -365,7 +369,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                "Bill: ${header.billNo}  GST: ${header.supplierGstin}",
+                                "Receiving No: ${header.grnNo}  Supplier Invoice: ${header.supplierBill.isEmpty ? '--' : header.supplierBill}  GST: ${header.supplierGstin}",
                                 style: const TextStyle(
                                     fontSize: 12, color: Colors.grey),
                               ),
@@ -425,7 +429,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                           rows: items.map((e) {
                             return DataRow(
                               cells: [
-                  DataCell(Text(e.itemName)),
+                  DataCell(Text('${e.itemName}${e.brand.isNotEmpty ? ' (${e.brand})' : ''}')),
                                 DataCell(Text(e.unit)),
                                 DataCell(Text(e.qty.toString())),
                                 DataCell(Text(e.rate.toStringAsFixed(2))),
@@ -673,14 +677,14 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
 
   Future<void> exportToExcel() async {
     final excel = exc.Excel.createExcel();
-    final sheet = excel['Purchase Report'];
+    final sheet = excel['Receiving Report'];
 
     int row = 0;
 
     // ================= TITLE =================
     sheet
         .cell(exc.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-        .value = exc.TextCellValue('PURCHASE REPORT');
+        .value = exc.TextCellValue('RECEIVING REPORT');
 
     row++;
 
@@ -714,7 +718,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
           .cell(exc.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row));
 
       invCell.value = exc.TextCellValue(
-          'Software Ident No: ${header.grnNo} | Bill: ${header.billNo} | ${DateFormat('dd-MMM-yyyy').format(header.date)} | ${header.supplier}');
+          'Receiving No: ${header.grnNo} | Supplier Invoice: ${header.supplierBill} | Date: ${DateFormat('dd-MMM-yyyy').format(header.date)} | ${header.supplier}');
 
       invCell.cellStyle = exc.CellStyle(
         bold: true,
@@ -771,7 +775,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
           cell.cellStyle = exc.CellStyle(backgroundColorHex: bgColor);
         }
 
-        setCell(0, exc.TextCellValue(e.itemName));
+        setCell(0, exc.TextCellValue('${e.itemName}${e.brand.isNotEmpty ? ' (${e.brand})' : ''}'));
         setCell(1, exc.TextCellValue(e.unit));
         setCell(2, exc.DoubleCellValue(e.qty));
         setCell(3, exc.DoubleCellValue(e.rate));
@@ -797,7 +801,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
 
     final dir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final file = File('${dir.path}/PurchaseReport_$timestamp.xlsx');
+    final file = File('${dir.path}/ReceivingReport_$timestamp.xlsx');
 
     await file.writeAsBytes(excel.encode()!);
     await OpenFile.open(file.path);
@@ -814,7 +818,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              'Purchase Report',
+              'Receiving Report',
               style: pw.TextStyle(
                 fontSize: 18,
                 fontWeight: pw.FontWeight.bold,
@@ -850,9 +854,9 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                 padding: const pw.EdgeInsets.all(8),
                 color: PdfColors.blueGrey100,
                 child: pw.Text(
-                  'Software Ident No: ${headerData.grnNo} | '
-                  'Bill: ${headerData.billNo} | '
-                  '${DateFormat('dd-MMM-yyyy').format(headerData.date)} | '
+                  'Receiving No: ${headerData.grnNo} | '
+                  'Supplier Invoice: ${headerData.supplierBill} | '
+                  'Date: ${DateFormat('dd-MMM-yyyy').format(headerData.date)} | '
                   '${headerData.supplier}',
                   style: pw.TextStyle(
                     fontWeight: pw.FontWeight.bold,
@@ -917,7 +921,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
 
                     return pw.TableRow(
                       children: [
-                        _pdfCell(e.itemName),
+                        _pdfCell(e.brand.isNotEmpty ? '${e.itemName} (${e.brand})' : e.itemName),
                         _pdfCell(e.unit),
                         _pdfCell(e.qty.toString(), right: true),
                         _pdfCell(e.rate.toStringAsFixed(2), right: true),
@@ -957,7 +961,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(name: 'Stock_In_Report', onLayout: (format) async => pdf.save());
+    await Printing.layoutPdf(name: 'Receiving_Report', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _pdfHeaderCell(String text) {

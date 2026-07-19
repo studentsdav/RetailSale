@@ -1,4 +1,5 @@
 class PurchaseOrderReport {
+  final int id;
   final String poNo;
   final String supplierName;
   final String status;
@@ -6,6 +7,7 @@ class PurchaseOrderReport {
   final DateTime poDate;
 
   PurchaseOrderReport({
+    required this.id,
     required this.poNo,
     required this.supplierName,
     required this.status,
@@ -15,6 +17,7 @@ class PurchaseOrderReport {
 
   factory PurchaseOrderReport.fromJson(Map<String, dynamic> json) {
     return PurchaseOrderReport(
+      id: json['id'],
       poNo: json['po_no'] ?? '',
       supplierName: json['supplier_name'] ?? '',
       status: json['status'] ?? '',

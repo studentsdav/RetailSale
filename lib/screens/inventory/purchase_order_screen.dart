@@ -770,7 +770,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                     cells: [
                       DataCell(Text('${i + 1}')),
                       DataCell(Text(r.itemCode)),
-                      DataCell(Text(r.itemName)),
+                      DataCell(Text('${r.itemName}${r.brand.isNotEmpty ? ' (${r.brand})' : ''}')),
                       DataCell(Text(r.brand)),
                       DataCell(Text(r.unit)),
                       DataCell(Text(_fmtNumber(r.qty))),
@@ -1096,7 +1096,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                 return pw.TableRow(
                   children: [
                     _tableCell("${i + 1}"),
-                    _tableCell(item.itemName),
+                    _tableCell('${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}'),
                     _tableCell(item.brand),
                     _tableCell(item.unit),
                     _tableCell(_fmtNumber(item.qty)),

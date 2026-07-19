@@ -249,11 +249,13 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                 final rate = double.parse(r['rate'].toString());
 
                 final amount = qty * rate;
+                final brand = r['item_master']?['brand']?.toString() ?? '';
+                final itemName = r['item_master']?['item_name'] ?? r['item_code'];
 
                 return pw.TableRow(
                   children: [
                     _cell("${i + 1}"),
-                    _cell(r['item_master']?['item_name'] ?? r['item_code']),
+                    _cell(brand.isNotEmpty ? '$itemName ($brand)' : '$itemName'),
                     _cell(r['item_master']?['unit'] ?? ""),
                     _cell(qty.toString()),
                     _cell(rate.toStringAsFixed(2)),
@@ -529,7 +531,9 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                               DataCell(Text("${i + 1}")),
 
                               DataCell(Text(item['item_master']['item_code'])),
-                              DataCell(Text(item['item_master']['item_name'])),
+                              DataCell(Text(
+                                '${item['item_master']['item_name']}${item['item_master']['brand'] != null && item['item_master']['brand'].toString().isNotEmpty ? ' (${item['item_master']['brand']})' : ''}'
+                              )),
 
                               DataCell(Text(item['item_master']['unit'] ?? "")),
 
