@@ -1,6 +1,7 @@
 class ClosingItem {
   final String group;
   final String name;
+  final String brand;
   final String unit;
   final double avgRate;
   final double opening;
@@ -14,6 +15,7 @@ class ClosingItem {
   ClosingItem({
     required this.group,
     required this.name,
+    required this.brand,
     required this.unit,
     required this.avgRate,
     required this.opening,
@@ -32,6 +34,7 @@ class ClosingItem {
     return ClosingItem(
       group: json['group'] ?? '',
       name: json['name'] ?? '',
+      brand: json['brand'] ?? '',
       unit: json['unit'] ?? '',
       avgRate: toDouble(json['avgRate']),
       opening: toDouble(json['opening']),

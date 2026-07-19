@@ -104,6 +104,7 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
       'Date',
       'Type',
       'Item',
+      'Brand',
       'Ref No',
       'Qty In',
       'Qty Out',
@@ -127,6 +128,7 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
         displayDate,
         '${row['txnType'] ?? ''}',
         '${row['itemName'] ?? row['itemCode'] ?? ''}',
+        '${row['brand'] ?? ''}',
         '${row['refNo'] ?? ''}',
         _fmt(row['qtyIn']),
         _fmt(row['qtyOut']),
@@ -172,12 +174,12 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
             'From: ${fromDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(fromDate!)}'
             '  To: ${toDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(toDate!)}',
           ),
-          pw.SizedBox(height: 12),
           pw.Table.fromTextArray(
             headers: const [
               'Date',
               'Type',
               'Item',
+              'Brand',
               'Ref No',
               'Qty In',
               'Qty Out',
@@ -192,6 +194,7 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
                     : DateFormat('dd-MMM-yyyy').format(rawDate),
                 '${row['txnType'] ?? ''}',
                 '${row['itemName'] ?? row['itemCode'] ?? ''}',
+                '${row['brand'] ?? ''}',
                 '${row['refNo'] ?? ''}',
                 _fmt(row['qtyIn']),
                 _fmt(row['qtyOut']),
@@ -287,10 +290,11 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
                                 headingRowColor: WidgetStateProperty.all(
                                   Colors.grey.shade200,
                                 ),
-                                columns: const [
+                                 columns: const [
                                   DataColumn(label: Text('Date')),
                                   DataColumn(label: Text('Type')),
                                   DataColumn(label: Text('Item')),
+                                  DataColumn(label: Text('Brand')),
                                   DataColumn(label: Text('Ref No')),
                                   DataColumn(label: Text('Qty In')),
                                   DataColumn(label: Text('Qty Out')),
@@ -312,6 +316,7 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
                                       DataCell(Text(
                                         '${row['itemName'] ?? row['itemCode'] ?? ''}',
                                       )),
+                                      DataCell(Text('${row['brand'] ?? ''}')),
                                       DataCell(Text('${row['refNo'] ?? ''}')),
                                       DataCell(Text(_fmt(row['qtyIn']))),
                                       DataCell(Text(_fmt(row['qtyOut']))),

@@ -4040,3 +4040,45 @@ TypeError: argument handler must be a function
 2026-07-19T07:09:45.855Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-07-19T07:10:07.472Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-07-19T07:10:07.537Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T07:30:00.049Z [INFO] Hourly backup job started.
+2026-07-19T07:30:00.069Z [INFO] Hourly backup job started.
+2026-07-19T07:30:00.544Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T07:30:00.545Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T07:30:00.552Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T07:30:00.553Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T07:30:00.609Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-07-19T07:30:00.628Z [INFO] Hourly backup job execution finished.
+2026-07-19T07:30:00.637Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-07-19T07:30:06.570Z [INFO] Cloud upload sequence completed successfully.
+2026-07-19T07:30:06.613Z [INFO] Hourly backup job execution finished.
+2026-07-19T07:30:16.024Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T07:30:16.099Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T07:38:54.909Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-07-19T08:30:00.084Z [INFO] Hourly backup job started.
+2026-07-19T08:30:00.255Z [INFO] Hourly backup job started.
+2026-07-19T08:30:00.851Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T08:30:00.854Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T08:30:00.865Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T08:30:00.866Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T08:30:00.925Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-07-19T08:30:00.937Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-07-19T08:30:00.975Z [INFO] Hourly backup job execution finished.
+2026-07-19T08:30:08.559Z [INFO] Cloud upload sequence completed successfully.
+2026-07-19T08:30:08.589Z [INFO] Hourly backup job execution finished.
+2026-07-19T08:30:24.396Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T08:30:24.447Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T09:30:00.044Z [INFO] Hourly backup job started.
+2026-07-19T09:30:00.086Z [INFO] Hourly backup job started.
+2026-07-19T09:30:00.663Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T09:30:00.665Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T09:30:00.675Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T09:30:00.680Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T09:30:00.801Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-07-19T09:30:00.836Z [INFO] Hourly backup job execution finished.
+2026-07-19T09:30:00.847Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-07-19T09:30:12.954Z [INFO] Cloud upload sequence completed successfully.
+2026-07-19T09:30:13.000Z [INFO] Hourly backup job execution finished.
+2026-07-19T09:30:26.714Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T09:30:26.795Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T09:42:54.617Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T09:42:54.675Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

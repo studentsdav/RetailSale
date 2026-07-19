@@ -17,6 +17,7 @@ exports.getClosingReport = async (req, res) => {
       SELECT
         im.item_group AS "group",
         im.item_name  AS name,
+        COALESCE(im.brand, '') AS brand,
         im.unit       AS unit,
         COALESCE(AVG(im.rate),0) AS "avgRate",
 
@@ -73,6 +74,7 @@ exports.getClosingReport = async (req, res) => {
       GROUP BY
         im.item_group,
         im.item_name,
+        im.brand,
         im.unit,
         im.opening_balance
 
@@ -106,6 +108,7 @@ exports.getClosingReport = async (req, res) => {
         sl.ref_no AS "refNo",
         sl.item_code AS "itemCode",
         COALESCE(im.item_name, sl.item_code) AS "itemName",
+        COALESCE(im.brand, '') AS "brand",
         COALESCE(im.item_group, '') AS "group",
         COALESCE(sl.qty_in, 0) AS "qtyIn",
         COALESCE(sl.qty_out, 0) AS "qtyOut",

@@ -321,6 +321,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
       // ---------- Table Header ----------
       final headers = [
         "Item",
+        "Brand",
         "Rate",
         "Opening",
         "IN",
@@ -367,15 +368,16 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
         }
 
         setCell(0, exc.TextCellValue(e.name));
-        setCell(1, exc.DoubleCellValue(e.avgRate));
-        setCell(2, exc.DoubleCellValue(e.opening));
-        setCell(3, exc.DoubleCellValue(e.receive));
-        setCell(4, exc.DoubleCellValue(e.issue));
-        setCell(5, exc.DoubleCellValue(e.damage));
-        setCell(6, exc.DoubleCellValue(e.returned));
-        setCell(7, exc.DoubleCellValue(e.supplierReturnQty));
-        setCell(8, exc.DoubleCellValue(e.closing));
-        setCell(9, exc.DoubleCellValue(e.amount));
+        setCell(1, exc.TextCellValue(e.brand));
+        setCell(2, exc.DoubleCellValue(e.avgRate));
+        setCell(3, exc.DoubleCellValue(e.opening));
+        setCell(4, exc.DoubleCellValue(e.receive));
+        setCell(5, exc.DoubleCellValue(e.issue));
+        setCell(6, exc.DoubleCellValue(e.damage));
+        setCell(7, exc.DoubleCellValue(e.returned));
+        setCell(8, exc.DoubleCellValue(e.supplierReturnQty));
+        setCell(9, exc.DoubleCellValue(e.closing));
+        setCell(10, exc.DoubleCellValue(e.amount));
 
         groupTotal += e.amount;
         row++;
@@ -383,7 +385,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
 
       // ---------- Group Total ----------
       final totalLabelCell = sheet
-          .cell(exc.CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row));
+          .cell(exc.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row));
 
       totalLabelCell.value = exc.TextCellValue('Group Total');
       totalLabelCell.cellStyle = exc.CellStyle(
@@ -391,7 +393,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
       );
 
       final totalValueCell = sheet
-          .cell(exc.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row));
+          .cell(exc.CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: row));
 
       totalValueCell.value = exc.DoubleCellValue(groupTotal);
       totalValueCell.cellStyle = exc.CellStyle(
@@ -404,20 +406,20 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
     }
 
     sheet
-        .cell(exc.CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row))
+        .cell(exc.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row))
         .value = exc.TextCellValue('Grand Total');
     sheet
-        .cell(exc.CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row))
+        .cell(exc.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row))
         .cellStyle = exc.CellStyle(
       bold: true,
       fontColorHex: exc.ExcelColor.fromHexString('#FFFFFF'),
       backgroundColorHex: exc.ExcelColor.fromHexString('#1E3A8A'),
     );
     sheet
-        .cell(exc.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row))
+        .cell(exc.CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: row))
         .value = exc.DoubleCellValue(grandTotal);
     sheet
-        .cell(exc.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row))
+        .cell(exc.CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: row))
         .cellStyle = exc.CellStyle(
       bold: true,
       fontColorHex: exc.ExcelColor.fromHexString('#FFFFFF'),
@@ -540,6 +542,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
                 cellAlignment: pw.Alignment.centerLeft,
                 headers: const [
                   "Item",
+                  "Brand",
                   "Rate",
                   "Opening",
                   "IN",
@@ -556,6 +559,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
 
                   return [
                     e.name,
+                    e.brand,
                     e.avgRate.toStringAsFixed(2),
                     e.opening.toString(),
                     e.receive.toString(),
@@ -674,10 +678,6 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
           padding: const EdgeInsets.all(12),
           children: [
             ...grouped.entries.map((entry) => _groupCard(entry.key, entry.value)),
-            if (ctrl.transactions.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              _transactionCard(),
-            ],
           ],
         ));
   }
@@ -703,8 +703,9 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
-                columns: const [
+                 columns: const [
                   DataColumn(label: Text("Item")),
+                  DataColumn(label: Text("Brand")),
                   DataColumn(label: Text("Rate")),
                   DataColumn(label: Text("Opening")),
                   DataColumn(label: Text("IN")),
@@ -719,6 +720,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
                   return DataRow(
                     cells: [
                       DataCell(Text(e.name)),
+                      DataCell(Text(e.brand)),
                       DataCell(Text(e.avgRate.toStringAsFixed(2))),
                       DataCell(Text(e.opening.toString())),
                       DataCell(Text(e.receive.toString())),
@@ -775,6 +777,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
                   DataColumn(label: Text("Date")),
                   DataColumn(label: Text("Type")),
                   DataColumn(label: Text("Item")),
+                  DataColumn(label: Text("Brand")),
                   DataColumn(label: Text("Ref No")),
                   DataColumn(label: Text("Qty In")),
                   DataColumn(label: Text("Qty Out")),
@@ -787,13 +790,14 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
                     cells: [
                       DataCell(Text(
                         txnDate == null
-                            ? '--'
+                             ? '--'
                             : DateFormat('dd-MMM-yyyy').format(txnDate),
                       )),
                       DataCell(Text('${txn['txnType'] ?? ''}')),
                       DataCell(Text(
                         '${txn['itemName'] ?? txn['itemCode'] ?? ''}',
                       )),
+                      DataCell(Text('${txn['brand'] ?? ''}')),
                       DataCell(Text('${txn['refNo'] ?? ''}')),
                       DataCell(Text(
                         double.tryParse('${txn['qtyIn'] ?? 0}')?.toStringAsFixed(2) ?? '0.00',
