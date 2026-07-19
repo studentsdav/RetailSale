@@ -30,5 +30,21 @@
     "contact_phone": "",
     "tax_id": "",
     "pin": "$2b$10$.4fD5p/M/w97WUbIqBD0YuYLKjJ946/X9nDxSr.Pm0R6My2TvHbOK"
+  },
+  {
+    "client_id": "ceebe8ee-caa5-457b-a6fe-d926a4cbd4d6",
+    "folderId": "1EHtV-YRUUjpWdT2oafgb9ErJJNgPWvLL",
+    "outlet_code": "OUTLET202606071947",
+    "outlet_id": 1,
+    "property_name": "Famalth Technologies",
+    "machine_id": "Kathakali",
+    "db_name": "POSINVRETAIL",
+    "created_at": "2026-07-16T15:37:26.421Z",
+    "status": "ACTIVE",
+    "expiry_date": "",
+    "contact_email": "help@famalth.com",
+    "contact_phone": "8287035744",
+    "tax_id": "",
+    "pin": "$2b$10$1cyzKcWF0bJiCI36qfUcyupL0RhQNzMSJ.udLOrwJsjKBtJPd.Jju"
   }
 ]

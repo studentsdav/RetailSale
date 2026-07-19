@@ -19,10 +19,12 @@ function extractNumericPart(value, setting) {
     const postfix = String(setting.postfix || '');
     let middle = raw;
 
-    if (prefix && middle.startsWith(prefix)) {
+    if (prefix) {
+        if (!middle.startsWith(prefix)) return null;
         middle = middle.substring(prefix.length);
     }
-    if (postfix && middle.endsWith(postfix)) {
+    if (postfix) {
+        if (!middle.endsWith(postfix)) return null;
         middle = middle.substring(0, middle.length - postfix.length);
     }
 
@@ -53,51 +55,41 @@ async function getEffectiveSetting({ db, outlet_id, module, date }) {
     return { effective, nextSetting };
 }
 
-async function getExistingNumbersForModule({ req, module, outlet_id, startDate, nextStartDate }) {
+async function getExistingNumbersForModule({ req, module, outlet_id }) {
     let Model;
     let numberField;
-    let dateField;
 
     switch (module) {
         case 'PO':
             Model = req.propertyDb.models.purchase_orders;
             numberField = 'po_no';
-            dateField = 'po_date';
             break;
         case 'RECEIVING':
             Model = req.propertyDb.models.goods_receipts;
             numberField = 'grn_no';
-            dateField = 'receipt_date';
             break;
         case 'INDENT':
             Model = req.propertyDb.models.issue_headers;
             numberField = 'issue_no';
-            dateField = 'issue_date';
             break;
         case 'REQUEST':
             Model = req.propertyDb.models.request_headers;
             numberField = 'request_no';
-            dateField = 'request_date';
             break;
         case 'DAMAGE':
             Model = req.propertyDb.models.damage_headers;
             numberField = 'damage_no';
-            dateField = 'damage_date';
             break;
         case 'SALES':
             Model = req.propertyDb.models.sales_headers;
             numberField = 'sale_no';
-            dateField = 'sale_date';
             break;
         default:
             throw new Error(`Unsupported module ${module}`);
     }
 
     const where = {
-        outlet_id,
-        [dateField]: nextStartDate
-            ? { [Op.gte]: startDate, [Op.lt]: nextStartDate }
-            : { [Op.gte]: startDate }
+        outlet_id
     };
 
     if (module === 'SALES') {
@@ -129,9 +121,7 @@ async function resolveNextNumber({ req, module, date, outlet_id }) {
     const existingNumbers = await getExistingNumbersForModule({
         req,
         module,
-        outlet_id,
-        startDate: effective.start_date,
-        nextStartDate: nextSetting?.start_date || null
+        outlet_id
     });
 
     let nextNo = toWholeNumber(effective.start_no);

@@ -12,7 +12,38 @@ const baseDir = isCompiled ? path.dirname(process.execPath) : path.join(__dirnam
  * Executes the PostgreSQL restore using the plain SQL file
  */
 
-function executeDatabaseRestore(sqlFilePath, db_name, db_user, db_pass) {
+function cleanDatabaseSchema(db_name, db_user, db_pass) {
+    return new Promise((resolve, reject) => {
+        const env = { ...process.env, PGPASSWORD: db_pass };
+        const args = [
+            "-U", db_user,
+            "-d", db_name,
+            "-c", "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;"
+        ];
+
+        console.log(`🧹 Cleaning database schema for ${db_name}...`);
+        const cleanProcess = spawn(psqlPath, args, { env });
+
+        cleanProcess.stderr.on("data", (data) => console.log(`🧹 psql cleanup: ${data.toString().trim()}`));
+
+        cleanProcess.on("close", (code) => {
+            if (code === 0) {
+                console.log("✅ Database schema cleaned successfully!");
+                resolve();
+            } else {
+                reject(new Error("psql schema cleanup failed with code " + code));
+            }
+        });
+
+        cleanProcess.on("error", reject);
+    });
+}
+
+async function executeDatabaseRestore(sqlFilePath, db_name, db_user, db_pass) {
+    // 1. Clean the schema first to prevent foreign key and constraint conflicts from newer/different schemas
+    await cleanDatabaseSchema(db_name, db_user, db_pass);
+
+    // 2. Perform the actual restore
     return new Promise((resolve, reject) => {
         const env = { ...process.env, PGPASSWORD: db_pass };
         const args = ["-U", db_user, "-d", db_name, "-f", sqlFilePath];
