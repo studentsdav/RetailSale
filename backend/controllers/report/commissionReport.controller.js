@@ -50,6 +50,8 @@ exports.getCommissionReport = async (req, res) => {
         let totalTds = 0;
         let totalDeductions = 0;
         let totalNetPayout = 0;
+        let totalCommissionPercentageAmount = 0;
+        let totalCommissionFixedAmount = 0;
 
         const data = sales.map(sale => {
             const netAmount = toNumber(sale.net_amount);
@@ -69,6 +71,8 @@ exports.getCommissionReport = async (req, res) => {
             totalTds += tdsAmount;
             totalDeductions += deductions;
             totalNetPayout += netPayout;
+            totalCommissionPercentageAmount += toNumber(sale.commission_percentage_amount);
+            totalCommissionFixedAmount += toNumber(sale.commission_fixed_amount);
 
             return {
                 id: sale.id,
@@ -88,7 +92,10 @@ exports.getCommissionReport = async (req, res) => {
                 tds_rate: toNumber(sale.tds_rate),
                 tds_amount: tdsAmount,
                 deductions: roundAmount(deductions),
-                net_payout: netPayout
+                net_payout: netPayout,
+                applied_rules: sale.applied_rules || 'Platform Fallback',
+                commission_percentage_amount: toNumber(sale.commission_percentage_amount),
+                commission_fixed_amount: toNumber(sale.commission_fixed_amount)
             };
         });
 
@@ -102,7 +109,9 @@ exports.getCommissionReport = async (req, res) => {
                 total_tcs: roundAmount(totalTcs),
                 total_tds: roundAmount(totalTds),
                 total_deductions: roundAmount(totalDeductions),
-                total_net_payout: roundAmount(totalNetPayout)
+                total_net_payout: roundAmount(totalNetPayout),
+                total_commission_percentage_amount: roundAmount(totalCommissionPercentageAmount),
+                total_commission_fixed_amount: roundAmount(totalCommissionFixedAmount)
             },
             data
         });

@@ -5,7 +5,7 @@ const toNumber = (val) => {
 
 exports.listCommissionRules = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const outlet_id = req.user?.outlet_id;
         const { platform_id } = req.query;
 
         const where = { outlet_id };
@@ -24,12 +24,14 @@ exports.listCommissionRules = async (req, res) => {
                 {
                     model: req.propertyDb.models.item_groups,
                     as: 'category',
-                    attributes: ['id', 'group_name']
+                    attributes: ['id', 'group_name'],
+                    required: false
                 },
                 {
                     model: req.propertyDb.models.item_master,
                     as: 'product',
-                    attributes: ['id', 'item_name', 'item_code']
+                    attributes: ['id', 'item_name', 'item_code'],
+                    required: false
                 }
             ],
             order: [['priority', 'DESC'], ['id', 'ASC']]

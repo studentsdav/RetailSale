@@ -2864,6 +2864,26 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 77,
+    description: "Add applied_rules column to sales_headers",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS applied_rules VARCHAR(255);
+      `);
+    }
+  },
+  {
+    version: 78,
+    description: "Add commission_percentage_amount and commission_fixed_amount columns to sales_headers",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE sales_headers 
+        ADD COLUMN IF NOT EXISTS commission_percentage_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN IF NOT EXISTS commission_fixed_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00;
+      `);
+    }
   }
 ];
 

@@ -33,6 +33,10 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
     const base = baseAmount > 0 ? baseAmount : netAmount;
 
     let totalCommission = 0;
+    let appliedRulesList = [];
+    let totalPercentageCommission = 0;
+    let totalBaseForPercentage = 0;
+    let totalFixedCommAmount = 0;
 
     // 2. Run Hierarchical Rule Engine if items are provided
     if (platform_id && Array.isArray(saleItems) && saleItems.length > 0) {
@@ -43,8 +47,13 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
             : [];
         const itemMasterMap = new Map(itemMasters.map(item => [item.id, item]));
 
-        // Fetch category group details
-        const allGroups = await db.models.item_groups.findAll({ transaction });
+        // Fetch category group details for the current outlet to avoid duplicate name conflicts
+        const store = require('./context').contextStorage.getStore();
+        const currentOutletId = store?.get('outlet_id') || itemMasters[0]?.outlet_id;
+        const allGroups = await db.models.item_groups.findAll({
+            where: currentOutletId ? { outlet_id: currentOutletId } : {},
+            transaction
+        });
         const groupNameToId = new Map(allGroups.map(g => [g.group_name, g.id]));
 
         // Fetch active platform rules
@@ -53,10 +62,15 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
             transaction
         });
 
+        const appliedRulesSet = new Set();
+        const ruleGroups = new Map();
+
         for (const item of saleItems) {
             const itemId = Number(item.item_id || item.product_id);
             const qty = toNumber(item.qty);
             const rate = toNumber(item.rate);
+
+            totalBaseForPercentage += rate * qty;
 
             const itemMaster = itemMasterMap.get(itemId);
             const categoryId = itemMaster ? groupNameToId.get(itemMaster.item_group) : null;
@@ -78,6 +92,9 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
                 return false;
             });
 
+            let appliedRule = null;
+            let groupKey = 'fallback';
+
             if (matchingRules.length > 0) {
                 // Sort matching rules by specificity and priority:
                 // Specificity score: ProductSpecific (3) > CategorySpecific (2) > PlatformDefault (1)
@@ -90,29 +107,73 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
                     return b.priority - a.priority;
                 });
 
-                const rule = matchingRules[0];
+                appliedRule = matchingRules[0];
+                groupKey = `rule_${appliedRule.id}`;
+            }
+
+            if (!ruleGroups.has(groupKey)) {
+                ruleGroups.set(groupKey, {
+                    rule: appliedRule,
+                    items: [],
+                    totalValue: 0
+                });
+            }
+
+            const group = ruleGroups.get(groupKey);
+            group.items.push({ qty, rate });
+            group.totalValue += rate * qty;
+        }
+
+        // Process groups and aggregate commissions
+        for (const [groupKey, group] of ruleGroups.entries()) {
+            if (groupKey === 'fallback') {
+                const fallbackPctAmount = group.totalValue * (platform_commission_rate / 100);
+                totalCommission += fallbackPctAmount;
+                totalPercentageCommission += fallbackPctAmount;
+                appliedRulesSet.add('Platform Fallback');
+            } else {
+                const rule = group.rule;
                 const percentageFee = toNumber(rule.percentage_fee);
                 const fixedFee = toNumber(rule.fixed_fee);
-                const itemCommission = (rate * (percentageFee / 100)) + fixedFee;
-                totalCommission += itemCommission * qty;
-            } else {
-                // Platform fallback
-                totalCommission += (rate * (platform_commission_rate / 100)) * qty;
+
+                const groupPercentageAmount = group.totalValue * (percentageFee / 100);
+                totalCommission += groupPercentageAmount + fixedFee;
+                totalPercentageCommission += groupPercentageAmount;
+                totalFixedCommAmount += fixedFee;
+
+                if (rule.product_id) {
+                    appliedRulesSet.add(`Product: ${itemMasterMap.get(rule.product_id)?.item_name || 'Item ' + rule.product_id}`);
+                } else if (rule.category_id) {
+                    const matchedGrp = allGroups.find(g => g.id === rule.category_id);
+                    appliedRulesSet.add(`Category: ${matchedGrp?.group_name || 'Category ' + rule.category_id}`);
+                } else {
+                    appliedRulesSet.add('Platform Default');
+                }
             }
         }
+
+        appliedRulesList = Array.from(appliedRulesSet);
     } else {
         // Flat calculation fallback
         totalCommission = base * (platform_commission_rate / 100);
+        totalPercentageCommission = totalCommission;
+        totalBaseForPercentage = base;
+        appliedRulesList = ['Platform Fallback'];
     }
+
+    const resolved_commission_rate = totalBaseForPercentage > 0
+        ? roundAmount((totalPercentageCommission / totalBaseForPercentage) * 100)
+        : platform_commission_rate;
 
     const commission_amount = roundAmount(totalCommission);
     const commission_tax_amount = roundAmount(commission_amount * (platform_gst_rate / 100));
     const tcs_amount = roundAmount(base * (platform_tcs_rate / 100));
     const tds_amount = roundAmount(base * (platform_tds_rate / 100));
     const net_payout = roundAmount(netAmount);
+    const applied_rules = appliedRulesList.join(', ');
 
     return {
-        commission_rate: platform_commission_rate,
+        commission_rate: resolved_commission_rate,
         gst_rate_on_commission: platform_gst_rate,
         tds_rate: platform_tds_rate,
         tcs_rate: platform_tcs_rate,
@@ -120,7 +181,10 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
         commission_tax_amount,
         tcs_amount,
         tds_amount,
-        net_payout
+        net_payout,
+        applied_rules,
+        commission_percentage_amount: roundAmount(totalPercentageCommission),
+        commission_fixed_amount: roundAmount(totalFixedCommAmount)
     };
 }
 

@@ -230,6 +230,8 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
     final double totalTcsTds = (double.tryParse('${_reportSummary['total_tcs'] ?? 0}') ?? 0.0) +
         (double.tryParse('${_reportSummary['total_tds'] ?? 0}') ?? 0.0);
     final double netPayout = double.tryParse('${_reportSummary['total_net_payout'] ?? 0}') ?? 0.0;
+    final double totalPctComm = double.tryParse('${_reportSummary['total_commission_percentage_amount'] ?? 0}') ?? 0.0;
+    final double totalFixedComm = double.tryParse('${_reportSummary['total_commission_fixed_amount'] ?? 0}') ?? 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -492,11 +494,14 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
                                         DataColumn(label: Text('Sale No')),
                                         DataColumn(label: Text('Date')),
                                         DataColumn(label: Text('Source')),
+                                        DataColumn(label: Text('Applied Rule')),
                                         DataColumn(label: Text('Customer')),
                                         DataColumn(label: Text('Taxable Value')),
                                         DataColumn(label: Text('Net Amount')),
                                         DataColumn(label: Text('Comm (%)')),
-                                        DataColumn(label: Text('Comm (INR)')),
+                                        DataColumn(label: Text('Pct Comm (₹)')),
+                                        DataColumn(label: Text('Fixed Comm (₹)')),
+                                        DataColumn(label: Text('Total Comm (₹)')),
                                         DataColumn(label: Text('Comm GST')),
                                         DataColumn(label: Text('TCS')),
                                         DataColumn(label: Text('TDS')),
@@ -523,10 +528,20 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
                                                 backgroundColor: const Color(0xFFEFF6FF),
                                                 side: BorderSide.none,
                                               )),
+                                              DataCell(Text(
+                                                '${row['applied_rules'] ?? 'Platform Fallback'}',
+                                                style: TextStyle(
+                                                  color: Colors.blue.shade800,
+                                                  fontWeight: FontWeight.w500,
+                                                  fontSize: 12,
+                                                ),
+                                              )),
                                               DataCell(Text('${row['customer_name'] ?? 'Walk-in'}')),
                                               DataCell(Text(_inr.format(double.tryParse('${row['taxable_amount'] ?? 0}') ?? 0.0))),
                                               DataCell(Text(_inr.format(double.tryParse('${row['net_amount'] ?? 0}') ?? 0.0))),
                                               DataCell(Text('${row['commission_rate']}%')),
+                                              DataCell(Text(_inr.format(double.tryParse('${row['commission_percentage_amount'] ?? 0}') ?? 0.0))),
+                                              DataCell(Text(_inr.format(double.tryParse('${row['commission_fixed_amount'] ?? 0}') ?? 0.0))),
                                               DataCell(Text(_inr.format(double.tryParse('${row['commission_amount'] ?? 0}') ?? 0.0))),
                                               DataCell(Text(_inr.format(double.tryParse('${row['commission_tax_amount'] ?? 0}') ?? 0.0))),
                                               DataCell(Text(_inr.format(double.tryParse('${row['tcs_amount'] ?? 0}') ?? 0.0))),
@@ -550,9 +565,12 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
                                             const DataCell(Text('')),
                                             const DataCell(Text('')),
                                             const DataCell(Text('')),
+                                            const DataCell(Text('')),
                                             DataCell(Text(_inr.format(totalTaxable), style: const TextStyle(fontWeight: FontWeight.w900))),
                                             DataCell(Text(_inr.format(totalSales), style: const TextStyle(fontWeight: FontWeight.w900))),
                                             const DataCell(Text('')),
+                                            DataCell(Text(_inr.format(totalPctComm), style: const TextStyle(fontWeight: FontWeight.w900))),
+                                            DataCell(Text(_inr.format(totalFixedComm), style: const TextStyle(fontWeight: FontWeight.w900))),
                                             DataCell(Text(_inr.format(totalComm), style: const TextStyle(fontWeight: FontWeight.w900))),
                                             DataCell(Text(_inr.format(totalCommTax), style: const TextStyle(fontWeight: FontWeight.w900))),
                                             DataCell(Text(_inr.format(double.tryParse('${_reportSummary['total_tcs'] ?? 0}') ?? 0.0), style: const TextStyle(fontWeight: FontWeight.w900))),

@@ -67,7 +67,10 @@ module.exports = (sequelize, DataTypes) => {
         commission_tax_amount: DataTypes.DECIMAL(12, 2),
         tcs_amount: DataTypes.DECIMAL(12, 2),
         tds_amount: DataTypes.DECIMAL(12, 2),
-        net_payout: DataTypes.DECIMAL(12, 2)
+        net_payout: DataTypes.DECIMAL(12, 2),
+        applied_rules: DataTypes.STRING,
+        commission_percentage_amount: DataTypes.DECIMAL(12, 2),
+        commission_fixed_amount: DataTypes.DECIMAL(12, 2)
     }, {
         tableName: 'sales_headers',
         timestamps: true,

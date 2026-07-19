@@ -94,6 +94,107 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
     );
   }
 
+  void _showFormulaGuide(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.blue.shade600, size: 24),
+            const SizedBox(width: 8),
+            const Text('Commission Formula Guide'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'How Platform Commission is Calculated:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: RichText(
+                text: TextSpan(
+                  style: const TextStyle(fontSize: 15, color: Colors.black, height: 1.4),
+                  children: [
+                    TextSpan(
+                      text: '[ (Rate × Percentage%)',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade700),
+                    ),
+                    const TextSpan(text: ' + '),
+                    TextSpan(
+                      text: 'Fixed Fee ]',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade700),
+                    ),
+                    const TextSpan(text: ' × '),
+                    TextSpan(
+                      text: 'Quantity',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade700),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Example Walkthrough:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            _buildStepRow('1. Percentage Part', 'Rate (₹60) × 18% = ₹10.80', Colors.blue.shade700),
+            _buildStepRow('2. Add Fixed Fee', '₹10.80 + ₹200.00 = ₹210.80', Colors.orange.shade700),
+            _buildStepRow('3. Quantity Multiply', '₹210.80 × 2 units = ₹421.60', Colors.green.shade700),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 4),
+            const Text(
+              'Scope Hierarchy Level:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '• Product specific rules override Category specific rules, which override Platform Defaults.\n• Overlapping rules are resolved by highest priority value first.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepRow(String title, String formula, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('• $title: ', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          Expanded(
+            child: Text(
+              formula,
+              style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _toggleRuleActive(Map<String, dynamic> rule, bool val) async {
     try {
       await _salesCtrl.updateCommissionRule(rule['id'], {'is_active': val});
@@ -198,9 +299,23 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                       const SizedBox(height: 12),
 
                       // Target Type Select
-                      const Text(
-                        'Rule Scope / Level',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                       Row(
+                        children: [
+                          const Text(
+                            'Rule Scope / Level',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                          ),
+                          const SizedBox(width: 6),
+                          Tooltip(
+                            triggerMode: TooltipTriggerMode.tap,
+                            message: 'Define the target specificity:\n'
+                                '• Platform: Applies to all platform orders.\n'
+                                '• Category: Applies to a specific item category.\n'
+                                '• Product: Applies only to a specific item.\n\n'
+                                'Product rules override category rules, which override platform defaults.',
+                            child: Icon(Icons.info_outline, color: Colors.grey.shade600, size: 16),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       SegmentedButton<String>(
@@ -287,7 +402,14 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                             child: TextField(
                               controller: percentageCtrl,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Percentage Fee (%)', hintText: '0.00'),
+                              decoration: InputDecoration(
+                                labelText: 'Percentage Fee (%)', 
+                                hintText: '0.00',
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.help_outline, size: 18),
+                                  onPressed: () => _showFormulaGuide(context),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -295,7 +417,14 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                             child: TextField(
                               controller: fixedCtrl,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Fixed Flat Fee (₹)', hintText: '0.00'),
+                              decoration: InputDecoration(
+                                labelText: 'Fixed Flat Fee (₹)', 
+                                hintText: '0.00',
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.help_outline, size: 18),
+                                  onPressed: () => _showFormulaGuide(context),
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -309,7 +438,15 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                             child: TextField(
                               controller: priorityCtrl,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'Evaluation Priority', hintText: '0'),
+                              decoration: InputDecoration(
+                                labelText: 'Evaluation Priority', 
+                                hintText: '0',
+                                suffixIcon: Tooltip(
+                                  triggerMode: TooltipTriggerMode.tap,
+                                  message: 'Higher priority values resolve first in case of overlapping price slabs or target scopes.',
+                                  child: const Icon(Icons.info_outline, size: 18),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -508,9 +645,21 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Commission Rules Ledger',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                        Row(
+                          children: [
+                            const Text(
+                              'Commission Rules Ledger',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => _showFormulaGuide(context),
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: Icon(Icons.info_outline, color: Colors.blue.shade600, size: 20),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         const Text('Rules will resolve from top to bottom based on specificity and priority levels.', style: TextStyle(color: Color(0xFF64748B))),
