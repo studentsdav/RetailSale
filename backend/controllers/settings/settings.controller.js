@@ -127,7 +127,13 @@ exports.getSettings = async (req, res) => {
                     payment_gateway_provider: 'SANDBOX',
                     payment_gateway_api_key: '',
                     payment_gateway_secret_key: '',
-                    merchant_upi_id: ''
+                    merchant_upi_id: '',
+                    sub_delivery_charge_enabled: false,
+                    sub_delivery_charge_name: 'Subscription Delivery',
+                    sub_delivery_charge_amount: 0.0,
+                    sub_delivery_charge_type: 'FLAT',
+                    sub_delivery_charge_gst_percent: 0.0,
+                    sub_delivery_free_above: 0.0
                 }
             });
         }
@@ -180,7 +186,13 @@ exports.saveSettings = async (req, res) => {
             payment_gateway_provider: req.body.payment_gateway_provider || 'SANDBOX',
             payment_gateway_api_key: req.body.payment_gateway_api_key || '',
             payment_gateway_secret_key: req.body.payment_gateway_secret_key || '',
-            merchant_upi_id: req.body.merchant_upi_id || ''
+            merchant_upi_id: req.body.merchant_upi_id || '',
+            sub_delivery_charge_enabled: req.body.sub_delivery_charge_enabled ?? false,
+            sub_delivery_charge_name: req.body.sub_delivery_charge_name || 'Subscription Delivery',
+            sub_delivery_charge_amount: req.body.sub_delivery_charge_amount ?? 0.0,
+            sub_delivery_charge_type: req.body.sub_delivery_charge_type || 'FLAT',
+            sub_delivery_charge_gst_percent: req.body.sub_delivery_charge_gst_percent ?? 0.0,
+            sub_delivery_free_above: req.body.sub_delivery_free_above ?? 0.0
         };
 
         let record;

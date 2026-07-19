@@ -1,6 +1,7 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5476,6 +5477,18 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
+                        OutlinedButton.icon(
+                          onPressed: () => _showReceiptDialog(sub),
+                          icon: const Icon(Icons.print_outlined, size: 15),
+                          label: const Text('Receipt'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            textStyle: const TextStyle(fontSize: 12),
+                            foregroundColor: Colors.blue.shade700,
+                            side: BorderSide(color: Colors.blue.shade300),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
                         if (canRenew)
                           FilledButton.icon(
                             onPressed: () => _showRenewSubscriptionDialog(sub),
@@ -5891,11 +5904,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       };
       final res = await ApiClient.post('/api/sales/subscriptions', payload);
       if (res['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('🎉 Subscribed to services successfully!')),
-        );
         _fetchSubscriptions();
+        if (mounted) {
+          await _showReceiptDialog(res['data'] ?? payload);
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -5908,6 +5920,394 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  DateTime? _parseDateOnly(dynamic val) {
+    if (val == null) return null;
+    try {
+      if (val is DateTime) return DateTime(val.year, val.month, val.day);
+      final s = val.toString().split('T')[0];
+      return DateFormat('yyyy-MM-dd').parse(s);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Uint8List> _buildReceiptPdf(Map<String, dynamic> subscription) async {
+    final pdf = pw.Document();
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final schemes = (subscription['selected_schemes'] as List? ?? subscription['schemes'] as List? ?? const [])
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList();
+    final paymentLines = (subscription['payment_lines'] as List? ?? const [])
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList();
+    final totalAmount = double.tryParse(
+            subscription['total_payment_amount']?.toString() ?? '0') ??
+        0;
+    final paidAmount =
+        double.tryParse(subscription['paid_amount']?.toString() ?? subscription['advance_original_amount']?.toString() ?? subscription['total_payment_amount']?.toString() ?? '0') ?? 0;
+    if (paymentLines.isEmpty) {
+      final mode = (subscription['payment_mode'] ?? 'CASH').toString().toUpperCase();
+      paymentLines.add({
+        'method': mode,
+        'amount': paidAmount,
+      });
+    }
+    final outstandingAmount = double.tryParse(subscription['remaining_amount']?.toString() ?? '') ?? (totalAmount - paidAmount).clamp(0, double.infinity);
+    final receiptDate = DateTime.tryParse(
+          subscription['receipt_date']?.toString() ?? subscription['created_at']?.toString() ?? '',
+        ) ??
+        DateTime.now();
+    final startDate = _parseDateOnly(subscription['start_date']);
+    final endDate = _parseDateOnly(subscription['end_date']);
+    final periodDays = (startDate != null && endDate != null)
+        ? (endDate.difference(startDate).inDays + 1)
+        : 31;
+    final bonusQtyForReceipt =
+        double.tryParse(subscription['bonus_qty']?.toString() ?? '0') ?? 0;
+    final payableDays = periodDays > 0
+        ? (bonusQtyForReceipt > 0 ? periodDays - 1 : periodDays)
+        : 0;
+    final dailyQty =
+        double.tryParse(subscription['daily_allowed_qty']?.toString() ?? '0') ??
+            0;
+    final declaredRate =
+        double.tryParse(subscription['item_rate']?.toString() ?? '0') ?? 0;
+    final effectiveRate = declaredRate > 0
+        ? declaredRate
+        : (payableDays > 0 && dailyQty > 0
+            ? (totalAmount / (payableDays * dailyQty))
+            : 0);
+    final baseAmount = (effectiveRate * dailyQty * payableDays)
+        .clamp(0, double.infinity)
+        .toDouble();
+    
+    final itemTaxable = double.tryParse(subscription['taxable_amount']?.toString() ?? '') ?? baseAmount;
+    final itemTaxPercent = double.tryParse(subscription['tax_percent']?.toString() ?? subscription['item']?['tax_percent']?.toString() ?? '0') ?? 0.0;
+    final itemGst = double.tryParse(subscription['tax_amount']?.toString() ?? '') ?? (itemTaxable * itemTaxPercent / 100);
+
+    final dailyDeliveryCharge = double.tryParse(subscription['delivery_charge_amount']?.toString() ?? '0.0') ?? 0.0;
+    final dailyDeliveryTax = double.tryParse(subscription['delivery_charge_tax_amount']?.toString() ?? '0.0') ?? 0.0;
+    final totalDeliveryCharge = dailyDeliveryCharge * periodDays;
+    final totalDeliveryTax = dailyDeliveryTax * periodDays;
+
+    final mono = pw.Font.courier();
+
+    pw.Widget divider() => pw.Container(
+          margin: const pw.EdgeInsets.symmetric(vertical: 5),
+          width: double.infinity,
+          height: 1,
+          color: PdfColors.black,
+        );
+
+    pw.Widget kvLine(
+      String label,
+      String value, {
+      bool bold = false,
+      double fontSize = 9,
+    }) {
+      final style = pw.TextStyle(
+        font: mono,
+        fontSize: fontSize,
+        fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      );
+      return pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 2),
+        child: pw.Row(
+          children: [
+            pw.Expanded(child: pw.Text(label, style: style)),
+            pw.SizedBox(width: 6),
+            pw.Text(value, style: style, textAlign: pw.TextAlign.right),
+          ],
+        ),
+      );
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: const PdfPageFormat(
+          72 * PdfPageFormat.mm,
+          220 * PdfPageFormat.mm,
+          marginLeft: 3 * PdfPageFormat.mm,
+          marginRight: 3 * PdfPageFormat.mm,
+          marginTop: 3 * PdfPageFormat.mm,
+          marginBottom: 3 * PdfPageFormat.mm,
+        ),
+        build: (context) => [
+          pw.Center(
+            child: pw.Text(
+              'SUBSCRIPTION RECEIPT',
+              style: pw.TextStyle(
+                font: mono,
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+          ),
+          if (subscription['id'] != null)
+            pw.Center(
+              child: pw.Text(
+                'Receipt No: SUB-${subscription['id']}',
+                style: pw.TextStyle(
+                  font: mono,
+                  fontSize: 9,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+          pw.Center(
+            child: pw.Text(
+              DateFormat('dd-MMM-yyyy hh:mm a').format(receiptDate),
+              style: pw.TextStyle(font: mono, fontSize: 8),
+            ),
+          ),
+          divider(),
+          pw.Text(
+            'Customer: ${subscription['customer_name'] ?? ''}',
+            style: pw.TextStyle(font: mono, fontSize: 9),
+          ),
+          pw.Text(
+            'Phone   : ${subscription['customer_phone'] ?? ''}',
+            style: pw.TextStyle(font: mono, fontSize: 9),
+          ),
+          pw.Text(
+            'Item    : ${subscription['item_name'] ?? ''}',
+            style: pw.TextStyle(font: mono, fontSize: 9),
+          ),
+          pw.Text(
+            'Period  : ${subscription['start_date']} to ${subscription['end_date']}',
+            style: pw.TextStyle(font: mono, fontSize: 9),
+          ),
+          pw.Text(
+            'DailyQty: ${subscription['daily_allowed_qty'] ?? ''}',
+            style: pw.TextStyle(font: mono, fontSize: 9),
+          ),
+          divider(),
+          kvLine(
+            'Item Subtotal',
+            currency.format(itemTaxable),
+            fontSize: 9,
+          ),
+          kvLine(
+            'Item GST',
+            currency.format(itemGst),
+            fontSize: 9,
+          ),
+          if (totalDeliveryCharge > 0) ...[
+            kvLine(
+              'Delivery Charges',
+              currency.format(totalDeliveryCharge),
+              fontSize: 9,
+            ),
+            if (totalDeliveryTax > 0)
+              kvLine(
+                'Delivery GST',
+                currency.format(totalDeliveryTax),
+                fontSize: 9,
+              ),
+          ],
+          divider(),
+          kvLine(
+            'TOTAL',
+            currency.format(totalAmount),
+            bold: true,
+            fontSize: 11,
+          ),
+          kvLine(
+            'PAID',
+            currency.format(paidAmount),
+            bold: true,
+            fontSize: 11,
+          ),
+          kvLine(
+            'OUTSTANDING',
+            currency.format(outstandingAmount),
+            bold: true,
+            fontSize: 10,
+          ),
+          divider(),
+          pw.Text('Payment Breakdown',
+              style: pw.TextStyle(
+                font: mono,
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 9,
+              )),
+          pw.SizedBox(height: 2),
+          if (paymentLines.isEmpty)
+            kvLine(
+              (subscription['payment_mode'] ?? 'CASH').toString().toUpperCase(),
+              currency.format(paidAmount > 0 ? paidAmount : totalAmount),
+            )
+          else
+            ...paymentLines.map((row) {
+              final amount =
+                  double.tryParse(row['amount']?.toString() ?? '0') ?? 0;
+              return kvLine(
+                (row['method'] ?? '').toString().toUpperCase(),
+                currency.format(amount),
+              );
+            }),
+          if ((subscription['payment_notes'] ?? '')
+              .toString()
+              .trim()
+              .isNotEmpty) ...[
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Note: ${subscription['payment_notes']}',
+              style: pw.TextStyle(font: mono, fontSize: 8),
+            ),
+          ],
+          divider(),
+          pw.Text('Scheme Applied',
+              style: pw.TextStyle(
+                font: mono,
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 9,
+              )),
+          pw.SizedBox(height: 2),
+          if (schemes.isEmpty)
+            pw.Text('No scheme', style: pw.TextStyle(font: mono, fontSize: 9))
+          else
+            ...schemes.map((scheme) {
+              final schemeName = (scheme['scheme_name'] ?? '').toString();
+              final bonusQty =
+                  double.tryParse(scheme['bonus_qty']?.toString() ?? '0') ?? 0;
+              final discountAmount = double.tryParse(
+                      scheme['discount_amount']?.toString() ?? '0') ??
+                  0;
+              final schemeValue =
+                  double.tryParse(scheme['scheme_value']?.toString() ?? '0') ??
+                      0;
+              final schemeType =
+                  (scheme['scheme_type'] ?? '').toString().trim().toUpperCase();
+              final expectedOff = schemeType == 'BONUS_QTY'
+                  ? (bonusQty * (declaredRate > 0 ? declaredRate : effectiveRate))
+                      .clamp(0, double.infinity)
+                      .toDouble()
+                  : schemeType == 'PRICE_DISCOUNT' &&
+                          (scheme['discount_mode'] ?? '')
+                                  .toString()
+                                  .toUpperCase() ==
+                              'PERCENT'
+                      ? (baseAmount * schemeValue / 100)
+                          .clamp(0, double.infinity)
+                          .toDouble()
+                      : discountAmount;
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    schemeName.isEmpty ? 'Scheme' : schemeName,
+                    style: pw.TextStyle(
+                      font: mono,
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 9,
+                    ),
+                  ),
+                  kvLine(
+                    'Type',
+                    schemeType.isEmpty ? '-' : schemeType,
+                  ),
+                  if (schemeType == 'BONUS_QTY')
+                    kvLine(
+                      'Formula',
+                      '${(declaredRate > 0 ? declaredRate : effectiveRate).toStringAsFixed(2)} x ${bonusQty.toStringAsFixed(bonusQty % 1 == 0 ? 0 : 2)}',
+                    )
+                  else if (schemeType == 'PRICE_DISCOUNT')
+                    kvLine(
+                      'Formula',
+                      (scheme['discount_mode'] ?? '')
+                                  .toString()
+                                  .toUpperCase() ==
+                              'PERCENT'
+                          ? '${schemeValue.toStringAsFixed(2)}% of base'
+                          : 'Flat discount amount',
+                    ),
+                  kvLine(
+                    'Expected Off',
+                    currency.format(expectedOff),
+                  ),
+                  kvLine(
+                    'Applied Off',
+                    currency.format(discountAmount),
+                  ),
+                  pw.SizedBox(height: 4),
+                ],
+              );
+            }),
+          divider(),
+          pw.Text('Terms & Conditions',
+              style: pw.TextStyle(
+                  font: mono, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+          pw.Text('1) Scheme benefit shown as expected off.',
+              style: pw.TextStyle(font: mono, fontSize: 7)),
+          pw.Text('2) If item rate changes in future bills, payable amount will be adjusted as per current rate.',
+              style: pw.TextStyle(font: mono, fontSize: 7)),
+          pw.Text('3) Subscription usage follows daily quantity limit and billing period.',
+              style: pw.TextStyle(font: mono, fontSize: 7)),
+          divider(),
+          pw.Center(
+            child: pw.Text('Thank you for your business',
+                style: pw.TextStyle(font: mono, fontSize: 8)),
+          ),
+        ],
+      ),
+    );
+    return pdf.save();
+  }
+
+  Future<void> _showReceiptDialog(Map<String, dynamic> receiptData) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Subscription Receipt'),
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '🎉 Subscription Created Successfully!',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text('Customer: ${receiptData['customer_name'] ?? ''}'),
+                Text('Phone: ${receiptData['customer_phone'] ?? ''}'),
+                Text('Item: ${receiptData['item_name'] ?? ''}'),
+                Text('Daily Qty: ${receiptData['daily_allowed_qty'] ?? ''}'),
+                Text('Total: Rs. ${(double.tryParse(receiptData['total_payment_amount']?.toString() ?? '0') ?? 0).toStringAsFixed(2)}'),
+                const SizedBox(height: 12),
+                const Text(
+                  'You can print or save this receipt.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await Printing.layoutPdf(
+                name: 'Subscription_Receipt_${receiptData['customer_phone'] ?? 'customer'}',
+                onLayout: (_) => _buildReceiptPdf(receiptData),
+              );
+            },
+            icon: const Icon(Icons.print, size: 16),
+            label: const Text('Print / Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -6578,7 +6978,34 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
     final totalCost = totalQty * rate;
     final taxPercent = double.tryParse(selectedItem?['tax_percent']?.toString() ?? '0') ?? 0.0;
     final totalGst = totalCost * taxPercent / 100.0;
-    final netPayable = totalCost + totalGst;
+
+    final settings = context.read<SystemSettingsController>().settings;
+    final isHomeDelivery = _deliveryType == 'HOME';
+    
+    double dailyDeliveryCharge = 0.0;
+    double totalDeliveryCharge = 0.0;
+    double deliveryGstPercent = 0.0;
+    double totalDeliveryGst = 0.0;
+
+    bool isDeliveryFree = false;
+    if (settings != null && settings.subDeliveryChargeEnabled && isHomeDelivery) {
+      final baseTotal = totalCost + totalGst;
+      final dailyBaseTotal = baseTotal / _durationDays;
+      if (settings.subDeliveryFreeAbove > 0 && dailyBaseTotal >= settings.subDeliveryFreeAbove) {
+        isDeliveryFree = true;
+      } else {
+        deliveryGstPercent = settings.subDeliveryChargeGstPercent;
+        if (settings.subDeliveryChargeType == 'FLAT') {
+          dailyDeliveryCharge = settings.subDeliveryChargeAmount;
+        } else {
+          dailyDeliveryCharge = (rate * _dailyAllowedQty) * (settings.subDeliveryChargeAmount / 100);
+        }
+        totalDeliveryCharge = dailyDeliveryCharge * _durationDays;
+        totalDeliveryGst = totalDeliveryCharge * (deliveryGstPercent / 100);
+      }
+    }
+
+    final netPayable = totalCost + totalGst + totalDeliveryCharge + totalDeliveryGst;
     final endDate = _startDate.add(Duration(days: _durationDays));
     final unitLabel = selectedItem?['unit']?.toString() ?? 'Ltr';
     final validItems = widget.catalogItems
@@ -6832,6 +7259,37 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                 ),
               ],
             ),
+            if (settings != null && settings.subDeliveryChargeEnabled && isHomeDelivery) ...[
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(settings.subDeliveryChargeName, style: const TextStyle(color: Colors.grey)),
+                  Text(
+                    isDeliveryFree
+                        ? 'Free (Plan > Rs. ${settings.subDeliveryFreeAbove.toStringAsFixed(0)})'
+                        : 'Rs. ${totalDeliveryCharge.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDeliveryFree ? Colors.green : Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+              if (!isDeliveryFree) ...[
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Delivery GST:', style: TextStyle(color: Colors.grey)),
+                    Text(
+                      'Rs. ${totalDeliveryGst.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ],
             const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -6847,6 +7305,17 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                 ),
               ],
             ),
+            if (settings != null && settings.subDeliveryChargeEnabled && isHomeDelivery) ...[
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'Note: Home delivery charges are collected upfront and included in the Net Amount Payable.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -6865,6 +7334,11 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                     'end_date': DateFormat('yyyy-MM-dd').format(endDate),
                     'daily_allowed_qty': _dailyAllowedQty,
                     'total_payment_amount': netPayable,
+                    'taxable_amount': totalCost,
+                    'tax_amount': totalGst,
+                    'delivery_charge_amount': dailyDeliveryCharge,
+                    'delivery_charge_gst_percent': deliveryGstPercent,
+                    'delivery_charge_tax_amount': dailyDeliveryCharge * (deliveryGstPercent / 100),
                     'payment_mode': _paymentMode,
                     'delivery_type': _deliveryType,
                     'customer_name': widget.customerName,

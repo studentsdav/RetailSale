@@ -61,6 +61,21 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: true
         },
+        delivery_charge_amount: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: false,
+            defaultValue: 0.0
+        },
+        delivery_charge_gst_percent: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: false,
+            defaultValue: 0.0
+        },
+        delivery_charge_tax_amount: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: false,
+            defaultValue: 0.0
+        },
         settled_at: DataTypes.DATE,
         created_by: DataTypes.INTEGER,
         updated_by: DataTypes.INTEGER

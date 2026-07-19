@@ -102,6 +102,30 @@ module.exports = (sequelize, DataTypes) => {
         merchant_upi_id: {
             type: DataTypes.STRING(255),
             defaultValue: ''
+        },
+        sub_delivery_charge_enabled: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        sub_delivery_charge_name: {
+            type: DataTypes.STRING(255),
+            defaultValue: 'Subscription Delivery'
+        },
+        sub_delivery_charge_amount: {
+            type: DataTypes.DECIMAL(12, 2),
+            defaultValue: 0.0
+        },
+        sub_delivery_charge_type: {
+            type: DataTypes.STRING(50),
+            defaultValue: 'FLAT'
+        },
+        sub_delivery_charge_gst_percent: {
+            type: DataTypes.DECIMAL(12, 2),
+            defaultValue: 0.0
+        },
+        sub_delivery_free_above: {
+            type: DataTypes.DECIMAL(12, 2),
+            defaultValue: 0.0
         }
     }, {
         tableName: 'system_settings',

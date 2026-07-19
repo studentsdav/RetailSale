@@ -32,18 +32,41 @@ async function createDraftForSubscription(db, sub, outletId, today) {
         const rate = parseFloat(sub.item_master?.retail_sale_price ?? sub.item_master?.rate ?? 0);
         const qty = parseFloat(sub.daily_allowed_qty ?? 1);
         const amt = rate * qty;
+
+        const dailyDeliveryCharge = parseFloat(sub.delivery_charge_amount || 0.0);
+        const dailyDeliveryGstPercent = parseFloat(sub.delivery_charge_gst_percent || 0.0);
+        const dailyDeliveryTaxAmount = parseFloat(sub.delivery_charge_tax_amount || 0.0);
+
+        const charges = dailyDeliveryCharge > 0 ? [
+            {
+                name: 'Subscription Delivery',
+                code: 'DELIVERY',
+                amount: dailyDeliveryCharge,
+                calculationValue: dailyDeliveryCharge,
+                taxable: dailyDeliveryGstPercent > 0,
+                autoApply: true,
+                isEnabled: true,
+                taxType: 'GST',
+                taxPercent: dailyDeliveryGstPercent,
+                taxAmount: dailyDeliveryTaxAmount
+            }
+        ] : [];
+
+        const totalChargesAmount = dailyDeliveryCharge + dailyDeliveryTaxAmount;
+        const totalPayable = amt + totalChargesAmount;
+
         const header = await db.models.sales_headers.create({
             outlet_id: outletId, sale_no: saleNo, sale_date: new Date(today),
             customer_name: sub.customer_name || 'Subscription Customer',
             customer_phone: sub.customer_phone || '', customer_address: sub.customer_address || '',
             customer_gstin: sub.customer_gstin || null, payment_mode: 'CASH',
             payment_reference: null, initial_amount_paid: 0, amount_paid: 0,
-            change_amount: 0, balance_due: amt, order_type: 'B2C',
+            change_amount: 0, balance_due: totalPayable, order_type: 'B2C',
             billing_country: 'India', billing_tax_mode: 'CGST_SGST', bill_format: 'A4',
             tax_percent: 0, total_qty: qty, sub_total: amt, taxable_amount: amt,
             cgst_amount: 0, sgst_amount: 0, igst_amount: 0, total_tax: 0,
-            tax_breakup: [], charges: [], charge_total: 0, charge_tax_total: 0,
-            total_discount: 0, round_off_amount: 0, net_amount: amt,
+            tax_breakup: [], charges: charges, charge_total: dailyDeliveryCharge, charge_tax_total: dailyDeliveryTaxAmount,
+            total_discount: 0, round_off_amount: 0, net_amount: totalPayable,
             scheme_discount: 0, manual_discount_type: null,
             manual_discount_value: 0, manual_discount_amount: 0,
             notes: '[SUBSCRIPTION_AUTO] subscription_id=' + sub.id + ' | ' + (sub.customer_name||'') + ' | ' + (sub.item_master?.item_name||''),
@@ -110,20 +133,41 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
 
         const lineTotal = amt + taxAmount;
 
+        const dailyDeliveryCharge = parseFloat(sub.delivery_charge_amount || 0.0);
+        const dailyDeliveryGstPercent = parseFloat(sub.delivery_charge_gst_percent || 0.0);
+        const dailyDeliveryTaxAmount = parseFloat(sub.delivery_charge_tax_amount || 0.0);
+
+        const charges = dailyDeliveryCharge > 0 ? [
+            {
+                name: 'Subscription Delivery',
+                code: 'DELIVERY',
+                amount: dailyDeliveryCharge,
+                calculationValue: dailyDeliveryCharge,
+                taxable: dailyDeliveryGstPercent > 0,
+                autoApply: true,
+                isEnabled: true,
+                taxType: 'GST',
+                taxPercent: dailyDeliveryGstPercent,
+                taxAmount: dailyDeliveryTaxAmount
+            }
+        ] : [];
+
+        const totalChargesAmount = dailyDeliveryCharge + dailyDeliveryTaxAmount;
+        const netAmount = totalChargesAmount;
+        const deductionAmount = lineTotal + totalChargesAmount;
+
         const header = await db.models.sales_headers.create({
             outlet_id: outletId, sale_no: saleNo, sale_date: new Date(today),
             customer_name: sub.customer_name || 'Subscription Customer',
             customer_phone: sub.customer_phone || '', customer_address: sub.customer_address || '',
             customer_gstin: sub.customer_gstin || null, payment_mode: 'CASH',
-            payment_reference: null, initial_amount_paid: 0, amount_paid: 0,
+            payment_reference: null, initial_amount_paid: netAmount, amount_paid: netAmount,
             change_amount: 0, balance_due: 0, order_type: 'B2C',
             billing_country: 'India', billing_tax_mode: 'CGST_SGST', bill_format: 'A4',
             tax_percent: 0, total_qty: qty, sub_total: amt, taxable_amount: amt,
             cgst_amount: halfAmount, sgst_amount: halfAmount, igst_amount: 0, total_tax: taxAmount,
-            tax_breakup: taxBreakup, charges: [], charge_total: 0, charge_tax_total: 0,
-            total_discount: lineTotal, round_off_amount: 0, net_amount: 0,
-            scheme_discount: 0, manual_discount_type: null,
-            manual_discount_value: 0, manual_discount_amount: 0,
+            tax_breakup: taxBreakup, charges: charges, charge_total: dailyDeliveryCharge, charge_tax_total: dailyDeliveryTaxAmount,
+            total_discount: lineTotal, round_off_amount: 0, net_amount: netAmount,
             notes: '[SUBSCRIPTION_AUTO] subscription_id=' + sub.id + ' | ' + (sub.customer_name||'') + ' | ' + (sub.item_master?.item_name||''),
             status: 'COMPLETED', version_no: 1, is_latest: true, is_deleted: false,
         });
@@ -174,7 +218,7 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                 });
                 if (cashAdvance) {
                     const currentCashAvailable = parseFloat(cashAdvance.available_amount ?? 0);
-                    const nextCashAvailable = Math.max(currentCashAvailable - lineTotal, 0);
+                    const nextCashAvailable = Math.max(currentCashAvailable - deductionAmount, 0);
                     await cashAdvance.update({ available_amount: nextCashAvailable });
                 }
 
@@ -189,7 +233,7 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                     reference_no: saleNo,
                     party_name: sub.customer_name || sub.customer_phone || 'Subscription Customer',
                     payment_method: 'SUBSCRIPTION',
-                    amount_out: lineTotal,
+                    amount_out: deductionAmount,
                     notes: `Advance adjusted for subscription item consumption in ${saleNo}`,
                     created_by: sub.created_by || null
                 });

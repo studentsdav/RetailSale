@@ -686,10 +686,46 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           .clamp(0, double.infinity)
           .toDouble();
 
-  double get _grandTotalSubscriptionAmount =>
-      (_taxableSubscriptionAmount + _taxAmountValue)
-          .clamp(0, double.infinity)
-          .toDouble();
+  bool get _isHomeDelivery => _deliveryType == 'HOME';
+
+  double get _dailyDeliveryChargeAmount {
+    final s = context.read<SystemSettingsController>().settings;
+    if (s == null || !s.subDeliveryChargeEnabled || !_isHomeDelivery) return 0.0;
+
+    if (_isSubscriptionDeliveryFree) {
+      return 0.0;
+    }
+
+    if (s.subDeliveryChargeType == 'FLAT') {
+      return s.subDeliveryChargeAmount;
+    } else {
+      return (_itemRate * _dailyQtyValue) * (s.subDeliveryChargeAmount / 100);
+    }
+  }
+
+  double get _subscriptionDeliveryChargeAmount =>
+      _dailyDeliveryChargeAmount * _payableSubscriptionDays;
+
+  double get _subscriptionDeliveryChargeGstAmount {
+    final s = context.read<SystemSettingsController>().settings;
+    if (s == null || !s.subDeliveryChargeEnabled || !_isHomeDelivery) return 0.0;
+    return _subscriptionDeliveryChargeAmount * (s.subDeliveryChargeGstPercent / 100);
+  }
+
+  bool get _isSubscriptionDeliveryFree {
+    final s = context.read<SystemSettingsController>().settings;
+    if (s == null || !s.subDeliveryChargeEnabled || !_isHomeDelivery) return false;
+    final baseTotal = _taxableSubscriptionAmount + _taxAmountValue;
+    final dailyBaseTotal = baseTotal / _payableSubscriptionDays;
+    return s.subDeliveryFreeAbove > 0 && dailyBaseTotal >= s.subDeliveryFreeAbove;
+  }
+
+  double get _grandTotalSubscriptionAmount {
+    final baseTotal = (_taxableSubscriptionAmount + _taxAmountValue)
+        .clamp(0, double.infinity)
+        .toDouble();
+    return baseTotal + _subscriptionDeliveryChargeAmount + _subscriptionDeliveryChargeGstAmount;
+  }
 
   double _calculatedSchemeDiscountAmount(_SchemeDraft draft) {
     final base = _baseSubscriptionAmount;
@@ -912,12 +948,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         .map((entry) => Map<String, dynamic>.from(entry))
         .toList();
     final paymentNotes = _paymentDraft?['notes']?.toString().trim() ?? '';
-    final totalPaid = paymentLines.fold<double>(
+    final totalAmount = _grandTotalSubscriptionAmount;
+    var totalPaid = paymentLines.fold<double>(
       0,
       (sum, entry) =>
           sum + (double.tryParse(entry['amount']?.toString() ?? '0') ?? 0),
     );
-    final totalAmount = _grandTotalSubscriptionAmount;
+    if (totalPaid != totalAmount && paymentLines.isNotEmpty) {
+      final diff = totalAmount - totalPaid;
+      final lastAmount = double.tryParse(paymentLines.last['amount']?.toString() ?? '0') ?? 0;
+      paymentLines.last['amount'] = lastAmount + diff;
+      totalPaid = totalAmount;
+    }
     _totalPayment.text = totalAmount.toStringAsFixed(2);
 
     final selectedSchemes = _selectedSchemesPayload();
@@ -948,6 +990,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       'selected_schemes': selectedSchemes,
       'payment_mode': firstMode,
       'delivery_type': _deliveryType,
+      'delivery_charge_amount': _dailyDeliveryChargeAmount,
+      'delivery_charge_gst_percent': context.read<SystemSettingsController>().settings?.subDeliveryChargeGstPercent ?? 0.0,
+      'delivery_charge_tax_amount': _dailyDeliveryChargeAmount * ((context.read<SystemSettingsController>().settings?.subDeliveryChargeGstPercent ?? 0.0) / 100),
     };
 
     final saved = await _ctrl.createSubscription(payload);
@@ -1114,22 +1159,27 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Future<Uint8List> _buildReceiptPdf(Map<String, dynamic> subscription) async {
     final pdf = pw.Document();
     final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
-    final schemes = (subscription['selected_schemes'] as List? ?? const [])
+    final schemes = (subscription['selected_schemes'] as List? ?? subscription['schemes'] as List? ?? const [])
         .map((entry) => Map<String, dynamic>.from(entry))
         .toList();
     final paymentLines = (subscription['payment_lines'] as List? ?? const [])
         .map((entry) => Map<String, dynamic>.from(entry))
         .toList();
-    final paidAmount =
-        double.tryParse(subscription['paid_amount']?.toString() ?? '0') ?? 0;
     final totalAmount = double.tryParse(
             subscription['total_payment_amount']?.toString() ?? '0') ??
         0;
-    final outstandingAmount =
-        double.tryParse(subscription['remaining_amount']?.toString() ?? '0') ??
-            0;
+    final paidAmount =
+        double.tryParse(subscription['paid_amount']?.toString() ?? subscription['advance_original_amount']?.toString() ?? subscription['total_payment_amount']?.toString() ?? '0') ?? 0;
+    if (paymentLines.isEmpty) {
+      final mode = (subscription['payment_mode'] ?? 'CASH').toString().toUpperCase();
+      paymentLines.add({
+        'method': mode,
+        'amount': paidAmount,
+      });
+    }
+    final outstandingAmount = double.tryParse(subscription['remaining_amount']?.toString() ?? '') ?? (totalAmount - paidAmount).clamp(0, double.infinity);
     final receiptDate = DateTime.tryParse(
-          subscription['receipt_date']?.toString() ?? '',
+          subscription['receipt_date']?.toString() ?? subscription['created_at']?.toString() ?? '',
         ) ??
         DateTime.now();
     final startDate = _parseDateOnly(subscription['start_date']);
@@ -1155,6 +1205,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final baseAmount = (effectiveRate * dailyQty * payableDays)
         .clamp(0, double.infinity)
         .toDouble();
+    final itemTaxable = double.tryParse(subscription['taxable_amount']?.toString() ?? '') ?? baseAmount;
+    final itemTaxPercent = double.tryParse(subscription['tax_percent']?.toString() ?? subscription['item']?['tax_percent']?.toString() ?? '0') ?? 0.0;
+    final itemGst = double.tryParse(subscription['tax_amount']?.toString() ?? '') ?? (itemTaxable * itemTaxPercent / 100);
+
+    final dailyDeliveryCharge = double.tryParse(subscription['delivery_charge_amount']?.toString() ?? '0.0') ?? 0.0;
+    final dailyDeliveryTax = double.tryParse(subscription['delivery_charge_tax_amount']?.toString() ?? '0.0') ?? 0.0;
+    final totalDeliveryCharge = dailyDeliveryCharge * periodDays;
+    final totalDeliveryTax = dailyDeliveryTax * periodDays;
+
     final mono = pw.Font.courier();
 
     pw.Widget divider() => pw.Container(
@@ -1208,6 +1267,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ),
             ),
           ),
+          if (subscription['id'] != null)
+            pw.Center(
+              child: pw.Text(
+                'Receipt No: SUB-${subscription['id']}',
+                style: pw.TextStyle(
+                  font: mono,
+                  fontSize: 9,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
           pw.Center(
             child: pw.Text(
               DateFormat('dd-MMM-yyyy hh:mm a').format(receiptDate),
@@ -1235,6 +1305,30 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             'DailyQty: ${subscription['daily_allowed_qty'] ?? ''}',
             style: pw.TextStyle(font: mono, fontSize: 9),
           ),
+          divider(),
+          kvLine(
+            'Item Subtotal',
+            currency.format(itemTaxable),
+            fontSize: 9,
+          ),
+          kvLine(
+            'Item GST',
+            currency.format(itemGst),
+            fontSize: 9,
+          ),
+          if (totalDeliveryCharge > 0) ...[
+            kvLine(
+              'Delivery Charges',
+              currency.format(totalDeliveryCharge),
+              fontSize: 9,
+            ),
+            if (totalDeliveryTax > 0)
+              kvLine(
+                'Delivery GST',
+                currency.format(totalDeliveryTax),
+                fontSize: 9,
+              ),
+          ],
           divider(),
           kvLine(
             'TOTAL',
@@ -2638,7 +2732,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                   Align(
                                     alignment: Alignment.centerLeft,
                                     child: Text(
-                                      'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}',
+                                      _isHomeDelivery && (context.read<SystemSettingsController>().settings?.subDeliveryChargeEnabled == true)
+                                          ? (_isSubscriptionDeliveryFree
+                                              ? 'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Delivery: Free (Threshold: Rs. ${context.read<SystemSettingsController>().settings?.subDeliveryFreeAbove.toStringAsFixed(0)}) | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}'
+                                              : 'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Delivery: Rs. ${_subscriptionDeliveryChargeAmount.toStringAsFixed(2)} | Delivery GST: Rs. ${_subscriptionDeliveryChargeGstAmount.toStringAsFixed(2)} | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}')
+                                          : 'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: Color(0xFF334155),

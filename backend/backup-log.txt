@@ -4288,3 +4288,82 @@ SyntaxError: Unexpected token '!'
 2026-07-19T14:55:10.831Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-07-19T14:55:10.885Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-07-19T14:55:10.894Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:30:00.074Z [INFO] Hourly backup job started.
+2026-07-19T15:30:00.194Z [INFO] Hourly backup job started.
+2026-07-19T15:30:00.216Z [INFO] Hourly backup job started.
+2026-07-19T15:30:00.746Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T15:30:00.748Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T15:30:00.757Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T15:30:00.758Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T15:30:00.766Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T15:30:00.767Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T15:30:00.825Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-07-19T15:30:00.849Z [INFO] Hourly backup job execution finished.
+2026-07-19T15:30:00.860Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-07-19T15:30:00.883Z [INFO] Hourly backup job execution finished.
+2026-07-19T15:30:00.894Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-07-19T15:30:08.206Z [INFO] Cloud upload sequence completed successfully.
+2026-07-19T15:30:08.241Z [INFO] Hourly backup job execution finished.
+2026-07-19T15:30:36.397Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:30:36.470Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:30:36.480Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:33:30.616Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:33:30.680Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:33:30.693Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:42:51.795Z [ERROR] [FATAL] Uncaught Exception: missing ) after argument list
+D:\inventorynew\RetailSale new\RetailSale\backend\jobs\subscriptionDeliveryJob.js:28
+                hsn_code: sub.item_master.hsn_code||'', batch_no: null, expiry_date: null,
+                ^^^^^^^^
+
+SyntaxError: missing ) after argument list
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\server.js:51:42)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-07-19T15:43:08.268Z [ERROR] [FATAL] Uncaught Exception: Unexpected token ')'
+D:\inventorynew\RetailSale new\RetailSale\backend\jobs\subscriptionDeliveryJob.js:21
+        );
+        ^
+
+SyntaxError: Unexpected token ')'
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\server.js:51:42)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-07-19T15:43:31.845Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:43:31.928Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:43:31.948Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:44:05.246Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:44:05.309Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:44:05.318Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:57:45.514Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:57:45.586Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T15:57:45.602Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-07-19T16:30:00.066Z [INFO] Hourly backup job started.
+2026-07-19T16:30:00.467Z [INFO] Hourly backup job started.
+2026-07-19T16:30:00.494Z [INFO] Hourly backup job started.
+2026-07-19T16:30:01.061Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T16:30:01.062Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T16:30:01.071Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T16:30:01.072Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T16:30:01.079Z [INFO] Backup created. File size: 0.05 MB
+2026-07-19T16:30:01.080Z [INFO] Verifying backup integrity before local retention and upload.
+2026-07-19T16:30:01.164Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-07-19T16:30:01.201Z [INFO] Hourly backup job execution finished.
+2026-07-19T16:30:01.216Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-07-19T16:30:01.252Z [INFO] Hourly backup job execution finished.
+2026-07-19T16:30:01.263Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-07-19T16:30:09.632Z [INFO] Cloud upload sequence completed successfully.
+2026-07-19T16:30:09.679Z [INFO] Hourly backup job execution finished.

@@ -24,6 +24,12 @@ class SystemSettings {
   String paymentGatewayApiKey;
   String paymentGatewaySecretKey;
   String merchantUpiId;
+  bool subDeliveryChargeEnabled;
+  String subDeliveryChargeName;
+  double subDeliveryChargeAmount;
+  String subDeliveryChargeType;
+  double subDeliveryChargeGstPercent;
+  double subDeliveryFreeAbove;
 
   SystemSettings({
     required this.autoReorder,
@@ -46,6 +52,12 @@ class SystemSettings {
     required this.paymentGatewayApiKey,
     required this.paymentGatewaySecretKey,
     required this.merchantUpiId,
+    required this.subDeliveryChargeEnabled,
+    required this.subDeliveryChargeName,
+    required this.subDeliveryChargeAmount,
+    required this.subDeliveryChargeType,
+    required this.subDeliveryChargeGstPercent,
+    required this.subDeliveryFreeAbove,
   });
 
   factory SystemSettings.fromJson(Map<String, dynamic> json) {
@@ -70,6 +82,12 @@ class SystemSettings {
       paymentGatewayApiKey: json['payment_gateway_api_key'] ?? '',
       paymentGatewaySecretKey: json['payment_gateway_secret_key'] ?? '',
       merchantUpiId: json['merchant_upi_id'] ?? '',
+      subDeliveryChargeEnabled: json['sub_delivery_charge_enabled'] ?? false,
+      subDeliveryChargeName: json['sub_delivery_charge_name'] ?? 'Subscription Delivery',
+      subDeliveryChargeAmount: double.tryParse(json['sub_delivery_charge_amount']?.toString() ?? '0.0') ?? 0.0,
+      subDeliveryChargeType: json['sub_delivery_charge_type'] ?? 'FLAT',
+      subDeliveryChargeGstPercent: double.tryParse(json['sub_delivery_charge_gst_percent']?.toString() ?? '0.0') ?? 0.0,
+      subDeliveryFreeAbove: double.tryParse(json['sub_delivery_free_above']?.toString() ?? '0.0') ?? 0.0,
       defaultCharges: rawCharges is List
           ? rawCharges
               .map((e) => BillingCharge.fromJson(Map<String, dynamic>.from(e)))
@@ -135,6 +153,12 @@ class SystemSettings {
       'payment_gateway_api_key': paymentGatewayApiKey,
       'payment_gateway_secret_key': paymentGatewaySecretKey,
       'merchant_upi_id': merchantUpiId,
+      'sub_delivery_charge_enabled': subDeliveryChargeEnabled,
+      'sub_delivery_charge_name': subDeliveryChargeName,
+      'sub_delivery_charge_amount': subDeliveryChargeAmount,
+      'sub_delivery_charge_type': subDeliveryChargeType,
+      'sub_delivery_charge_gst_percent': subDeliveryChargeGstPercent,
+      'sub_delivery_free_above': subDeliveryFreeAbove,
     };
   }
 }

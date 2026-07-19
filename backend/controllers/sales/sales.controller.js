@@ -3324,6 +3324,13 @@ exports.createSale = async (req, res) => {
         }
 
         if (freeBillItems.length > 0) {
+            const freeBillCharges = splitItems.paid.length === 0
+                ? (Array.isArray(headerForCreate.charges) ? headerForCreate.charges : [])
+                : [];
+            const freeBillChargeTotal = splitItems.paid.length === 0 ? toAmount(headerForCreate.charge_total) : 0;
+            const freeBillChargeTaxTotal = splitItems.paid.length === 0 ? toAmount(headerForCreate.charge_tax_total) : 0;
+            const freeBillNetAmount = freeBillChargeTotal + freeBillChargeTaxTotal;
+
             freeSale = await createSaleVersion({
                 req,
                 transaction: t,
@@ -3335,8 +3342,11 @@ exports.createSale = async (req, res) => {
                     amount_paid: 0,
                     initial_amount_paid: 0,
                     change_amount: 0,
-                    balance_due: 0,
-                    net_amount: 0,
+                    balance_due: freeBillNetAmount,
+                    net_amount: freeBillNetAmount,
+                    charges: freeBillCharges,
+                    charge_total: freeBillChargeTotal,
+                    charge_tax_total: freeBillChargeTaxTotal,
                     total_discount: freeBillDiscount,
                     invoice_discount_amount: freeBillDiscount,
                     scheme_id: null,
@@ -5415,6 +5425,9 @@ exports.createSubscription = async (req, res) => {
             // App self-subscriptions need to flow through the home-delivery job.
             // Retailer-created records still override this explicitly from the UI.
             delivery_type: String(req.body.delivery_type || 'HOME').trim().toUpperCase(),
+            delivery_charge_amount: toRoundedAmount(req.body.delivery_charge_amount ?? req.body.deliveryChargeAmount ?? 0.0),
+            delivery_charge_gst_percent: toRoundedAmount(req.body.delivery_charge_gst_percent ?? req.body.deliveryChargeGstPercent ?? 0.0),
+            delivery_charge_tax_amount: toRoundedAmount(req.body.delivery_charge_tax_amount ?? req.body.deliveryChargeTaxAmount ?? 0.0),
             status: 'ACTIVE',
             active_subscription: true,
             created_by: req.user.id,

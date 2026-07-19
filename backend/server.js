@@ -177,15 +177,33 @@ if (!fs.existsSync(licensePath)) {
         await propertyDb.authenticate();
         console.log('✅ Database connected');
         
-        // Dynamically add merchant_upi_id column if missing to prevent DB query crashes
+        // Dynamically add merchant_upi_id and subscription delivery charge columns if missing to prevent DB query crashes
         try {
             await propertyDb.query(`
                 ALTER TABLE system_settings 
-                ADD COLUMN IF NOT EXISTS merchant_upi_id VARCHAR(255) DEFAULT '';
+                ADD COLUMN IF NOT EXISTS merchant_upi_id VARCHAR(255) DEFAULT '',
+                ADD COLUMN IF NOT EXISTS sub_delivery_charge_enabled BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS sub_delivery_charge_name VARCHAR(255) DEFAULT 'Subscription Delivery',
+                ADD COLUMN IF NOT EXISTS sub_delivery_charge_amount NUMERIC(12,2) DEFAULT 0.0,
+                ADD COLUMN IF NOT EXISTS sub_delivery_charge_type VARCHAR(50) DEFAULT 'FLAT',
+                ADD COLUMN IF NOT EXISTS sub_delivery_charge_gst_percent NUMERIC(12,2) DEFAULT 0.0,
+                ADD COLUMN IF NOT EXISTS sub_delivery_free_above NUMERIC(12,2) DEFAULT 0.0;
             `);
-            console.log('✅ Verified/added merchant_upi_id column in system_settings table');
+            console.log('✅ Verified/added merchant_upi_id and subscription delivery charge columns in system_settings table');
         } catch (colErr) {
             console.warn('⚠️ Failed to dynamically alter table system_settings:', colErr.message);
+        }
+
+        try {
+            await propertyDb.query(`
+                ALTER TABLE milk_subscriptions 
+                ADD COLUMN IF NOT EXISTS delivery_charge_amount NUMERIC(12,2) DEFAULT 0.0,
+                ADD COLUMN IF NOT EXISTS delivery_charge_gst_percent NUMERIC(12,2) DEFAULT 0.0,
+                ADD COLUMN IF NOT EXISTS delivery_charge_tax_amount NUMERIC(12,2) DEFAULT 0.0;
+            `);
+            console.log('✅ Verified/added delivery charge columns in milk_subscriptions table');
+        } catch (colErr) {
+            console.warn('⚠️ Failed to dynamically alter table milk_subscriptions:', colErr.message);
         }
 
         await runMigrations(propertyDb);

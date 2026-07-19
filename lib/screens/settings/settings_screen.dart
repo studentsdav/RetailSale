@@ -382,14 +382,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'Manage automated workflows for daily recurring orders.',
                     [
                       _settingRow(
-                        title: 'Enable App Subscription Delivery',
-                        description: 'Daily subscription orders are auto-accepted into retailer console instead of being drafts',
-                        isLast: true,
+                        title: 'Enable Home Delivery Subscription (From App or Store)',
+                        description: 'Enable home delivery subscriptions when subscribing from the Customer App or from the Store',
+                        isLast: !s.enableAppSubscription,
                         control: Switch.adaptive(
                           value: s.enableAppSubscription,
-                          onChanged: (v) => setState(() => s.enableAppSubscription = v),
+                          onChanged: (v) => setState(() {
+                            s.enableAppSubscription = v;
+                            if (!v) {
+                              s.subDeliveryChargeEnabled = false;
+                            }
+                          }),
                         ),
                       ),
+                      if (s.enableAppSubscription) ...[
+                        _settingRow(
+                          title: 'Apply Delivery Charges for Subscription',
+                          description: 'Enable additional home delivery charges on subscription orders',
+                          isLast: !s.subDeliveryChargeEnabled,
+                          control: Switch.adaptive(
+                            value: s.subDeliveryChargeEnabled,
+                            onChanged: (v) => setState(() => s.subDeliveryChargeEnabled = v),
+                          ),
+                        ),
+                        if (s.subDeliveryChargeEnabled) ...[
+                          _settingRow(
+                            title: 'Delivery Charges Name',
+                            description: 'Label shown on receipts and reports (e.g. Home Delivery Charges)',
+                            control: SizedBox(
+                              width: 280,
+                              child: TextFormField(
+                                initialValue: s.subDeliveryChargeName,
+                                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                                onChanged: (v) => s.subDeliveryChargeName = v.trim(),
+                              ),
+                            ),
+                          ),
+                          _settingRow(
+                            title: 'Delivery Charge Type',
+                            description: 'Charge structure: Flat fee per day or percentage of daily subtotal',
+                            control: SizedBox(
+                              width: 280,
+                              child: DropdownButtonFormField<String>(
+                                value: s.subDeliveryChargeType,
+                                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                                items: const [
+                                  DropdownMenuItem(value: 'FLAT', child: Text('Flat Rate per Day')),
+                                  DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage of Subtotal')),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() => s.subDeliveryChargeType = val);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                          _settingRow(
+                            title: 'Delivery Charge Value',
+                            description: 'Daily charge amount (in Rs. or % depending on type)',
+                            control: SizedBox(
+                              width: 280,
+                              child: TextFormField(
+                                initialValue: s.subDeliveryChargeAmount.toString(),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                                onChanged: (v) => s.subDeliveryChargeAmount = double.tryParse(v.trim()) ?? 0.0,
+                              ),
+                            ),
+                          ),
+                          _settingRow(
+                            title: 'GST on Delivery Charges (%)',
+                            description: 'Tax rate applicable specifically to subscription delivery charges',
+                            control: SizedBox(
+                              width: 280,
+                              child: TextFormField(
+                                initialValue: s.subDeliveryChargeGstPercent.toString(),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                                onChanged: (v) => s.subDeliveryChargeGstPercent = double.tryParse(v.trim()) ?? 0.0,
+                              ),
+                            ),
+                          ),
+                          _settingRow(
+                            title: 'Free Delivery Threshold Amount',
+                            description: 'Subscriptions with daily value (subtotal + tax per day) above this threshold will have free delivery (0 to disable)',
+                            isLast: true,
+                            control: SizedBox(
+                              width: 280,
+                              child: TextFormField(
+                                initialValue: s.subDeliveryFreeAbove.toString(),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                                onChanged: (v) => s.subDeliveryFreeAbove = double.tryParse(v.trim()) ?? 0.0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ],
                   ),
                   _customSection(
