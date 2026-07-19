@@ -327,10 +327,21 @@ exports.getCampaignParticipants = async (req, res) => {
                 order: [['created_at', 'DESC']]
             });
 
-            const campaignThreshold = Number(campaign.threshold_amount || 2000.00);
+            const startDate = campaign.start_date;
+            const endDate = campaign.status === 'COMPLETED' ? campaign.draw_date : new Date();
+
             const accumulated = Number(record.accumulated_spend || 0);
             const voucherCount = vouchers.length;
-            const totalPurchase = accumulated + (voucherCount * campaignThreshold);
+
+            const totalPurchase = await req.propertyDb.models.sales_headers.sum('net_amount', {
+                where: {
+                    customer_phone: record.customer_phone,
+                    status: 'COMPLETED',
+                    created_at: {
+                        [Op.between]: [startDate, endDate]
+                    }
+                }
+            }) || 0;
 
             participants.push({
                 customer_name: record.customer_name || 'Walk-in',

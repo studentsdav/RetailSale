@@ -2875,8 +2875,9 @@ class _SaleScreenState extends State<SaleScreen> {
                   icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.green),
                   tooltip: 'Add Customer',
                   onPressed: () {
+                    FocusScope.of(context).unfocus();
                     Navigator.pop(dialogContext);
-                    Future.delayed(const Duration(milliseconds: 100), () {
+                    Future.delayed(const Duration(milliseconds: 300), () {
                       if (mounted) {
                         _showCustomerDialog(clearSelection: true, preFillText: currentSearchText);
                       }
@@ -2914,12 +2915,13 @@ class _SaleScreenState extends State<SaleScreen> {
                             const SizedBox(height: 12),
                             ElevatedButton.icon(
                               onPressed: () {
+                                FocusScope.of(context).unfocus();
                                 Navigator.pop(context); // Close popup
-                                Future.delayed(const Duration(milliseconds: 100), () {
+                                Future.delayed(const Duration(milliseconds: 300), () {
                                   if (dialogContext.mounted) {
                                     Navigator.pop(dialogContext); // Close dialog
                                   }
-                                  Future.delayed(const Duration(milliseconds: 100), () {
+                                  Future.delayed(const Duration(milliseconds: 300), () {
                                     if (mounted) {
                                       _showCustomerDialog(clearSelection: true, preFillText: searchEntry);
                                     }
