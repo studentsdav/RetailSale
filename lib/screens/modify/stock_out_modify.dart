@@ -312,9 +312,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Issue_${issue['issue_no']}', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _cell(String text, {bool bold = false}) {

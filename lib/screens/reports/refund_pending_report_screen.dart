@@ -254,7 +254,7 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (_) async => pdf.save());
+    await Printing.layoutPdf(name: 'Refund_Pending_Report', onLayout: (_) async => pdf.save());
   }
 
   Color _statusColor(String status) {

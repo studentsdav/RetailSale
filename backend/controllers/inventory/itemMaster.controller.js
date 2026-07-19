@@ -185,20 +185,23 @@ exports.createItem = async (req, res) => {
 
         const outlet_id = req.user.outlet_id;
 
-        const existing = await req.propertyDb.models.item_master.findOne({
-            where: {
-                outlet_id,
-                [Op.or]: [
-                    { item_code },
-                    { item_name }
-                ]
-            }
-        });
-
-        if (existing) {
+        // Item code must always be unique
+        const codeConflict = await req.propertyDb.models.item_master.findOne({ where: { outlet_id, item_code } });
+        if (codeConflict) {
             return res.status(400).json({
                 success: false,
-                message: 'Item code or item name already exists'
+                message: `Item Code "${item_code}" is already used by "${codeConflict.item_name} (${codeConflict.brand})". Please use a unique item code.`
+            });
+        }
+
+        // Same item name + same brand = duplicate (same name with different brand is allowed)
+        const nameBrandConflict = await req.propertyDb.models.item_master.findOne({
+            where: { outlet_id, item_name, brand: brand || '' }
+        });
+        if (nameBrandConflict) {
+            return res.status(400).json({
+                success: false,
+                message: `Item "${item_name}" with Brand "${brand}" already exists. Please use a different brand or a different item name.`
             });
         }
 
@@ -529,21 +532,23 @@ exports.updateItem = async (req, res) => {
         if (payload.loose_item_code !== undefined) {
             payload.loose_item_code = String(payload.loose_item_code || '').trim() || null;
         }
-        const duplicate = await req.propertyDb.models.item_master.findOne({
-            where: {
-                outlet_id,
-                id: { [Op.ne]: id },
-                [Op.or]: [
-                    { item_code: payload.item_code },
-                    { item_name: payload.item_name }
-                ]
-            }
-        });
-
-        if (duplicate) {
+        // Item code must always be unique (excluding self)
+        const codeConflict = await req.propertyDb.models.item_master.findOne({ where: { outlet_id, item_code: payload.item_code, id: { [Op.ne]: id } } });
+        if (codeConflict) {
             return res.status(400).json({
                 success: false,
-                message: 'Item code or item name already exists'
+                message: `Item Code "${payload.item_code}" is already used by "${codeConflict.item_name} (${codeConflict.brand})". Please use a unique item code.`
+            });
+        }
+
+        // Same item name + same brand = duplicate (excluding self)
+        const nameBrandConflict = await req.propertyDb.models.item_master.findOne({
+            where: { outlet_id, item_name: payload.item_name, brand: payload.brand || '', id: { [Op.ne]: id } }
+        });
+        if (nameBrandConflict) {
+            return res.status(400).json({
+                success: false,
+                message: `Item "${payload.item_name}" with Brand "${payload.brand}" already exists. Please use a different brand or a different item name.`
             });
         }
 

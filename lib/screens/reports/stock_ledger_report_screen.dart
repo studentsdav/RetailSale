@@ -203,7 +203,7 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (_) async => pdf.save());
+    await Printing.layoutPdf(name: 'Stock_Ledger_Report', onLayout: (_) async => pdf.save());
   }
 
   @override

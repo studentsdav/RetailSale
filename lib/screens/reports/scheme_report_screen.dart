@@ -586,6 +586,7 @@ class _SchemeReportScreenState extends State<SchemeReportScreen> {
     );
 
     await Printing.layoutPdf(
+      name: 'Scheme_Report',
       onLayout: (format) async => pdf.save(),
     );
   }

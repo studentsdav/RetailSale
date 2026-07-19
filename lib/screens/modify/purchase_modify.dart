@@ -380,9 +380,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'PO_${po.poNo}', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _tableCell(String text, {bool bold = false}) {

@@ -1051,8 +1051,8 @@ ON expense_entries(outlet_id, expense_date);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_supplier_master_name
 ON supplier_master(outlet_id, lower(supplier_name));
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_item_master_name
-ON item_master(outlet_id, lower(item_name));
+CREATE UNIQUE INDEX IF NOT EXISTS uq_item_master_name_brand
+ON item_master(outlet_id, lower(item_name), lower(COALESCE(brand, '')));
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_item_groups_name
 ON item_groups(outlet_id, lower(group_name));
@@ -2882,6 +2882,21 @@ COMMIT;
         ALTER TABLE sales_headers 
         ADD COLUMN IF NOT EXISTS commission_percentage_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         ADD COLUMN IF NOT EXISTS commission_fixed_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00;
+      `);
+    }
+  },
+  {
+    version: 79,
+    description: "Change item_master unique constraint from (outlet_id, item_name) to (outlet_id, item_name, brand) to allow same item with multiple brands",
+    up: async (db) => {
+      await db.query(`
+        -- Drop the old unique index that only allowed one item per name
+        DROP INDEX IF EXISTS uq_item_master_name;
+
+        -- Create new unique index on name + brand combination
+        -- Same item name is now allowed as long as the brand is different
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_item_master_name_brand
+        ON item_master(outlet_id, lower(item_name), lower(COALESCE(brand, '')));
       `);
     }
   }

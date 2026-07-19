@@ -842,7 +842,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                             ? 'Open Print Dialog'
                                             : mode == 'ASK_BEFORE_PRINT'
                                                 ? 'Ask Yes / No'
-                                                : 'Direct Print (System Default)',
+                                                : 'Direct Print (Selected Printer)',
                                       ),
                                     ))
                                 .toList(),

@@ -696,8 +696,6 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Damage_Report', onLayout: (format) async => pdf.save());
   }
 }

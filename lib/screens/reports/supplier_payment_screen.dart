@@ -1465,8 +1465,6 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Supplier_Payment_Report', onLayout: (format) async => pdf.save());
   }
 }

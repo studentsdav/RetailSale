@@ -115,6 +115,25 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
   }
 
   Future<void> _saveSupplier() async {
+    if (_name.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vendor Name is required.')),
+      );
+      return;
+    }
+    if (_address.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Address is required.')),
+      );
+      return;
+    }
+    if (_state.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('State is required.')),
+      );
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     final model = Supplier(

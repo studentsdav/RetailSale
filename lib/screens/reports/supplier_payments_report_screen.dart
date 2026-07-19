@@ -207,7 +207,7 @@ class _SupplierPaymentsReportScreenState extends State<SupplierPaymentsReportScr
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (_) async => pdf.save());
+    await Printing.layoutPdf(name: 'Supplier_Payments_Report', onLayout: (_) async => pdf.save());
   }
 
   @override

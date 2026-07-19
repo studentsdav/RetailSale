@@ -97,7 +97,7 @@ class PosInvoicePrinter {
       return;
     }
 
-    await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+    await Printing.layoutPdf(name: order.saleNo, onLayout: (_) async => pdfBytes);
   }
 
   static Future<Uint8List> buildSaleInvoicePdf({
@@ -2191,7 +2191,7 @@ class PosInvoicePrinter {
       return;
     }
 
-    await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+    await Printing.layoutPdf(name: creditNote['credit_note_no'] ?? 'CreditNote', onLayout: (_) async => pdfBytes);
   }
 
   static Future<Uint8List> buildCreditNotePdf({
@@ -2775,7 +2775,7 @@ class PosInvoicePrinter {
       gateway: gateway,
       creditNoteNo: creditNoteNo,
     );
-    await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+    await Printing.layoutPdf(name: 'Refund_${order['sale_no'] ?? refundTxnId}', onLayout: (_) async => pdfBytes);
   }
 
   static Future<Uint8List> buildRefundReceiptPdf({

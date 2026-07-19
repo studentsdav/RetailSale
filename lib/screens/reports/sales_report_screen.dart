@@ -1565,7 +1565,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     }
 
     final bytes = await pdf.save();
-    await Printing.layoutPdf(onLayout: (_) async => bytes);
+    await Printing.layoutPdf(name: title, onLayout: (_) async => bytes);
   }
 
   @override

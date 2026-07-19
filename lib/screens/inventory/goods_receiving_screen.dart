@@ -769,8 +769,17 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
               child: DropdownSearch<String>(
                 key: _itemNameDropdownKey,
                 selectedItem: _selectedItemName,
-                items: (filter, infiniteScrollProps) =>
-                    itemCtrl.list.map((e) => e.itemName).toSet().toList(),
+                items: (filter, infiniteScrollProps) {
+                      final q = filter.trim().toLowerCase();
+                      final all = itemCtrl.list;
+                      final filtered = q.isEmpty
+                          ? all
+                          : all.where((e) =>
+                              e.itemName.toLowerCase().contains(q) ||
+                              e.brand.toLowerCase().contains(q) ||
+                              e.itemCode.toLowerCase().contains(q)).toList();
+                      return filtered.map((e) => e.itemName).toSet().toList();
+                    },
                 popupProps: const PopupProps.menu(
                   showSearchBox: true,
                   searchFieldProps: TextFieldProps(
@@ -1114,6 +1123,9 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                 focusNode: _tableFocusNode,
                 onKeyEvent: _onTableKey,
                 child: DataTable(
+                  columnSpacing: 24,
+                  dataRowMinHeight: 48,
+                  dataRowMaxHeight: 56,
                   headingRowColor: WidgetStateProperty.all(
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
@@ -1196,7 +1208,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                             ),
                           ),
                         ),
-                        DataCell(Text(r.amount.toString())),
+                        DataCell(Text(r.amount.toStringAsFixed(2))),
                         DataCell(Text(r.remarks)),
                         DataCell(Text(_selectedSupplier ?? '')),
                         if (showDepartment) DataCell(Text(depname)),
@@ -1615,9 +1627,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: _sno.text.isNotEmpty ? 'GRN_${_sno.text}' : 'Goods_Receiving_Receipt', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _cell(String text, {bool bold = false}) {

@@ -1045,8 +1045,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           FilledButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              await Printing.layoutPdf(
-                  onLayout: (_) => _buildReceiptPdf(receiptData));
+              await Printing.layoutPdf(name: 'Subscription_Receipt_${receiptData['customer_phone'] ?? 'customer'}', onLayout: (_) => _buildReceiptPdf(receiptData));
             },
             child: const Text('Print'),
           ),

@@ -365,6 +365,23 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   Future<void> _saveItem() async {
     if (_isSaving) return; // NEW: Block double submit
 
+    if (_selectedGroup == null) {
+      showErrorSnackbar("Item Group is required.");
+      return;
+    }
+    if (_selectedSubCategory == null) {
+      showErrorSnackbar("Sub Category is required.");
+      return;
+    }
+    if (_selectedBrand == null) {
+      showErrorSnackbar("Brand is required.");
+      return;
+    }
+    if (_unit == null || _unit!.trim().isEmpty) {
+      showErrorSnackbar("Unit is required.");
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     // NEW: Jump focus away to prevent mashing
@@ -477,7 +494,35 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       _clearForm();
       await _loadItems();
     } catch (e) {
-      showErrorSnackbar(e.toString());
+      final msg = e.toString().replaceAll('Exception: ', '');
+      final isNameBrandConflict = msg.contains('with Brand') && msg.contains('already exists');
+      final isCodeConflict = msg.contains('Item Code') && msg.contains('already used by');
+      if (isNameBrandConflict || isCodeConflict) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            icon: Icon(
+              isCodeConflict ? Icons.pin_outlined : Icons.inventory_2_outlined,
+              color: Colors.orange,
+              size: 36,
+            ),
+            title: Text(
+              isCodeConflict ? 'Duplicate Item Code' : 'Duplicate Item + Brand',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Text(msg),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK, I will fix it'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        showErrorSnackbar(msg);
+      }
     } finally {
       if (mounted) {
         setState(() {

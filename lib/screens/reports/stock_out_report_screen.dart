@@ -608,8 +608,6 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Stock_Out_Report', onLayout: (format) async => pdf.save());
   }
 }

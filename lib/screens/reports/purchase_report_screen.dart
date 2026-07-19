@@ -602,8 +602,6 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Purchase_Report', onLayout: (format) async => pdf.save());
   }
 }

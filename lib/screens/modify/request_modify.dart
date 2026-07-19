@@ -322,9 +322,7 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Request_${request.requestNo}', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _cell(String text, {bool bold = false}) {

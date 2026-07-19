@@ -617,9 +617,7 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Return_Issue_Report', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _cell(String text, {bool bold = false}) {

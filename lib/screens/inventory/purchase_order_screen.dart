@@ -526,8 +526,17 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
               child: DropdownSearch<String>(
                 key: _itemSearchKey,
                 selectedItem: _selectedItemName,
-                items: (filter, infiniteScrollProps) =>
-                    itemCtrl.list.map((e) => e.itemName).toSet().toList(),
+                items: (filter, infiniteScrollProps) {
+                      final q = filter.trim().toLowerCase();
+                      final all = itemCtrl.list;
+                      final filtered = q.isEmpty
+                          ? all
+                          : all.where((e) =>
+                              e.itemName.toLowerCase().contains(q) ||
+                              e.brand.toLowerCase().contains(q) ||
+                              e.itemCode.toLowerCase().contains(q)).toList();
+                      return filtered.map((e) => e.itemName).toSet().toList();
+                    },
                 popupProps: const PopupProps.menu(
                   showSearchBox: true,
                   searchFieldProps: TextFieldProps(
@@ -1151,9 +1160,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: _poNo.text.isNotEmpty ? 'PO_${_poNo.text}' : 'Purchase_Order', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _tableCell(String text, {bool bold = false}) {

@@ -662,8 +662,6 @@ class _ReturnReportScreenState extends State<ReturnReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Return_Report', onLayout: (format) async => pdf.save());
   }
 }

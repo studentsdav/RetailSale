@@ -480,8 +480,17 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
               child: DropdownSearch<String>(
                 key: _itemNameDropdownKey,
                 selectedItem: _selectedItemName,
-                items: (filter, infiniteScrollProps) =>
-                    itemCtrl.list.map((e) => e.itemName).toSet().toList(),
+                items: (filter, infiniteScrollProps) {
+                      final q = filter.trim().toLowerCase();
+                      final all = itemCtrl.list;
+                      final filtered = q.isEmpty
+                          ? all
+                          : all.where((e) =>
+                              e.itemName.toLowerCase().contains(q) ||
+                              e.brand.toLowerCase().contains(q) ||
+                              e.itemCode.toLowerCase().contains(q)).toList();
+                      return filtered.map((e) => e.itemName).toSet().toList();
+                    },
                 popupProps: const PopupProps.menu(
                   showSearchBox: true,
                   searchFieldProps: TextFieldProps(
@@ -1083,9 +1092,7 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
         ],
       ),
     );
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: _requestNo.text.isNotEmpty ? 'Request_${_requestNo.text}' : 'Stock_Request', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _cell(String text, {bool bold = false}) {

@@ -616,9 +616,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Stock_Closing_Report', onLayout: (format) async => pdf.save());
   }
 
   Widget _roundedDateField(String label, DateTime? value, VoidCallback onTap) {

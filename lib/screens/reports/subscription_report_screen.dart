@@ -476,7 +476,7 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (_) => pdf.save());
+    await Printing.layoutPdf(name: 'Subscription_Report', onLayout: (_) => pdf.save());
   }
 }
 

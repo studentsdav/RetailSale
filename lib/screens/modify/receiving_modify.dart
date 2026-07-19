@@ -354,9 +354,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'GRN_${grn['grn_no']}', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _cell(String text, {bool bold = false}) {

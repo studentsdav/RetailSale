@@ -907,8 +907,6 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Request_Report', onLayout: (format) async => pdf.save());
   }
 }

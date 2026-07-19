@@ -326,7 +326,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    await Printing.layoutPdf(name: 'Stock_Balance_Report', onLayout: (format) async => pdf.save());
   }
 
   @override

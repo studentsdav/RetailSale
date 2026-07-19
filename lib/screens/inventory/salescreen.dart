@@ -1573,7 +1573,8 @@ class _SaleScreenState extends State<SaleScreen> {
         .where((item) {
           return item.itemCode.toLowerCase().contains(value) ||
               item.itemName.toLowerCase().contains(value) ||
-              item.barcode.toLowerCase().contains(value);
+              item.barcode.toLowerCase().contains(value) ||
+              item.brand.toLowerCase().contains(value);
         })
         .take(10)
         .toList();
@@ -3272,7 +3273,7 @@ class _SaleScreenState extends State<SaleScreen> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    await Printing.layoutPdf(name: 'Customer_List', onLayout: (format) async => pdf.save());
   }
 
   Future<void> _showManageCustomersDialog() async {
@@ -6682,15 +6683,19 @@ class _SaleScreenState extends State<SaleScreen> {
 
   Future<Printer?> _resolveDefaultPrinter() async {
     final settings = settingsCtrl.settings;
-    if (settings == null || settings.defaultPrinterUrl.trim().isEmpty) {
+    if (settings == null ||
+        (settings.defaultPrinterUrl.trim().isEmpty &&
+            settings.defaultPrinterName.trim().isEmpty)) {
       return null;
     }
     try {
       final printers = await Printing.listPrinters();
       return printers.cast<Printer?>().firstWhere(
             (printer) =>
-                printer?.url == settings.defaultPrinterUrl ||
-                printer?.name == settings.defaultPrinterName,
+                (settings.defaultPrinterUrl.trim().isNotEmpty &&
+                    printer?.url == settings.defaultPrinterUrl) ||
+                (settings.defaultPrinterName.trim().isNotEmpty &&
+                    printer?.name == settings.defaultPrinterName),
             orElse: () => null,
           );
     } catch (_) {
@@ -10505,7 +10510,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     return _suggestedItems(filter);
                   },
                   itemAsString: (item) =>
-                      '${item.itemCode} - ${item.itemName} (${item.taxType} ${item.taxPercent.toStringAsFixed(item.taxPercent % 1 == 0 ? 0 : 2)}%)',
+                      '${item.itemCode} - ${item.itemName} [${item.brand}] (${item.taxType} ${item.taxPercent.toStringAsFixed(item.taxPercent % 1 == 0 ? 0 : 2)}%)',
                   compareFn: (first, second) => first.id == second.id,
                   popupProps: const PopupProps.menu(showSearchBox: true),
                   decoratorProps: const DropDownDecoratorProps(

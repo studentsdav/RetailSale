@@ -808,7 +808,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
 
   Future<void> _printCustomerList() async {
     final pdf = _buildCustomerPdf();
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    await Printing.layoutPdf(name: 'Customer_List', onLayout: (format) async => pdf.save());
   }
 
   Future<void> _editCustomer(SaleCustomer customer) async {

@@ -1786,7 +1786,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    await Printing.layoutPdf(name: 'Cash_Ledger_Report', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _pdfMiniStat(String label, String value) {

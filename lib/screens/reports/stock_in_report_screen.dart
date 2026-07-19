@@ -957,9 +957,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    await Printing.layoutPdf(name: 'Stock_In_Report', onLayout: (format) async => pdf.save());
   }
 
   pw.Widget _pdfHeaderCell(String text) {

@@ -186,7 +186,7 @@ class _StockTransferReportScreenState extends State<StockTransferReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (_) async => pdf.save());
+    await Printing.layoutPdf(name: 'Stock_Transfer_Report', onLayout: (_) async => pdf.save());
   }
 
   @override
