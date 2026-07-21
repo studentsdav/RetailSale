@@ -6935,49 +6935,61 @@ class _SaleScreenState extends State<SaleScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          _sidebarButton(
-            Icons.shopping_bag_outlined,
-            selected: true,
-            tooltip: 'Current bill',
-          ),
-          _sidebarButton(Icons.person_add_alt_1_rounded,
-              onTap: _showCustomerDialog, tooltip: 'Add customer'),
-          _sidebarButton(Icons.groups_2_outlined,
-              onTap: _openCustomerListScreen, tooltip: 'Customer list'),
-          // Draft button with count badge
-          _sidebarBadgeButton(
-            icon: Icons.drafts_outlined,
-            onTap: () async {
-              await _showDraftsDialog();
-              _loadSubscriptionDraftCounts();
-            },
-            tooltip: 'Draft bills',
-            count: _totalDraftCount,
-          ),
-          _sidebarButton(Icons.inventory_2_outlined,
-              onTap: _openItemMaster, tooltip: 'Item master'),
-          _sidebarButton(Icons.add_card_rounded,
-              onTap: _createSchemeDialog, tooltip: 'Create schemes'),
-          _sidebarButton(Icons.local_offer_outlined,
-              onTap: _showManageSchemesDialog, tooltip: 'Manage schemes'),
-          _sidebarButton(Icons.storefront,
-              onTap: _goback, tooltip: 'Receiving'),
-          _sidebarButton(Icons.payment, onTap: getSub, tooltip: 'Subscription'),
-          _sidebarButton(
-            Icons.receipt_long_outlined,
-            onTap: _openBillReprint,
-            tooltip: 'Bill Reprint',
-          ),
-          // Subscription delivery icon — shown when there are pending auto-draft orders today
-          if (_subscriptionDraftCount > 0)
-            _sidebarBadgeButton(
-              icon: Icons.delivery_dining,
-              onTap: _showSubscriptionDraftsDialog,
-              tooltip: 'Today\'s Subscription Deliveries',
-              count: _subscriptionDraftCount,
-              color: const Color(0xFF10B981),
+          
+          // Scrollable middle section for buttons to avoid vertical overflow on small/POS screens
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _sidebarButton(
+                    Icons.shopping_bag_outlined,
+                    selected: true,
+                    tooltip: 'Current bill',
+                  ),
+                  _sidebarButton(Icons.person_add_alt_1_rounded,
+                      onTap: _showCustomerDialog, tooltip: 'Add customer'),
+                  _sidebarButton(Icons.groups_2_outlined,
+                      onTap: _openCustomerListScreen, tooltip: 'Customer list'),
+                  // Draft button with count badge
+                  _sidebarBadgeButton(
+                    icon: Icons.drafts_outlined,
+                    onTap: () async {
+                      await _showDraftsDialog();
+                      _loadSubscriptionDraftCounts();
+                    },
+                    tooltip: 'Draft bills',
+                    count: _totalDraftCount,
+                  ),
+                  _sidebarButton(Icons.inventory_2_outlined,
+                      onTap: _openItemMaster, tooltip: 'Item master'),
+                  _sidebarButton(Icons.add_card_rounded,
+                      onTap: _createSchemeDialog, tooltip: 'Create schemes'),
+                  _sidebarButton(Icons.local_offer_outlined,
+                      onTap: _showManageSchemesDialog, tooltip: 'Manage schemes'),
+                  _sidebarButton(Icons.storefront,
+                      onTap: _goback, tooltip: 'Receiving'),
+                  _sidebarButton(Icons.payment, onTap: getSub, tooltip: 'Subscription'),
+                  _sidebarButton(
+                    Icons.receipt_long_outlined,
+                    onTap: _openBillReprint,
+                    tooltip: 'Bill Reprint',
+                  ),
+                  if (_subscriptionDraftCount > 0)
+                    _sidebarBadgeButton(
+                      icon: Icons.delivery_dining,
+                      onTap: _showSubscriptionDraftsDialog,
+                      tooltip: 'Today\'s Subscription Deliveries',
+                      count: _subscriptionDraftCount,
+                      color: const Color(0xFF10B981),
+                    ),
+                ],
+              ),
             ),
-          const Spacer(),
+          ),
+          
+          const SizedBox(height: 10),
           _sidebarButton(Icons.settings_outlined,
               onTap: _openSettings, tooltip: 'Settings'),
           const SizedBox(height: 14),
@@ -7514,177 +7526,182 @@ class _SaleScreenState extends State<SaleScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          const SizedBox(height: 18),
           Expanded(
-            child: GridView.builder(
-              itemCount: products.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: _showItemImages ? 1.22 : 1.38,
-              ),
-              itemBuilder: (context, index) {
-                final item = products[index];
-                final cartQty = _cartQtyForItem(item);
-                final isSelected = cartQty > 0;
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                
+                // Determine responsive column count based on available catalog width
+                int crossAxisCount = 5;
+                if (width < 480) {
+                  crossAxisCount = 2;
+                } else if (width < 720) {
+                  crossAxisCount = 3;
+                } else if (width < 960) {
+                  crossAxisCount = 4;
+                } else if (width < 1200) {
+                  crossAxisCount = 5;
+                } else {
+                  crossAxisCount = 6;
+                }
 
-                return Card(
-                  margin: EdgeInsets.zero,
-                  elevation: 0, // Flat look like the image
-                  color: isSelected ? const Color(0xFFFFF8F1) : Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: isSelected
-                          ? const Color(0xFFE58A20)
-                          : const Color(0xFFE2E8F0),
-                      width: isSelected ? 1.5 : 1,
-                    ),
+                // Compute exact spacing and width per cell
+                const double spacing = 12.0;
+                final double cellWidth = (width - (crossAxisCount - 1) * spacing) / crossAxisCount;
+
+                // Enforce a strict target height to prevent vertical text/image overflow
+                final double targetHeight = _showItemImages ? 142.0 : 110.0;
+                final double childAspectRatio = cellWidth / targetHeight;
+
+                return GridView.builder(
+                  itemCount: products.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    mainAxisSpacing: spacing,
+                    crossAxisSpacing: spacing,
+                    childAspectRatio: childAspectRatio,
                   ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      if (item.productTemplateId != null) {
-                        _showVariantSelectorDialog(item);
-                      } else {
-                        _addOrUpdateItem(item, qty: _entryQtyValue());
-                      }
-                    },
-                    child: Stack(
-                      children: [
-                        // --- TEXT CONTENT ---
-                        Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Title (Dark Blue)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                    right:
-                                        20.0), // Breathing room for long titles
-                               child: Text(
-                                  item.brand.trim().isNotEmpty
-                                      ? '${item.brand.trim()} - ${item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName}'
-                                      : (item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Color(
-                                        0xFF223854), // Exact Dark Blue from image
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                    height: 1.2,
+                  itemBuilder: (context, index) {
+                    final item = products[index];
+                    final cartQty = _cartQtyForItem(item);
+                    final isSelected = cartQty > 0;
+
+                    return Card(
+                      margin: EdgeInsets.zero,
+                      elevation: 0,
+                      color: isSelected ? const Color(0xFFFFF8F1) : Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: isSelected
+                              ? const Color(0xFFE58A20)
+                              : const Color(0xFFE2E8F0),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          if (item.productTemplateId != null) {
+                            _showVariantSelectorDialog(item);
+                          } else {
+                            _addOrUpdateItem(item, qty: _entryQtyValue());
+                          }
+                        },
+                        child: Stack(
+                          children: [
+                            // --- TEXT CONTENT ---
+                            Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Title (Dark Blue)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 24.0), // Padding to avoid overlap with delete/info badges
+                                    child: Text(
+                                      item.brand.trim().isNotEmpty
+                                          ? '${item.brand.trim()} - ${item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName}'
+                                          : (item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(0xFF223854),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13.5,
+                                        height: 1.2,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(height: 2),
+
+                                  if (item.productTemplateId != null) ...[
+                                    const Text(
+                                      'Multiple options available',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Color(0xFF718096),
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                  ],
+
+                                  const Spacer(),
+
+                                  // Price (Orange) & Cart Badge
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          item.productTemplateId != null
+                                              ? 'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}+'
+                                              : 'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Color(0xFFD67D25),
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 2),
+                            ),
 
-                              if (item.productTemplateId != null) ...[
-                                const Text(
-                                  'Multiple options available',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Color(0xFF718096),
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 10),
-
-                              if (cartQty > 0) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
+                            // Floating Modern Qty Badge (Saves vertical space and looks very professional)
+                            if (cartQty > 0)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFFF3E7),
-                                    border: Border.all(
-                                        color: const Color(0xFFE58A20)),
+                                    color: const Color(0xFFFF7A1A),
                                     borderRadius: BorderRadius.circular(6),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.12),
+                                        blurRadius: 3,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
                                   ),
                                   child: Text(
                                     'x${cartQty.toStringAsFixed(cartQty % 1 == 0 ? 0 : 2)}',
                                     style: const TextStyle(
-                                      color: Color(0xFFE58A20),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 10.5,
                                     ),
                                   ),
                                 ),
-                              ],
-
-                              const Spacer(),
-
-                              // Price (Orange) & Cart Badge
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      item.productTemplateId != null
-                                          ? 'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}+'
-                                          : 'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Color(
-                                            0xFFD67D25), // Exact Orange from image
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ),
-                                  // if (!(_showItemImages &&
-                                  //     item.imagePath.trim().isNotEmpty))
-                                  //   if (cartQty > 0) ...[
-                                  //     const SizedBox(width: 8),
-                                  //     Container(
-                                  //       padding: const EdgeInsets.symmetric(
-                                  //           horizontal: 6, vertical: 2),
-                                  //       decoration: BoxDecoration(
-                                  //         color: const Color(0xFFFFF3E7),
-                                  //         border: Border.all(
-                                  //             color: const Color(0xFFE58A20)),
-                                  //         borderRadius:
-                                  //             BorderRadius.circular(6),
-                                  //       ),
-                                  //       child: Text(
-                                  //         'x${cartQty.toStringAsFixed(cartQty % 1 == 0 ? 0 : 2)}',
-                                  //         style: const TextStyle(
-                                  //           color: Color(0xFFE58A20),
-                                  //           fontWeight: FontWeight.bold,
-                                  //           fontSize: 11,
-                                  //         ),
-                                  //       ),
-                                  //     ),
-                                  //   ],
-                                ],
                               ),
-                            ],
-                          ),
-                        ),
 
-                        if (_showItemImages && item.imagePath.trim().isNotEmpty)
-                          Positioned(
-                            right: 4,
-                            bottom: 12,
-                            width: 80,
-                            height: 60,
-                            child: Image.network(
-                              _itemImageUrl(item),
-                              fit: BoxFit.contain,
-                              alignment: Alignment.bottomRight,
-                              errorBuilder: (_, __, ___) =>
-                                  const SizedBox.shrink(),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+                            // Product image on bottom right
+                            if (_showItemImages && item.imagePath.trim().isNotEmpty)
+                              Positioned(
+                                right: 4,
+                                bottom: 10,
+                                width: 72,
+                                height: 52,
+                                child: Image.network(
+                                  _itemImageUrl(item),
+                                  fit: BoxFit.contain,
+                                  alignment: Alignment.bottomRight,
+                                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),

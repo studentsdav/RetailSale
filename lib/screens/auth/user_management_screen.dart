@@ -21,6 +21,7 @@ class UserManagementScreen extends StatefulWidget {
 class _UserManagementScreenState extends State<UserManagementScreen> {
   final _search = TextEditingController();
   final UserController userCtrl = UserController();
+  final ScrollController _horizontalScrollController = ScrollController();
   final password = TextEditingController();
   List<AppUser> users = [];
   final outletCtrl = OutletController();
@@ -84,6 +85,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   void initState() {
     super.initState();
     _loadUsers();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    password.dispose();
+    _horizontalScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUsers() async {
@@ -160,81 +169,87 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            headingRowColor: WidgetStateProperty.all(
-              Theme.of(context).colorScheme.surfaceContainerHighest,
-            ),
-            columns: const [
-              DataColumn(label: Text('Username')),
-              DataColumn(label: Text('Name')),
-              DataColumn(label: Text('Role')),
-              DataColumn(label: Text('Mobile')),
-              DataColumn(label: Text('Email')),
-              DataColumn(label: Text('Status')),
-              DataColumn(label: Text('Actions')),
-            ],
-            rows: filteredUsers.map((u) {
-              return DataRow(
-                color: WidgetStateProperty.all(
-                  u.isActive ? Colors.white : Colors.grey.shade200,
-                ),
-                cells: [
-                  DataCell(Text(u.username)),
-                  DataCell(Text(u.fullName)),
-                  DataCell(Text(u.role)),
-                  DataCell(Text(u.mobile)),
-                  DataCell(Text(u.email)),
-                  DataCell(Chip(
-                    label: Text(u.isActive ? 'ACTIVE' : 'INACTIVE'),
-                    backgroundColor: u.isActive
-                        ? Colors.green.shade100
-                        : Colors.red.shade100,
-                  )),
-                  DataCell(Row(
-                    children: [
-                      IconButton(
-                        tooltip: 'Edit User',
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _openEditUser(u),
-                      ),
-                      IconButton(
-                        tooltip: 'Permissions',
-                        icon: const Icon(Icons.security),
-                        onPressed: () => _openPermissions(u),
-                      ),
-                      IconButton(
-                        tooltip: 'Reset Password',
-                        icon: const Icon(Icons.lock_reset),
-                        onPressed: () => _resetPassword(u),
-                      ),
-                      IconButton(
-                        tooltip: 'Change Password',
-                        icon: const Icon(Icons.lock),
-                        onPressed: () => _changePassword(u),
-                      ),
-                      IconButton(
-                        tooltip: u.isActive ? 'Disable User' : 'Enable User',
-                        icon: Icon(
-                          u.isActive ? Icons.block : Icons.check_circle,
-                          color: u.isActive ? Colors.red : Colors.green,
+        child: Scrollbar(
+          controller: _horizontalScrollController,
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: SingleChildScrollView(
+            controller: _horizontalScrollController,
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(
+                Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              columns: const [
+                DataColumn(label: Text('Username')),
+                DataColumn(label: Text('Name')),
+                DataColumn(label: Text('Role')),
+                DataColumn(label: Text('Mobile')),
+                DataColumn(label: Text('Email')),
+                DataColumn(label: Text('Status')),
+                DataColumn(label: Text('Actions')),
+              ],
+              rows: filteredUsers.map((u) {
+                return DataRow(
+                  color: WidgetStateProperty.all(
+                    u.isActive ? Colors.white : Colors.grey.shade200,
+                  ),
+                  cells: [
+                    DataCell(Text(u.username)),
+                    DataCell(Text(u.fullName)),
+                    DataCell(Text(u.role)),
+                    DataCell(Text(u.mobile)),
+                    DataCell(Text(u.email)),
+                    DataCell(Chip(
+                      label: Text(u.isActive ? 'ACTIVE' : 'INACTIVE'),
+                      backgroundColor: u.isActive
+                          ? Colors.green.shade100
+                          : Colors.red.shade100,
+                    )),
+                    DataCell(Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Edit User',
+                          icon: const Icon(Icons.edit),
+                          onPressed: () => _openEditUser(u),
                         ),
-                        onPressed: () async {
-                          await userCtrl.toggleStatus(u.id);
-                          await _loadUsers();
-                        },
-                      ),
-                      IconButton(
-                        tooltip: 'View Details',
-                        icon: const Icon(Icons.info_outline),
-                        onPressed: () => _viewDetails(u),
-                      ),
-                    ],
-                  )),
-                ],
-              );
-            }).toList(),
+                        IconButton(
+                          tooltip: 'Permissions',
+                          icon: const Icon(Icons.security),
+                          onPressed: () => _openPermissions(u),
+                        ),
+                        IconButton(
+                          tooltip: 'Reset Password',
+                          icon: const Icon(Icons.lock_reset),
+                          onPressed: () => _resetPassword(u),
+                        ),
+                        IconButton(
+                          tooltip: 'Change Password',
+                          icon: const Icon(Icons.lock),
+                          onPressed: () => _changePassword(u),
+                        ),
+                        IconButton(
+                          tooltip: u.isActive ? 'Disable User' : 'Enable User',
+                          icon: Icon(
+                            u.isActive ? Icons.block : Icons.check_circle,
+                            color: u.isActive ? Colors.red : Colors.green,
+                          ),
+                          onPressed: () async {
+                            await userCtrl.toggleStatus(u.id);
+                            await _loadUsers();
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'View Details',
+                          icon: const Icon(Icons.info_outline),
+                          onPressed: () => _viewDetails(u),
+                        ),
+                      ],
+                    )),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ),

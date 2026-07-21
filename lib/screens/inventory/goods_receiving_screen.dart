@@ -31,6 +31,7 @@ class GoodsReceivingScreen extends StatefulWidget {
 
 class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
   final ctrl = ReceivingController();
+  final ScrollController _horizontalScrollController = ScrollController();
 
   final supplierCtrl = SupplierController();
   final itemCtrl = ItemController();
@@ -110,6 +111,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
     _addBtnFocus.dispose();
     _saveBtnFocus.dispose();
     _tableFocusNode.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -629,7 +631,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                       selected.isNotEmpty ? selected.first.supplierName : null;
 
                   for (var i in po['items']) {
-                    if ((i['line_status'] ?? 'CLOSED').toString() != 'OPEN') {
+                    if ((i['line_status'] ?? 'OPEN').toString() != 'OPEN') {
                       continue;
                     }
                     final matchedItem = itemCtrl.list
@@ -1117,9 +1119,14 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
           height: constraints.maxHeight,
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Focus(
+            child: Scrollbar(
+              controller: _horizontalScrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              child: SingleChildScrollView(
+                controller: _horizontalScrollController,
+                scrollDirection: Axis.horizontal,
+                child: Focus(
                 focusNode: _tableFocusNode,
                 onKeyEvent: _onTableKey,
                 child: DataTable(
@@ -1230,7 +1237,9 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                 ),
               ),
             ),
-          ));
+          ),
+        ),
+      );
     });
   }
 

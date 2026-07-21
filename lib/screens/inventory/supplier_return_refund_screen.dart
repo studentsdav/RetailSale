@@ -15,6 +15,7 @@ class SupplierReturnRefundScreen extends StatefulWidget {
 class _SupplierReturnRefundScreenState
     extends State<SupplierReturnRefundScreen> {
   final ctrl = SupplierReturnController();
+  final ScrollController _horizontalScrollController = ScrollController();
   DateTime fromDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime toDate = DateTime.now();
   final fromCtrl = TextEditingController();
@@ -26,6 +27,14 @@ class _SupplierReturnRefundScreenState
     fromCtrl.text = DateFormat('dd-MMM-yyyy').format(fromDate);
     toCtrl.text = DateFormat('dd-MMM-yyyy').format(toDate);
     _load();
+  }
+
+  @override
+  void dispose() {
+    fromCtrl.dispose();
+    toCtrl.dispose();
+    _horizontalScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -281,8 +290,13 @@ class _SupplierReturnRefundScreenState
         return SizedBox(
           height: constraints.maxHeight,
           child: SingleChildScrollView(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            child: Scrollbar(
+              controller: _horizontalScrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              child: SingleChildScrollView(
+                controller: _horizontalScrollController,
+                scrollDirection: Axis.horizontal,
               child: DataTable(
                 columns: const [
                   DataColumn(label: Text('Return No')),
@@ -330,8 +344,9 @@ class _SupplierReturnRefundScreenState
               ),
             ),
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 

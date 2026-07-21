@@ -2899,6 +2899,15 @@ COMMIT;
         ON item_master(outlet_id, lower(item_name), lower(COALESCE(brand, '')));
       `);
     }
+  },
+  {
+    version: 80,
+    description: "Add created_at column to issue_headers table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE issue_headers ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      `);
+    }
   }
 ];
 

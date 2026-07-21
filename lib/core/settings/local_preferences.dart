@@ -139,4 +139,21 @@ class LocalPreferences {
     await prefs.setString(_brandingKey, jsonEncode(value.toJson()));
     await prefs.setString(_themeKey, value.themeKey);
   }
+
+  static const _favoriteDrawerItemsKey = 'favorite_drawer_items';
+
+  static Future<List<String>> getFavoriteDrawerItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_favoriteDrawerItemsKey) ?? [
+      'Retail Sales',
+      'Purchase Order',
+      'Stock View',
+      'Stock Issue / Dispatch',
+    ];
+  }
+
+  static Future<void> setFavoriteDrawerItems(List<String> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_favoriteDrawerItemsKey, items);
+  }
 }

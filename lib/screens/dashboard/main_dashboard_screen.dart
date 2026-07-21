@@ -159,6 +159,97 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   bool _isSyncing = false;
   String _userRole = '';
   String _drawerSearchQuery = '';
+  Set<String> _favoriteDrawerItems = {};
+
+  Future<void> _loadFavorites() async {
+    final list = await LocalPreferences.getFavoriteDrawerItems();
+    if (mounted) {
+      setState(() {
+        _favoriteDrawerItems = list.toSet();
+      });
+    }
+  }
+
+  Future<void> _toggleFavorite(String itemLabel) async {
+    setState(() {
+      if (_favoriteDrawerItems.contains(itemLabel)) {
+        _favoriteDrawerItems.remove(itemLabel);
+      } else {
+        _favoriteDrawerItems.add(itemLabel);
+      }
+    });
+    await LocalPreferences.setFavoriteDrawerItems(_favoriteDrawerItems.toList());
+  }
+
+  void _openManageFavoritesDialog(List<Map<String, dynamic>> allDrawerItems) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final theme = Theme.of(context);
+            final isDark = theme.brightness == Brightness.dark;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.star_rounded, color: Color(0xFFFFB800)),
+                  SizedBox(width: 8),
+                  Text('Customize Favorite Features', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                height: 480,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select features to pin directly to the top of your navigation drawer:',
+                      style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView(
+                        children: allDrawerItems.map((item) {
+                          final label = item['label'] as String;
+                          final category = item['category'] as String;
+                          final icon = item['icon'] as IconData;
+                          final isFav = _favoriteDrawerItems.contains(label);
+                          final perm = item['permission'] as String?;
+                          if (perm != null && !PermissionService.can(perm)) return const SizedBox();
+
+                          return CheckboxListTile(
+                            dense: true,
+                            value: isFav,
+                            activeColor: const Color(0xFFFFB800),
+                            title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                            subtitle: Text(category, style: const TextStyle(fontSize: 11)),
+                            secondary: Icon(icon, size: 18, color: theme.colorScheme.primary),
+                            onChanged: (val) async {
+                              await _toggleFavorite(label);
+                              setDialogState(() {});
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   String get _businessType => (user?.outletType ?? '').toUpperCase();
   bool get _isRetailBusiness =>
@@ -216,6 +307,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     loadUser();
 
     _loadUserRole();
+    _loadFavorites();
   }
 
   Future<bool?> _showConfirmSyncDialog() async {
@@ -1200,143 +1292,141 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
     return Column(
       children: [
-        Row(
+        GridView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 260,
+            mainAxisExtent: 68,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+          ),
           children: [
-            Expanded(
-              child: _statCard(
-                'Today Revenue (No Sub)',
-                'Rs. ${todayRevenue.toStringAsFixed(0)}',
-                Icons.payments_outlined,
-                const Color(0xFF2563EB),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SalesReportScreen(),
-                    ),
-                  );
-                },
-              ),
+            _statCard(
+              'Today Revenue (No Sub)',
+              'Rs. ${todayRevenue.toStringAsFixed(0)}',
+              Icons.payments_outlined,
+              const Color(0xFF2563EB),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SalesReportScreen(),
+                  ),
+                );
+              },
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _statCard(
-                'Today Revenue (With Sub)',
-                'Rs. ${(todayRevenue + todaySubscriptionAmount).toStringAsFixed(0)}',
-                Icons.payments_outlined,
-                const Color(0xFF0EA5E9),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SalesReportScreen(),
-                    ),
-                  );
-                },
-              ),
+            _statCard(
+              'Today Revenue (With Sub)',
+              'Rs. ${(todayRevenue + todaySubscriptionAmount).toStringAsFixed(0)}',
+              Icons.payments_outlined,
+              const Color(0xFF0EA5E9),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SalesReportScreen(),
+                  ),
+                );
+              },
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _statCard(
-                'Today COGS',
-                'Rs. ${todayCogs.toStringAsFixed(0)}',
-                Icons.shopping_bag_outlined,
-                const Color(0xFFF97316),
-              ),
+            _statCard(
+              'Today COGS',
+              'Rs. ${todayCogs.toStringAsFixed(0)}',
+              Icons.shopping_bag_outlined,
+              const Color(0xFFF97316),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: todayGrossProfit >= todayGrossLoss
-                  ? _statCard(
-                      'Gross Profit',
-                      'Rs. ${todayGrossProfit.toStringAsFixed(0)}',
-                      Icons.trending_up,
-                      const Color(0xFF16A34A),
-                    )
-                  : _statCard(
-                      'Gross Loss',
-                      'Rs. ${todayGrossLoss.toStringAsFixed(0)}',
-                      Icons.trending_down,
-                      const Color(0xFFDC2626),
-                    ),
+            todayGrossProfit >= todayGrossLoss
+                ? _statCard(
+                    'Gross Profit',
+                    'Rs. ${todayGrossProfit.toStringAsFixed(0)}',
+                    Icons.trending_up,
+                    const Color(0xFF16A34A),
+                  )
+                : _statCard(
+                    'Gross Loss',
+                    'Rs. ${todayGrossLoss.toStringAsFixed(0)}',
+                    Icons.trending_down,
+                    const Color(0xFFDC2626),
+                  ),
+            _statCard(
+              'Month Growth',
+              '${month?.growthPercent.toStringAsFixed(1) ?? '0.0'}%',
+              Icons.auto_graph,
+              const Color(0xFF7C3AED),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _statCard(
-                'Month Growth',
-                '${month?.growthPercent.toStringAsFixed(1) ?? '0.0'}%',
-                Icons.auto_graph,
-                const Color(0xFF7C3AED),
-              ),
+            _statCard(
+              'Today Subscription Sale',
+              'Rs. ${todaySubscriptionAmount.toStringAsFixed(0)}',
+              Icons.subscriptions_outlined,
+              const Color(0xFF0EA5E9),
+            ),
+            _statCard(
+              'Today Discount',
+              'Rs. ${todayDiscount.toStringAsFixed(0)}',
+              Icons.percent_outlined,
+              const Color(0xFFF59E0B),
+            ),
+            _statCard(
+              'Today Collection',
+              'Rs. ${todayCollection.toStringAsFixed(0)}',
+              Icons.savings_outlined,
+              const Color(0xFF6366F1),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CashLedgerScreen(),
+                  ),
+                );
+              },
+            ),
+            _statCard(
+              'Today GST',
+              'Rs. ${todayGst.toStringAsFixed(0)}',
+              Icons.account_balance_outlined,
+              const Color(0xFFE11D48),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _statCard(
-                'Today Subscription Sale',
-                'Rs. ${todaySubscriptionAmount.toStringAsFixed(0)}',
-                Icons.subscriptions_outlined,
-                const Color(0xFF0EA5E9),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _statCard(
-                'Today Discount',
-                'Rs. ${todayDiscount.toStringAsFixed(0)}',
-                Icons.percent_outlined,
-                const Color(0xFFF59E0B),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _statCard(
-                'Today Collection',
-                'Rs. ${todayCollection.toStringAsFixed(0)}',
-                Icons.savings_outlined,
-                const Color(0xFF6366F1),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const CashLedgerScreen(),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _statCard(
-                'Today GST',
-                'Rs. ${todayGst.toStringAsFixed(0)}',
-                Icons.account_balance_outlined,
-                const Color(0xFFE11D48),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _comparisonChartCard('Day vs Yesterday', day)),
-            const SizedBox(width: 12),
-            Expanded(
-                child: _comparisonChartCard('Week vs Previous Week', week)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-                child: _comparisonChartCard('Month vs Previous Month', month)),
-            const SizedBox(width: 12),
-            Expanded(
-                child: _comparisonChartCard('Year vs Previous Year', year)),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            if (width < 700) {
+              return Column(
+                children: [
+                  _comparisonChartCard('Day vs Yesterday', day),
+                  const SizedBox(height: 12),
+                  _comparisonChartCard('Week vs Previous Week', week),
+                  const SizedBox(height: 12),
+                  _comparisonChartCard('Month vs Previous Month', month),
+                  const SizedBox(height: 12),
+                  _comparisonChartCard('Year vs Previous Year', year),
+                ],
+              );
+            } else {
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _comparisonChartCard('Day vs Yesterday', day)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _comparisonChartCard('Week vs Previous Week', week)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _comparisonChartCard('Month vs Previous Month', month)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _comparisonChartCard('Year vs Previous Year', year)),
+                    ],
+                  ),
+                ],
+              );
+            }
+          },
         ),
         const SizedBox(height: 12),
         _topItemHeatmapCard(),
@@ -1532,31 +1622,48 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           onTap: onTap,
           borderRadius: BorderRadius.circular(18),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(icon, color: color),
+                  child: Icon(icon, color: color, size: 20),
                 ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
-                        style: const TextStyle(color: Color(0xFF64748B))),
-                    const SizedBox(height: 4),
-                    Text(value,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: color,
-                        )),
-                  ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          value,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1758,6 +1865,151 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _userDetailRow(IconData icon, String label, String value, bool isDark, {bool isGreen = false}) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: isGreen ? const Color(0xFF10B981) : (isDark ? Colors.white60 : const Color(0xFF64748B))),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(fontSize: 10.5, color: isDark ? Colors.white60 : const Color(0xFF64748B))),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: isGreen ? const Color(0xFF059669) : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showUserDetailDialog(
+    BuildContext context,
+    String fullUserName,
+    String fullEmail,
+    String role,
+    String propertyName,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+        final displayId = fullUserName.isNotEmpty ? fullUserName : 'admin';
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.badge_outlined, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              const Text('User Identity Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Copyable Full User ID Card
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'FULL USER ID / USERNAME',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                              color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                            ),
+                          ),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: displayId));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('User ID "$displayId" copied to clipboard!'),
+                                  duration: const Duration(seconds: 2),
+                                  backgroundColor: const Color(0xFF10B981),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.copy_rounded, size: 14, color: theme.colorScheme.primary),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Copy',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        displayId,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _userDetailRow(Icons.shield_outlined, 'Role', role.isNotEmpty ? role.toUpperCase() : 'ADMIN', isDark),
+                const SizedBox(height: 10),
+                _userDetailRow(Icons.email_outlined, 'Email / Subtitle', fullEmail.isNotEmpty ? fullEmail : 'System Administrator', isDark),
+                const SizedBox(height: 10),
+                _userDetailRow(Icons.business_outlined, 'Property / Outlet', propertyName.isNotEmpty ? propertyName : 'Primary Workspace', isDark),
+                const SizedBox(height: 10),
+                _userDetailRow(Icons.timer_outlined, 'Active Session Uptime', sessionDuration, isDark, isGreen: true),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -2270,106 +2522,185 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
     Widget buildHeader() {
       return Container(
-        padding: const EdgeInsets.fromLTRB(20, 48, 20, 20),
+        padding: const EdgeInsets.fromLTRB(16, 44, 16, 16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isDark
-                ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-                : [const Color(0xFFF8FAFC), const Color(0xFFF1F5F9)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
           border: Border(
             bottom: BorderSide(
-              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
               width: 1,
             ),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: theme.colorScheme.primary.withOpacity(0.5),
-                      width: 2,
-                    ),
-                  ),
-                  child: CircleAvatar(
-                    radius: 28,
-                    backgroundColor: theme.colorScheme.primary,
-                    backgroundImage: (property?.logoPath != null &&
-                            property!.logoPath!.isNotEmpty &&
-                            File(property!.logoPath!).existsSync())
-                        ? FileImage(File(property!.logoPath!))
-                        : null,
-                    child: (property?.logoPath != null &&
-                            property!.logoPath!.isNotEmpty &&
-                            File(property!.logoPath!).existsSync())
-                        ? null
-                        : userName.isNotEmpty
-                            ? Text(
-                                userName.substring(0, 1).toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 20,
-                                ),
-                              )
-                            : const Icon(Icons.person, color: Colors.white),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            // Clickable User Avatar & Profile Info (Tap to view full ID & copy)
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => _showUserDetailDialog(context, userName, userEmail, userRole, hotelName),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
+                  child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          userRole.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.2,
-                            color: theme.colorScheme.primary,
+                      Stack(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: theme.colorScheme.primary.withOpacity(0.5),
+                                width: 2,
+                              ),
+                            ),
+                            child: CircleAvatar(
+                              radius: 24,
+                              backgroundColor: theme.colorScheme.primary,
+                              backgroundImage: (property?.logoPath != null &&
+                                      property!.logoPath!.isNotEmpty &&
+                                      File(property!.logoPath!).existsSync())
+                                  ? FileImage(File(property!.logoPath!))
+                                  : null,
+                              child: (property?.logoPath != null &&
+                                      property!.logoPath!.isNotEmpty &&
+                                      File(property!.logoPath!).existsSync())
+                                  ? null
+                                  : userName.isNotEmpty
+                                      ? Text(
+                                          userName.substring(0, 1).toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                          ),
+                                        )
+                                      : const Icon(Icons.person, color: Colors.white),
+                            ),
                           ),
-                        ),
+                          Positioned(
+                            right: 1,
+                            bottom: 1,
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        userName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimaryColor,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    userRole.isNotEmpty ? userRole.toUpperCase() : 'ADMIN',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.8,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                // Active session uptime duration tag
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.circle, size: 5, color: Color(0xFF10B981)),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        sessionDuration,
+                                        style: const TextStyle(
+                                          fontSize: 8.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF059669),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    userName.isNotEmpty ? userName : 'System Administrator',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: textPrimaryColor,
+                                    ),
+                                  ),
+                                ),
+                                Icon(Icons.info_outline_rounded, size: 14, color: textSecondaryColor.withOpacity(0.6)),
+                              ],
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              'Tap for full User ID',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                                color: textSecondaryColor.withOpacity(0.8),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              userEmail,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: textSecondaryColor,
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Account Security',
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _changePassword(userName),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.key_outlined,
+                      size: 17,
+                      color: textSecondaryColor,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -2379,12 +2710,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
     Widget buildFooter() {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
           border: Border(
             top: BorderSide(
-              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
               width: 1,
             ),
           ),
@@ -2396,18 +2727,18 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               children: [
                 Icon(
                   Icons.business_outlined,
-                  size: 14,
-                  color: textSecondaryColor,
+                  size: 15,
+                  color: theme.colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    hotelName,
+                    hotelName.isNotEmpty ? hotelName : 'Famalth technologies',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
                       color: textPrimaryColor,
                     ),
                   ),
@@ -2423,13 +2754,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   style: TextStyle(
                     fontSize: 11,
                     color: textSecondaryColor,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
                   'Build: 2025-12-04',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 10.5,
                     color: textSecondaryColor.withOpacity(0.8),
                   ),
                 ),
@@ -2446,58 +2777,81 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         children: [
           buildHeader(),
 
-          // Search Field
+          // 100% Fully Pill-Rounded Search Input Bar (Google & Microsoft style)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                  ),
                 ),
-              ),
-              child: TextField(
-                style: TextStyle(color: textPrimaryColor, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Search Menu...',
-                  hintStyle: TextStyle(color: textSecondaryColor.withOpacity(0.7), fontSize: 14),
-                  prefixIcon: Icon(Icons.search_outlined, color: textSecondaryColor, size: 20),
-                  suffixIcon: _drawerSearchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear_outlined, color: textSecondaryColor, size: 18),
-                          onPressed: () {
-                            setState(() {
-                              _drawerSearchQuery = '';
-                            });
-                          },
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                child: TextField(
+                  style: TextStyle(color: textPrimaryColor, fontSize: 13, fontWeight: FontWeight.w500),
+                  decoration: InputDecoration(
+                    hintText: 'Search Menu...',
+                    hintStyle: TextStyle(
+                      color: textSecondaryColor.withOpacity(0.65),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    prefixIcon: Padding(
+                      padding: const EdgeInsets.only(left: 14, right: 8),
+                      child: Icon(Icons.search_rounded, color: textSecondaryColor, size: 18),
+                    ),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 0),
+                    suffixIcon: _drawerSearchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear_rounded, color: textSecondaryColor, size: 16),
+                            onPressed: () {
+                              setState(() {
+                                _drawerSearchQuery = '';
+                              });
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  ),
+                  onChanged: (val) {
+                    setState(() {
+                      _drawerSearchQuery = val;
+                    });
+                  },
                 ),
-                onChanged: (val) {
-                  setState(() {
-                    _drawerSearchQuery = val;
-                  });
-                },
               ),
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
 
           Expanded(
             child: ListView(
-              padding: EdgeInsets.zero,
+              padding: const EdgeInsets.symmetric(vertical: 4),
               children: [
                 if (isSearching) ...[
                   if (matchingItems.isEmpty)
                     Padding(
-                      padding: const EdgeInsets.all(24.0),
+                      padding: const EdgeInsets.all(32.0),
                       child: Center(
                         child: Text(
                           'No menu items found',
-                          style: TextStyle(color: textSecondaryColor, fontSize: 14),
+                          style: TextStyle(color: textSecondaryColor, fontSize: 13),
                         ),
                       ),
                     )
@@ -2505,7 +2859,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     ...matchingItems.map((item) {
                       return _drawerItem(
                         item['icon'] as IconData,
-                        '${item['label']} (${item['category']})',
+                        item['label'] as String,
                         permission: item['permission'] as String?,
                         isBeta: item['isBeta'] as bool? ?? false,
                         isNew: item['isNew'] as bool? ?? false,
@@ -2513,9 +2867,111 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                         isFutureUpdate: item['isFutureUpdate'] as bool? ?? false,
                         onTap: item['onTap'] as VoidCallback?,
                         isSubItem: false,
+                        categoryName: item['category'] as String?,
                       );
                     }),
                 ] else ...[
+                  // FAVORITES SECTION (Show all starred features directly, no expansion tile)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'FAVORITES',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                                letterSpacing: 0.8,
+                                color: isDark ? Colors.white70 : const Color(0xFF475569),
+                              ),
+                            ),
+                          ],
+                        ),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: () => _openManageFavoritesDialog(allDrawerItems),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            child: Row(
+                              children: [
+                                Icon(Icons.tune_rounded, size: 13, color: theme.colorScheme.primary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Customize',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  if (_favoriteDrawerItems.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.star_outline_rounded, size: 16, color: textSecondaryColor),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Tap the star icon on any feature to pin it here.',
+                                style: TextStyle(fontSize: 11.5, color: textSecondaryColor),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ...allDrawerItems.where((item) {
+                      final label = item['label'] as String;
+                      if (!_favoriteDrawerItems.contains(label)) return false;
+                      final perm = item['permission'] as String?;
+                      if (perm != null && !PermissionService.can(perm)) return false;
+                      return true;
+                    }).map((item) {
+                      return _drawerItem(
+                        item['icon'] as IconData,
+                        item['label'] as String,
+                        permission: item['permission'] as String?,
+                        isBeta: item['isBeta'] as bool? ?? false,
+                        isNew: item['isNew'] as bool? ?? false,
+                        isDeprecated: item['isDeprecated'] as bool? ?? false,
+                        isFutureUpdate: item['isFutureUpdate'] as bool? ?? false,
+                        onTap: item['onTap'] as VoidCallback?,
+                        isSubItem: false,
+                        isFavoriteSectionItem: true,
+                        categoryName: item['category'] as String?,
+                      );
+                    }),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    child: Divider(height: 1, color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                  ),
+
+                  // CATEGORIES SECTION
                   ...categories.map((categoryName) {
                     final categoryItems = allDrawerItems.where((item) {
                       if (item['category'] != categoryName) return false;
@@ -2557,6 +3013,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                             isFutureUpdate: item['isFutureUpdate'] as bool? ?? false,
                             onTap: item['onTap'] as VoidCallback?,
                             isSubItem: true,
+                            categoryName: categoryName,
                           );
                         }).toList(),
                       ),
@@ -2584,6 +3041,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     bool isDeprecated = false,
     bool isFutureUpdate = false,
     bool isSubItem = false,
+    bool isFavoriteSectionItem = false,
+    String? categoryName,
   }) {
     if (permission != null && !PermissionService.can(permission)) {
       return const SizedBox();
@@ -2593,64 +3052,106 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final textPrimaryColor = isDark ? Colors.white : const Color(0xFF1E293B);
     final textSecondaryColor = isDark ? Colors.white70 : const Color(0xFF64748B);
+    final isFavorited = _favoriteDrawerItems.contains(label);
 
     Widget? badgeWidget;
     if (isBeta) {
-      badgeWidget = _buildBadge('BETA', Colors.red);
+      badgeWidget = _buildBadge('BETA', const Color(0xFFEF4444));
     } else if (isNew) {
-      badgeWidget = _buildBadge('NEW', Colors.green);
+      badgeWidget = _buildBadge('NEW', const Color(0xFF10B981));
     } else if (isDeprecated) {
-      badgeWidget = _buildBadge('DEP', Colors.grey);
+      badgeWidget = _buildBadge('DEP', const Color(0xFF64748B));
     } else if (isFutureUpdate) {
-      badgeWidget = _buildBadge('UPCOMING', Colors.orange);
+      badgeWidget = _buildBadge('UPCOMING', const Color(0xFFF59E0B));
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: isSubItem ? 20 : 16,
-            vertical: 0,
-          ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          leading: Icon(
-            ic,
-            size: isSubItem ? 18 : 22,
-            color: isSubItem 
-                ? (isDark ? Colors.white60 : const Color(0xFF64748B))
-                : (isDark ? Colors.white : const Color(0xFF334155)),
-          ),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: isSubItem ? 13 : 14,
-                    fontWeight: isSubItem ? FontWeight.w500 : FontWeight.w600,
-                    color: textPrimaryColor,
+      padding: EdgeInsets.fromLTRB(isSubItem ? 16 : 10, 1, 10, 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: onTap ?? () => Navigator.of(context).pop(),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                if (isSubItem && !isFavoriteSectionItem) ...[
+                  Container(
+                    width: 1.5,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Icon(
+                  ic,
+                  size: (isSubItem && !isFavoriteSectionItem) ? 16 : 19,
+                  color: (isSubItem && !isFavoriteSectionItem)
+                      ? (isDark ? Colors.white70 : const Color(0xFF64748B))
+                      : (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: (isSubItem && !isFavoriteSectionItem) ? 12.5 : 13,
+                            fontWeight: (isSubItem && !isFavoriteSectionItem) ? FontWeight.w500 : FontWeight.w600,
+                            color: textPrimaryColor,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                      ),
+                      if (isFavoriteSectionItem && categoryName != null) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '($categoryName)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: textSecondaryColor.withOpacity(0.7),
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ),
-              if (badgeWidget != null) ...[
-                const SizedBox(width: 8),
-                badgeWidget,
-              ],
-            ],
-          ),
-          trailing: isSubItem 
-              ? null 
-              : Icon(
-                  Icons.arrow_forward_ios_outlined, 
-                  size: 12, 
-                  color: textSecondaryColor.withOpacity(0.5),
+                if (badgeWidget != null) ...[
+                  const SizedBox(width: 6),
+                  badgeWidget,
+                ],
+                // Star Toggle Button for Favorites
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _toggleFavorite(label),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
+                        size: 17,
+                        color: isFavorited
+                            ? const Color(0xFFFFB800)
+                            : textSecondaryColor.withOpacity(0.35),
+                      ),
+                    ),
+                  ),
                 ),
-          onTap: onTap ?? () => Navigator.of(context).pop(),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -2658,10 +3159,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
   Widget _buildBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(6),
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(100),
         border: Border.all(color: color.withOpacity(0.3), width: 0.5),
       ),
       child: Text(
@@ -2669,7 +3170,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         style: TextStyle(
           color: color,
           fontSize: 8,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w800,
           letterSpacing: 0.5,
         ),
       ),

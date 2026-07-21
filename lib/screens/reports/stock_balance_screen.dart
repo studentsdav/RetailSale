@@ -22,6 +22,7 @@ class StockBalanceScreen extends StatefulWidget {
 class _StockBalanceScreenState extends State<StockBalanceScreen> {
   final ctrl = StockBalanceController();
   final searchCtrl = TextEditingController();
+  final ScrollController _horizontalScrollController = ScrollController();
 
   String statusFilter = 'ALL';
   String categoryFilter = 'ALL';
@@ -35,6 +36,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
   @override
   void dispose() {
     searchCtrl.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -577,9 +579,14 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
             height: constraints.maxHeight,
             child: SingleChildScrollView(
               scrollDirection: Axis.vertical,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
+              child: Scrollbar(
+                controller: _horizontalScrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _horizontalScrollController,
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
                   headingRowColor: WidgetStateProperty.all(
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
@@ -637,8 +644,9 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
                 ),
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
       ),
     );
   }

@@ -24,6 +24,7 @@ class SubscriptionReportScreen extends StatefulWidget {
 class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
   final SalesController ctrl = SalesController();
   final TextEditingController _searchCtrl = TextEditingController();
+  final ScrollController _horizontalScrollController = ScrollController();
 
   bool _loading = true;
   String _statusFilter = '';
@@ -38,6 +39,7 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -159,110 +161,123 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
   }
 
   Widget _table() {
-    return SingleChildScrollView(
-      child: Table(
-        columnWidths: const {
-          0: FlexColumnWidth(1.8),
-          1: FlexColumnWidth(1.5),
-          2: FlexColumnWidth(1.05),
-          3: FlexColumnWidth(1.05),
-          4: FlexColumnWidth(0.9),
-          5: FlexColumnWidth(0.9),
-          6: FlexColumnWidth(0.9),
-          7: FlexColumnWidth(0.9),
-          8: FlexColumnWidth(0.95),
-          9: FlexColumnWidth(0.95),
-          10: FlexColumnWidth(1.0),
-          11: FlexColumnWidth(1.0),
-          12: FlexColumnWidth(0.95),
-          13: FlexColumnWidth(0.95),
-          14: FlexColumnWidth(1.05),
-          15: FlexColumnWidth(0.9),
-        },
-        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-        children: [
-          TableRow(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            ),
-            children: const [
-              _ReportHeaderCell('Customer'),
-              _ReportHeaderCell('Item'),
-              _ReportHeaderCell('Start'),
-              _ReportHeaderCell('End'),
-              _ReportHeaderCell('Total'),
-              _ReportHeaderCell('Used'),
-              _ReportHeaderCell('Skip'),
-              _ReportHeaderCell('Left'),
-              _ReportHeaderCell('Adv Qty'),
-              _ReportHeaderCell('Use Qty'),
-              _ReportHeaderCell('Adv Left'),
-              _ReportHeaderCell('Adv Amt'),
-              _ReportHeaderCell('Prepaid'),
-              _ReportHeaderCell('Actual'),
-              _ReportHeaderCell('Due'),
-              _ReportHeaderCell('Status'),
-            ],
-          ),
-          ..._rows.map((row) {
-            final totalDays = _num(row['total_days']);
-            final consumedDays = _num(row['consumed_days']);
-            final skippedDays = _num(row['missed_days']);
-            final daysLeft = _num(row['days_left']);
-            final advanceQty = _num(row['advance_original_qty']);
-            final consumedQty = _num(row['advance_consumed_qty']);
-            final advanceLeftQty = _num(row['advance_remaining_qty']);
-            final advanceLeftAmt = _num(row['advance_remaining_amount']);
-            final prepaid = _num(row['prepaid_value']);
-            final actual = _num(row['actual_value']);
-            final outstanding = _num(row['outstanding_amount']);
-            final status =
-                row['active_subscription'] == true ? 'Active' : '${row['status'] ?? ''}';
-
-            return TableRow(
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-              ),
+    return Scrollbar(
+      controller: _horizontalScrollController,
+      thumbVisibility: true,
+      trackVisibility: true,
+      child: SingleChildScrollView(
+        controller: _horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: 1550,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(1.8),
+                1: FlexColumnWidth(1.5),
+                2: FlexColumnWidth(1.05),
+                3: FlexColumnWidth(1.05),
+                4: FlexColumnWidth(0.9),
+                5: FlexColumnWidth(0.9),
+                6: FlexColumnWidth(0.9),
+                7: FlexColumnWidth(0.9),
+                8: FlexColumnWidth(0.95),
+                9: FlexColumnWidth(0.95),
+                10: FlexColumnWidth(1.0),
+                11: FlexColumnWidth(1.0),
+                12: FlexColumnWidth(0.95),
+                13: FlexColumnWidth(0.95),
+                14: FlexColumnWidth(1.05),
+                15: FlexColumnWidth(0.9),
+              },
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
               children: [
-                _ReportCell(
-                  (row['customer_name'] ?? row['customer_phone'] ?? '').toString(),
-                  bold: true,
-                  onTap: () => _showTimeline(row),
+                TableRow(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  ),
+                  children: const [
+                    _ReportHeaderCell('Customer'),
+                    _ReportHeaderCell('Item'),
+                    _ReportHeaderCell('Start'),
+                    _ReportHeaderCell('End'),
+                    _ReportHeaderCell('Total'),
+                    _ReportHeaderCell('Used'),
+                    _ReportHeaderCell('Skip'),
+                    _ReportHeaderCell('Left'),
+                    _ReportHeaderCell('Adv Qty'),
+                    _ReportHeaderCell('Use Qty'),
+                    _ReportHeaderCell('Adv Left'),
+                    _ReportHeaderCell('Adv Amt'),
+                    _ReportHeaderCell('Prepaid'),
+                    _ReportHeaderCell('Actual'),
+                    _ReportHeaderCell('Due'),
+                    _ReportHeaderCell('Status'),
+                  ],
                 ),
-                _ReportCell(() {
-                  final brand = row['item']?['brand']?.toString() ?? '';
-                  final itemName = row['item_name'] ?? '';
-                  return brand.isNotEmpty ? '$itemName ($brand)' : '$itemName';
-                }()),
-                _ReportCell((row['start_date'] ?? '').toString()),
-                _ReportCell((row['end_date'] ?? '').toString()),
-                _ReportCell(totalDays.toStringAsFixed(totalDays % 1 == 0 ? 0 : 2),
-                    align: TextAlign.right),
-                _ReportCell(consumedDays.toStringAsFixed(consumedDays % 1 == 0 ? 0 : 2),
-                    align: TextAlign.right),
-                _ReportCell(skippedDays.toStringAsFixed(skippedDays % 1 == 0 ? 0 : 2),
-                    align: TextAlign.right),
-                _ReportCell(daysLeft.toStringAsFixed(daysLeft % 1 == 0 ? 0 : 2),
-                    align: TextAlign.right),
-                _ReportCell(advanceQty.toStringAsFixed(advanceQty % 1 == 0 ? 0 : 2),
-                    align: TextAlign.right),
-                _ReportCell(consumedQty.toStringAsFixed(consumedQty % 1 == 0 ? 0 : 2),
-                    align: TextAlign.right),
-                _ReportCell(
-                    advanceLeftQty.toStringAsFixed(advanceLeftQty % 1 == 0 ? 0 : 2),
-                    align: TextAlign.right),
-                _ReportCell(advanceLeftAmt.toStringAsFixed(2),
-                    align: TextAlign.right),
-                _ReportCell(prepaid.toStringAsFixed(2), align: TextAlign.right),
-                _ReportCell(actual.toStringAsFixed(2), align: TextAlign.right),
-                _ReportCell(outstanding.toStringAsFixed(2), align: TextAlign.right),
-                _ReportCell(status, align: TextAlign.center, bold: true),
+                ..._rows.map((row) {
+                  final totalDays = _num(row['total_days']);
+                  final consumedDays = _num(row['consumed_days']);
+                  final skippedDays = _num(row['missed_days']);
+                  final daysLeft = _num(row['days_left']);
+                  final advanceQty = _num(row['advance_original_qty']);
+                  final consumedQty = _num(row['advance_consumed_qty']);
+                  final advanceLeftQty = _num(row['advance_remaining_qty']);
+                  final advanceLeftAmt = _num(row['advance_remaining_amount']);
+                  final prepaid = _num(row['prepaid_value']);
+                  final actual = _num(row['actual_value']);
+                  final outstanding = _num(row['outstanding_amount']);
+                  final status =
+                      row['active_subscription'] == true ? 'Active' : '${row['status'] ?? ''}';
+
+                  return TableRow(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                    ),
+                    children: [
+                      _ReportCell(
+                        (row['customer_name'] ?? row['customer_phone'] ?? '').toString(),
+                        bold: true,
+                        onTap: () => _showTimeline(row),
+                      ),
+                      _ReportCell(() {
+                        final brand = row['item']?['brand']?.toString() ?? '';
+                        final itemName = row['item_name'] ?? '';
+                        return brand.isNotEmpty ? '$itemName ($brand)' : '$itemName';
+                      }()),
+                      _ReportCell((row['start_date'] ?? '').toString()),
+                      _ReportCell((row['end_date'] ?? '').toString()),
+                      _ReportCell(totalDays.toStringAsFixed(totalDays % 1 == 0 ? 0 : 2),
+                          align: TextAlign.right),
+                      _ReportCell(consumedDays.toStringAsFixed(consumedDays % 1 == 0 ? 0 : 2),
+                          align: TextAlign.right),
+                      _ReportCell(skippedDays.toStringAsFixed(skippedDays % 1 == 0 ? 0 : 2),
+                          align: TextAlign.right),
+                      _ReportCell(daysLeft.toStringAsFixed(daysLeft % 1 == 0 ? 0 : 2),
+                          align: TextAlign.right),
+                      _ReportCell(advanceQty.toStringAsFixed(advanceQty % 1 == 0 ? 0 : 2),
+                          align: TextAlign.right),
+                      _ReportCell(consumedQty.toStringAsFixed(consumedQty % 1 == 0 ? 0 : 2),
+                          align: TextAlign.right),
+                      _ReportCell(
+                          advanceLeftQty.toStringAsFixed(advanceLeftQty % 1 == 0 ? 0 : 2),
+                          align: TextAlign.right),
+                      _ReportCell(advanceLeftAmt.toStringAsFixed(2),
+                          align: TextAlign.right),
+                      _ReportCell(prepaid.toStringAsFixed(2), align: TextAlign.right),
+                      _ReportCell(actual.toStringAsFixed(2), align: TextAlign.right),
+                      _ReportCell(outstanding.toStringAsFixed(2), align: TextAlign.right),
+                      _ReportCell(status, align: TextAlign.center, bold: true),
+                    ],
+                  );
+                }),
               ],
-            );
-          }),
-        ],
+            ),
+          ),
+        ),
       ),
     );
   }

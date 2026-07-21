@@ -190,9 +190,9 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text("Issue No: ${issue['issue_no']}"),
+                    pw.Text("Dispatch No: ${issue['issue_no']}"),
                     pw.Text(
-                      "Date: ${DateFormat('dd-MMM-yyyy').format(issueDate)}",
+                      "Dispatch Date: ${DateFormat('dd-MMM-yyyy').format(issueDate)}",
                     ),
                     pw.Text(
                       "Department: ${selectedDepartment?.locationName ?? issue['department']}",
@@ -204,7 +204,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text("Issue Type: ${issue['issue_type'] ?? ''}"),
+                  pw.Text("Dispatch Type: ${issue['issue_type'] ?? ''}"),
                   pw.Text("Request ID: ${issue['open_request_no'] ?? ''}"),
                   pw.Text("Status: ${issue['status'] ?? ''}"),
                 ],
@@ -286,7 +286,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Column(children: [
-                pw.Text("Issued By (Store)"),
+                pw.Text("Dispatched By (Store)"),
                 pw.SizedBox(height: 30),
               ]),
               pw.Column(children: [

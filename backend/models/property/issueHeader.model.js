@@ -9,10 +9,13 @@ module.exports = (sequelize, DataTypes) => {
         open_request_no: DataTypes.STRING,
         status: DataTypes.STRING,
         outlet_id: DataTypes.INTEGER,
-        created_by: DataTypes.INTEGER
+        created_by: DataTypes.INTEGER,
+        created_at: DataTypes.DATE
     }, {
         tableName: 'issue_headers',
-        timestamps: false
+        timestamps: true,
+        createdAt: 'created_at',
+        updatedAt: false
     });
 
     IssueHeaders.associate = (models) => {

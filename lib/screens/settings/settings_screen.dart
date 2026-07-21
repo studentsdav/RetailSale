@@ -90,6 +90,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _showNotifications = showNotifications);
   }
 
+  Future<void> _openFavoritesManager() async {
+    final favorites = (await LocalPreferences.getFavoriteDrawerItems()).toSet();
+    final allFeatures = [
+      {'label': 'Purchase Order', 'category': 'Operations'},
+      {'label': 'Item Request', 'category': 'Operations'},
+      {'label': 'Receive from Vendor', 'category': 'Operations'},
+      {'label': 'Retail Sales', 'category': 'Operations'},
+      {'label': 'Stock Dispatch', 'category': 'Operations'},
+      {'label': 'Stock Transfer', 'category': 'Operations'},
+      {'label': 'Stock Adjustment', 'category': 'Operations'},
+      {'label': 'Master Items', 'category': 'Masters'},
+      {'label': 'Departments', 'category': 'Masters'},
+      {'label': 'Vendors / Suppliers', 'category': 'Masters'},
+      {'label': 'Customers / Debtors', 'category': 'Masters'},
+      {'label': 'Stock View', 'category': 'Stock View'},
+      {'label': 'Reports', 'category': 'Reports'},
+      {'label': 'System Settings', 'category': 'System'},
+    ];
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final theme = Theme.of(context);
+            final isDark = theme.brightness == Brightness.dark;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.star_rounded, color: Color(0xFFFFB800)),
+                  SizedBox(width: 8),
+                  Text('Navigation Favorites', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 420,
+                height: 440,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Check the features you want pinned directly to the top FAVORITES section in your sidebar drawer:',
+                      style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView(
+                        children: allFeatures.map((item) {
+                          final label = item['label']!;
+                          final category = item['category']!;
+                          final isFav = favorites.contains(label);
+
+                          return CheckboxListTile(
+                            dense: true,
+                            value: isFav,
+                            activeColor: const Color(0xFFFFB800),
+                            title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                            subtitle: Text(category, style: const TextStyle(fontSize: 11)),
+                            onChanged: (val) async {
+                              setDialogState(() {
+                                if (isFav) {
+                                  favorites.remove(label);
+                                } else {
+                                  favorites.add(label);
+                                }
+                              });
+                              await LocalPreferences.setFavoriteDrawerItems(favorites.toList());
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Save & Done', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _loadPrinters() async {
     setState(() => _loadingPrinters = true);
     try {
@@ -512,10 +604,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _settingRow(
                         title: 'Show Notifications',
                         description: 'Show app alerts and desktop warnings in the administrator console',
-                        isLast: true,
                         control: Switch.adaptive(
                           value: _showNotifications,
                           onChanged: (v) => setState(() => _showNotifications = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Customize Navigation Favorites',
+                        description: 'Select features to pin directly to the FAVORITES section in your sidebar drawer',
+                        isLast: true,
+                        control: ElevatedButton.icon(
+                          onPressed: _openFavoritesManager,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFB800).withOpacity(0.15),
+                            foregroundColor: const Color(0xFFD97706),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.star_rounded, size: 16, color: Color(0xFFFFB800)),
+                          label: const Text('Manage Favorites', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                         ),
                       ),
                     ],
@@ -959,11 +1066,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             children: [
                               Expanded(
                                 child: DropdownButtonFormField<String>(
+                                  isExpanded: true,
                                   value: selectedPrinterValue,
                                   items: _printers
                                       .map((printer) => DropdownMenuItem(
                                             value: printer.url,
-                                            child: Text(printer.name + (printer.isDefault ? ' (System Default)' : '')),
+                                            child: Text(
+                                              printer.name + (printer.isDefault ? ' (System Default)' : ''),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
                                           ))
                                       .toList(),
                                   onChanged: (value) {

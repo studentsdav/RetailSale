@@ -199,6 +199,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
           SizedBox(
             width: 220,
             child: DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: selectedGroup,
               items: [
                 const DropdownMenuItem(value: null, child: Text("All Groups")),
@@ -225,6 +226,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
           SizedBox(
             width: 220,
             child: DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: selectedItem,
               items: [
                 const DropdownMenuItem(value: null, child: Text("All Items")),
@@ -699,8 +701,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
                 style:
                     const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            _ScrollableTableWrapper(
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
                  columns: const [
@@ -769,8 +770,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
             const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            _ScrollableTableWrapper(
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
                 columns: const [
@@ -816,6 +816,38 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ScrollableTableWrapper extends StatefulWidget {
+  final Widget child;
+  const _ScrollableTableWrapper({required this.child});
+
+  @override
+  State<_ScrollableTableWrapper> createState() => _ScrollableTableWrapperState();
+}
+
+class _ScrollableTableWrapperState extends State<_ScrollableTableWrapper> {
+  final ScrollController _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      controller: _controller,
+      thumbVisibility: true,
+      trackVisibility: true,
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        child: widget.child,
       ),
     );
   }

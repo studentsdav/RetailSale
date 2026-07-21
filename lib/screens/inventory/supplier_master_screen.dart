@@ -439,50 +439,56 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
         height: constraints.maxHeight,
         child: SingleChildScrollView(
           scrollDirection: Axis.vertical,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(
-                Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: Scrollbar(
+            controller: _horizontalController,
+            thumbVisibility: true,
+            trackVisibility: true,
+            child: SingleChildScrollView(
+              controller: _horizontalController,
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+                ),
+                dataRowMinHeight: 46,
+                dataRowMaxHeight: 54,
+                columns: const [
+                  DataColumn(label: Text('Code')),
+                  DataColumn(label: Text('Name')),
+                  DataColumn(label: Text('Phone')),
+                  DataColumn(label: Text('Address')),
+                  DataColumn(label: Text('State')),
+                  DataColumn(label: Text('GSTIN')),
+                  DataColumn(label: Text('Action')),
+                ],
+                rows: List.generate(_filtered.length, (i) {
+                  final s = _filtered[i];
+                  return DataRow(
+                    color: WidgetStateProperty.all(
+                        i.isEven ? Colors.grey.shade50 : Colors.white),
+                    cells: [
+                      DataCell(Text(s.supplierCode)),
+                      DataCell(Text(s.supplierName)),
+                      DataCell(Text(s.phone ?? '')),
+                      DataCell(Text(s.address ?? '')),
+                      DataCell(Text(s.state ?? '')),
+                      DataCell(Text(s.gstin ?? '')),
+                      DataCell(Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => _editSupplier(i),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteSupplier(i),
+                          ),
+                        ],
+                      )),
+                    ],
+                  );
+                }),
               ),
-              dataRowMinHeight: 46,
-              dataRowMaxHeight: 54,
-              columns: const [
-                DataColumn(label: Text('Code')),
-                DataColumn(label: Text('Name')),
-                DataColumn(label: Text('Phone')),
-                DataColumn(label: Text('Address')),
-                DataColumn(label: Text('State')),
-                DataColumn(label: Text('GSTIN')),
-                DataColumn(label: Text('Action')),
-              ],
-              rows: List.generate(_filtered.length, (i) {
-                final s = _filtered[i];
-                return DataRow(
-                  color: WidgetStateProperty.all(
-                      i.isEven ? Colors.grey.shade50 : Colors.white),
-                  cells: [
-                    DataCell(Text(s.supplierCode)),
-                    DataCell(Text(s.supplierName)),
-                    DataCell(Text(s.phone ?? '')),
-                    DataCell(Text(s.address ?? '')),
-                    DataCell(Text(s.state ?? '')),
-                    DataCell(Text(s.gstin ?? '')),
-                    DataCell(Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _editSupplier(i),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteSupplier(i),
-                        ),
-                      ],
-                    )),
-                  ],
-                );
-              }),
             ),
           ),
         ),

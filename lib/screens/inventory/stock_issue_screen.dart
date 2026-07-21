@@ -27,6 +27,7 @@ class StockIssueScreen extends StatefulWidget {
 }
 
 class _StockIssueScreenState extends State<StockIssueScreen> {
+  final ScrollController _horizontalScrollController = ScrollController();
   // ================= HEADER =================
   final _indentNo = TextEditingController();
   String? _issueType;
@@ -116,6 +117,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
     _addBtnFocus.dispose();
     _saveBtnFocus.dispose();
     _tableFocusNode.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -426,7 +428,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                   _items.clear();
 
                   for (var i in request['items']) {
-                    if ((i['line_status'] ?? 'CLOSED').toString() != 'OPEN') {
+                    if ((i['line_status'] ?? 'OPEN').toString() != 'OPEN') {
                       continue;
                     }
                     _items.add(
@@ -698,16 +700,20 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
     );
   }
 
-  // ================= TABLE =================
   Widget _tableCard() {
     return LayoutBuilder(builder: (context, constraints) {
       return SizedBox(
           height: constraints.maxHeight,
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Focus(
+            child: Scrollbar(
+              controller: _horizontalScrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              child: SingleChildScrollView(
+                controller: _horizontalScrollController,
+                scrollDirection: Axis.horizontal,
+                child: Focus(
                 focusNode: _tableFocusNode,
                 onKeyEvent: _onTableKey,
                 child: DataTable(
@@ -790,7 +796,9 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                 ),
               ),
             ),
-          ));
+          ),
+        ),
+      );
     });
   }
 
@@ -1155,8 +1163,8 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text("Stock Dispatch No: ${_indentNo.text}"),
-                    pw.Text("Date: ${DateFormat('dd-MMM-yyyy').format(_date)}"),
+                    pw.Text("Dispatch No: ${_indentNo.text}"),
+                    pw.Text("Dispatch Date: ${DateFormat('dd-MMM-yyyy').format(_date)}"),
                     pw.Text(
                         "Department: ${_selectedDepartment?.locationName ?? ''}"),
                   ],
@@ -1166,7 +1174,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text("Stock Dispatch Type: ${_issueType ?? ''}"),
+                  pw.Text("Dispatch Type: ${_issueType ?? ''}"),
                   pw.Text("Request ID: ${_selectedRequestId ?? ''}"),
                   pw.Text("Status: CLOSED"),
                 ],
@@ -1247,7 +1255,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Column(children: [
-                pw.Text("Stock Dispatch By (Store)"),
+                pw.Text("Dispatched By (Store)"),
                 pw.SizedBox(height: 30),
               ]),
               pw.Column(children: [

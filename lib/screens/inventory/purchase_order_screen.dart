@@ -30,6 +30,7 @@ class PurchaseOrderScreen extends StatefulWidget {
 }
 
 class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
+  final ScrollController _horizontalScrollController = ScrollController();
   // ================= HEADER =================
   final _poNo = TextEditingController(text: '3');
   DateTime _date = DateTime.now();
@@ -120,6 +121,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     _departmentFocus.dispose();
     _addBtnFocus.dispose();
     _saveBtnFocus.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -728,9 +730,14 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
           height: constraints.maxHeight,
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
+            child: Scrollbar(
+              controller: _horizontalScrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              child: SingleChildScrollView(
+                controller: _horizontalScrollController,
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
                 headingRowColor: WidgetStateProperty.all(
                   Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
@@ -795,7 +802,9 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                 }),
               ),
             ),
-          ));
+          ),
+        ),
+      );
     });
   }
 
