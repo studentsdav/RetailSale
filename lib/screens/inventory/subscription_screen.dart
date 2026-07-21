@@ -2721,7 +2721,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                           ],
                                           onChanged: (val) {
                                             if (val != null) {
-                                              setState(() => _deliveryType = val);
+                                              setState(() {
+                                                _deliveryType = val;
+                                              });
+                                              _syncSuggestedPaymentAmount(force: true);
                                             }
                                           },
                                         ),
