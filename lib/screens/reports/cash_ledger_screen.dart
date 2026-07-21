@@ -865,6 +865,50 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     );
   }
 
+  Map<String, double> _parseAdvanceBreakdown(AdvanceEntry advance) {
+    final note = advance.note;
+    final regex = RegExp(r'\(Refunded Rs\.\s*([0-9]+(?:\.[0-9]+)?)\)', caseSensitive: false);
+    double totalRefunded = 0.0;
+    final matches = regex.allMatches(note);
+    for (final match in matches) {
+      final amountStr = match.group(1);
+      if (amountStr != null) {
+        totalRefunded += double.tryParse(amountStr) ?? 0.0;
+      }
+    }
+    
+    final totalUsed = advance.originalAmount - advance.availableAmount;
+    double totalConsumed = totalUsed - totalRefunded;
+    if (totalConsumed < 0) totalConsumed = 0.0;
+
+    return {
+      'available': advance.availableAmount,
+      'refunded': totalRefunded,
+      'consumed': totalConsumed,
+    };
+  }
+
+  String _cleanAdvanceNote(String note) {
+    final regex = RegExp(r'\(Refunded Rs\.\s*[0-9]+(?:\.[0-9]+)?\)', caseSensitive: false);
+    return note.replaceAll(regex, '').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  void _navigateToLedgerForAdvance(CreditCustomerReport customer, AdvanceEntry advance) {
+    setState(() {
+      _tabController.index = 1;
+      ledgerSearchCtrl.text = customer.customerName.isNotEmpty 
+          ? customer.customerName 
+          : customer.customerPhone;
+      fromDate = advance.advanceDate;
+      toDate = DateTime.now();
+      fromCtrl.text = _fmtDate(fromDate);
+      toCtrl.text = _fmtDate(toDate);
+      ledgerType = '';
+      ledgerPaymentMethod = '';
+    });
+    _loadCurrentTab();
+  }
+
   Future<void> _showRefundAdvanceDialog(CreditCustomerReport customer) async {
     final nonSubAdvance = customer.advances.where((e) {
       if (e.availableAmount <= 0.009) return false;
@@ -2714,21 +2758,36 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                     ),
                                                   ),
                                                   const SizedBox(height: 2),
-                                                  Text(
-                                                    '${_fmtDate(advance.advanceDate)} - Available: ${_money(advance.availableAmount)} | Refunded: ${_money(advance.originalAmount - advance.availableAmount)}',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.grey.shade700,
-                                                    ),
-                                                  ),
+                                                  (() {
+                                                    final breakdown = _parseAdvanceBreakdown(advance);
+                                                    final avail = breakdown['available']!;
+                                                    final refunded = breakdown['refunded']!;
+                                                    final consumed = breakdown['consumed']!;
+
+                                                    final List<String> parts = [];
+                                                    parts.add('Available: ${_money(avail)}');
+                                                    if (consumed > 0.009) {
+                                                      parts.add('Consumed: ${_money(consumed)}');
+                                                    }
+                                                    if (refunded > 0.009) {
+                                                      parts.add('Refunded: ${_money(refunded)}');
+                                                    }
+                                                    return Text(
+                                                      '${_fmtDate(advance.advanceDate)} - ${parts.join(" | ")}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey.shade700,
+                                                      ),
+                                                    );
+                                                  })(),
                                                   if (advance.referenceNo.trim().isNotEmpty)
                                                     Text(
                                                       'Ref: ${advance.referenceNo}',
                                                       style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                                                     ),
-                                                  if (advance.note.trim().isNotEmpty)
+                                                  if (_cleanAdvanceNote(advance.note).isNotEmpty)
                                                     Text(
-                                                      advance.note,
+                                                      _cleanAdvanceNote(advance.note),
                                                       style: TextStyle(
                                                         fontSize: 11,
                                                         fontStyle: FontStyle.italic,
@@ -2736,6 +2795,16 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                       ),
                                                     ),
                                                 ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            TextButton.icon(
+                                              onPressed: () => _navigateToLedgerForAdvance(customer, advance),
+                                              icon: const Icon(Icons.list_alt_rounded, size: 16),
+                                              label: const Text('Show Transactions', style: TextStyle(fontSize: 12)),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: const Color(0xFF2563EB),
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                               ),
                                             ),
                                           ],
