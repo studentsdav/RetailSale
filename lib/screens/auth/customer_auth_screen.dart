@@ -26,6 +26,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
 
   final _regNameCtrl = TextEditingController();
   final _regPhoneCtrl = TextEditingController();
+  final _regEmailCtrl = TextEditingController();
   final _regPasswordCtrl = TextEditingController();
   final _regAddressCtrl = TextEditingController();
   final _regOutletCtrl = TextEditingController();
@@ -52,6 +53,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
     _loginOutletCtrl.dispose();
     _regNameCtrl.dispose();
     _regPhoneCtrl.dispose();
+    _regEmailCtrl.dispose();
     _regPasswordCtrl.dispose();
     _regAddressCtrl.dispose();
     _regOutletCtrl.dispose();
@@ -105,6 +107,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
         'outlet_id': _regOutletCtrl.text.trim(),
         'name': _regNameCtrl.text.trim(),
         'phone': _regPhoneCtrl.text.trim(),
+        'email': _regEmailCtrl.text.trim(),
         'password': _regPasswordCtrl.text.trim(),
         'address': _regAddressCtrl.text.trim(),
       };
@@ -238,7 +241,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
                           child: SizedBox(
-                            height: _tabController.index == 0 ? 320 : 470,
+                            height: _tabController.index == 0 ? 320 : 540,
                             child: TabBarView(
                               controller: _tabController,
                               physics: const NeverScrollableScrollPhysics(),
@@ -292,6 +295,13 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
             ),
             validator: (value) => value == null || value.trim().isEmpty ? "Enter your password" : null,
           ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _showForgotPasswordDialog,
+              child: const Text("Forgot Password?"),
+            ),
+          ),
           Visibility(
             visible: false,
             child: TextFormField(
@@ -304,7 +314,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
               validator: (value) => value == null || value.trim().isEmpty ? "Enter outlet code" : null,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           FilledButton(
             onPressed: _isLoading ? null : _login,
             style: FilledButton.styleFrom(
@@ -346,6 +356,19 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
             validator: (value) => value == null || value.trim().isEmpty ? "Enter mobile number" : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _regEmailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+              labelText: "Email Address",
+              prefixIcon: const Icon(Icons.email_outlined),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            validator: (value) => value == null || value.trim().isEmpty
+                ? "Enter email address"
+                : (!value.contains('@') ? "Enter a valid email" : null),
           ),
           const SizedBox(height: 12),
           TextFormField(
@@ -393,6 +416,293 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen>
                 : const Text("Sign Up", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showForgotPasswordDialog() {
+    final phoneCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final otpCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+
+    bool otpSent = false;
+    bool passwordVisible = false;
+    bool isSendingOtp = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          final theme = Theme.of(ctx);
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.lock_reset, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text('Reset Password'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isSendingOtp) ...[
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text(
+                              'Please wait...',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else if (!otpSent) ...[
+                    const Text(
+                      'Enter your registered details to receive an OTP on your email.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Mobile Number *',
+                        prefixIcon: const Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Email Address *',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ] else ...[
+                    const Text(
+                      'Enter the OTP sent to your email and set your new password.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: otpCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Enter OTP Code *',
+                        prefixIcon: const Icon(Icons.pin_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: newPassCtrl,
+                      obscureText: !passwordVisible,
+                      decoration: InputDecoration(
+                        labelText: 'New Password *',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(passwordVisible ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setDlgState(() => passwordVisible = !passwordVisible),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirmPassCtrl,
+                      obscureText: !passwordVisible,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm Password *',
+                        prefixIcon: const Icon(Icons.lock_clock_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Resend OTP'),
+                        onPressed: () async {
+                          final phone = phoneCtrl.text.trim();
+                          final email = emailCtrl.text.trim();
+                          if (phone.isEmpty || email.isEmpty) return;
+
+                          setDlgState(() => isSendingOtp = true);
+                          try {
+                            final outletCode = _regOutletCtrl.text.trim();
+                            final res = await ApiClient.post(
+                              '/api/delivery/customer/forgot-password/request-otp',
+                              {
+                                'outlet_id': outletCode,
+                                'phone': phone,
+                                'email': email,
+                              },
+                            );
+                            if (res['success'] == true) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('OTP resent to email successfully.')),
+                                );
+                              }
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(res['message'] ?? 'Failed to resend OTP.')),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          } finally {
+                            setDlgState(() => isSendingOtp = false);
+                          }
+                        },
+                      ),
+                    ),
+                  ]
+                ],
+              ),
+            ),
+            actions: isSendingOtp
+                ? []
+                : [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: () async {
+                        if (!otpSent) {
+                          final phone = phoneCtrl.text.trim();
+                          final email = emailCtrl.text.trim();
+                          if (phone.isEmpty || email.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter your mobile number and email.')),
+                            );
+                            return;
+                          }
+                          setDlgState(() => isSendingOtp = true);
+                          try {
+                            final outletCode = _regOutletCtrl.text.trim();
+                            final res = await ApiClient.post(
+                              '/api/delivery/customer/forgot-password/request-otp',
+                              {
+                                'outlet_id': outletCode,
+                                'phone': phone,
+                                'email': email,
+                              },
+                            );
+                            if (res['success'] == true) {
+                              setDlgState(() => otpSent = true);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('OTP sent to email successfully.')),
+                                );
+                              }
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(res['message'] ?? 'Failed to send OTP.')),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          } finally {
+                            setDlgState(() => isSendingOtp = false);
+                          }
+                        } else {
+                          final otp = otpCtrl.text.trim();
+                          final newPass = newPassCtrl.text.trim();
+                          final confirmPass = confirmPassCtrl.text.trim();
+                          if (otp.isEmpty || newPass.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please fill all fields.')),
+                            );
+                            return;
+                          }
+                          if (newPass.length < 4) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password must be at least 4 characters.')),
+                            );
+                            return;
+                          }
+                          if (newPass != confirmPass) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Passwords do not match.')),
+                            );
+                            return;
+                          }
+
+                          setDlgState(() => isSendingOtp = true);
+                          try {
+                            final outletCode = _regOutletCtrl.text.trim();
+                            final res = await ApiClient.post(
+                              '/api/delivery/customer/forgot-password/reset',
+                              {
+                                'outlet_id': outletCode,
+                                'phone': phoneCtrl.text.trim(),
+                                'email': emailCtrl.text.trim(),
+                                'otp': otp,
+                                'new_password': newPass,
+                              },
+                            );
+                            if (res['success'] == true) {
+                              Navigator.pop(ctx);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Password reset successfully! Please log in.'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(res['message'] ?? 'Failed to reset password.')),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          } finally {
+                            setDlgState(() => isSendingOtp = false);
+                          }
+                        }
+                      },
+                      child: Text(otpSent ? 'Reset Password' : 'Send OTP'),
+                    ),
+                  ],
+          );
+        },
       ),
     );
   }

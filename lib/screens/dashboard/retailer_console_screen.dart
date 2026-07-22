@@ -36,7 +36,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   List<dynamic> _retailerRiders = [];
   int _retailerSubTabIndex = 0; // 0: Orders, 1: Returns, 2: Riders, 3: B2B Rates
   String _statusFilter = 'ALL'; // 'ALL', 'PENDING', 'CANCELLED', 'DELIVERED'
-  int _ordersSubTab = 0; // 0: Dashboard, 1: Orders List
+  int _ordersSubTab = 1; // 0: Dashboard, 1: Orders List (Default to 1)
 
   // --- Online Transactions State ---
   List<dynamic> _onlineTransactions = [];
@@ -2449,9 +2449,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     }
   }
 
-  // Show dialog to accept order and assign a rider (auto or manual)
+  // Show dialog to accept order and assign a rider (manual only)
   void _showAssignRiderDialog(int orderId) {
-    dynamic selectedRiderVal = 'AUTO';
+    dynamic selectedRiderVal;
     showDialog(
       context: context,
       builder: (context) {
@@ -2463,29 +2463,43 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Choose how you want to assign this order:'),
+                  const Text('Please select a rider to assign this order:'),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<dynamic>(
                     value: selectedRiderVal,
-                    items: [
-                      const DropdownMenuItem<dynamic>(
-                        value: 'AUTO',
-                        child: Text('Auto-Assign (Default)'),
-                      ),
-                      ..._retailerRiders.map((dynamic rider) {
-                        return DropdownMenuItem<dynamic>(
-                          value: rider['id'],
-                          child: Text(rider['name']),
-                        );
-                      }),
-                    ],
+                    hint: const Text('Select a Rider'),
+                    items: _retailerRiders.map((dynamic rider) {
+                      final status = (rider['status'] ?? 'OFFLINE').toString().toUpperCase();
+                      Color statusColor = Colors.green;
+                      if (status == 'BUSY') statusColor = Colors.orange;
+                      if (status == 'OFFLINE') statusColor = Colors.grey;
+
+                      return DropdownMenuItem<dynamic>(
+                        value: rider['id'],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: statusColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text('${rider['name']} (${rider['phone']}) - $status', style: const TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                     onChanged: (val) {
                       setDialogState(() {
                         selectedRiderVal = val;
                       });
                     },
                     decoration: const InputDecoration(
-                      labelText: 'Select Rider',
+                      labelText: 'Select Rider *',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -2498,6 +2512,15 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                 ),
                 FilledButton(
                   onPressed: () {
+                    if (selectedRiderVal == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please select a rider first.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
                     Navigator.pop(context);
                     _acceptOrder(orderId, selectedRiderVal);
                   },
@@ -2531,17 +2554,39 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                     value: selectedRiderVal,
                     items: [
                       const DropdownMenuItem<dynamic>(
-                        value: 'AUTO',
-                        child: Text('Auto-Assign'),
-                      ),
-                      const DropdownMenuItem<dynamic>(
                         value: 'NONE',
-                        child: Text('Unassign / None'),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.person_off_outlined, size: 16, color: Colors.grey),
+                            SizedBox(width: 8),
+                            Text('Unassign / None', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
                       ),
                       ..._retailerRiders.map((dynamic rider) {
+                        final status = (rider['status'] ?? 'OFFLINE').toString().toUpperCase();
+                        Color statusColor = Colors.green;
+                        if (status == 'BUSY') statusColor = Colors.orange;
+                        if (status == 'OFFLINE') statusColor = Colors.grey;
+
                         return DropdownMenuItem<dynamic>(
                           value: rider['id'],
-                          child: Text(rider['name']),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('${rider['name']} (${rider['phone']}) - $status', style: const TextStyle(fontSize: 13)),
+                            ],
+                          ),
                         );
                       }),
                     ],
@@ -3455,6 +3500,304 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                       }
 
                       final orderStatus = OrderStatusDisplay.fromOrder(order);
+                      final isPendingOrActive = status == 'PENDING' || status == 'ACCEPTED' || status == 'ASSIGNED' || status == 'OUT_FOR_DELIVERY';
+                      if (isPendingOrActive) {
+                        Color statusColor = status == 'PENDING'
+                            ? Colors.orange
+                            : (status == 'ACCEPTED' ? Colors.amber.shade800 : Colors.blue);
+
+                        return Card(
+                          elevation: status == 'PENDING' ? 1.5 : 0.5,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(
+                              color: status == 'PENDING' ? Colors.orange.shade300 : Colors.grey.shade200,
+                              width: status == 'PENDING' ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            backgroundColor: statusColor.withOpacity(0.12),
+                                            radius: 20,
+                                            child: Icon(
+                                              status == 'PENDING'
+                                                  ? Icons.pending_actions_outlined
+                                                  : (status == 'ACCEPTED'
+                                                      ? Icons.assignment_late_outlined
+                                                      : Icons.delivery_dining_outlined),
+                                              color: statusColor,
+                                              size: 20,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '${order['customer_name']}',
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                                ),
+                                                Text(
+                                                  'Order #${order['id']} • Rs. ${netAmt.toStringAsFixed(2)} • ${isPrepaid ? "Prepaid" : (isCredit ? "Credit" : "CoD")}',
+                                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: statusColor.withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        orderStatus.label,
+                                        style: TextStyle(
+                                          color: statusColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 4.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(Icons.phone_outlined, size: 16, color: Colors.grey.shade600),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Phone: ${order['customer_phone']}',
+                                            style: TextStyle(color: Colors.grey.shade800, fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Address: ${order['customer_address']}',
+                                              style: TextStyle(color: Colors.grey.shade800, fontSize: 13),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Icon(Icons.delivery_dining_outlined, size: 16, color: Colors.grey.shade600),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Assigned Rider: $riderName',
+                                            style: TextStyle(color: Colors.grey.shade800, fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                      if (notes.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Icon(Icons.note_alt_outlined, size: 16, color: Colors.grey.shade600),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Notes: $notes',
+                                                style: TextStyle(color: Colors.grey.shade800, fontSize: 13),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const Divider(height: 24),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(Icons.shopping_bag_outlined, size: 14, color: statusColor.withOpacity(0.9)),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'ITEMS',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11,
+                                              color: statusColor.withOpacity(0.9),
+                                              letterSpacing: 0.8,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ...itemsList.map<Widget>((item) {
+                                        final total = (double.tryParse(item['rate']?.toString() ?? '') ?? 0.0) *
+                                            (double.tryParse(item['qty']?.toString() ?? '') ?? 0.0);
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  (item['brand'] ?? '').toString().isNotEmpty
+                                                      ? '•  ${item["item_name"]} (${item["brand"]}) x ${item['qty']}'
+                                                      : '•  ${item["item_name"]} x ${item['qty']}',
+                                                  style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 16),
+                                              Text(
+                                                'Rs. ${total.toStringAsFixed(2)}',
+                                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                    ],
+                                  ),
+                                ),
+                                if (order['modification_reason'] != null && order['modification_reason'].toString().isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(10.0),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.amber.shade200),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.info_outline, size: 18, color: Colors.amber.shade800),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Correction Reason: ${order['modification_reason']}',
+                                            style: TextStyle(fontSize: 13, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                const Divider(height: 24),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      status == 'PENDING'
+                                          ? 'Pending Action'
+                                          : (status == 'ACCEPTED'
+                                              ? 'Auto-Assignment: Rider Unavailable'
+                                              : (status == 'ASSIGNED'
+                                                  ? 'Assigned to $riderName'
+                                                  : 'Out for Delivery via $riderName')),
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                        color: Colors.grey.shade600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  alignment: WrapAlignment.start,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: () => _cancelOrder(order),
+                                      icon: const Icon(Icons.cancel, size: 16),
+                                      label: const Text('Cancel'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red.shade700,
+                                        side: BorderSide(color: Colors.red.shade300),
+                                      ),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: () => _showReceiptDialog(order),
+                                      icon: const Icon(Icons.receipt_long, size: 16),
+                                      label: const Text('Receipt / Reprint'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.teal.shade700,
+                                        side: BorderSide(color: Colors.teal.shade300),
+                                      ),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: () => _editOrderInPOS(order),
+                                      icon: const Icon(Icons.edit, size: 16),
+                                      label: const Text('Edit Invoice'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.blue.shade700,
+                                        side: BorderSide(color: Colors.blue.shade300),
+                                      ),
+                                    ),
+                                    if (status == 'PENDING')
+                                      FilledButton.icon(
+                                        onPressed: () => _showAssignRiderDialog(order['id']),
+                                        icon: const Icon(Icons.check, size: 16),
+                                        label: const Text('Accept & Assign'),
+                                      ),
+                                    if (status == 'ACCEPTED' || status == 'ASSIGNED')
+                                      OutlinedButton.icon(
+                                        onPressed: () => _showReassignRiderDialog(order['id'], order['assigned_partner_id']),
+                                        icon: const Icon(Icons.person_outline, size: 16),
+                                        label: const Text('Reassign Rider'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.orange.shade800,
+                                          side: BorderSide(color: Colors.orange.shade300),
+                                        ),
+                                      ),
+                                    if (status == 'ACCEPTED')
+                                      TextButton(
+                                        onPressed: _fetchRetailerData,
+                                        child: const Text('Retry Auto-Assign'),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
 
                       return Card(
                         elevation: 0.5,
@@ -4356,10 +4699,19 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                             ),
                             const SizedBox(width: 8),
                             IconButton(
+                              icon: const Icon(Icons.vpn_key_outlined, color: Colors.blue),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () => _showResetRiderPasswordDialog(rider),
+                              tooltip: "Reset Password",
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
                               icon: const Icon(Icons.delete_outline, color: Colors.red),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                               onPressed: () => _showDeleteRiderConfirm(rider),
+                              tooltip: "Delete Rider",
                             ),
                           ],
                         ),
@@ -4368,6 +4720,139 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                   ),
           )
         ],
+      ),
+    );
+  }
+
+  void _showResetRiderPasswordDialog(dynamic rider) {
+    final passwordCtrl = TextEditingController();
+    final confirmPasswordCtrl = TextEditingController();
+    bool passwordVisible = false;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.lock_reset, color: Colors.blue),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Reset Password: ${rider['name']}'),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Set a new password for rider ${rider['name']} (Phone: ${rider['phone']})',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: passwordCtrl,
+                  obscureText: !passwordVisible,
+                  decoration: InputDecoration(
+                    labelText: 'New Password *',
+                    helperText: 'Must be at least 4 characters',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(passwordVisible ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDlgState(() => passwordVisible = !passwordVisible),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmPasswordCtrl,
+                  obscureText: !passwordVisible,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm Password *',
+                    prefixIcon: const Icon(Icons.lock_clock_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(passwordVisible ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDlgState(() => passwordVisible = !passwordVisible),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                final newPass = passwordCtrl.text.trim();
+                final confirmPass = confirmPasswordCtrl.text.trim();
+                if (newPass.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a password.')),
+                  );
+                  return;
+                }
+                if (newPass.length < 4) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Password must be at least 4 characters.')),
+                  );
+                  return;
+                }
+                if (newPass != confirmPass) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Passwords do not match.')),
+                  );
+                  return;
+                }
+
+                Navigator.pop(ctx); // Close dialog
+                setState(() => _isLoading = true);
+                try {
+                  final res = await ApiClient.put(
+                    '/api/delivery/retailer/riders/${rider['id']}/reset-password',
+                    {'password': newPass},
+                  );
+                  if (res['success'] == true) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Rider password reset successfully!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(res['message'] ?? 'Failed to reset password.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+                } finally {
+                  if (mounted) {
+                    setState(() => _isLoading = false);
+                  }
+                }
+              },
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text('Reset Password'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -4768,6 +5253,16 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
+                                    OutlinedButton.icon(
+                                      onPressed: () => _showReassignRiderDialog(order['id'], order['assigned_partner_id']),
+                                      icon: const Icon(Icons.person_outline, size: 16),
+                                      label: const Text('Reassign Rider'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.orange.shade800,
+                                        side: BorderSide(color: Colors.orange.shade300),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
                                     OutlinedButton.icon(
                                       onPressed: () => _showReceiptDialog(order),
                                       icon: const Icon(Icons.receipt_long, size: 16),

@@ -85,9 +85,26 @@ class _RiderAuthScreenState extends State<RiderAuthScreen>
           context,
           MaterialPageRoute(builder: (context) => const RiderConsoleScreen()),
         );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message'] ?? 'Login failed.'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Rider login error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -123,9 +140,26 @@ class _RiderAuthScreenState extends State<RiderAuthScreen>
           context,
           MaterialPageRoute(builder: (context) => const RiderConsoleScreen()),
         );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message'] ?? 'Registration failed.'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Rider registration error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

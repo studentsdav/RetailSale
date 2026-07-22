@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
+const { sendOtpEmail } = require('../../modules/emailService');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
 const { insertLedger } = require('../../services/stockLedger.service');
 
@@ -1886,7 +1887,7 @@ async function processPendingOrders(req, outletId) {
 exports.registerCustomer = async (req, res) => {
     const t = await req.propertyDb.transaction();
     try {
-        const { outlet_id, name, phone, password, address } = req.body;
+        const { outlet_id, name, phone, password, address, email } = req.body;
         if (!outlet_id || !name || !phone || !password) {
             await t.rollback();
             return res.status(400).json({ success: false, message: 'Missing required registration fields' });
@@ -1902,7 +1903,7 @@ exports.registerCustomer = async (req, res) => {
         const outlet = await req.propertyDb.models.outlets.findByPk(actualOutletId, { transaction: t });
         if (outlet) resolvedOutletCode = outlet.outlet_code;
 
-        // Check if customer already exists
+        // Check if customer already exists by phone
         const existing = await req.propertyDb.models.delivery_customers.findOne({
             where: { outlet_id: actualOutletId, phone },
             transaction: t
@@ -1912,6 +1913,18 @@ exports.registerCustomer = async (req, res) => {
             return res.status(400).json({ success: false, message: 'A customer with this phone number is already registered.' });
         }
 
+        // Check if customer already exists by email if email provided
+        if (email && email.trim()) {
+            const existingEmail = await req.propertyDb.models.delivery_customers.findOne({
+                where: { outlet_id: actualOutletId, email: email.trim().toLowerCase() },
+                transaction: t
+            });
+            if (existingEmail) {
+                await t.rollback();
+                return res.status(400).json({ success: false, message: 'A customer with this email address is already registered.' });
+            }
+        }
+
         const password_hash = bcrypt.hashSync(password, 10);
 
         const customer = await req.propertyDb.models.delivery_customers.create({
@@ -1919,7 +1932,8 @@ exports.registerCustomer = async (req, res) => {
             name,
             phone,
             password_hash,
-            address: address || ''
+            address: address || '',
+            email: email ? email.trim().toLowerCase() : ''
         }, { transaction: t });
 
         // Sync customer to sales_headers
@@ -2036,6 +2050,7 @@ exports.loginCustomer = async (req, res) => {
                 id: customer.id,
                 name: customer.name,
                 phone: customer.phone,
+                email: customer.email || '',
                 address: customer.address,
                 // Return outlet_id (outlet code string) so the customer app
                 // can correctly associate future orders with the right outlet
@@ -4712,6 +4727,138 @@ exports.getSaleDetailsPublic = async (req, res) => {
         saleJson.refunds = refunds;
 
         res.json({ success: true, data: saleJson });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.resetRiderPassword = async (req, res) => {
+    try {
+        const outlet_id = await resolveOutletId(req);
+        if (!outlet_id) {
+            return res.status(400).json({ success: false, message: 'outlet_id is required' });
+        }
+        const { id } = req.params;
+        const { password } = req.body;
+        if (!password) {
+            return res.status(400).json({ success: false, message: 'Password is required' });
+        }
+        if (password.trim().length < 4) {
+            return res.status(400).json({ success: false, message: 'Password must be at least 4 characters' });
+        }
+
+        const rider = await req.propertyDb.models.delivery_partners.findOne({
+            where: { id, outlet_id }
+        });
+        if (!rider) {
+            return res.status(404).json({ success: false, message: 'Rider not found' });
+        }
+
+        rider.password_hash = bcrypt.hashSync(password.trim(), 10);
+        await rider.save();
+
+        res.json({ success: true, message: 'Rider password reset successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.requestCustomerOtp = async (req, res) => {
+    try {
+        const { outlet_id, email, phone } = req.body;
+        if (!outlet_id || !email || !phone) {
+            return res.status(400).json({ success: false, message: 'Outlet ID, Email, and Mobile number are required.' });
+        }
+
+        let actualOutletId;
+        if (typeof outlet_id === 'string' && outlet_id.startsWith('OUTLET')) {
+            const outlet = await req.propertyDb.models.outlets.findOne({
+                where: { outlet_code: outlet_id }
+            });
+            if (!outlet) {
+                return res.status(400).json({ success: false, message: `Outlet not found for code: ${outlet_id}` });
+            }
+            actualOutletId = outlet.id;
+        } else {
+            actualOutletId = Number(outlet_id);
+        }
+
+        const customer = await req.propertyDb.models.delivery_customers.findOne({
+            where: { 
+                outlet_id: actualOutletId, 
+                phone: phone.trim(),
+                email: email.trim().toLowerCase() 
+            }
+        });
+
+        if (!customer) {
+            return res.status(404).json({ success: false, message: 'No registered customer account found matching this email and mobile number.' });
+        }
+
+        // Generate 6-digit OTP
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+        customer.otp_code = otpCode;
+        customer.otp_expires_at = expiresAt;
+        await customer.save();
+
+        // Send OTP
+        await sendOtpEmail(email.trim().toLowerCase(), otpCode, "Customer Password Reset");
+
+        res.json({ success: true, message: 'Verification OTP has been sent to your email address.' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.resetCustomerPassword = async (req, res) => {
+    try {
+        const { outlet_id, email, phone, otp, new_password } = req.body;
+        if (!outlet_id || !email || !phone || !otp || !new_password) {
+            return res.status(400).json({ success: false, message: 'All fields (Outlet ID, Email, Phone, OTP, New Password) are required.' });
+        }
+
+        if (new_password.trim().length < 4) {
+            return res.status(400).json({ success: false, message: 'Password must be at least 4 characters.' });
+        }
+
+        let actualOutletId;
+        if (typeof outlet_id === 'string' && outlet_id.startsWith('OUTLET')) {
+            const outlet = await req.propertyDb.models.outlets.findOne({
+                where: { outlet_code: outlet_id }
+            });
+            if (!outlet) {
+                return res.status(400).json({ success: false, message: `Outlet not found for code: ${outlet_id}` });
+            }
+            actualOutletId = outlet.id;
+        } else {
+            actualOutletId = Number(outlet_id);
+        }
+
+        const customer = await req.propertyDb.models.delivery_customers.findOne({
+            where: { 
+                outlet_id: actualOutletId, 
+                phone: phone.trim(),
+                email: email.trim().toLowerCase() 
+            }
+        });
+
+        if (!customer) {
+            return res.status(404).json({ success: false, message: 'Customer account not found.' });
+        }
+
+        if (!customer.otp_code || customer.otp_code !== otp.toString().trim() || !customer.otp_expires_at || new Date() > new Date(customer.otp_expires_at)) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
+        }
+
+        // Reset values
+        customer.password_hash = bcrypt.hashSync(new_password.trim(), 10);
+        customer.otp_code = null;
+        customer.otp_expires_at = null;
+        await customer.save();
+
+        res.json({ success: true, message: 'Password reset successfully.' });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

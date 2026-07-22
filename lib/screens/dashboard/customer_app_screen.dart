@@ -75,8 +75,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   final TextEditingController _custNameCtrl = TextEditingController();
   final TextEditingController _custPhoneCtrl = TextEditingController();
   final TextEditingController _custAddressCtrl = TextEditingController();
-  String _paymentMode = 'UNPAID'; // UNPAID (CoD) or PAID (Prepaid)
-  String _chosenPaymentMethod = 'CASH'; // CASH, CARD, UPI
+  String? _paymentMode; // UNPAID (CoD) or PAID (Prepaid)
+  String? _chosenPaymentMethod; // CASH, CARD, UPI
   double _minDeliveryOrderValue = 0.0;
   double _deliveryCharge = 0.0;
   double _deliveryGstPercent = 18.0;
@@ -123,6 +123,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   final TextEditingController _loginPasswordCtrl = TextEditingController();
   final TextEditingController _regNameCtrl = TextEditingController();
   final TextEditingController _regPhoneCtrl = TextEditingController();
+  final TextEditingController _regEmailCtrl = TextEditingController();
   final TextEditingController _regPasswordCtrl = TextEditingController();
   final TextEditingController _regAddressCtrl = TextEditingController();
   final TextEditingController _custGstinCtrl = TextEditingController();
@@ -155,6 +156,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     _loginPasswordCtrl.dispose();
     _regNameCtrl.dispose();
     _regPhoneCtrl.dispose();
+    _regEmailCtrl.dispose();
     _regPasswordCtrl.dispose();
     _regAddressCtrl.dispose();
     _custGstinCtrl.dispose();
@@ -501,10 +503,17 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   Future<void> _registerCustomer() async {
     if (_regNameCtrl.text.isEmpty ||
         _regPhoneCtrl.text.isEmpty ||
+        _regEmailCtrl.text.isEmpty ||
         _regPasswordCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Please fill in Name, Phone, and Password.')),
+            content: Text('Please fill in Name, Phone, Email, and Password.')),
+      );
+      return;
+    }
+    if (!_regEmailCtrl.text.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid email address.')),
       );
       return;
     }
@@ -516,6 +525,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         'outlet_id': outletCode,
         'name': _regNameCtrl.text.trim(),
         'phone': _regPhoneCtrl.text.trim(),
+        'email': _regEmailCtrl.text.trim(),
         'password': _regPasswordCtrl.text.trim(),
         'address': _regAddressCtrl.text.trim(),
       };
@@ -616,6 +626,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       _loginPasswordCtrl.clear();
       _regNameCtrl.clear();
       _regPhoneCtrl.clear();
+      _regEmailCtrl.clear();
       _regPasswordCtrl.clear();
       _regAddressCtrl.clear();
       _customerSubTabIndex = 0;
@@ -1164,11 +1175,79 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     );
   }
 
+  void _showPaymentMethodSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.payment, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              const Text('Select Payment Method'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Please choose how you would like to pay for your delivery order:',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.amber.shade50,
+                  child: Icon(Icons.delivery_dining, color: Colors.amber.shade800),
+                ),
+                title: const Text('Cash on Delivery (CoD)'),
+                subtitle: const Text('Pay when order is delivered'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _paymentMode = 'UNPAID';
+                    _chosenPaymentMethod = 'CASH';
+                  });
+                  _placeOrder();
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.green.shade50,
+                  child: Icon(Icons.payment_outlined, color: Colors.green.shade800),
+                ),
+                title: const Text('Pay Online Now'),
+                subtitle: const Text('UPI, Credit/Debit Card'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _paymentMode = 'PAID';
+                    _chosenPaymentMethod = _enablePaymentGateway ? 'CARD' : 'UPI';
+                  });
+                  _placeOrder();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _placeOrder() async {
     if (_cart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please add items to cart first.')),
       );
+      return;
+    }
+    if (_paymentMode == null || _chosenPaymentMethod == null) {
+      _showPaymentMethodSelectionDialog();
       return;
     }
     if (_custNameCtrl.text.isEmpty ||
@@ -2940,6 +3019,18 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextField(
+                      controller: _regEmailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Email Address',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
                       controller: _regPasswordCtrl,
                       obscureText: true,
                       decoration: InputDecoration(
@@ -2986,8 +3077,15 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                         ),
                       ),
                     ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _showForgotPasswordDialog,
+                        child: const Text('Forgot Password?'),
+                      ),
+                    ),
                   ],
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                   FilledButton(
                     onPressed:
                         _showRegisterForm ? _registerCustomer : _loginCustomer,
@@ -5710,6 +5808,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     final String unit = sub['item']?['unit']?.toString() ?? 'Ltr';
     final rate = double.tryParse(sub['advance_rate']?.toString() ?? '0') ?? 0.0;
     final dailyQty = double.tryParse(sub['daily_allowed_qty']?.toString() ?? '1') ?? 1.0;
+    final taxPercent = double.tryParse(sub['item']?['tax_percent']?.toString() ?? '0') ?? 0.0;
+    final deliveryType = sub['delivery_type']?.toString() ?? 'PICKUP';
     int durationDays = 30;
     String paymentMode = 'UPI';
     DateTime startDate = DateTime.now();
@@ -5725,7 +5825,37 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
         final totalQty = dailyQty * durationDays;
         final totalCost = totalQty * rate;
+        final totalGst = totalCost * taxPercent / 100.0;
+
+        final settings = context.read<SystemSettingsController>().settings;
+        final isHomeDelivery = deliveryType == 'HOME';
+        
+        double dailyDeliveryCharge = 0.0;
+        double totalDeliveryCharge = 0.0;
+        double deliveryGstPercent = 0.0;
+        double totalDeliveryGst = 0.0;
+
+        bool isDeliveryFree = false;
+        if (settings != null && settings.subDeliveryChargeEnabled && isHomeDelivery) {
+          final baseTotal = totalCost + totalGst;
+          final dailyBaseTotal = baseTotal / durationDays;
+          if (settings.subDeliveryFreeAbove > 0 && dailyBaseTotal >= settings.subDeliveryFreeAbove) {
+            isDeliveryFree = true;
+          } else {
+            deliveryGstPercent = settings.subDeliveryChargeGstPercent;
+            if (settings.subDeliveryChargeType == 'FLAT') {
+              dailyDeliveryCharge = settings.subDeliveryChargeAmount;
+            } else {
+              dailyDeliveryCharge = (rate * dailyQty) * (settings.subDeliveryChargeAmount / 100);
+            }
+            totalDeliveryCharge = dailyDeliveryCharge * durationDays;
+            totalDeliveryGst = totalDeliveryCharge * (deliveryGstPercent / 100);
+          }
+        }
+
+        final netPayable = totalCost + totalGst + totalDeliveryCharge + totalDeliveryGst;
         final endDate = startDate.add(Duration(days: durationDays));
+
         return AlertDialog(
           title: const Row(children: [
             Icon(Icons.autorenew, color: Colors.green),
@@ -5788,7 +5918,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 const SizedBox(height: 12),
                 const Text('Payment Mode:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 const SizedBox(height: 6),
-                Wrap(spacing: 8, children: ['UPI', 'CASH', 'CARD'].map((m) => ChoiceChip(
+                Wrap(spacing: 8, children: ['UPI', 'CARD'].map((m) => ChoiceChip(
                   label: Text(m),
                   selected: paymentMode == m,
                   onSelected: (_) => setSt(() => paymentMode = m),
@@ -5801,7 +5931,16 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     Text('Total Qty: ${totalQty.toStringAsFixed(1)} $unit', style: const TextStyle(fontWeight: FontWeight.w600)),
                     Text('End Date: ${DateFormat('dd-MMM-yyyy').format(endDate)}', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
                     const SizedBox(height: 4),
-                    Text('Total Advance: Rs. ${totalCost.toStringAsFixed(2)}',
+                    Text('Base Cost: Rs. ${totalCost.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                    Text('GST: Rs. ${totalGst.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                    if (isDeliveryFree) ...[
+                      Text('Delivery: Free', style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ] else if (totalDeliveryCharge > 0) ...[
+                      Text('Delivery: Rs. ${totalDeliveryCharge.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                      Text('Delivery GST: Rs. ${totalDeliveryGst.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                    ],
+                    const Divider(height: 8),
+                    Text('Net Amount Payable: Rs. ${netPayable.toStringAsFixed(2)}',
                         style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
                   ]),
                 ),
@@ -5813,11 +5952,21 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop({
                 'item_id': sub['item_id'],
+                'item_name': sub['item_name'],
+                'start_date': DateFormat('yyyy-MM-dd').format(startDate),
+                'end_date': DateFormat('yyyy-MM-dd').format(endDate),
                 'daily_allowed_qty': dailyQty,
-                'duration_days': durationDays,
-                'start_date': startDate.toIso8601String().split('T')[0],
-                'advance_rate': rate,
+                'total_payment_amount': netPayable,
+                'taxable_amount': totalCost,
+                'tax_amount': totalGst,
+                'delivery_charge_amount': dailyDeliveryCharge,
+                'delivery_charge_gst_percent': deliveryGstPercent,
+                'delivery_charge_tax_amount': totalDeliveryGst,
                 'payment_mode': paymentMode,
+                'delivery_type': deliveryType,
+                'customer_name': _loggedInCustomer?['name']?.toString() ?? '',
+                'customer_phone': _loggedInCustomer?['phone']?.toString() ?? '',
+                'customer_address': _loggedInCustomer?['address']?.toString() ?? '',
               }),
               style: FilledButton.styleFrom(backgroundColor: Colors.green.shade700),
               child: const Text('Renew'),
@@ -5828,6 +5977,26 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     );
 
     if (result == null || !mounted) return;
+
+    final double netPayable = result['total_payment_amount'];
+    Map<String, dynamic>? gatewayDetails;
+
+    if (_enablePaymentGateway) {
+      gatewayDetails = await _showPaymentGatewayDialog(netPayable);
+      if (gatewayDetails == null) return;
+    } else if (_merchantUpiId.isNotEmpty) {
+      gatewayDetails = await _showDirectUpiQrDialog(netPayable);
+      if (gatewayDetails == null) return;
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Online payments are not configured. Renewal cannot be processed.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       final phone = _loggedInCustomer!['phone'];
@@ -5836,6 +6005,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
       final res = await ApiClient.post('/api/sales/subscriptions', {
         ...result,
+        'payment_mode': gatewayDetails['payment_method'],
+        'payment_gateway_details': gatewayDetails,
         'customer_phone': phone,
         'outlet_id': outletCode,
       });
@@ -5893,6 +6064,25 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
     if (result == null) return;
 
+    final double netPayable = result['total_payment_amount'];
+    Map<String, dynamic>? gatewayDetails;
+
+    if (_enablePaymentGateway) {
+      gatewayDetails = await _showPaymentGatewayDialog(netPayable);
+      if (gatewayDetails == null) return;
+    } else if (_merchantUpiId.isNotEmpty) {
+      gatewayDetails = await _showDirectUpiQrDialog(netPayable);
+      if (gatewayDetails == null) return;
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Online payments are not configured. Subscription cannot be created.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       final outletCode = _loggedInCustomer?['outlet_id'] ??
@@ -5900,6 +6090,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
       final payload = {
         ...result,
+        'payment_mode': gatewayDetails['payment_method'],
+        'payment_gateway_details': gatewayDetails,
         'outlet_id': outletCode,
       };
       final res = await ApiClient.post('/api/sales/subscriptions', payload);
@@ -6402,6 +6594,19 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                           ),
                           const SizedBox(height: 14),
                           TextField(
+                            controller: _regEmailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Email Address',
+                              prefixIcon: const Icon(Icons.email_outlined),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
                             controller: _regPasswordCtrl,
                             obscureText: true,
                             textInputAction: TextInputAction.next,
@@ -6455,9 +6660,16 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               ),
                             ),
                           ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _showForgotPasswordDialog,
+                              child: const Text('Forgot Password?'),
+                            ),
+                          ),
                         ],
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 12),
 
                         // ── Primary action button ──
                         SizedBox(
@@ -6869,6 +7081,293 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       },
     );
   }
+
+  void _showForgotPasswordDialog() {
+    final phoneCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final otpCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+
+    bool otpSent = false;
+    bool passwordVisible = false;
+    bool isSendingOtp = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          final theme = Theme.of(ctx);
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.lock_reset, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text('Reset Password'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isSendingOtp) ...[
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text(
+                              'Please wait...',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else if (!otpSent) ...[
+                    const Text(
+                      'Enter your registered details to receive an OTP on your email.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Mobile Number *',
+                        prefixIcon: const Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Email Address *',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ] else ...[
+                    const Text(
+                      'Enter the OTP sent to your email and set your new password.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: otpCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Enter OTP Code *',
+                        prefixIcon: const Icon(Icons.pin_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: newPassCtrl,
+                      obscureText: !passwordVisible,
+                      decoration: InputDecoration(
+                        labelText: 'New Password *',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(passwordVisible ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setDlgState(() => passwordVisible = !passwordVisible),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirmPassCtrl,
+                      obscureText: !passwordVisible,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm Password *',
+                        prefixIcon: const Icon(Icons.lock_clock_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Resend OTP'),
+                        onPressed: () async {
+                          final phone = phoneCtrl.text.trim();
+                          final email = emailCtrl.text.trim();
+                          if (phone.isEmpty || email.isEmpty) return;
+
+                          setDlgState(() => isSendingOtp = true);
+                          try {
+                            final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+                            final res = await ApiClient.post(
+                              '/api/delivery/customer/forgot-password/request-otp',
+                              {
+                                'outlet_id': outletCode,
+                                'phone': phone,
+                                'email': email,
+                              },
+                            );
+                            if (res['success'] == true) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('OTP resent to email successfully.')),
+                                );
+                              }
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(res['message'] ?? 'Failed to resend OTP.')),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          } finally {
+                            setDlgState(() => isSendingOtp = false);
+                          }
+                        },
+                      ),
+                    ),
+                  ]
+                ],
+              ),
+            ),
+            actions: isSendingOtp
+                ? []
+                : [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: () async {
+                        if (!otpSent) {
+                          final phone = phoneCtrl.text.trim();
+                          final email = emailCtrl.text.trim();
+                          if (phone.isEmpty || email.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter your mobile number and email.')),
+                            );
+                            return;
+                          }
+                          setDlgState(() => isSendingOtp = true);
+                          try {
+                            final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+                            final res = await ApiClient.post(
+                              '/api/delivery/customer/forgot-password/request-otp',
+                              {
+                                'outlet_id': outletCode,
+                                'phone': phone,
+                                'email': email,
+                              },
+                            );
+                            if (res['success'] == true) {
+                              setDlgState(() => otpSent = true);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('OTP sent to email successfully.')),
+                                );
+                              }
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(res['message'] ?? 'Failed to send OTP.')),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          } finally {
+                            setDlgState(() => isSendingOtp = false);
+                          }
+                        } else {
+                          final otp = otpCtrl.text.trim();
+                          final newPass = newPassCtrl.text.trim();
+                          final confirmPass = confirmPassCtrl.text.trim();
+                          if (otp.isEmpty || newPass.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please fill all fields.')),
+                            );
+                            return;
+                          }
+                          if (newPass.length < 4) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password must be at least 4 characters.')),
+                            );
+                            return;
+                          }
+                          if (newPass != confirmPass) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Passwords do not match.')),
+                            );
+                            return;
+                          }
+
+                          setDlgState(() => isSendingOtp = true);
+                          try {
+                            final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
+                            final res = await ApiClient.post(
+                              '/api/delivery/customer/forgot-password/reset',
+                              {
+                                'outlet_id': outletCode,
+                                'phone': phoneCtrl.text.trim(),
+                                'email': emailCtrl.text.trim(),
+                                'otp': otp,
+                                'new_password': newPass,
+                              },
+                            );
+                            if (res['success'] == true) {
+                              Navigator.pop(ctx);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Password reset successfully! Please log in.'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(res['message'] ?? 'Failed to reset password.')),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          } finally {
+                            setDlgState(() => isSendingOtp = false);
+                          }
+                        }
+                      },
+                      child: Text(otpSent ? 'Reset Password' : 'Send OTP'),
+                    ),
+                  ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _SubscribeDialog extends StatefulWidget {
@@ -7161,7 +7660,6 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                   value: _paymentMode,
                   items: const [
                     DropdownMenuItem(value: 'UPI', child: Text('UPI / Net Banking')),
-                    DropdownMenuItem(value: 'CASH', child: Text('Cash Advance')),
                     DropdownMenuItem(value: 'CARD', child: Text('Credit/Debit Card')),
                   ],
                   onChanged: (val) {

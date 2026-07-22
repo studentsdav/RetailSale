@@ -24,6 +24,19 @@ module.exports = (sequelize, DataTypes) => {
         address: {
             type: DataTypes.TEXT,
             allowNull: true
+        },
+        email: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: ''
+        },
+        otp_code: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        otp_expires_at: {
+            type: DataTypes.DATE,
+            allowNull: true
         }
     }, {
         tableName: 'delivery_customers',

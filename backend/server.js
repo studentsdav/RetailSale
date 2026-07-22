@@ -206,6 +206,18 @@ if (!fs.existsSync(licensePath)) {
             console.warn('⚠️ Failed to dynamically alter table milk_subscriptions:', colErr.message);
         }
 
+        try {
+            await propertyDb.query(`
+                ALTER TABLE delivery_customers 
+                ADD COLUMN IF NOT EXISTS email VARCHAR(255) DEFAULT '',
+                ADD COLUMN IF NOT EXISTS otp_code VARCHAR(10) DEFAULT '',
+                ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP DEFAULT NULL;
+            `);
+            console.log('✅ Verified/added email and otp columns in delivery_customers table');
+        } catch (colErr) {
+            console.warn('⚠️ Failed to dynamically alter table delivery_customers:', colErr.message);
+        }
+
         await runMigrations(propertyDb);
 
         console.log('✅ Database migrations complete');

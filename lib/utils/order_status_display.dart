@@ -35,15 +35,34 @@ class OrderStatusDisplay {
     final returnType = _normalize(order?['return_type']);
     final isExchangeReplacement = _isExchangeReplacementOrder(order);
 
-    final isRefunded = refundStatus == 'REFUNDED' ||
+    final isRefundCompleted = refundStatus == 'REFUNDED' ||
         refundStatus == 'PARTIALLY_REFUNDED' ||
-        returnStatus == 'RETURNED' ||
-        returnType == 'REFUND';
-    final isExchanged = returnType == 'EXCHANGE' ||
-        returnStatus == 'EXCHANGED' ||
-        refundStatus == 'EXCHANGED';
+        returnStatus == 'RETURNED';
+    final isExchangeCompleted = returnStatus == 'EXCHANGED' ||
+        refundStatus == 'EXCHANGED' ||
+        returnStatus == 'REDELIVERED';
 
-    if (isRefunded) {
+    if (returnType == 'REFUND' || (returnStatus.isNotEmpty && returnType == 'REFUND')) {
+      if (!isRefundCompleted) {
+        return const OrderStatusDisplay(
+          label: 'REFUND PENDING',
+          color: Colors.orange,
+          icon: Icons.pending_actions_outlined,
+        );
+      }
+    }
+
+    if (returnType == 'EXCHANGE' || (returnStatus.isNotEmpty && returnType == 'EXCHANGE')) {
+      if (!isExchangeCompleted) {
+        return const OrderStatusDisplay(
+          label: 'EXCHANGE PENDING',
+          color: Colors.orange,
+          icon: Icons.pending_actions_outlined,
+        );
+      }
+    }
+
+    if (isRefundCompleted) {
       return const OrderStatusDisplay(
         label: 'REFUNDED',
         color: Colors.blue,
@@ -57,9 +76,9 @@ class OrderStatusDisplay {
         icon: Icons.swap_horiz_outlined,
       );
     }
-    if (isExchanged || isExchangeReplacement) {
+    if (isExchangeCompleted || isExchangeReplacement) {
       return const OrderStatusDisplay(
-        label: 'EXCHANGE',
+        label: 'EXCHANGED',
         color: Colors.purple,
         icon: Icons.swap_horiz_outlined,
       );
