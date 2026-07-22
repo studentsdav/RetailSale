@@ -2355,7 +2355,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StoreAnalysisScreen())),
       },
       {
-        'category': 'Reports',
+        'category': 'Operations',
         'icon': Icons.confirmation_number_outlined,
         'label': 'Lucky Draw Campaigns',
         'permission': 'REPORTS',

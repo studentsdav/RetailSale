@@ -1291,13 +1291,15 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       }
     } else if (_tabController.index == 0) {
       writeRow(
-        ['Customer', 'Bill', 'Date', 'Amount', 'Outstanding', 'Status'],
+        ['Customer Name', 'Phone', 'Address', 'Bill', 'Date', 'Amount', 'Outstanding', 'Status'],
         style: headerStyle,
       );
       for (final customer in ctrl.creditCustomers) {
         for (final bill in customer.bills) {
           writeRow([
             customer.customerName,
+            customer.customerPhone,
+            customer.customerAddress,
             bill.billNo,
             _fmtDate(bill.billDate),
             bill.amount.toStringAsFixed(2),
@@ -1308,6 +1310,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       }
       writeRow([
         'TOTAL',
+        '',
+        '',
         '${ctrl.totalCreditBills}',
         '',
         ctrl.creditCustomers
@@ -1530,7 +1534,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     } else if (_tabController.index == 0) {
       accent = PdfColors.lightBlue700;
       headers = const [
-        'Customer',
+        'Customer Name',
+        'Phone',
+        'Address',
         'Bill',
         'Date',
         'Amount',
@@ -1541,6 +1547,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         for (final bill in customer.bills) {
           rows.add([
             customer.customerName,
+            customer.customerPhone,
+            customer.customerAddress,
             bill.billNo,
             _fmtDate(bill.billDate),
             bill.amount.toStringAsFixed(2),
@@ -1551,6 +1559,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       }
       rows.add([
         'TOTAL',
+        '',
+        '',
         '${ctrl.totalCreditBills}',
         '',
         ctrl.creditCustomers
@@ -1783,7 +1793,6 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 children: [
                   _pdfMiniStat('Bills', '${ctrl.totalCreditBills}'),
                   _pdfMiniStat('Outstanding', ctrl.totalOutstanding.toStringAsFixed(2)),
-                  _pdfMiniStat('Advance', ctrl.totalAdvance.toStringAsFixed(2)),
                 ],
               ),
             ),

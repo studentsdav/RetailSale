@@ -216,6 +216,7 @@ class CreditCustomerReport {
   final String customerName;
   final String customerPhone;
   final String customerGstin;
+  final String customerAddress;
   final double totalOutstanding;
   final double totalAdvance;
   final List<CreditBill> bills;
@@ -225,6 +226,7 @@ class CreditCustomerReport {
     required this.customerName,
     required this.customerPhone,
     required this.customerGstin,
+    required this.customerAddress,
     required this.totalOutstanding,
     required this.totalAdvance,
     required this.bills,
@@ -236,6 +238,7 @@ class CreditCustomerReport {
       customerName: (json['customer_name'] ?? '').toString(),
       customerPhone: (json['customer_phone'] ?? '').toString(),
       customerGstin: (json['customer_gstin'] ?? '').toString(),
+      customerAddress: (json['customer_address'] ?? '').toString(),
       totalOutstanding:
           double.tryParse((json['total_outstanding'] ?? 0).toString()) ?? 0,
       totalAdvance:

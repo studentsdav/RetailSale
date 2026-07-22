@@ -41,9 +41,16 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
 
   int _saleNoNumericValue(String? saleNo) {
     final raw = (saleNo ?? '').trim();
-    final match = RegExp(r'(\d+)(?!.*\d)').firstMatch(raw);
+    final parts = raw.split('-');
+    if (parts.length > 1) {
+      for (int i = 1; i < parts.length; i++) {
+        final val = int.tryParse(parts[i]);
+        if (val != null) return val;
+      }
+    }
+    final match = RegExp(r'\d+').firstMatch(raw);
     if (match == null) return 1 << 30;
-    return int.tryParse(match.group(1) ?? '') ?? (1 << 30);
+    return int.tryParse(match.group(0) ?? '') ?? (1 << 30);
   }
 
   @override
@@ -1018,7 +1025,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                             message:
                                                 'Correct bill payment mode and sync ledger',
                                             child: SizedBox(
-                                              width: 160,
+                                              width: 180,
                                               height: 40,
                                               child: FilledButton.icon(
                                                 onPressed:

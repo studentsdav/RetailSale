@@ -1557,6 +1557,7 @@ exports.getCreditReport = async (req, res) => {
                     customer_name: getCustomerLabel(sale),
                     customer_phone: sale.customer_phone || '',
                     customer_gstin: sale.customer_gstin || '',
+                    customer_address: sale.customer_address || '',
                     total_outstanding: 0,
                     total_advance: 0,
                     bills: [],
@@ -1565,6 +1566,9 @@ exports.getCreditReport = async (req, res) => {
             }
 
             const customer = customers.get(key);
+            if (!customer.customer_address && sale.customer_address) {
+                customer.customer_address = sale.customer_address;
+            }
             customer.total_outstanding = roundAmount(customer.total_outstanding + balanceDue);
             customer.bills.push({
                 sale_id: sale.id,
@@ -1594,6 +1598,7 @@ exports.getCreditReport = async (req, res) => {
                     customer_name: getCustomerLabel(advance),
                     customer_phone: advance.customer_phone || '',
                     customer_gstin: advance.customer_gstin || '',
+                    customer_address: '',
                     total_outstanding: 0,
                     total_advance: 0,
                     bills: [],

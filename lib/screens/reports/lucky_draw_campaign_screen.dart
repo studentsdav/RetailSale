@@ -309,7 +309,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
     final nextDescriptionCtrl = TextEditingController(text: 'Win pressure cooker, cup, mug, or more!');
     DateTime selectedDate = DateTime.now().add(const Duration(days: 30));
     bool startNextCampaign = true;
-    bool nextAllowCreditors = true;
+    bool nextAllowCreditors = false;
 
     showDialog(
       context: context,
@@ -508,7 +508,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
     final nextDescriptionCtrl = TextEditingController(text: 'Win pressure cooker, cup, mug, or more!');
     DateTime selectedDate = DateTime.now().add(const Duration(days: 30));
     bool startNextCampaign = false;
-    bool nextAllowCreditors = true;
+    bool nextAllowCreditors = false;
 
     showDialog(
       context: context,
@@ -672,7 +672,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
     final thresholdCtrl = TextEditingController(text: '2000');
     final descriptionCtrl = TextEditingController(text: 'Win pressure cooker, cup, mug, or more!');
     DateTime selectedDate = DateTime.now().add(const Duration(days: 30));
-    bool allowCreditors = true;
+    bool allowCreditors = false;
 
     showDialog(
       context: context,
