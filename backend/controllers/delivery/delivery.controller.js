@@ -757,6 +757,20 @@ exports.deleteRider = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Rider not found' });
         }
 
+        const pendingCommissionOrders = await req.propertyDb.models.customer_orders.count({
+            where: { 
+                assigned_partner_id: id,
+                commission_status: 'UNPAID'
+            }
+        });
+
+        if (pendingCommissionOrders > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot delete rider with pending unpaid commission. Please pay the rider commission first.'
+            });
+        }
+
         const ordersCount = await req.propertyDb.models.customer_orders.count({
             where: { assigned_partner_id: id }
         });
@@ -1696,8 +1710,19 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                     }
 
                     // Subscription free item expense
+                    const advanceApplyEntries = await req.propertyDb.models.cash_ledger.findAll({
+                        where: {
+                            outlet_id: order.outlet_id,
+                            reference_no: sale.sale_no,
+                            transaction_type: 'ADVANCE_APPLY'
+                        },
+                        transaction: t
+                    });
+                    const totalAppliedCashAdvance = advanceApplyEntries.reduce((sum, entry) => sum + toAmount(entry.amount_out), 0);
+
                     const subscriptionExpense = freeItems.reduce((sum, si) => sum + toAmount(si.taxable_amount) + toAmount(si.tax_amount), 0);
-                    if (subscriptionExpense > 0) {
+                    const uncoveredByAdvance = Math.max(0, subscriptionExpense - totalAppliedCashAdvance);
+                    if (uncoveredByAdvance > 0) {
                         await createExpEntry({
                             db: req.propertyDb,
                             outlet_id: order.outlet_id,
@@ -1708,7 +1733,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                             reference_no: sale.sale_no,
                             party_name: expParty,
                             payment_method: 'SUBSCRIPTION',
-                            amount_out: subscriptionExpense,
+                            amount_out: uncoveredByAdvance,
                             notes: `Subscription free item expense for delivery order #${order.id} (${sale.sale_no})`,
                             created_by: req.user?.id || 1,
                             transaction: t

@@ -2435,15 +2435,18 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     try {
       final outletCode = _currentUser?.outletCode ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
       final res = await ApiClient.delete('/api/delivery/retailer/riders/$riderId?outlet_id=$outletCode');
+      final msg = res['message'] ?? (res['error'] ?? 'Rider deleted successfully');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
       if (res['success'] == true) {
-        final msg = res['message'] ?? 'Rider deleted successfully';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
-        );
         _fetchRetailerData();
       }
     } catch (e) {
       debugPrint('Error deleting rider: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete rider: ${e.toString().replaceFirst('Exception: ', '')}')),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
@@ -3243,6 +3246,22 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     );
   }
 
+  bool _isRefundPending(dynamic order) {
+    dynamic refundStatusVal = order?['refund_status'];
+    final refundDetails = order?['refund_details'];
+    if (refundDetails is Map && refundDetails['status'] != null) {
+      final detailStatus = refundDetails['status']?.toString().toUpperCase();
+      if (detailStatus == 'PAID') {
+        refundStatusVal = 'REFUNDED';
+      } else if (detailStatus == 'PENDING') {
+        refundStatusVal = 'PENDING';
+      } else if (detailStatus == 'PARTIALLY_PAID') {
+        refundStatusVal = 'PARTIALLY_REFUNDED';
+      }
+    }
+    return refundStatusVal?.toString().toUpperCase() == 'PENDING';
+  }
+
   Widget _buildRetailerOrdersSection(ThemeData theme) {
     final filteredOrders = _retailerOrders.where((order) {
       final status = order['status']?.toString().toUpperCase() ?? 'PENDING';
@@ -3257,7 +3276,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
         return status == 'CANCELLED';
       }
       if (_statusFilter == 'REFUND_PENDING') {
-        return order['refund_status']?.toString() == 'PENDING';
+        return _isRefundPending(order);
       }
       return true;
     }).toList();
@@ -3407,7 +3426,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                   ),
                   const SizedBox(width: 8),
                   (() {
-                    final pendingRefundCount = _retailerOrders.where((o) => o['refund_status']?.toString() == 'PENDING').length;
+                    final pendingRefundCount = _retailerOrders.where((o) => _isRefundPending(o)).length;
                     return Badge(
                       isLabelVisible: pendingRefundCount > 0,
                       label: Text('$pendingRefundCount'),
@@ -3481,9 +3500,17 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                               ? 'Exchange Completed. Replacement Delivered.'
                               : 'Return Handed Over to Store. Awaiting final receive.';
                         } else if (returnStatus == 'RETURNED') {
-                          returnBannerColor = Colors.blue;
-                          returnBannerIcon = Icons.keyboard_return_outlined;
-                          returnBannerText = 'Returned & Refunded - $returnedItems';
+                          final refund = order['refund_details'];
+                          final isRefundPending = refund != null && refund['status']?.toString().toUpperCase() == 'PENDING';
+                          if (isRefundPending) {
+                            returnBannerColor = Colors.orange;
+                            returnBannerIcon = Icons.pending_actions_outlined;
+                            returnBannerText = 'Credit Note Issued - Refund Pending - $returnedItems';
+                          } else {
+                            returnBannerColor = Colors.blue;
+                            returnBannerIcon = Icons.keyboard_return_outlined;
+                            returnBannerText = 'Returned & Refunded - $returnedItems';
+                          }
                         } else if (returnStatus == 'EXCHANGED') {
                           returnBannerColor = Colors.purple;
                           returnBannerIcon = Icons.assignment_return_outlined;
@@ -4220,84 +4247,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                         ],
                                       ),
                                     ),
-                                  ],
-                                  if (order['refund_status']?.toString() == 'PENDING' && !isCod) ...[
-                                    (() {
-                                      final origAmt = double.tryParse(order['original_net_amount']?.toString() ?? '') ?? 0.0;
-                                      final curAmt = double.tryParse(order['net_amount']?.toString() ?? '') ?? 0.0;
-                                      final refundDue = origAmt > 0 ? origAmt - curAmt : 0.0;
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 12),
-                                        child: Container(
-                                          width: double.infinity,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          decoration: BoxDecoration(
-                                            color: Colors.green.shade50,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: Colors.green.shade300, width: 1.5),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.currency_rupee, size: 18, color: Colors.green.shade800),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      'REFUND PENDING',
-                                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green.shade800, letterSpacing: 0.5),
-                                                    ),
-                                                    if (refundDue > 0)
-                                                      Text(
-                                                        'Rs. ${refundDue.toStringAsFixed(2)} to be refunded to customer',
-                                                        style: TextStyle(fontSize: 12, color: Colors.green.shade700),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                              if (order['payment_gateway_details'] != null) ...[
-                                                Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    FilledButton(
-                                                      onPressed: () => _handleGatewayRefund(order['id'], refundDue),
-                                                      style: FilledButton.styleFrom(
-                                                        backgroundColor: Colors.indigo.shade700,
-                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                        minimumSize: Size.zero,
-                                                      ),
-                                                      child: const Text('Refund Online', style: TextStyle(fontSize: 11)),
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    OutlinedButton(
-                                                      onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
-                                                      style: OutlinedButton.styleFrom(
-                                                        foregroundColor: Colors.green.shade800,
-                                                        side: BorderSide(color: Colors.green.shade300),
-                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                        minimumSize: Size.zero,
-                                                      ),
-                                                      child: const Text('Mark Manual Paid', style: TextStyle(fontSize: 11)),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ] else ...[
-                                                FilledButton(
-                                                  onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
-                                                  style: FilledButton.styleFrom(
-                                                    backgroundColor: Colors.green.shade700,
-                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                    minimumSize: Size.zero,
-                                                  ),
-                                                  child: const Text('Mark Paid', style: TextStyle(fontSize: 12)),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    })(),
+
                                   ],
                                   if (order['original_net_amount'] != null) ...[
                                     (() {
@@ -4466,51 +4416,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                     runSpacing: 6,
                                     alignment: WrapAlignment.start,
                                     children: [
-                                      if (order['refund_status']?.toString() == 'PENDING' && !isCod) ...[
-                                        ...(() {
-                                          final origAmt = double.tryParse(order['original_net_amount']?.toString() ?? '') ?? 0.0;
-                                          final curAmt = double.tryParse(order['net_amount']?.toString() ?? '') ?? 0.0;
-                                          final refundDue = origAmt > 0 ? origAmt - curAmt : 0.0;
-                                          if (order['payment_gateway_details'] != null) {
-                                            return [
-                                              FilledButton.icon(
-                                                onPressed: () => _handleGatewayRefund(order['id'], refundDue),
-                                                icon: const Icon(Icons.security, size: 16),
-                                                label: Text(refundDue > 0
-                                                    ? 'Refund Online (Rs. ${refundDue.toStringAsFixed(2)})'
-                                                    : 'Refund Online'),
-                                                style: FilledButton.styleFrom(
-                                                  backgroundColor: Colors.indigo.shade700,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                              ),
-                                              OutlinedButton.icon(
-                                                onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
-                                                icon: const Icon(Icons.currency_rupee, size: 16),
-                                                label: const Text('Mark Manual Paid'),
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: Colors.green.shade800,
-                                                  side: BorderSide(color: Colors.green.shade300),
-                                                ),
-                                              ),
-                                            ];
-                                          } else {
-                                            return [
-                                              FilledButton.icon(
-                                                onPressed: () => _handleMarkRefundPaid(order['id'], refundDue),
-                                                icon: const Icon(Icons.currency_rupee, size: 16),
-                                                label: Text(refundDue > 0
-                                                    ? 'Mark Refund Paid (Rs. ${refundDue.toStringAsFixed(2)})'
-                                                    : 'Mark Refund Paid'),
-                                                style: FilledButton.styleFrom(
-                                                  backgroundColor: Colors.green.shade700,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                              )
-                                            ];
-                                          }
-                                        })(),
-                                      ] else if (order['return_status'] == 'PENDING') ...[
+                                      if (order['return_status'] == 'PENDING') ...[
                                         OutlinedButton.icon(
                                           onPressed: () => _handleReturnRequest(order['id'], 'REJECT'),
                                           icon: const Icon(Icons.close, size: 16),
@@ -4707,10 +4613,28 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              icon: Icon(Icons.delete_outline, color: unpaidCommission > 0 ? Colors.grey : Colors.red),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              onPressed: () => _showDeleteRiderConfirm(rider),
+                              onPressed: () {
+                                if (unpaidCommission > 0) {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Cannot Delete Rider'),
+                                      content: const Text('This rider has unpaid pending commission. Please clear all pending commissions before deleting this rider.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text('OK'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                } else {
+                                  _showDeleteRiderConfirm(rider);
+                                }
+                              },
                               tooltip: "Delete Rider",
                             ),
                           ],

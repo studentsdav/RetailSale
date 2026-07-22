@@ -6939,6 +6939,25 @@ exports.payRefund = async (req, res) => {
             transaction: t
         });
 
+        // Sync with delivery order if applicable
+        if (sale && sale.notes) {
+            const match = String(sale.notes).match(/#(\d+)$/);
+            if (match) {
+                const orderId = parseInt(match[1]);
+                const order = await req.propertyDb.models.customer_orders.findOne({
+                    where: { id: orderId, outlet_id },
+                    transaction: t
+                });
+                if (order) {
+                    order.refund_status = newStatus === 'PAID' ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+                    if (newStatus === 'PAID') {
+                        order.return_status = 'RETURNED';
+                    }
+                    await order.save({ transaction: t });
+                }
+            }
+        }
+
         // Insert into Cash Ledger
         await createLedgerEntry({
             db: req.propertyDb,

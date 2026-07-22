@@ -31,13 +31,27 @@ class OrderStatusDisplay {
   static OrderStatusDisplay fromOrder(Map<String, dynamic>? order) {
     final status = _normalize(order?['status']);
     final returnStatus = _normalize(order?['return_status']);
-    final refundStatus = _normalize(order?['refund_status']);
+    
+    dynamic refundStatusVal = order?['refund_status'];
+    final refundDetails = order?['refund_details'];
+    if (refundDetails is Map && refundDetails['status'] != null) {
+      final detailStatus = _normalize(refundDetails['status']);
+      if (detailStatus == 'PAID') {
+        refundStatusVal = 'REFUNDED';
+      } else if (detailStatus == 'PENDING') {
+        refundStatusVal = 'PENDING';
+      } else if (detailStatus == 'PARTIALLY_PAID') {
+        refundStatusVal = 'PARTIALLY_REFUNDED';
+      }
+    }
+    final refundStatus = _normalize(refundStatusVal);
+    
     final returnType = _normalize(order?['return_type']);
     final isExchangeReplacement = _isExchangeReplacementOrder(order);
 
-    final isRefundCompleted = refundStatus == 'REFUNDED' ||
-        refundStatus == 'PARTIALLY_REFUNDED' ||
-        returnStatus == 'RETURNED';
+    final isRefundCompleted = (refundStatus == 'REFUNDED' ||
+        refundStatus == 'PARTIALLY_REFUNDED') ||
+        (returnStatus == 'RETURNED' && refundStatus != 'PENDING');
     final isExchangeCompleted = returnStatus == 'EXCHANGED' ||
         refundStatus == 'EXCHANGED' ||
         returnStatus == 'REDELIVERED';

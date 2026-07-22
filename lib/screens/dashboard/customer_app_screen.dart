@@ -3846,8 +3846,6 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     final refund = order['refund_details'];
 
     if (returnStatus == 'RETURNED' && refund != null) {
-      color = Colors.blue;
-      icon = Icons.keyboard_return_outlined;
       final paidAmt =
           double.tryParse(refund['amount_paid']?.toString() ?? '0.0') ?? 0.0;
       final pendingAmt =
@@ -3855,6 +3853,21 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       final mode = refund['payment_mode'] ?? 'N/A';
       final status = refund['status'] ?? 'PENDING';
       final remarks = refund['notes'] ?? '';
+
+      final isPending = status == 'PENDING';
+      color = isPending ? Colors.orange : Colors.blue;
+      icon = isPending ? Icons.pending_actions_outlined : Icons.keyboard_return_outlined;
+
+      final remainingPending = isPending 
+          ? pendingAmt 
+          : (pendingAmt - paidAmt < 0 ? 0.0 : pendingAmt - paidAmt);
+
+      final title = isPending 
+          ? 'Credit Note Issued - Refund Pending - $returnedItems' 
+          : 'Refunded - $returnedItems';
+
+      final Color textColor = isPending ? Colors.orange.shade900 : Colors.blue.shade900;
+      final Color detailColor = isPending ? Colors.orange.shade800 : Colors.blue.shade800;
 
       return Container(
         width: double.infinity,
@@ -3874,27 +3887,27 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Refunded - $returnedItems',
+                    title,
                     style: TextStyle(
-                        color: Colors.blue.shade900,
+                        color: textColor,
                         fontWeight: FontWeight.bold,
                         fontSize: 13),
                   ),
                   const SizedBox(height: 4),
                   Text('• Mode: $mode',
                       style:
-                          TextStyle(color: Colors.blue.shade800, fontSize: 12)),
+                          TextStyle(color: detailColor, fontSize: 12)),
                   Text('• Refund Status: $status',
                       style:
-                          TextStyle(color: Colors.blue.shade800, fontSize: 12)),
+                          TextStyle(color: detailColor, fontSize: 12)),
                   Text(
-                      '• Refunded Amount: Rs. ${paidAmt.toStringAsFixed(2)} (Pending: Rs. ${pendingAmt.toStringAsFixed(2)})',
+                      '• Refunded Amount: Rs. ${paidAmt.toStringAsFixed(2)} (Pending: Rs. ${remainingPending.toStringAsFixed(2)})',
                       style:
-                          TextStyle(color: Colors.blue.shade800, fontSize: 12)),
+                          TextStyle(color: detailColor, fontSize: 12)),
                   if (remarks.isNotEmpty)
                     Text('• Remark: $remarks',
                         style: TextStyle(
-                            color: Colors.blue.shade800, fontSize: 12)),
+                            color: detailColor, fontSize: 12)),
                 ],
               ),
             ),
