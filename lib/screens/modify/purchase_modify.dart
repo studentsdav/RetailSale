@@ -14,6 +14,8 @@ import '../../core/api/endpoints.dart';
 import '../../models/common/property_info_model.dart';
 import '../../models/inventory/purchase_order_model.dart';
 import '../../models/inventory/supplier_model.dart';
+import '../../utils/branding_storage.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 class PurchaseOrderModifyScreen extends StatefulWidget {
   const PurchaseOrderModifyScreen({super.key});
@@ -190,6 +192,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
     final grandTotal = subTotal + totalGST;
 
     final property = propertyInfo;
+    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
 
     pdf.addPage(
       pw.MultiPage(
@@ -197,42 +200,22 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
           /// ================= HEADER =================
-
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      property?.propertyName ?? '',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text("${property?.address}"),
-                    pw.Text("Mobile: ${property?.mobile}"),
-                    pw.Text("Email: ${property?.email}"),
-                    pw.Text("GSTIN: ${property?.gstNo}"),
-                  ],
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            logo: logo,
+            rightWidget: pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(),
+              ),
+              child: pw.Text(
+                "PURCHASE ORDER",
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(),
-                ),
-                child: pw.Text(
-                  "PURCHASE ORDER",
-                  style: pw.TextStyle(
-                    fontSize: 14,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
           pw.Align(
             alignment: pw.Alignment.centerRight,

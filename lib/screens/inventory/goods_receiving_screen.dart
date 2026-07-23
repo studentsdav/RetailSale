@@ -6,6 +6,7 @@ import 'package:retailpos/utils/date_picker_helper.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 import '../../controllers/inventory/issue_controller.dart';
 import '../../controllers/inventory/item_controller.dart';
@@ -1476,43 +1477,17 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
           /// ================= HEADER =================
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              if (logo != null)
-                pw.Container(
-                  width: 70,
-                  height: 70,
-                  margin: const pw.EdgeInsets.only(right: 12),
-                  child: pw.Image(logo, fit: pw.BoxFit.contain),
-                ),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      property!.propertyName,
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(property.address),
-                    if (property.printMobile != false && property.mobile.isNotEmpty)
-                      pw.Text("Mobile: ${property.mobile}"),
-                  ],
-                ),
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            logo: logo,
+            rightWidget: pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: pw.BoxDecoration(border: pw.Border.all()),
+              child: pw.Text(
+                "VENDOR RECEIVE ORDER",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
               ),
-              pw.Container(
-                padding:
-                    const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: pw.BoxDecoration(border: pw.Border.all()),
-                child: pw.Text(
-                  "VENDOR RECEIVE ORDER",
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-            ],
+            ),
           ),
 
           pw.SizedBox(height: 20),

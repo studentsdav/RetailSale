@@ -10,6 +10,8 @@ import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart';
 import '../../models/inventory/supplier_model.dart';
+import '../../utils/branding_storage.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 class ModifyReceivingScreen extends StatefulWidget {
   final int? initialGrnId;
@@ -146,6 +148,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
     final supplier = supplierCtrl.list.firstWhere((e) => e.id == supplierId);
 
     final property = propertyCtrl.data;
+    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
 
     final grn = ctrl.grnDetails;
 
@@ -174,42 +177,24 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
           /// ================= HEADER =================
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      property!.propertyName,
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(property.address),
-                    if (property.printMobile != false && property.mobile.isNotEmpty)
-                      pw.Text("Mobile: ${property.mobile}"),
-                  ],
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            logo: logo,
+            rightWidget: pw.Container(
+              padding: const pw.EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(),
+              ),
+              child: pw.Text(
+                "GOODS RECEIPT NOTE",
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(),
-                ),
-                child: pw.Text(
-                  "GOODS RECEIPT NOTE",
-                  style: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
 
           pw.SizedBox(height: 20),

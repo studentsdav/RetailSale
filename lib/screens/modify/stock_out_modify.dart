@@ -10,6 +10,8 @@ import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart' show PropertyInfo;
 import '../../models/inventory/stock_location_model.dart';
+import '../../utils/branding_storage.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 class IssueModifyScreen extends StatefulWidget {
   const IssueModifyScreen({super.key});
@@ -135,6 +137,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
     final pdf = pw.Document();
 
     final property = propertyCtrl.data;
+    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
 
     final issue = ctrl.issueDetails;
 
@@ -146,38 +149,21 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
           /// ================= HEADER =================
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      property?.propertyName ?? '',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(property?.address ?? ""),
-                    pw.Text("GSTIN: ${property?.gstNo ?? ""}"),
-                  ],
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            logo: logo,
+            rightWidget: pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(),
+              ),
+              child: pw.Text(
+                "STOCK DISPATCH SLIP",
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(),
-                ),
-                child: pw.Text(
-                  "STOCK DISPATCH SLIP",
-                  style: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
 
           pw.SizedBox(height: 20),

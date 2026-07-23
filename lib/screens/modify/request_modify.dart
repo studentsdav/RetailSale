@@ -13,6 +13,8 @@ import '../../core/api/endpoints.dart';
 import '../../models/common/property_info_model.dart';
 import '../../models/inventory/request_detail_model.dart';
 import '../../models/inventory/stock_location_model.dart';
+import '../../utils/branding_storage.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 class RequestModifyScreen extends StatefulWidget {
   const RequestModifyScreen({super.key});
@@ -178,6 +180,7 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
     final pdf = pw.Document();
 
     final property = propertyCtrl.data;
+    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
     final totalAmount = request.items.fold<double>(
       0,
       (sum, i) => sum + (i.qty * i.rate),
@@ -188,41 +191,17 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
           /// ================= HEADER =================
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // if (logo != null)
-              //   pw.Container(
-              //     width: 60,
-              //     height: 60,
-              //     child: pw.Image(logo),
-              //   ),
-              // pw.SizedBox(width: 12),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      property?.propertyName ?? '',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(property?.address ?? ''),
-                    pw.Text("GSTIN: ${property?.gstNo ?? ''}"),
-                  ],
-                ),
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            logo: logo,
+            rightWidget: pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(border: pw.Border.all()),
+              child: pw.Text(
+                "MATERIAL REQUEST",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
               ),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(border: pw.Border.all()),
-                child: pw.Text(
-                  "MATERIAL REQUEST",
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-            ],
+            ),
           ),
 
           pw.SizedBox(height: 20),

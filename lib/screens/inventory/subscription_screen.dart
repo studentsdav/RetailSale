@@ -8,6 +8,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
+import '../../controllers/settings/property_info_controller.dart';
+import '../../utils/branding_storage.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/ui_preferences_controller.dart';
@@ -31,6 +34,7 @@ class SubscriptionScreen extends StatefulWidget {
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
   final SalesController _ctrl = SalesController();
+  final _propertyCtrl = PropertyInfoController();
   final _customerName = TextEditingController();
   final _customerPhone = TextEditingController();
   final _customerAddress = TextEditingController();
@@ -85,6 +89,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       if (settingsCtrl.settings == null) {
         await settingsCtrl.load();
       }
+      await _propertyCtrl.load();
     } catch (_) {}
     await _ctrl.loadInitialData();
     _applyInitialCustomer();
@@ -1158,6 +1163,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   Future<Uint8List> _buildReceiptPdf(Map<String, dynamic> subscription) async {
     final pdf = pw.Document();
+    final property = _propertyCtrl.data;
+    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
     final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
     final schemes = (subscription['selected_schemes'] as List? ?? subscription['schemes'] as List? ?? const [])
         .map((entry) => Map<String, dynamic>.from(entry))
@@ -1257,6 +1264,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           marginBottom: 3 * PdfPageFormat.mm,
         ),
         build: (context) => [
+          PosInvoicePrinter.buildStandardThermalHeader(
+            property: property,
+            logo: logo,
+            fontRegular: pw.Font.helvetica(),
+            fontBold: pw.Font.helveticaBold(),
+          ),
+          pw.SizedBox(height: 6),
           pw.Center(
             child: pw.Text(
               'SUBSCRIPTION RECEIPT',

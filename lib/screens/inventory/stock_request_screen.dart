@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/inventory/request_controller.dart';
@@ -959,41 +960,17 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
         build: (context) => [
           // Keeping your exact PDF rendering logic untouched here
           /// ================= HEADER =================
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              if (logo != null)
-                pw.Container(
-                  width: 60,
-                  height: 60,
-                  margin: const pw.EdgeInsets.only(right: 12),
-                  child: pw.Image(logo, fit: pw.BoxFit.contain),
-                ),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      property?.propertyName ?? '',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(property?.address ?? ''),
-                    pw.Text("GSTIN: ${property?.gstNo ?? ''}"),
-                  ],
-                ),
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            logo: logo,
+            rightWidget: pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(border: pw.Border.all()),
+              child: pw.Text(
+                "MATERIAL REQUEST",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
               ),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(border: pw.Border.all()),
-                child: pw.Text(
-                  "MATERIAL REQUEST",
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-            ],
+            ),
           ),
 
           pw.SizedBox(height: 20),

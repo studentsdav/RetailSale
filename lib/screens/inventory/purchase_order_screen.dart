@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 import '../../controllers/inventory/issue_controller.dart' show IssueController;
 import '../../controllers/inventory/item_controller.dart';
@@ -993,48 +994,22 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         build: (context) => [
           /// ================= HEADER =================
 
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              if (logo != null)
-                pw.Container(
-                  width: 60,
-                  height: 60,
-                  margin: const pw.EdgeInsets.only(right: 12),
-                  child: pw.Image(logo, fit: pw.BoxFit.contain),
-                ),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      property?.propertyName ?? '',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text("${property?.address}"),
-                    pw.Text("Mobile: ${property?.mobile}"),
-                    pw.Text("Email: ${property?.email}"),
-                    pw.Text("GSTIN: ${property?.gstNo}"),
-                  ],
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            logo: logo,
+            rightWidget: pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(),
+              ),
+              child: pw.Text(
+                "PURCHASE ORDER",
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(),
-                ),
-                child: pw.Text(
-                  "PURCHASE ORDER",
-                  style: pw.TextStyle(
-                    fontSize: 14,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
 
           pw.SizedBox(height: 20),

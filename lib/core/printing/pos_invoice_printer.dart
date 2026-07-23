@@ -210,57 +210,15 @@ class PosInvoicePrinter {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
+          buildStandardThermalHeader(
+            property: data.property,
+            logo: logo,
+            fontRegular: regular,
+            fontBold: bold,
+          ),
           pw.Center(
             child: pw.Column(
               children: [
-                pw.Container(
-                  width: logo == null ? 0 : 44,
-                  height: logo == null ? 0 : 44,
-                  margin: pw.EdgeInsets.only(bottom: logo == null ? 0 : 4),
-                  child: logo == null
-                      ? null
-                      : pw.Image(logo, fit: pw.BoxFit.contain),
-                ),
-                pw.Text(
-                  data.property?.propertyName.isNotEmpty == true
-                      ? data.property!.propertyName
-                      : AppBrand.productName,
-                  textAlign: pw.TextAlign.center,
-                  style: storeStyle,
-                ),
-                if (_sellerAddress(data).isNotEmpty)
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.only(top: 2),
-                    child: pw.Text(
-                      _sellerAddress(data),
-                      textAlign: pw.TextAlign.center,
-                    ),
-                  ),
-                if (data.property?.printMobile != false && (data.property?.mobile ?? '').isNotEmpty)
-                  pw.Text(
-                    'Phone: ${data.property!.mobile}',
-                    textAlign: pw.TextAlign.center,
-                  ),
-                if (data.property?.printEmail != false && (data.property?.email ?? '').isNotEmpty)
-                  pw.Text(
-                    'Email: ${data.property!.email}',
-                    textAlign: pw.TextAlign.center,
-                  ),
-                if (data.property?.printWebsite != false && (data.property?.website ?? '').isNotEmpty)
-                  pw.Text(
-                    'Website: ${data.property!.website}',
-                    textAlign: pw.TextAlign.center,
-                  ),
-                if ((data.property?.gstNo ?? '').isNotEmpty)
-                  pw.Text(
-                    'GSTIN: ${data.property!.gstNo}',
-                    textAlign: pw.TextAlign.center,
-                  ),
-                if ((data.property?.drugLicenseNo ?? '').isNotEmpty)
-                  pw.Text(
-                    'DL No: ${data.property!.drugLicenseNo}',
-                    textAlign: pw.TextAlign.center,
-                  ),
                 pw.SizedBox(height: 4),
                 pw.Text(
                   _receiptTitle(order, hasTaxData),
@@ -1997,6 +1955,135 @@ class PosInvoicePrinter {
     final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (normalized.length <= length) return normalized;
     return '${normalized.substring(0, length - 1)}…';
+  }
+
+  static pw.Widget buildStandardA4Header({
+    required PropertyInfo? property,
+    required pw.MemoryImage? logo,
+    pw.Widget? rightWidget,
+  }) {
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        if (logo != null)
+          pw.Container(
+            width: 70,
+            height: 70,
+            margin: const pw.EdgeInsets.only(right: 12),
+            child: pw.Image(logo, fit: pw.BoxFit.contain),
+          ),
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                property?.propertyName ?? '',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              if (property?.address != null && property!.address.isNotEmpty)
+                pw.Text(property.address, style: const pw.TextStyle(fontSize: 8.5)),
+              if (property != null) ...[
+                if (property.printMobile != false && property.mobile.isNotEmpty)
+                  pw.Text('Phone: ${property.mobile}', style: const pw.TextStyle(fontSize: 8.5)),
+                if (property.printEmail != false && property.email.isNotEmpty)
+                  pw.Text('Email: ${property.email}', style: const pw.TextStyle(fontSize: 8.5)),
+                if (property.printWebsite != false && property.website.isNotEmpty)
+                  pw.Text('Website: ${property.website}', style: const pw.TextStyle(fontSize: 8.5)),
+                if (property.gstNo.isNotEmpty)
+                  pw.Text('GSTIN: ${property.gstNo}', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                if (property.drugLicenseNo.isNotEmpty)
+                  pw.Text('DL No: ${property.drugLicenseNo}', style: const pw.TextStyle(fontSize: 8.5)),
+                if (property.fssaiNo.isNotEmpty)
+                  pw.Text('FSSAI No: ${property.fssaiNo}', style: const pw.TextStyle(fontSize: 8.5)),
+              ],
+            ],
+          ),
+        ),
+        if (rightWidget != null) ...[
+          pw.SizedBox(width: 16),
+          rightWidget,
+        ],
+      ],
+    );
+  }
+
+  static pw.Widget buildStandardThermalHeader({
+    required PropertyInfo? property,
+    required pw.MemoryImage? logo,
+    required pw.Font fontRegular,
+    required pw.Font fontBold,
+  }) {
+    final bodyStyle = pw.TextStyle(font: fontRegular, fontSize: 8.9, color: _thermalSecondary);
+    final storeStyle = pw.TextStyle(font: fontBold, fontSize: 12.8, color: _thermalPrimary);
+    
+    final addressText = property?.address ?? '';
+    
+    return pw.DefaultTextStyle(
+      style: bodyStyle,
+      child: pw.Center(
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            if (logo != null)
+              pw.Container(
+                width: 44,
+                height: 44,
+                margin: const pw.EdgeInsets.only(bottom: 4),
+                child: pw.Image(logo, fit: pw.BoxFit.contain),
+              ),
+            pw.Text(
+              property?.propertyName ?? '',
+              textAlign: pw.TextAlign.center,
+              style: storeStyle,
+            ),
+            if (addressText.isNotEmpty)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 2),
+                child: pw.Text(
+                  addressText,
+                  textAlign: pw.TextAlign.center,
+                ),
+              ),
+            if (property != null) ...[
+              if (property.printMobile != false && property.mobile.isNotEmpty)
+                pw.Text(
+                  'Phone: ${property.mobile}',
+                  textAlign: pw.TextAlign.center,
+                ),
+              if (property.printEmail != false && property.email.isNotEmpty)
+                pw.Text(
+                  'Email: ${property.email}',
+                  textAlign: pw.TextAlign.center,
+                ),
+              if (property.printWebsite != false && property.website.isNotEmpty)
+                pw.Text(
+                  'Website: ${property.website}',
+                  textAlign: pw.TextAlign.center,
+                ),
+              if (property.gstNo.isNotEmpty)
+                pw.Text(
+                  'GSTIN: ${property.gstNo}',
+                  textAlign: pw.TextAlign.center,
+                ),
+              if (property.drugLicenseNo.isNotEmpty)
+                pw.Text(
+                  'DL No: ${property.drugLicenseNo}',
+                  textAlign: pw.TextAlign.center,
+                ),
+              if (property.fssaiNo.isNotEmpty)
+                pw.Text(
+                  'FSSAI No: ${property.fssaiNo}',
+                  textAlign: pw.TextAlign.center,
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   static String _cleanAddressForPrint(String? rawAddress) {
