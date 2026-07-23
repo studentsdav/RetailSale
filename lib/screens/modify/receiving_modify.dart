@@ -189,8 +189,8 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                       ),
                     ),
                     pw.Text(property.address),
-                    pw.Text("GSTIN: ${property.gstNo}"),
-                    pw.Text("Mobile: ${property.mobile}"),
+                    if (property.printMobile != false && property.mobile.isNotEmpty)
+                      pw.Text("Mobile: ${property.mobile}"),
                   ],
                 ),
               ),

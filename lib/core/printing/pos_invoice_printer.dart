@@ -236,9 +236,19 @@ class PosInvoicePrinter {
                       textAlign: pw.TextAlign.center,
                     ),
                   ),
-                if ((data.property?.mobile ?? '').isNotEmpty)
+                if (data.property?.printMobile != false && (data.property?.mobile ?? '').isNotEmpty)
                   pw.Text(
                     'Phone: ${data.property!.mobile}',
+                    textAlign: pw.TextAlign.center,
+                  ),
+                if (data.property?.printEmail != false && (data.property?.email ?? '').isNotEmpty)
+                  pw.Text(
+                    'Email: ${data.property!.email}',
+                    textAlign: pw.TextAlign.center,
+                  ),
+                if (data.property?.printWebsite != false && (data.property?.website ?? '').isNotEmpty)
+                  pw.Text(
+                    'Website: ${data.property!.website}',
                     textAlign: pw.TextAlign.center,
                   ),
                 if ((data.property?.gstNo ?? '').isNotEmpty)
@@ -518,11 +528,6 @@ class PosInvoicePrinter {
           pw.SizedBox(height: 4),
           pw.Center(child: pw.Text(order.saleNo, style: emphasisStyle)),
           pw.SizedBox(height: 6),
-          pw.Text(
-            'Return Policy: Exchange within 7 days with original receipt',
-            textAlign: pw.TextAlign.center,
-          ),
-          pw.SizedBox(height: 4),
           if ((order.notes ?? '').trim().isNotEmpty)
             pw.Text(
               'Note: ${order.notes!.trim()}',
@@ -530,11 +535,11 @@ class PosInvoicePrinter {
             ),
           if ((order.notes ?? '').trim().isNotEmpty) pw.SizedBox(height: 4),
           pw.Text(
-            data.termsAndConditions,
+            (data.property?.thermalFooterNote ?? '').trim().isNotEmpty
+                ? data.property!.thermalFooterNote.trim()
+                : data.thankYouMessage,
             textAlign: pw.TextAlign.center,
           ),
-          pw.SizedBox(height: 4),
-          pw.Text(data.thankYouMessage, textAlign: pw.TextAlign.center),
           if (order.luckyDrawVouchers != null && order.luckyDrawVouchers!.isNotEmpty) ...[
             pw.SizedBox(height: 8),
             _buildThermalVoucherTicketEmbedded(order, order.luckyDrawVouchers!, regular, bold, data.property, isCustomerCopy: true),
@@ -621,11 +626,14 @@ class PosInvoicePrinter {
                     if (_sellerAddress(data).isNotEmpty)
                       pw.Text(_sellerAddress(data),
                           style: const pw.TextStyle(fontSize: 8.8)),
-                    if ((data.property?.mobile ?? '').isNotEmpty)
+                    if (data.property?.printMobile != false && (data.property?.mobile ?? '').isNotEmpty)
                       pw.Text('Contact: ${data.property!.mobile}',
                           style: const pw.TextStyle(fontSize: 8.8)),
-                    if ((data.property?.email ?? '').isNotEmpty)
+                    if (data.property?.printEmail != false && (data.property?.email ?? '').isNotEmpty)
                       pw.Text('Email: ${data.property!.email}',
+                          style: const pw.TextStyle(fontSize: 8.8)),
+                    if (data.property?.printWebsite != false && (data.property?.website ?? '').isNotEmpty)
+                      pw.Text('Website: ${data.property!.website}',
                           style: const pw.TextStyle(fontSize: 8.8)),
                     pw.Text(
                       'GSTIN: ${((data.property?.gstNo ?? '').trim().isEmpty) ? '--' : data.property!.gstNo.trim()}',
@@ -728,7 +736,7 @@ class PosInvoicePrinter {
                         'Place of Supply',
                         data.buyerState != null && data.buyerState!.isNotEmpty
                             ? '${_titleCase(data.buyerState!)}${data.buyerStateCode != null ? ' / ${data.buyerStateCode}' : ''}'
-                            : (sellerState.isNotEmpty ? '${_titleCase(sellerState)}${data.sellerStateCode != null ? ' / ${data.sellerStateCode}' : ''}' : '-'),
+                            : '-',
                       ),
                     ],
                   ),
@@ -2014,7 +2022,7 @@ class PosInvoicePrinter {
   static String _deriveBuyerState(SaleOrder order, PropertyInfo? property) {
     final gstStateCode = _stateCodeFromGstin(order.customerGstin);
     if (gstStateCode != null) {
-      return _stateNameByCode[gstStateCode] ?? (order.billingTaxMode == 'IGST' ? '' : property?.state ?? '');
+      return _stateNameByCode[gstStateCode] ?? '';
     }
 
     final address = order.customerAddress ?? '';
@@ -2024,7 +2032,7 @@ class PosInvoicePrinter {
       }
     }
 
-    return order.billingTaxMode == 'IGST' ? '' : property?.state ?? '';
+    return '';
   }
 
   static String? _stateCodeFromGstin(String? gstin) {
@@ -2318,7 +2326,9 @@ class PosInvoicePrinter {
                         pw.SizedBox(height: 4),
                         pw.Text(sellerName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                         pw.Text(sellerAddressLines, style: const pw.TextStyle(fontSize: 8.5)),
-                        if ((property?.mobile ?? '').isNotEmpty) pw.Text('Phone: ${property!.mobile}', style: const pw.TextStyle(fontSize: 8.5)),
+                        if (property?.printMobile != false && (property?.mobile ?? '').isNotEmpty) pw.Text('Phone: ${property!.mobile}', style: const pw.TextStyle(fontSize: 8.5)),
+                        if (property?.printEmail != false && (property?.email ?? '').isNotEmpty) pw.Text('Email: ${property!.email}', style: const pw.TextStyle(fontSize: 8.5)),
+                        if (property?.printWebsite != false && (property?.website ?? '').isNotEmpty) pw.Text('Website: ${property!.website}', style: const pw.TextStyle(fontSize: 8.5)),
                         if ((property?.gstNo ?? '').isNotEmpty) pw.Text('GSTIN: ${property!.gstNo}', style: const pw.TextStyle(fontSize: 8.5)),
                         if ((property?.drugLicenseNo ?? '').isNotEmpty) pw.Text('DL No: ${property!.drugLicenseNo}', style: const pw.TextStyle(fontSize: 8.5)),
                       ],
@@ -2576,9 +2586,19 @@ class PosInvoicePrinter {
                       textAlign: pw.TextAlign.center,
                     ),
                   ),
-                if ((property?.mobile ?? '').isNotEmpty)
+                if (property?.printMobile != false && (property?.mobile ?? '').isNotEmpty)
                   pw.Text(
                     'Phone: ${property!.mobile}',
+                    textAlign: pw.TextAlign.center,
+                  ),
+                if (property?.printEmail != false && (property?.email ?? '').isNotEmpty)
+                  pw.Text(
+                    'Email: ${property!.email}',
+                    textAlign: pw.TextAlign.center,
+                  ),
+                if (property?.printWebsite != false && (property?.website ?? '').isNotEmpty)
+                  pw.Text(
+                    'Website: ${property!.website}',
                     textAlign: pw.TextAlign.center,
                   ),
                 if ((property?.gstNo ?? '').isNotEmpty)
@@ -2808,8 +2828,12 @@ class PosInvoicePrinter {
                     ),
                     if (property?.address != null && property!.address.isNotEmpty)
                       pw.Text(property.address, style: const pw.TextStyle(fontSize: 7.5), textAlign: pw.TextAlign.center),
-                    if (property?.mobile != null && property!.mobile.isNotEmpty)
+                    if (property?.printMobile != false && property?.mobile != null && property!.mobile.isNotEmpty)
                       pw.Text('Phone: ${property.mobile}', style: const pw.TextStyle(fontSize: 7.5)),
+                    if (property?.printEmail != false && property?.email != null && property!.email.isNotEmpty)
+                      pw.Text('Email: ${property.email}', style: const pw.TextStyle(fontSize: 7.5)),
+                    if (property?.printWebsite != false && property?.website != null && property!.website.isNotEmpty)
+                      pw.Text('Website: ${property.website}', style: const pw.TextStyle(fontSize: 7.5)),
                     if (property?.gstNo != null && property!.gstNo.isNotEmpty)
                       pw.Text('GSTIN: ${property.gstNo}', style: const pw.TextStyle(fontSize: 7.5)),
                   ],
@@ -3033,7 +3057,7 @@ class PosInvoicePrinter {
     final String storeAddress = property?.address ?? '';
     final String storeCity = property?.city ?? '';
     final String storePin = property?.pinCode ?? '';
-    final String storePhone = property?.mobile ?? '';
+    final String storePhone = property?.printMobile != false ? (property?.mobile ?? '') : '';
     final String cityPin = '$storeCity $storePin'.trim();
 
     return pw.Column(

@@ -67,6 +67,11 @@ exports.savePropertyInfo = async (req, res) => {
             fssai_no: req.body.fssai_no,
             drug_license_no: req.body.drug_license_no,
             logo_path: req.body.logo_path,
+            website: req.body.website,
+            print_mobile: req.body.print_mobile !== undefined ? req.body.print_mobile : true,
+            print_email: req.body.print_email !== undefined ? req.body.print_email : true,
+            print_website: req.body.print_website !== undefined ? req.body.print_website : true,
+            thermal_footer_note: req.body.thermal_footer_note,
             is_active: req.body.is_active
         };
 

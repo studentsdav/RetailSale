@@ -14,6 +14,11 @@ class PropertyInfo {
   final String drugLicenseNo;
   final String? logoPath;
   final bool isActive;
+  final String website;
+  final bool printMobile;
+  final bool printEmail;
+  final bool printWebsite;
+  final String thermalFooterNote;
 
   PropertyInfo({
     required this.propertyName,
@@ -31,6 +36,11 @@ class PropertyInfo {
     this.drugLicenseNo = '',
     this.logoPath,
     required this.isActive,
+    this.website = '',
+    this.printMobile = true,
+    this.printEmail = true,
+    this.printWebsite = true,
+    this.thermalFooterNote = 'Thank you for shopping with us. Please visit again.\nReturn Policy: Exchange within 7 days with original receipt.\nHave a nice day!',
   });
 
   factory PropertyInfo.fromJson(Map<String, dynamic> json) {
@@ -50,6 +60,13 @@ class PropertyInfo {
       drugLicenseNo: json['drug_license_no'] ?? json['drugLicenseNo'] ?? '',
       logoPath: json['logo_path'],
       isActive: json['is_active'] ?? true,
+      website: json['website'] ?? '',
+      printMobile: json['print_mobile'] ?? true,
+      printEmail: json['print_email'] ?? true,
+      printWebsite: json['print_website'] ?? true,
+      thermalFooterNote: (json['thermal_footer_note'] ?? '').toString().trim().isNotEmpty
+          ? json['thermal_footer_note'].toString()
+          : 'Thank you for shopping with us. Please visit again.\nReturn Policy: Exchange within 7 days with original receipt.\nHave a nice day!',
     );
   }
 
@@ -70,6 +87,11 @@ class PropertyInfo {
       'drug_license_no': drugLicenseNo,
       'logo_path': logoPath,
       'is_active': isActive,
+      'website': website,
+      'print_mobile': printMobile,
+      'print_email': printEmail,
+      'print_website': printWebsite,
+      'thermal_footer_note': thermalFooterNote,
     };
   }
 }

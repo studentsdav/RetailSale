@@ -1498,8 +1498,8 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                       ),
                     ),
                     pw.Text(property.address),
-                    pw.Text("GSTIN: ${property.gstNo}"),
-                    pw.Text("Mobile: ${property.mobile}"),
+                    if (property.printMobile != false && property.mobile.isNotEmpty)
+                      pw.Text("Mobile: ${property.mobile}"),
                   ],
                 ),
               ),

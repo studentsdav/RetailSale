@@ -62,6 +62,30 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.TEXT
         },
 
+        website: {
+            type: DataTypes.STRING(150)
+        },
+
+        print_mobile: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+
+        print_email: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+
+        print_website: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+
+        thermal_footer_note: {
+            type: DataTypes.TEXT,
+            defaultValue: 'Thank you for shopping with us. Please visit again.\nReturn Policy: Exchange within 7 days with original receipt.\nHave a nice day!'
+        },
+
         is_active: {
             type: DataTypes.BOOLEAN,
             defaultValue: true

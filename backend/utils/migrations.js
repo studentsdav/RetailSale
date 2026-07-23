@@ -2908,6 +2908,20 @@ COMMIT;
         ALTER TABLE issue_headers ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
       `);
     }
+  },
+  {
+    version: 81,
+    description: "Add website, print_mobile, print_email, print_website, and thermal_footer_note columns to property_info table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE property_info 
+        ADD COLUMN IF NOT EXISTS website VARCHAR(150),
+        ADD COLUMN IF NOT EXISTS print_mobile BOOLEAN DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS print_email BOOLEAN DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS print_website BOOLEAN DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS thermal_footer_note TEXT;
+      `);
+    }
   }
 ];
 

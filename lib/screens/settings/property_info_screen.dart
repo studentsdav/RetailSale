@@ -33,9 +33,14 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
   final _panNo = TextEditingController();
   final _fssaiNo = TextEditingController();
   final _drugLicenseNo = TextEditingController();
+  final _website = TextEditingController();
+  final _thermalFooterNote = TextEditingController();
   String? _logoPath;
 
   bool _active = true;
+  bool _printMobile = true;
+  bool _printEmail = true;
+  bool _printWebsite = true;
   bool _isLoading = false;
 
   @override
@@ -65,8 +70,13 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
         _panNo.text = d.panNo;
         _fssaiNo.text = d.fssaiNo;
         _drugLicenseNo.text = d.drugLicenseNo;
+        _website.text = d.website;
+        _thermalFooterNote.text = d.thermalFooterNote;
         _logoPath = d.logoPath;
         _active = d.isActive;
+        _printMobile = d.printMobile;
+        _printEmail = d.printEmail;
+        _printWebsite = d.printWebsite;
       });
     } catch (e) {}
   }
@@ -115,6 +125,11 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
         drugLicenseNo: _drugLicenseNo.text,
         logoPath: _logoPath,
         isActive: _active,
+        website: _website.text,
+        printMobile: _printMobile,
+        printEmail: _printEmail,
+        printWebsite: _printWebsite,
+        thermalFooterNote: _thermalFooterNote.text,
       );
 
       await ctrl.save(payload);
@@ -203,6 +218,9 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                           validator: (v) => v != null && v.contains('@')
                               ? null
                               : 'Enter a valid email address'),
+                      _field(_website, 'Website URL',
+                          required: false,
+                          prefixIcon: Icons.web_rounded),
                     ],
                   ),
                   _sectionCard(
@@ -265,7 +283,7 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                                         style: TextStyle(
                                             fontWeight: FontWeight.w600,
                                             fontSize: 14)),
-                                    Text('Appears on invoices and reports',
+                                    Text('Appears on invoices/reports\n(Recommended: 200x200 px PNG/JPG)',
                                         style: TextStyle(
                                             color: Colors.grey.shade600,
                                             fontSize: 12)),
@@ -310,6 +328,92 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                  _sectionCard(
+                    title: 'Invoice & Printing Options',
+                    icon: Icons.print_rounded,
+                    children: [
+                      SizedBox(
+                        width: 380,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.white,
+                          ),
+                          child: SwitchListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: const Text('Print Mobile Number',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            subtitle: Text(
+                                'Include store phone number on invoices and bills',
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12)),
+                            value: _printMobile,
+                            activeThumbColor: Colors.green,
+                            onChanged: (v) => setState(() => _printMobile = v),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 380,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.white,
+                          ),
+                          child: SwitchListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: const Text('Print Email Address',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            subtitle: Text(
+                                'Include store email address on invoices and bills',
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12)),
+                            value: _printEmail,
+                            activeThumbColor: Colors.green,
+                            onChanged: (v) => setState(() => _printEmail = v),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 380,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.white,
+                          ),
+                          child: SwitchListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: const Text('Print Website',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            subtitle: Text(
+                                'Include store website on invoices and bills',
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12)),
+                            value: _printWebsite,
+                            activeThumbColor: Colors.green,
+                            onChanged: (v) => setState(() => _printWebsite = v),
+                          ),
+                        ),
+                      ),
+                      _field(_thermalFooterNote, 'Thermal Receipt Footer Note',
+                          width: double.infinity,
+                          prefixIcon: Icons.notes_rounded,
+                          required: false,
+                          maxLines: 3),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -452,7 +556,9 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
           TextFormField(
             controller: c,
             maxLines: maxLines,
-            keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+            keyboardType: isNumber
+                ? TextInputType.number
+                : (maxLines > 1 ? TextInputType.multiline : TextInputType.text),
             validator: validator ??
                 (required
                     ? (v) => v == null || v.trim().isEmpty

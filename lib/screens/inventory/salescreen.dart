@@ -2903,6 +2903,7 @@ class _SaleScreenState extends State<SaleScreen> {
                 compareFn: (first, second) => first.id == second.id,
                 popupProps: PopupProps.menu(
                   showSearchBox: true,
+                  itemBuilder: _buildCustomerDropdownItem,
                   emptyBuilder: (context, searchEntry) {
                     return Center(
                       child: Padding(
@@ -8669,7 +8670,10 @@ class _SaleScreenState extends State<SaleScreen> {
                       : await ctrl.searchCustomers(filter),
                   itemAsString: (customer) => customer.displayLabel,
                   compareFn: (first, second) => first.id == second.id,
-                  popupProps: const PopupProps.menu(showSearchBox: true),
+                  popupProps: PopupProps.menu(
+                    showSearchBox: true,
+                    itemBuilder: _buildCustomerDropdownItem,
+                  ),
                   decoratorProps: const DropDownDecoratorProps(
                     decoration: InputDecoration(
                       labelText: 'Search Existing Customer',
@@ -9592,7 +9596,10 @@ class _SaleScreenState extends State<SaleScreen> {
                       : await ctrl.searchCustomers(filter),
                   itemAsString: (customer) => customer.displayLabel,
                   compareFn: (first, second) => first.id == second.id,
-                  popupProps: const PopupProps.menu(showSearchBox: true),
+                  popupProps: PopupProps.menu(
+                    showSearchBox: true,
+                    itemBuilder: _buildCustomerDropdownItem,
+                  ),
                   decoratorProps: const DropDownDecoratorProps(
                     decoration: InputDecoration(
                       labelText: 'Search Customer',
@@ -11363,6 +11370,134 @@ class _SaleScreenState extends State<SaleScreen> {
               fontWeight: FontWeight.w800,
               fontSize: 16,
               color: highlight ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerDropdownItem(BuildContext context, SaleCustomer customer, bool isSelected, bool isHighlighted) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? Theme.of(context).primaryColor.withOpacity(0.08)
+            : isHighlighted
+                ? Colors.grey.shade100
+                : null,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  customer.displayLabel,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color: isSelected ? Theme.of(context).primaryColor : Colors.black87,
+                  ),
+                ),
+                if (customer.customerAddress.trim().isNotEmpty || customer.customerGstin.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Customer Details'),
+                          content: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextFormField(
+                                  initialValue: customer.customerName.trim().isEmpty ? 'Walk-in' : customer.customerName,
+                                  readOnly: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Name',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  initialValue: customer.customerPhone,
+                                  readOnly: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Phone',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  initialValue: customer.customerAddress.trim().isEmpty ? 'N/A' : customer.customerAddress,
+                                  readOnly: true,
+                                  maxLines: null,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Address',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  initialValue: customer.customerGstin.trim().isEmpty ? 'N/A' : customer.customerGstin,
+                                  readOnly: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'GSTIN',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 13,
+                          color: isSelected ? Theme.of(context).primaryColor : Colors.blue.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            [
+                              if (customer.customerGstin.trim().isNotEmpty) 'GSTIN: ${customer.customerGstin.trim()}',
+                              if (customer.customerAddress.trim().isNotEmpty) 'Address: ${customer.customerAddress.trim()}',
+                            ].join(' | '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: isSelected
+                                  ? Theme.of(context).primaryColor.withOpacity(0.7)
+                                  : Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
