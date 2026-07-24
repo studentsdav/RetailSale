@@ -2371,6 +2371,29 @@ async function recordSalePayment({
     const changeAmount = toAmount(header.change_amount || sale?.change_amount || 0);
     let remainingChange = changeAmount;
 
+    const totalSplitPaid = paymentLines.reduce((sum, line) => sum + toAmount(line.amount), 0);
+    const excessToDeduct = Math.max(0, toAmount(totalSplitPaid - changeAmount - amountPaid));
+    let remainingExcess = excessToDeduct;
+
+    if (remainingExcess > 0) {
+        for (const line of paymentLines) {
+            if (line.method === 'CASH') {
+                const deduct = Math.min(line.amount, remainingExcess);
+                line.amount = toAmount(line.amount - deduct);
+                remainingExcess = toAmount(remainingExcess - deduct);
+            }
+        }
+    }
+    if (remainingExcess > 0) {
+        for (const line of paymentLines) {
+            if (line.amount > 0) {
+                const deduct = Math.min(line.amount, remainingExcess);
+                line.amount = toAmount(line.amount - deduct);
+                remainingExcess = toAmount(remainingExcess - deduct);
+            }
+        }
+    }
+
     for (const line of paymentLines) {
         let lineAmount = line.amount;
         if (line.method === 'CASH' && remainingChange > 0) {

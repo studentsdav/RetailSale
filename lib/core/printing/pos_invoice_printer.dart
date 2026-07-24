@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -456,23 +457,35 @@ class PosInvoicePrinter {
             ],
           ),
           pw.SizedBox(height: 5),
-          _thermalMetaRow(
-            'Payment',
-            _displayPaymentMode(order),
-            _isRefundedOrder(order)
-                ? 'Refund'
-                : ((data.changeDue ?? order.changeAmount) > 0 ? 'Refund (CASH)' : 'Refund'),
-            _money(_refundAmountForDisplay(order, data.changeDue)),
-          ),
-          if (_refundTimestamp(order).isNotEmpty)
-            _thermalMetaRow('Refunded On', _refundTimestamp(order), '', ''),
-          if ((data.amountReceived ?? order.amountPaid) > 0)
-            _thermalMetaRow(
-              'Received',
-              _money(data.amountReceived ?? order.amountPaid),
-              '',
-              '',
-            ),
+          ...(() {
+            final pmts = _calculateActualPayments(order, data.amountReceived);
+            return [
+              _thermalMetaRow(
+                'Payment',
+                _displayPaymentMode(order),
+                _isRefundedOrder(order)
+                    ? 'Refund'
+                    : (pmts['refund']! > 0 ? 'Refund (CASH)' : 'Refund'),
+                _money(pmts['refund']!),
+              ),
+              if (pmts['advanceCreated']! > 0.009)
+                _thermalMetaRow(
+                  'Add to Advance',
+                  _money(pmts['advanceCreated']!),
+                  '',
+                  '',
+                ),
+              if (_refundTimestamp(order).isNotEmpty)
+                _thermalMetaRow('Refunded On', _refundTimestamp(order), '', ''),
+              if (pmts['received']! > 0)
+                _thermalMetaRow(
+                  'Received',
+                  _money(pmts['received']!),
+                  '',
+                  '',
+                ),
+            ];
+          })(),
           pw.SizedBox(height: 8),
           pw.Center(
             child: pw.BarcodeWidget(
@@ -1142,17 +1155,24 @@ class PosInvoicePrinter {
               bold: true,
             ),
           ],
-          if (order.amountPaid > 0) ...[
-            pw.Divider(height: 10),
-            _a4AmountRow(
-              order.paymentMode.isNotEmpty
-                  ? 'Received (${order.paymentMode})'
-                  : 'Received',
-              order.amountPaid,
-            ),
-          ],
-          if (order.changeAmount > 0)
-            _a4AmountRow('Refund (CASH)', order.changeAmount),
+          ...(() {
+            final pmts = _calculateActualPayments(order);
+            return [
+              if (pmts['received']! > 0) ...[
+                pw.Divider(height: 10),
+                _a4AmountRow(
+                  order.paymentMode.isNotEmpty
+                      ? 'Received (${order.paymentMode})'
+                      : 'Received',
+                  pmts['received']!,
+                ),
+              ],
+              if (pmts['refund']! > 0)
+                _a4AmountRow('Refund (CASH)', pmts['refund']!),
+              if (pmts['advanceCreated']! > 0.009)
+                _a4AmountRow('Added to Advance', pmts['advanceCreated']!),
+            ];
+          })(),
         ],
       ),
     );
@@ -1254,6 +1274,38 @@ class PosInvoicePrinter {
       return order.netAmount;
     }
     return order.changeAmount > 0 ? order.changeAmount : (fallback ?? 0.0);
+  }
+
+  static Map<String, double> _calculateActualPayments(SaleOrder order, [double? fallbackAmountReceived]) {
+    double totalReceived = fallbackAmountReceived ?? order.amountPaid;
+    final ref = (order.paymentReference ?? '').trim();
+    if (ref.startsWith('POSPAY:')) {
+      try {
+        final rawJson = ref.substring(7);
+        final dynamic decoded = jsonDecode(rawJson);
+        if (decoded is List) {
+          double sum = 0;
+          for (final entry in decoded) {
+            if (entry is Map) {
+              sum += double.tryParse((entry['amount'] ?? 0).toString()) ?? 0.0;
+            }
+          }
+          if (sum > 0) {
+            totalReceived = sum;
+          }
+        }
+      } catch (_) {}
+    }
+
+    final netPayable = order.netAmount;
+    final refund = order.changeAmount;
+    final advanceCreated = math.max(totalReceived - netPayable - refund, 0.0);
+
+    return {
+      'received': totalReceived,
+      'refund': refund,
+      'advanceCreated': advanceCreated,
+    };
   }
 
   static bool _hasTaxData(SaleOrder order) {

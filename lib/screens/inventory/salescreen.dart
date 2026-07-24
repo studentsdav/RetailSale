@@ -139,6 +139,7 @@ class _SaleScreenState extends State<SaleScreen> {
   double _pendingPreviousAdjustment = 0;
   double _pendingAdvanceApplied = 0;
   double _pendingAdvanceCreated = 0;
+  _PaymentSummary? _checkoutSummary;
   String _cashierName = 'System';
   int _customerOutstandingRequestId = 0;
   int? _activeDraftId;
@@ -2376,6 +2377,7 @@ class _SaleScreenState extends State<SaleScreen> {
         _schemeUsageMode = 'APPLY_NOW';
         _itemSchemeProgress = null;
         _itemSchemeProgressByScheme.clear();
+        _recombineAdvanceSplitLines();
       }
       _itemAdvanceSummaries.clear();
       _customerItemAdvances = const [];
@@ -2706,6 +2708,23 @@ class _SaleScreenState extends State<SaleScreen> {
     _items
       ..clear()
       ..addAll(rebuiltItems);
+  }
+
+  void _recombineAdvanceSplitLines() {
+    final rebuilt = <SaleItem>[];
+    for (final item in _items) {
+      if (item.isAdvanceFree) {
+        continue;
+      }
+      if (item.originalQty > 0) {
+        rebuilt.add(item.copyWith(qty: item.originalQty, originalQty: 0));
+      } else {
+        rebuilt.add(item);
+      }
+    }
+    _items
+      ..clear()
+      ..addAll(rebuilt);
   }
 
   // Item-wise scheme: convert up to `free_qty` from the scheme item into a rate=0 line
@@ -3495,6 +3514,7 @@ class _SaleScreenState extends State<SaleScreen> {
       _loyaltyMaxRedeemPerBill = 0;
       _customerItemAdvances = const [];
       _customerSubscriptions = const [];
+      _recombineAdvanceSplitLines();
       _pendingPreviousAdjustment = 0;
       _pendingAdvanceApplied = 0;
       _pendingAdvanceCreated = 0;
@@ -4419,6 +4439,7 @@ class _SaleScreenState extends State<SaleScreen> {
     final result = await _showPaymentDialog();
     if (result == null) return;
     setState(() {
+      _checkoutSummary = result.summary;
       _paymentEntries = result.entries;
       _paymentMode = result.summary.primaryMode;
       _amountPaid.text = result.summary.collectedAmount.toStringAsFixed(2);
@@ -5060,12 +5081,20 @@ class _SaleScreenState extends State<SaleScreen> {
     final isEditing = _editingSaleId != null;
     final isWorkingDraft = _activeDraftId != null;
     final roundedInvoiceTotal = _payableInvoiceTotal;
-    final normalizedPayments = _normalizePaymentEntries(
-      _paymentEntries,
-      invoiceTotal: roundedInvoiceTotal,
-      fallbackMode: _paymentMode,
-      fallbackPaid: double.tryParse(_amountPaid.text.trim()),
-    );
+    final _NormalizedPaymentEntries normalizedPayments;
+    if (_checkoutSummary != null) {
+      normalizedPayments = _NormalizedPaymentEntries(
+        entries: _paymentEntries,
+        summary: _checkoutSummary!,
+      );
+    } else {
+      normalizedPayments = _normalizePaymentEntries(
+        _paymentEntries,
+        invoiceTotal: roundedInvoiceTotal,
+        fallbackMode: _paymentMode,
+        fallbackPaid: double.tryParse(_amountPaid.text.trim()),
+      );
+    }
     final paymentSummary = normalizedPayments.summary;
     if (_hasCreditSelected(normalizedPayments.entries) &&
         !_hasCustomerContext) {
@@ -5378,6 +5407,7 @@ class _SaleScreenState extends State<SaleScreen> {
       _pendingPreviousAdjustment = 0;
       _pendingAdvanceApplied = 0;
       _pendingAdvanceCreated = 0;
+      _checkoutSummary = null;
       _notes.clear();
       _manualDiscountValue.text = '0';
       _voucherCode.clear();

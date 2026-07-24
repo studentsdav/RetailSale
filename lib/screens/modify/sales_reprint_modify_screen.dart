@@ -805,8 +805,14 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                     );
                                     return ListTile(
                                       selected: selected,
-                                      title:
+                                      title: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
                                           Text('${sale['sale_no'] ?? 'Bill'}'),
+                                          const SizedBox(width: 8),
+                                          _buildSourceTag(sale['sale_source']),
+                                        ],
+                                      ),
                                       subtitle: Text(
                                         '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateFormat('dd-MMM-yyyy hh:mm a').format(saleDate)} • Rs. ${_fmtAmount(sale['net_amount'])}${sale['status'] == 'RETURNED' ? ' • [RETURNED]' : ''}',
                                       ),
@@ -841,11 +847,18 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              'Bill ${_selectedOrder!.saleNo}${_selectedDetails?['status'] == 'RETURNED' ? ' (Returned)' : ''}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleLarge,
+                                            Wrap(
+                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                              spacing: 8,
+                                              children: [
+                                                Text(
+                                                  'Bill ${_selectedOrder!.saleNo}${_selectedDetails?['status'] == 'RETURNED' ? ' (Returned)' : ''}',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleLarge,
+                                                ),
+                                                _buildSourceTag(_selectedOrder!.saleSource),
+                                              ],
                                             ),
                                             Text(
                                               DateFormat('dd-MMM-yyyy hh:mm a')
@@ -1107,6 +1120,54 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSourceTag(String? source) {
+    if (source == null || source.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final cleanSource = source.trim().toLowerCase();
+    Color bgColor;
+    Color textColor;
+
+    switch (cleanSource) {
+      case 'app':
+        bgColor = Colors.green.shade50;
+        textColor = Colors.green.shade700;
+        break;
+      case 'flipkart':
+        bgColor = Colors.blue.shade50;
+        textColor = Colors.blue.shade700;
+        break;
+      case 'amazon':
+        bgColor = Colors.orange.shade50;
+        textColor = Colors.orange.shade700;
+        break;
+      case 'store':
+        bgColor = Colors.grey.shade100;
+        textColor = Colors.grey.shade700;
+        break;
+      default:
+        bgColor = Colors.purple.shade50;
+        textColor = Colors.purple.shade700;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: textColor.withOpacity(0.3), width: 0.5),
+      ),
+      child: Text(
+        source.toUpperCase(),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

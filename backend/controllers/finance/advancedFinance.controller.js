@@ -1508,11 +1508,6 @@ exports.getCreditReport = async (req, res) => {
             is_latest: true,
             is_deleted: false
         };
-        if (req.query.from_date || req.query.to_date) {
-            where.sale_date = {};
-            if (req.query.from_date) where.sale_date[Op.gte] = parseDateOnly(req.query.from_date);
-            if (req.query.to_date) where.sale_date[Op.lte] = endOfDay(req.query.to_date);
-        }
         const customerMatch = buildCustomerMatch(String(req.query.customer || req.query.search || '').trim());
         if (customerMatch) Object.assign(where, customerMatch);
 
@@ -1626,15 +1621,19 @@ exports.getCreditReport = async (req, res) => {
             customer.advances = Array.isArray(customer.advances) ? customer.advances : [];
         }
 
+        const resultCustomers = Array.from(customers.values()).filter(
+            (c) => c.total_outstanding > 0.009 || c.total_advance > 0.009
+        );
+
         res.json({
             success: true,
             summary: {
-                total_customers: customers.size,
-                total_credit_bills: totalCreditBills,
-                total_outstanding: roundAmount(totalOutstanding),
-                total_advance: roundAmount(totalAdvance)
+                total_customers: resultCustomers.length,
+                total_credit_bills: resultCustomers.reduce((sum, c) => sum + c.bills.length, 0),
+                total_outstanding: roundAmount(resultCustomers.reduce((sum, c) => sum + c.total_outstanding, 0)),
+                total_advance: roundAmount(resultCustomers.reduce((sum, c) => sum + c.total_advance, 0))
             },
-            data: Array.from(customers.values())
+            data: resultCustomers
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

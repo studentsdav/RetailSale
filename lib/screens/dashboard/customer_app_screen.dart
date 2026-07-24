@@ -4077,16 +4077,17 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                           children: [
                             _buildCustomerDashboard(theme),
                             if (_historyOrders.isNotEmpty) ...[
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 8.0),
-                                child: Text(
-                                  'Online Delivery Orders',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: theme.colorScheme.primary),
+                              if (_historySales.isNotEmpty)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Text(
+                                    'Online Delivery Orders',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.colorScheme.primary),
+                                  ),
                                 ),
-                              ),
                               ..._historyOrders.map((order) {
                                 final netAmt = double.tryParse(
                                         order['net_amount']?.toString() ??
