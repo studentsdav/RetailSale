@@ -19,6 +19,15 @@ class PropertyInfo {
   final bool printEmail;
   final bool printWebsite;
   final String thermalFooterNote;
+  final String termsAndConditions;
+  final String bankName;
+  final String bankAccNo;
+  final String bankIfsc;
+  final String upiId;
+  final String upiPayeeName;
+  final bool printBankDetails;
+  final bool printUpiQr;
+  final bool printDigitalSignature;
 
   PropertyInfo({
     required this.propertyName,
@@ -41,6 +50,15 @@ class PropertyInfo {
     this.printEmail = true,
     this.printWebsite = true,
     this.thermalFooterNote = 'Thank you for shopping with us. Please visit again.\nReturn Policy: Exchange within 7 days with original receipt.\nHave a nice day!',
+    this.termsAndConditions = '1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction.',
+    this.bankName = '',
+    this.bankAccNo = '',
+    this.bankIfsc = '',
+    this.upiId = '',
+    this.upiPayeeName = '',
+    this.printBankDetails = false,
+    this.printUpiQr = false,
+    this.printDigitalSignature = false,
   });
 
   factory PropertyInfo.fromJson(Map<String, dynamic> json) {
@@ -67,6 +85,15 @@ class PropertyInfo {
       thermalFooterNote: (json['thermal_footer_note'] ?? '').toString().trim().isNotEmpty
           ? json['thermal_footer_note'].toString()
           : 'Thank you for shopping with us. Please visit again.\nReturn Policy: Exchange within 7 days with original receipt.\nHave a nice day!',
+      termsAndConditions: json['terms_and_conditions'] ?? json['termsAndConditions'] ?? '1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction.',
+      bankName: json['bank_name'] ?? json['bankName'] ?? '',
+      bankAccNo: json['bank_acc_no'] ?? json['bankAccNo'] ?? '',
+      bankIfsc: json['bank_ifsc'] ?? json['bankIfsc'] ?? '',
+      upiId: json['upi_id'] ?? json['upiId'] ?? '',
+      upiPayeeName: json['upi_payee_name'] ?? json['upiPayeeName'] ?? '',
+      printBankDetails: json['print_bank_details'] ?? json['printBankDetails'] ?? false,
+      printUpiQr: json['print_upi_qr'] ?? json['printUpiQr'] ?? false,
+      printDigitalSignature: json['print_digital_signature'] ?? json['printDigitalSignature'] ?? false,
     );
   }
 
@@ -92,6 +119,15 @@ class PropertyInfo {
       'print_email': printEmail,
       'print_website': printWebsite,
       'thermal_footer_note': thermalFooterNote,
+      'terms_and_conditions': termsAndConditions,
+      'bank_name': bankName,
+      'bank_acc_no': bankAccNo,
+      'bank_ifsc': bankIfsc,
+      'upi_id': upiId,
+      'upi_payee_name': upiPayeeName,
+      'print_bank_details': printBankDetails,
+      'print_upi_qr': printUpiQr,
+      'print_digital_signature': printDigitalSignature,
     };
   }
 }

@@ -1133,59 +1133,71 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
           pw.SizedBox(height: 20),
 
           /// ================= ISSUE INFO =================
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              color: PdfColors.grey50,
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("DEPARTMENT DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(_selectedDepartment?.locationName ?? 'N/A', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
+                      pw.Text("Dispatch Type: ${_issueType ?? 'N/A'}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                    ],
+                  ),
+                ),
+                pw.Container(width: 0.5, height: 45, color: PdfColors.grey300, margin: const pw.EdgeInsets.symmetric(horizontal: 16)),
+                pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text("Dispatch No: ${_indentNo.text}"),
-                    pw.Text("Dispatch Date: ${DateFormat('dd-MMM-yyyy').format(_date)}"),
-                    pw.Text(
-                        "Department: ${_selectedDepartment?.locationName ?? ''}"),
+                    pw.Text("DISPATCH DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                    pw.SizedBox(height: 4),
+                    _metaRow("Dispatch No", _indentNo.text),
+                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(_date)),
+                    if (_selectedRequestId != null)
+                      _metaRow("Request ID", _selectedRequestId.toString()),
+                    _metaRow("Status", "CLOSED"),
                   ],
                 ),
-              ),
-              pw.SizedBox(width: 20),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text("Dispatch Type: ${_issueType ?? ''}"),
-                  pw.Text("Request ID: ${_selectedRequestId ?? ''}"),
-                  pw.Text("Status: CLOSED"),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
 
           pw.SizedBox(height: 20),
 
           /// ================= ITEM TABLE =================
           pw.Table(
-            border: pw.TableBorder.all(width: 0.5),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
             columnWidths: {
-              0: const pw.FixedColumnWidth(30),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(1),
-              3: const pw.FlexColumnWidth(1),
-              4: const pw.FlexColumnWidth(1),
-              5: const pw.FlexColumnWidth(1),
-              6: const pw.FlexColumnWidth(1),
-              7: const pw.FlexColumnWidth(1),
+              0: const pw.FixedColumnWidth(25),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(40),
+              3: const pw.FixedColumnWidth(40),
+              4: const pw.FixedColumnWidth(50),
+              5: const pw.FixedColumnWidth(45),
+              6: const pw.FixedColumnWidth(50),
+              7: const pw.FixedColumnWidth(60),
             },
             children: [
               pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
                 children: [
-                  _cell("S.No", bold: true),
-                  _cell("Item"),
-                  _cell("Unit"),
-                  _cell("Qty"),
-                  _cell("Rate"),
-                  _cell("GST %"),
-                  _cell("GST Amt"),
-                  _cell("Amount"),
+                  _cell("S.No", bold: true, alignment: pw.Alignment.center),
+                  _cell("Item", bold: true),
+                  _cell("Unit", bold: true, alignment: pw.Alignment.center),
+                  _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("GST %", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("GST Amt", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
               ...List.generate(_items.length, (i) {
@@ -1193,14 +1205,14 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                 final gstAmount = (r.qty * r.rate) * (r.tax / 100);
                 return pw.TableRow(
                   children: [
-                    _cell("${i + 1}"),
+                    _cell("${i + 1}", alignment: pw.Alignment.center),
                     _cell(r.itemName),
-                    _cell(r.unit),
-                    _cell(r.qty.toString()),
-                    _cell(r.rate.toStringAsFixed(2)),
-                    _cell(r.tax.toStringAsFixed(2)),
-                    _cell(gstAmount.toStringAsFixed(2)),
-                    _cell(r.amount.toStringAsFixed(2)),
+                    _cell(r.unit, alignment: pw.Alignment.center),
+                    _cell(r.qty.toString(), alignment: pw.Alignment.centerRight),
+                    _cell(r.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(r.tax.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(gstAmount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(r.amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -1218,7 +1230,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                 children: [
                   _total("Sub Total", totalAmount),
                   _total("GST", totalGST),
-                  pw.Divider(),
+                  pw.Divider(color: PdfColors.grey400, thickness: 0.5),
                   _total("Net Amount", netAmount, bold: true),
                 ],
               ),
@@ -1231,18 +1243,27 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(children: [
-                pw.Text("Dispatched By (Store)"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Received By (Department)"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Approved By"),
-                pw.SizedBox(height: 30),
-              ]),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text("Dispatched By (Store)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text("Received By (Dept)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("Approved By", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
             ],
           ),
         ],
@@ -1251,14 +1272,16 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
     await Printing.layoutPdf(name: _indentNo.text.isNotEmpty ? 'Indent_${_indentNo.text}' : 'Stock_Issue', onLayout: (format) async => pdf.save());
   }
 
-  pw.Widget _cell(String text, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
+  pw.Widget _cell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: alignment,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
         ),
       ),
     );
@@ -1275,6 +1298,28 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],
+    );
+  }
+
+  pw.Widget _metaRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 45,
+            child: pw.Text(
+              "$label:",
+              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          ),
+        ],
+      ),
     );
   }
 

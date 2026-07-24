@@ -89,6 +89,51 @@ module.exports = (sequelize, DataTypes) => {
         is_active: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
+        },
+
+        terms_and_conditions: {
+            type: DataTypes.TEXT,
+            defaultValue: ''
+        },
+
+        bank_name: {
+            type: DataTypes.STRING(150),
+            defaultValue: ''
+        },
+
+        bank_acc_no: {
+            type: DataTypes.STRING(50),
+            defaultValue: ''
+        },
+
+        bank_ifsc: {
+            type: DataTypes.STRING(30),
+            defaultValue: ''
+        },
+
+        upi_id: {
+            type: DataTypes.STRING(100),
+            defaultValue: ''
+        },
+
+        upi_payee_name: {
+            type: DataTypes.STRING(150),
+            defaultValue: ''
+        },
+
+        print_bank_details: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+
+        print_upi_qr: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+
+        print_digital_signature: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         }
     }, {
         tableName: 'property_info',

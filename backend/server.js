@@ -218,6 +218,24 @@ if (!fs.existsSync(licensePath)) {
             console.warn('⚠️ Failed to dynamically alter table delivery_customers:', colErr.message);
         }
 
+        try {
+            await propertyDb.query(`
+                ALTER TABLE property_info 
+                ADD COLUMN IF NOT EXISTS terms_and_conditions TEXT DEFAULT '',
+                ADD COLUMN IF NOT EXISTS bank_name VARCHAR(150) DEFAULT '',
+                ADD COLUMN IF NOT EXISTS bank_acc_no VARCHAR(50) DEFAULT '',
+                ADD COLUMN IF NOT EXISTS bank_ifsc VARCHAR(30) DEFAULT '',
+                ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100) DEFAULT '',
+                ADD COLUMN IF NOT EXISTS upi_payee_name VARCHAR(150) DEFAULT '',
+                ADD COLUMN IF NOT EXISTS print_bank_details BOOLEAN DEFAULT false,
+                ADD COLUMN IF NOT EXISTS print_upi_qr BOOLEAN DEFAULT false,
+                ADD COLUMN IF NOT EXISTS print_digital_signature BOOLEAN DEFAULT false;
+            `);
+            console.log('✅ Verified/added custom columns in property_info table');
+        } catch (colErr) {
+            console.warn('⚠️ Failed to dynamically alter table property_info:', colErr.message);
+        }
+
         await runMigrations(propertyDb);
 
         console.log('✅ Database migrations complete');

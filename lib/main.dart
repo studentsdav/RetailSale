@@ -369,14 +369,28 @@ class MyApp extends StatelessWidget {
               globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const CommissionReportScreen()));
             },
           },
-          child: Listener(
+          child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onPointerDown: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: child ?? const SizedBox.shrink(),
-            ),
+            onTap: () {
+              final primaryFocus = FocusManager.instance.primaryFocus;
+              if (primaryFocus != null && primaryFocus.context != null) {
+                bool isTextBox = false;
+                primaryFocus.context!.visitAncestorElements((element) {
+                  final name = element.widget.runtimeType.toString();
+                  if (name.contains('EditableText') ||
+                      name.contains('TextField') ||
+                      name.contains('TextFormField')) {
+                    isTextBox = true;
+                    return false; // stop visiting
+                  }
+                  return true;
+                });
+                if (isTextBox) {
+                  primaryFocus.unfocus();
+                }
+              }
+            },
+            child: child ?? const SizedBox.shrink(),
           ),
         );
       },

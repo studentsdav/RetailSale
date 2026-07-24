@@ -976,59 +976,73 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
           pw.SizedBox(height: 20),
 
           /// ================= REQUEST INFO =================
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text("Request No: ${_requestNo.text}"),
-                  pw.Text("Date: ${DateFormat('dd-MMM-yyyy').format(_date)}"),
-                ],
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                      "Department: ${_selectedDepartment?.locationName ?? ''}"),
-                  pw.Text("Status: Auto"),
-                ],
-              ),
-            ],
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              color: PdfColors.grey50,
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("DEPARTMENT DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(_selectedDepartment?.locationName ?? 'N/A', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
+                    ],
+                  ),
+                ),
+                pw.Container(width: 0.5, height: 45, color: PdfColors.grey300, margin: const pw.EdgeInsets.symmetric(horizontal: 16)),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("REQUEST DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                    pw.SizedBox(height: 4),
+                    _metaRow("Request No", _requestNo.text),
+                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(_date)),
+                    _metaRow("Status", "Auto"),
+                  ],
+                ),
+              ],
+            ),
           ),
 
           pw.SizedBox(height: 20),
 
           /// ================= ITEM TABLE =================
           pw.Table(
-            border: pw.TableBorder.all(width: 0.5),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
             columnWidths: {
               0: const pw.FixedColumnWidth(30),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(1),
-              3: const pw.FlexColumnWidth(1),
-              4: const pw.FlexColumnWidth(1),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(40),
+              3: const pw.FixedColumnWidth(50),
+              4: const pw.FixedColumnWidth(60),
             },
             children: [
               pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
                 children: [
-                  _cell("S.No", bold: true),
-                  _cell("Item"),
-                  _cell("Unit"),
-                  _cell("Qty"),
-                  _cell("Rate"),
+                  _cell("S.No", bold: true, alignment: pw.Alignment.center),
+                  _cell("Item", bold: true),
+                  _cell("Unit", bold: true, alignment: pw.Alignment.center),
+                  _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
               ...List.generate(_items.length, (i) {
                 final r = _items[i];
                 return pw.TableRow(
                   children: [
-                    _cell("${i + 1}"),
+                    _cell("${i + 1}", alignment: pw.Alignment.center),
                     _cell(r.name),
-                    _cell(r.unit),
-                    _cell(r.qty.toString()),
-                    _cell(r.rate.toStringAsFixed(2)),
+                    _cell(r.unit, alignment: pw.Alignment.center),
+                    _cell(r.qty.toString(), alignment: pw.Alignment.centerRight),
+                    _cell(r.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -1040,9 +1054,17 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
           /// ================= TOTAL =================
           pw.Align(
             alignment: pw.Alignment.centerRight,
-            child: pw.Text(
-              "Total Amount : ${totalAmount.toStringAsFixed(2)}",
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            child: pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                color: PdfColors.grey50,
+              ),
+              child: pw.Text(
+                "Total Amount : ${totalAmount.toStringAsFixed(2)}",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.blueGrey900),
+              ),
             ),
           ),
 
@@ -1052,18 +1074,27 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(children: [
-                pw.Text("Requested By"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Store Incharge"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Approved By"),
-                pw.SizedBox(height: 30),
-              ]),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text("Requested By", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text("Store Incharge", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("Approved By", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
             ],
           ),
         ],
@@ -1072,15 +1103,39 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
     await Printing.layoutPdf(name: _requestNo.text.isNotEmpty ? 'Request_${_requestNo.text}' : 'Stock_Request', onLayout: (format) async => pdf.save());
   }
 
-  pw.Widget _cell(String text, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
+  pw.Widget _cell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: alignment,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
         ),
+      ),
+    );
+  }
+
+  pw.Widget _metaRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 45,
+            child: pw.Text(
+              "$label:",
+              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          ),
+        ],
       ),
     );
   }

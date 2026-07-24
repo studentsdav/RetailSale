@@ -851,6 +851,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       _settingRow(
+                        title: 'On-Screen Virtual Keyboard',
+                        description: 'Show virtual keyboard on touch input focus. Turn off if you use a physical keyboard or barcode scanner.',
+                        control: Switch.adaptive(
+                          value: !uiPrefsCtrl.virtualKeyboardDisabled,
+                          onChanged: (v) => uiPrefsCtrl.updateVirtualKeyboardDisabled(!v),
+                        ),
+                      ),
+                      _settingRow(
                         title: 'Default Startup Screen',
                         description: 'Determine which dashboard loads first upon log-in',
                         control: SizedBox(
@@ -2108,7 +2116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue),
         ),
         const Divider(),
-        shortcutRow('Enter / F1', 'Focus & search product in barcode scanner input field'),
+        shortcutRow('Ctrl + F', 'Focus & search product in barcode scanner input field'),
         shortcutRow('F2', 'Trigger Checkout Payment dialog directly'),
         shortcutRow('Delete', 'Remove the currently selected/highlighted cart line item (or last item if none selected)'),
         shortcutRow('Escape', 'Close checkout popup / Clear barcode scanner input'),

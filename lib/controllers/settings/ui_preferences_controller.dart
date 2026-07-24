@@ -4,6 +4,7 @@ import '../../core/settings/local_preferences.dart';
 
 class UiPreferencesController extends ChangeNotifier {
   bool _touchMode = false;
+  bool _virtualKeyboardDisabled = false;
   String _defaultStartupScreen = 'INVENTORY_DASHBOARD';
   String _textfieldSize = 'normal';
   String _textfieldBorderStyle = 'rounded';
@@ -13,6 +14,7 @@ class UiPreferencesController extends ChangeNotifier {
   String _fontSizeAdjustment = 'normal';
 
   bool get touchMode => _touchMode;
+  bool get virtualKeyboardDisabled => _virtualKeyboardDisabled;
   String get defaultStartupScreen => _defaultStartupScreen;
   String get textfieldSize => _textfieldSize;
   String get textfieldBorderStyle => _textfieldBorderStyle;
@@ -23,6 +25,7 @@ class UiPreferencesController extends ChangeNotifier {
 
   Future<void> load() async {
     _touchMode = await LocalPreferences.getTouchMode();
+    _virtualKeyboardDisabled = await LocalPreferences.getVirtualKeyboardDisabled();
     _defaultStartupScreen = await LocalPreferences.getDefaultStartupScreen();
     _textfieldSize = await LocalPreferences.getTextfieldSize();
     _textfieldBorderStyle = await LocalPreferences.getTextfieldBorderStyle();
@@ -37,6 +40,13 @@ class UiPreferencesController extends ChangeNotifier {
     if (_touchMode == value) return;
     _touchMode = value;
     await LocalPreferences.setTouchMode(value);
+    notifyListeners();
+  }
+
+  Future<void> updateVirtualKeyboardDisabled(bool value) async {
+    if (_virtualKeyboardDisabled == value) return;
+    _virtualKeyboardDisabled = value;
+    await LocalPreferences.setVirtualKeyboardDisabled(value);
     notifyListeners();
   }
 

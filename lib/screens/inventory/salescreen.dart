@@ -16,6 +16,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/custom_focus_node.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
@@ -63,7 +64,9 @@ class _SaleScreenState extends State<SaleScreen> {
   final _amountPaid = TextEditingController(text: '0');
   final _notes = TextEditingController();
   final _barcode = TextEditingController();
-  final FocusNode _barcodeFocusNode = FocusNode();
+  late final FocusNode _barcodeFocusNode;
+  late final FocusNode _entryQtyFocusNode;
+  bool _isProgrammaticFocus = false;
   final _entryQty = TextEditingController(text: '1');
   final _manualDiscountValue = TextEditingController(text: '0');
   final _voucherCode = TextEditingController();
@@ -179,6 +182,22 @@ class _SaleScreenState extends State<SaleScreen> {
 
   @override
   void initState() {
+    _barcodeFocusNode = KeyboardControlFocusNode(
+      shouldPreventKeyboard: () {
+        if (!mounted) return false;
+        final uiPrefs = context.read<UiPreferencesController>();
+        return uiPrefs.virtualKeyboardDisabled || _isProgrammaticFocus;
+      },
+      debugLabel: 'barcode',
+    );
+    _entryQtyFocusNode = KeyboardControlFocusNode(
+      shouldPreventKeyboard: () {
+        if (!mounted) return false;
+        final uiPrefs = context.read<UiPreferencesController>();
+        return uiPrefs.virtualKeyboardDisabled;
+      },
+      debugLabel: 'entryQty',
+    );
     super.initState();
     _init();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -389,6 +408,7 @@ class _SaleScreenState extends State<SaleScreen> {
     _notes.dispose();
     _barcode.dispose();
     _barcodeFocusNode.dispose();
+    _entryQtyFocusNode.dispose();
     _salesKeyboardFocusNode.dispose();
     _entryQty.dispose();
     _manualDiscountValue.dispose();
@@ -1643,7 +1663,9 @@ class _SaleScreenState extends State<SaleScreen> {
     void requestIfNeeded() {
       if (!mounted) return;
       if (!_barcodeFocusNode.hasFocus) {
+        _isProgrammaticFocus = true;
         FocusScope.of(context).requestFocus(_barcodeFocusNode);
+        _isProgrammaticFocus = false;
       }
     }
 
@@ -6780,7 +6802,7 @@ class _SaleScreenState extends State<SaleScreen> {
       autofocus: true,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.f1) {
+          if (event.logicalKey == LogicalKeyboardKey.keyF && HardwareKeyboard.instance.isControlPressed) {
             _barcodeFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
@@ -7448,6 +7470,7 @@ class _SaleScreenState extends State<SaleScreen> {
                 width: 90,
                 child: TextField(
                   controller: _entryQty,
+                  focusNode: _entryQtyFocusNode,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   textAlign: TextAlign.center,

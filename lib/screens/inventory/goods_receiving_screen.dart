@@ -1493,59 +1493,78 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
           pw.SizedBox(height: 20),
 
           /// ================= INFO SECTION =================
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              color: PdfColors.grey50,
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("VENDOR / BILL FROM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(supplier.supplierName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
+                      if ((supplier.address ?? '').trim().isNotEmpty)
+                        pw.Text(supplier.address!.trim(), style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                      if ((supplier.gstin ?? '').trim().isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 2),
+                          child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                        ),
+                    ],
+                  ),
+                ),
+                pw.Container(width: 0.5, height: 45, color: PdfColors.grey300, margin: const pw.EdgeInsets.symmetric(horizontal: 16)),
+                pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text("GRN No: ${_sno.text}"),
-                    pw.Text("Date: ${DateFormat('dd-MMM-yyyy').format(_date)}"),
-                    pw.Text("PO No: ${poNumber ?? ''}"),
+                    pw.Text("RECEIVING DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                    pw.SizedBox(height: 4),
+                    _metaRow("GRN No", _sno.text),
+                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(_date)),
+                    if ((poNumber ?? '').trim().isNotEmpty)
+                      _metaRow("PO No", poNumber!.trim()),
+                    if ((_supplierBill.text).trim().isNotEmpty)
+                      _metaRow("Bill No", _supplierBill.text.trim()),
                   ],
                 ),
-              ),
-              pw.SizedBox(width: 20),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("Vendor: ${supplier.supplierName}"),
-                    pw.Text("Bill No: ${_supplierBill.text}"),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
 
           pw.SizedBox(height: 20),
 
           /// ================= ITEM TABLE =================
           pw.Table(
-            border: pw.TableBorder.all(width: 0.5),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
             columnWidths: {
               0: const pw.FixedColumnWidth(25),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(1),
-              3: const pw.FlexColumnWidth(1),
-              4: const pw.FlexColumnWidth(1),
-              5: const pw.FlexColumnWidth(1),
-              6: const pw.FlexColumnWidth(1),
-              7: const pw.FlexColumnWidth(1),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(40),
+              3: const pw.FixedColumnWidth(40),
+              4: const pw.FixedColumnWidth(50),
+              5: const pw.FixedColumnWidth(45),
+              6: const pw.FixedColumnWidth(50),
+              7: const pw.FixedColumnWidth(60),
             },
             children: [
               pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
                 children: [
-                  _cell("S.No", bold: true),
-                  _cell("Item"),
-                  _cell("Unit"),
-                  _cell("Qty"),
-                  _cell("Rate"),
-                  _cell("GST %"),
-                  _cell("GST Amt"),
-                  _cell("Amount"),
+                  _cell("S.No", bold: true, alignment: pw.Alignment.center),
+                  _cell("Item", bold: true),
+                  _cell("Unit", bold: true, alignment: pw.Alignment.center),
+                  _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("GST %", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("GST Amt", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
               ...List.generate(_items.length, (i) {
@@ -1553,14 +1572,14 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                 final gstAmount = (r.qty * r.rate) * (r.tax / 100);
                 return pw.TableRow(
                   children: [
-                    _cell("${i + 1}"),
+                    _cell("${i + 1}", alignment: pw.Alignment.center),
                     _cell(r.name),
-                    _cell(r.unit),
-                    _cell(r.qty.toString()),
-                    _cell(r.rate.toStringAsFixed(2)),
-                    _cell(r.tax.toStringAsFixed(2)),
-                    _cell(gstAmount.toStringAsFixed(2)),
-                    _cell(r.amount.toStringAsFixed(2)),
+                    _cell(r.unit, alignment: pw.Alignment.center),
+                    _cell(r.qty.toString(), alignment: pw.Alignment.centerRight),
+                    _cell(r.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(r.tax.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(gstAmount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(r.amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -1578,7 +1597,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                 children: [
                   _total("Sub Total", totalAmount),
                   _total("GST", totalGST),
-                  pw.Divider(),
+                  pw.Divider(color: PdfColors.grey400, thickness: 0.5),
                   _total("Net Amount", netAmount, bold: true),
                 ],
               ),
@@ -1590,6 +1609,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
           /// ================= FOOTER =================
           pw.Text(
             "Goods received in good condition.",
+            style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800),
           ),
 
           pw.SizedBox(height: 40),
@@ -1597,14 +1617,20 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(children: [
-                pw.Text("Store Incharge"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Authorized Signatory"),
-                pw.SizedBox(height: 30),
-              ]),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text("Store Incharge", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("Authorized Signatory", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
             ],
           ),
         ],
@@ -1614,14 +1640,16 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
     await Printing.layoutPdf(name: _sno.text.isNotEmpty ? 'GRN_${_sno.text}' : 'Goods_Receiving_Receipt', onLayout: (format) async => pdf.save());
   }
 
-  pw.Widget _cell(String text, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
+  pw.Widget _cell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: alignment,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
         ),
       ),
     );
@@ -1638,6 +1666,28 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],
+    );
+  }
+
+  pw.Widget _metaRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 45,
+            child: pw.Text(
+              "$label:",
+              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          ),
+        ],
+      ),
     );
   }
 }

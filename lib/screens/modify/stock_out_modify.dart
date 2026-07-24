@@ -169,61 +169,68 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
           pw.SizedBox(height: 20),
 
           /// ================= ISSUE INFO =================
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              color: PdfColors.grey50,
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("DEPARTMENT DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(selectedDepartment?.locationName ?? issue['department']?.toString() ?? 'N/A', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
+                      pw.Text("Dispatch Type: ${issue['issue_type'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                    ],
+                  ),
+                ),
+                pw.Container(width: 0.5, height: 45, color: PdfColors.grey300, margin: const pw.EdgeInsets.symmetric(horizontal: 16)),
+                pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text("Dispatch No: ${issue['issue_no']}"),
-                    pw.Text(
-                      "Dispatch Date: ${DateFormat('dd-MMM-yyyy').format(issueDate)}",
-                    ),
-                    pw.Text(
-                      "Department: ${selectedDepartment?.locationName ?? issue['department']}",
-                    ),
+                    pw.Text("DISPATCH DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                    pw.SizedBox(height: 4),
+                    _metaRow("Dispatch No", issue['issue_no'].toString()),
+                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(issueDate)),
+                    if ((issue['open_request_no'] ?? '').toString().trim().isNotEmpty)
+                      _metaRow("Request ID", issue['open_request_no'].toString().trim()),
+                    _metaRow("Status", issue['status']?.toString() ?? 'CLOSED'),
                   ],
                 ),
-              ),
-              pw.SizedBox(width: 20),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text("Dispatch Type: ${issue['issue_type'] ?? ''}"),
-                  pw.Text("Request ID: ${issue['open_request_no'] ?? ''}"),
-                  pw.Text("Status: ${issue['status'] ?? ''}"),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
 
           pw.SizedBox(height: 20),
 
           /// ================= ITEM TABLE =================
           pw.Table(
-            border: pw.TableBorder.all(width: 0.5),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
             columnWidths: {
               0: const pw.FixedColumnWidth(30),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(1),
-              3: const pw.FlexColumnWidth(1),
-              4: const pw.FlexColumnWidth(1),
-              5: const pw.FlexColumnWidth(1),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(40),
+              3: const pw.FixedColumnWidth(50),
+              4: const pw.FixedColumnWidth(60),
+              5: const pw.FixedColumnWidth(60),
             },
             children: [
               /// HEADER
               pw.TableRow(
-                decoration: const pw.BoxDecoration(
-                  color: PdfColors.grey300,
-                ),
+                decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
                 children: [
-                  _cell("S.No", bold: true),
-                  _cell("Item"),
-                  _cell("Unit"),
-                  _cell("Qty"),
-                  _cell("Rate"),
-                  _cell("Amount"),
+                  _cell("S.No", bold: true, alignment: pw.Alignment.center),
+                  _cell("Item", bold: true),
+                  _cell("Unit", bold: true, alignment: pw.Alignment.center),
+                  _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
 
@@ -240,12 +247,12 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
 
                 return pw.TableRow(
                   children: [
-                    _cell("${i + 1}"),
+                    _cell("${i + 1}", alignment: pw.Alignment.center),
                     _cell(brand.isNotEmpty ? '$itemName ($brand)' : '$itemName'),
-                    _cell(r['item_master']?['unit'] ?? ""),
-                    _cell(qty.toString()),
-                    _cell(rate.toStringAsFixed(2)),
-                    _cell(amount.toStringAsFixed(2)),
+                    _cell(r['item_master']?['unit'] ?? "", alignment: pw.Alignment.center),
+                    _cell(qty.toString(), alignment: pw.Alignment.centerRight),
+                    _cell(rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -257,10 +264,16 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
           /// ================= TOTAL =================
           pw.Align(
             alignment: pw.Alignment.centerRight,
-            child: pw.Text(
-              "Total Amount : ${total.toStringAsFixed(2)}",
-              style: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
+            child: pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                color: PdfColors.grey50,
+              ),
+              child: pw.Text(
+                "Total Amount : ${total.toStringAsFixed(2)}",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.blueGrey900),
               ),
             ),
           ),
@@ -271,18 +284,27 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(children: [
-                pw.Text("Dispatched By (Store)"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Received By (Department)"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Approved By"),
-                pw.SizedBox(height: 30),
-              ]),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text("Dispatched By (Store)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text("Received By (Dept)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("Approved By", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
             ],
           ),
 
@@ -293,6 +315,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
               style: pw.TextStyle(
                 color: PdfColors.red,
                 fontWeight: pw.FontWeight.bold,
+                fontSize: 9,
               ),
             ),
           ),
@@ -303,15 +326,39 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
     await Printing.layoutPdf(name: 'Issue_${issue['issue_no']}', onLayout: (format) async => pdf.save());
   }
 
-  pw.Widget _cell(String text, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
+  pw.Widget _cell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: alignment,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
         ),
+      ),
+    );
+  }
+
+  pw.Widget _metaRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 45,
+            child: pw.Text(
+              "$label:",
+              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          ),
+        ],
       ),
     );
   }

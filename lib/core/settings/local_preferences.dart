@@ -16,6 +16,7 @@ class LocalPreferences {
   static const _cardBorderStyleKey = 'ui_card_border_style';
   static const _buttonBorderStyleKey = 'ui_button_border_style';
   static const _fontSizeAdjustmentKey = 'ui_font_size_adjustment';
+  static const _virtualKeyboardDisabledKey = 'virtual_keyboard_disabled';
 
   static Future<bool> getShowNotifications() async {
     final prefs = await SharedPreferences.getInstance();
@@ -105,6 +106,16 @@ class LocalPreferences {
   static Future<void> setFontSizeAdjustment(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_fontSizeAdjustmentKey, value);
+  }
+
+  static Future<bool> getVirtualKeyboardDisabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_virtualKeyboardDisabledKey) ?? false;
+  }
+
+  static Future<void> setVirtualKeyboardDisabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_virtualKeyboardDisabledKey, value);
   }
 
   static Future<String> getThemeKey() async {

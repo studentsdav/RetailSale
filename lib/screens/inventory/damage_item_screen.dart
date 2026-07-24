@@ -960,48 +960,63 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
           pw.SizedBox(height: 20),
 
           /// ================= INFO =================
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text("Damage No: ${_srNo.text}"),
-              pw.Text("Date: ${DateFormat('dd-MMM-yyyy').format(_date)}"),
-            ],
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              color: PdfColors.grey50,
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("DAMAGE REPORT DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                    pw.SizedBox(height: 4),
+                    _metaRow("Damage No", _srNo.text),
+                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(_date)),
+                  ],
+                ),
+              ],
+            ),
           ),
 
           pw.SizedBox(height: 20),
 
           /// ================= TABLE =================
           pw.Table(
-            border: pw.TableBorder.all(width: 0.5),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
             columnWidths: {
               0: const pw.FixedColumnWidth(30),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(1),
-              3: const pw.FlexColumnWidth(1),
-              4: const pw.FlexColumnWidth(1),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(40),
+              3: const pw.FixedColumnWidth(40),
+              4: const pw.FixedColumnWidth(60),
               5: const pw.FlexColumnWidth(2),
             },
             children: [
               pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
                 children: [
-                  _cell("S.No", bold: true),
-                  _cell("Item"),
-                  _cell("Unit"),
-                  _cell("Qty"),
-                  _cell("Rate"),
-                  _cell("Remarks"),
+                  _cell("S.No", bold: true, alignment: pw.Alignment.center),
+                  _cell("Item", bold: true),
+                  _cell("Unit", bold: true, alignment: pw.Alignment.center),
+                  _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell("Remarks", bold: true),
                 ],
               ),
               ...List.generate(_items.length, (i) {
                 final d = _items[i];
                 return pw.TableRow(
                   children: [
-                    _cell("${i + 1}"),
+                    _cell("${i + 1}", alignment: pw.Alignment.center),
                     _cell(d.itemName),
-                    _cell(d.unit),
-                    _cell(d.qty.toString()),
-                    _cell(d.rate.toStringAsFixed(2)),
+                    _cell(d.unit, alignment: pw.Alignment.center),
+                    _cell(d.qty.toString(), alignment: pw.Alignment.centerRight),
+                    _cell(d.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
                     _cell(d.remarks),
                   ],
                 );
@@ -1014,9 +1029,17 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
           /// ================= TOTAL =================
           pw.Align(
             alignment: pw.Alignment.centerRight,
-            child: pw.Text(
-              "Total Damage Value : ${totalDamageValue.toStringAsFixed(2)}",
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            child: pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                color: PdfColors.grey50,
+              ),
+              child: pw.Text(
+                "Total Damage Value : ${totalDamageValue.toStringAsFixed(2)}",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.blueGrey900),
+              ),
             ),
           ),
 
@@ -1026,18 +1049,27 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(children: [
-                pw.Text("Reported By"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Verified By"),
-                pw.SizedBox(height: 30),
-              ]),
-              pw.Column(children: [
-                pw.Text("Approved By"),
-                pw.SizedBox(height: 30),
-              ]),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text("Reported By", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text("Verified By", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("Approved By", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 30),
+                ]
+              ),
             ],
           ),
         ],
@@ -1046,15 +1078,39 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
     await Printing.layoutPdf(name: 'Damage_Item_Report', onLayout: (format) async => pdf.save());
   }
 
-  pw.Widget _cell(String text, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
+  pw.Widget _cell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: alignment,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
         ),
+      ),
+    );
+  }
+
+  pw.Widget _metaRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 45,
+            child: pw.Text(
+              "$label:",
+              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          ),
+        ],
       ),
     );
   }

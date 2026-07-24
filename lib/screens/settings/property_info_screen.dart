@@ -35,12 +35,21 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
   final _drugLicenseNo = TextEditingController();
   final _website = TextEditingController();
   final _thermalFooterNote = TextEditingController();
+  final _bankName = TextEditingController();
+  final _bankAccNo = TextEditingController();
+  final _bankIfsc = TextEditingController();
+  final _upiId = TextEditingController();
+  final _upiPayeeName = TextEditingController();
+  final _termsAndConditions = TextEditingController();
   String? _logoPath;
 
   bool _active = true;
   bool _printMobile = true;
   bool _printEmail = true;
   bool _printWebsite = true;
+  bool _printBankDetails = false;
+  bool _printUpiQr = false;
+  bool _printDigitalSignature = false;
   bool _isLoading = false;
 
   @override
@@ -72,11 +81,20 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
         _drugLicenseNo.text = d.drugLicenseNo;
         _website.text = d.website;
         _thermalFooterNote.text = d.thermalFooterNote;
+        _bankName.text = d.bankName;
+        _bankAccNo.text = d.bankAccNo;
+        _bankIfsc.text = d.bankIfsc;
+        _upiId.text = d.upiId;
+        _upiPayeeName.text = d.upiPayeeName;
+        _termsAndConditions.text = d.termsAndConditions;
         _logoPath = d.logoPath;
         _active = d.isActive;
         _printMobile = d.printMobile;
         _printEmail = d.printEmail;
         _printWebsite = d.printWebsite;
+        _printBankDetails = d.printBankDetails;
+        _printUpiQr = d.printUpiQr;
+        _printDigitalSignature = d.printDigitalSignature;
       });
     } catch (e) {}
   }
@@ -130,6 +148,15 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
         printEmail: _printEmail,
         printWebsite: _printWebsite,
         thermalFooterNote: _thermalFooterNote.text,
+        bankName: _bankName.text,
+        bankAccNo: _bankAccNo.text,
+        bankIfsc: _bankIfsc.text,
+        upiId: _upiId.text,
+        upiPayeeName: _upiPayeeName.text,
+        termsAndConditions: _termsAndConditions.text,
+        printBankDetails: _printBankDetails,
+        printUpiQr: _printUpiQr,
+        printDigitalSignature: _printDigitalSignature,
       );
 
       await ctrl.save(payload);
@@ -237,6 +264,34 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                           required: false, prefixIcon: Icons.verified_user),
                       _field(_drugLicenseNo, 'Drug License Number (Optional)',
                           required: false, prefixIcon: Icons.medical_services_outlined),
+                    ],
+                  ),
+                  _sectionCard(
+                    title: 'Bank & Payment Details',
+                    icon: Icons.account_balance_rounded,
+                    children: [
+                      _field(_bankName, 'Bank Name', prefixIcon: Icons.business_rounded, required: false),
+                      _field(_bankAccNo, 'Account Number', prefixIcon: Icons.credit_card_rounded, required: false),
+                      _field(_bankIfsc, 'IFSC Code', prefixIcon: Icons.code_rounded, required: false),
+                    ],
+                  ),
+                  _sectionCard(
+                    title: 'UPI Configuration (Instant QR)',
+                    icon: Icons.qr_code_2_rounded,
+                    children: [
+                      _field(_upiId, 'UPI ID / VPA', prefixIcon: Icons.alternate_email_rounded, required: false),
+                      _field(_upiPayeeName, 'Payee Legal Name', prefixIcon: Icons.person_rounded, required: false),
+                    ],
+                  ),
+                  _sectionCard(
+                    title: 'Terms & Digital Signature',
+                    icon: Icons.border_color_rounded,
+                    children: [
+                      _field(_termsAndConditions, 'Invoice Terms & Conditions',
+                          width: double.infinity,
+                          prefixIcon: Icons.description_rounded,
+                          required: false,
+                          maxLines: 4),
                     ],
                   ),
                   _sectionCard(
@@ -406,6 +461,81 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                             value: _printWebsite,
                             activeThumbColor: Colors.green,
                             onChanged: (v) => setState(() => _printWebsite = v),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 380,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.white,
+                          ),
+                          child: SwitchListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: const Text('Print Bank Details',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            subtitle: Text(
+                                'Include bank details on printed invoices',
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12)),
+                            value: _printBankDetails,
+                            activeThumbColor: Colors.green,
+                            onChanged: (v) => setState(() => _printBankDetails = v),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 380,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.white,
+                          ),
+                          child: SwitchListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: const Text('Print UPI QR Code',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            subtitle: Text(
+                                'Show Pay-to-UPI QR code on invoices',
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12)),
+                            value: _printUpiQr,
+                            activeThumbColor: Colors.green,
+                            onChanged: (v) => setState(() => _printUpiQr = v),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 380,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.white,
+                          ),
+                          child: SwitchListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: const Text('Print Digital Signature',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            subtitle: Text(
+                                'Show cashier digital signature indicator',
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12)),
+                            value: _printDigitalSignature,
+                            activeThumbColor: Colors.green,
+                            onChanged: (v) => setState(() => _printDigitalSignature = v),
                           ),
                         ),
                       ),

@@ -72,7 +72,16 @@ exports.savePropertyInfo = async (req, res) => {
             print_email: req.body.print_email !== undefined ? req.body.print_email : true,
             print_website: req.body.print_website !== undefined ? req.body.print_website : true,
             thermal_footer_note: req.body.thermal_footer_note,
-            is_active: req.body.is_active
+            is_active: req.body.is_active,
+            terms_and_conditions: req.body.terms_and_conditions !== undefined ? req.body.terms_and_conditions : '',
+            bank_name: req.body.bank_name !== undefined ? req.body.bank_name : '',
+            bank_acc_no: req.body.bank_acc_no !== undefined ? req.body.bank_acc_no : '',
+            bank_ifsc: req.body.bank_ifsc !== undefined ? req.body.bank_ifsc : '',
+            upi_id: req.body.upi_id !== undefined ? req.body.upi_id : '',
+            upi_payee_name: req.body.upi_payee_name !== undefined ? req.body.upi_payee_name : '',
+            print_bank_details: req.body.print_bank_details !== undefined ? req.body.print_bank_details : false,
+            print_upi_qr: req.body.print_upi_qr !== undefined ? req.body.print_upi_qr : false,
+            print_digital_signature: req.body.print_digital_signature !== undefined ? req.body.print_digital_signature : false
         };
 
         let record;

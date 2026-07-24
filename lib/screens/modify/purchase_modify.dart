@@ -232,65 +232,77 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
           pw.SizedBox(height: 20),
 
           /// ================= SUPPLIER & PO INFO =================
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              color: PdfColors.grey50,
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("VENDOR / BILL TO", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(supplier.supplierName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
+                      if ((supplier.address ?? '').trim().isNotEmpty)
+                        pw.Text(supplier.address!.trim(), style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                      if ((supplier.gstin ?? '').trim().isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 2),
+                          child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                        ),
+                    ],
+                  ),
+                ),
+                pw.Container(width: 0.5, height: 45, color: PdfColors.grey300, margin: const pw.EdgeInsets.symmetric(horizontal: 16)),
+                pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text("To,",
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                    pw.Text(supplier.supplierName),
-                    pw.Text(supplier.address ?? ""),
-                    pw.Text("GSTIN: ${supplier.gstin ?? ""}"),
+                    pw.Text("PURCHASE ORDER DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                    pw.SizedBox(height: 4),
+                    _metaRow("PO No", po.poNo),
+                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(po.createdAt ?? po.poDate)),
+                    _metaRow("Time", DateFormat('hh:mm a').format(po.createdAt ?? DateTime.now())),
                   ],
                 ),
-              ),
-              pw.SizedBox(width: 20),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text("PO No: ${po.poNo}"),
-                  pw.Text(
-                      "Date: ${DateFormat('dd-MMM-yyyy').format(po.createdAt ?? po.poDate)}"),
-                  pw.Text(
-                      "Time: ${DateFormat('hh:mm a').format(po.createdAt ?? DateTime.now())}"),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
 
           pw.SizedBox(height: 20),
 
           /// ================= ITEM TABLE =================
           pw.Table(
-            border: pw.TableBorder.all(width: 0.5),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
             columnWidths: {
               0: const pw.FixedColumnWidth(30),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(2),
+              1: const pw.FlexColumnWidth(2.5),
+              2: const pw.FlexColumnWidth(1.5),
               3: const pw.FlexColumnWidth(1),
-              4: const pw.FlexColumnWidth(1),
-              5: const pw.FlexColumnWidth(1),
+              4: const pw.FlexColumnWidth(1.2),
+              5: const pw.FlexColumnWidth(1.2),
               6: const pw.FlexColumnWidth(1),
-              7: const pw.FlexColumnWidth(1),
-              8: const pw.FlexColumnWidth(1),
+              7: const pw.FlexColumnWidth(1.2),
+              8: const pw.FlexColumnWidth(1.5),
             },
             children: [
               pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
                 children: [
-                  _tableCell("S.No", bold: true),
-                  _tableCell("Item"),
-                  _tableCell("Brand"),
-                  _tableCell("Unit"),
-                  _tableCell("Qty"),
-                  _tableCell("Rate"),
-                  _tableCell("GST %"),
-                  _tableCell("GST Amt"),
-                  _tableCell("Amount"),
+                  _tableCell("S.No", bold: true, alignment: pw.Alignment.center),
+                  _tableCell("Item", bold: true),
+                  _tableCell("Brand", bold: true),
+                  _tableCell("Unit", bold: true, alignment: pw.Alignment.center),
+                  _tableCell("Qty", bold: true, alignment: pw.Alignment.centerRight),
+                  _tableCell("Rate", bold: true, alignment: pw.Alignment.centerRight),
+                  _tableCell("GST %", bold: true, alignment: pw.Alignment.centerRight),
+                  _tableCell("GST Amt", bold: true, alignment: pw.Alignment.centerRight),
+                  _tableCell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
               ...List.generate(po.items.length, (i) {
@@ -298,15 +310,15 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                 final gstAmount = (item.qty * item.rate) * (item.tax / 100);
                 return pw.TableRow(
                   children: [
-                    _tableCell("${i + 1}"),
+                    _tableCell("${i + 1}", alignment: pw.Alignment.center),
                     _tableCell(item.itemName),
                     _tableCell(item.brand),
-                    _tableCell(item.unit),
-                    _tableCell(item.qty.toString()),
-                    _tableCell(item.rate.toStringAsFixed(2)),
-                    _tableCell(item.tax.toStringAsFixed(2)),
-                    _tableCell(gstAmount.toStringAsFixed(2)),
-                    _tableCell(item.amount.toStringAsFixed(2)),
+                    _tableCell(item.unit, alignment: pw.Alignment.center),
+                    _tableCell(item.qty.toString(), alignment: pw.Alignment.centerRight),
+                    _tableCell(item.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _tableCell(item.tax.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _tableCell(gstAmount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _tableCell(item.amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
                   ],
                 );
               }),
@@ -324,7 +336,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                 children: [
                   _totalRow("Sub Total", subTotal),
                   _totalRow("GST", totalGST),
-                  pw.Divider(),
+                  pw.Divider(color: PdfColors.grey400, thickness: 0.5),
                   _totalRow("Grand Total", grandTotal, bold: true),
                 ],
               ),
@@ -336,6 +348,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
           /// ================= FOOTER =================
           pw.Text(
             "Thank you for your business. Please supply the above items as per agreed terms.",
+            style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800),
           ),
 
           pw.SizedBox(height: 40),
@@ -344,16 +357,18 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text("Authorized Signature"),
+                  pw.Text("Authorized Signature", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                   pw.SizedBox(height: 30),
                   pw.Text(property!.legalName,
-                      style: const pw.TextStyle(fontSize: 7)),
+                      style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
                 ],
               ),
               pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text("Supplier Signature"),
+                  pw.Text("Supplier Signature", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                   pw.SizedBox(height: 30),
                 ],
               ),
@@ -366,14 +381,16 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
     await Printing.layoutPdf(name: 'PO_${po.poNo}', onLayout: (format) async => pdf.save());
   }
 
-  pw.Widget _tableCell(String text, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
+  pw.Widget _tableCell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: alignment,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
         ),
       ),
     );
@@ -390,6 +407,28 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],
+    );
+  }
+
+  pw.Widget _metaRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 45,
+            child: pw.Text(
+              "$label:",
+              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          ),
+        ],
+      ),
     );
   }
 
