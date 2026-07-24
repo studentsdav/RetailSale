@@ -163,6 +163,17 @@ propertyDb.models.cash_ledger =
 propertyDb.models.expense_entries =
     require('../../models/property/expenseEntry.model')(propertyDb, DataTypes);
 
+propertyDb.models.expense_categories =
+    require('../../models/property/expenseCategory.model')(propertyDb, DataTypes);
+propertyDb.models.taxes_master =
+    require('../../models/property/taxesMaster.model')(propertyDb, DataTypes);
+propertyDb.models.expenses =
+    require('../../models/property/expense.model')(propertyDb, DataTypes);
+propertyDb.models.expense_taxes =
+    require('../../models/property/expenseTax.model')(propertyDb, DataTypes);
+propertyDb.models.expense_deductions =
+    require('../../models/property/expenseDeduction.model')(propertyDb, DataTypes);
+
 propertyDb.models.item_groups =
     require('../../models/property/group.model')(propertyDb, DataTypes);
 

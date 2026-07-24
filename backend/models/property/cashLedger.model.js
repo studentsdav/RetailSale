@@ -13,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         reference_type: DataTypes.STRING(50),
-        reference_id: DataTypes.INTEGER,
+        reference_id: DataTypes.STRING(50),
         reference_no: DataTypes.STRING(50),
         party_name: DataTypes.STRING(150),
         payment_method: DataTypes.STRING(20),

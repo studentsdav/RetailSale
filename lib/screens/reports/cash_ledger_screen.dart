@@ -11,9 +11,15 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/reports/finance_hub_controller.dart';
 import '../../models/reports/finance_models.dart';
+import '../../models/inventory/supplier_model.dart';
+import '../../models/security/app_user_model.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import 'credit_analysis_screen.dart';
+import 'expense_analytics_screen.dart';
+import '../../controllers/settings/property_info_controller.dart';
+import '../../core/printing/pos_invoice_printer.dart';
+import '../../utils/branding_storage.dart';
 
 class CashLedgerScreen extends StatefulWidget {
   const CashLedgerScreen({super.key});
@@ -170,6 +176,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             paymentMethod: ledgerPaymentMethod);
         break;
       case 2:
+        await ctrl.loadExpenseCategories();
         await ctrl.loadExpenses(
             fromDate: fromDate,
             toDate: toDate,
@@ -218,108 +225,257 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     }
   }
 
+  Future<void> _confirmDelete(String expenseId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: const Text('Are you sure you want to delete this expense? This will also remove the cash ledger entry.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await ctrl.deleteExpense(expenseId);
+      await ctrl.loadExpenses(
+        fromDate: fromDate,
+        toDate: toDate,
+        categoryId: '',
+      );
+    }
+  }
+
   Future<void> _showExpenseDialog(
       {ExpenseEntryReport? expense, String initialCategory = ''}) async {
-    final categoryCtrl =
-        TextEditingController(text: expense?.category ?? initialCategory);
-    final amountCtrl = TextEditingController(
-        text: expense == null ? '' : expense.amount.toStringAsFixed(2));
-    final noteCtrl = TextEditingController(text: expense?.note ?? '');
-    DateTime expenseDate = expense?.expenseDate ?? DateTime.now();
-
     await showDialog<void>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: Text(expense == null ? 'Add Expense' : 'Edit Expense'),
-            content: SizedBox(
-              width: 420,
+      barrierDismissible: false,
+      builder: (context) => ExpenseEntryDialog(
+        expense: expense,
+        ctrl: ctrl,
+        initialCategory: initialCategory,
+        onSaved: () async {
+          await ctrl.loadExpenses(
+            fromDate: fromDate,
+            toDate: toDate,
+            categoryId: '',
+          );
+          await ctrl.loadLedger(
+            fromDate: fromDate,
+            toDate: toDate,
+          );
+        },
+      ),
+    );
+  }
+
+  void _onLedgerRowTapped(CashLedgerEntry entry) async {
+    final isExpense = entry.transactionType.trim().toUpperCase() == 'EXPENSE' ||
+        entry.referenceType.trim().toUpperCase() == 'EXPENSE';
+        
+    if (!isExpense) return;
+    
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined, color: Colors.indigo),
+                title: Text('Expense: ${entry.referenceNo}'),
+                subtitle: Text('Amount: ${_money(entry.amountOut > 0 ? entry.amountOut : entry.adjustmentAmount)}'),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined, color: Colors.blue),
+                title: const Text('Edit Expense'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  _editExpenseFromLedger(entry.referenceId);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.print_outlined, color: Colors.green),
+                title: const Text('Print Receipt'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  _printExpenseFromLedger(entry.referenceId);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _editExpenseFromLedger(String? referenceId) async {
+    if (referenceId == null || referenceId.isEmpty) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+    
+    final expense = await ctrl.fetchExpenseById(referenceId);
+    
+    if (mounted) {
+      Navigator.pop(context);
+    }
+    
+    if (expense == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load expense details.')),
+        );
+      }
+      return;
+    }
+    
+    if (mounted) {
+      _showExpenseDialog(expense: expense);
+    }
+  }
+
+  Future<void> _printExpenseFromLedger(String? referenceId) async {
+    if (referenceId == null || referenceId.isEmpty) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+    
+    final expense = await ctrl.fetchExpenseById(referenceId);
+    
+    if (mounted) {
+      Navigator.pop(context);
+    }
+    
+    if (expense == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load expense details.')),
+        );
+      }
+      return;
+    }
+    
+    await ExpenseEntryDialog.printExpenseReceipt(expense);
+  }
+
+  Future<void> _addNewCategory() async {
+    final nameCtrl = TextEditingController();
+    final newCat = await showDialog<ExpenseCategoryModel?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Category'),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Category Name',
+            hintText: 'e.g. Office Supplies',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              try {
+                final cat = await ctrl.saveExpenseCategory(name);
+                Navigator.pop(context, cat);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to save category: $e')),
+                );
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    if (newCat != null) {
+      setState(() {});
+    }
+  }
+
+  Widget _buildKpiCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: expensePresets
-                        .map((preset) => ActionChip(
-                              label: Text(preset),
-                              onPressed: () {
-                                categoryCtrl.text = preset;
-                                setDialogState(() {});
-                              },
-                            ))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: categoryCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Expense Type',
-                      hintText: 'Salary / Petrol / Diesel / Commission / Rent',
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: amountCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Amount'),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Expense Date'),
-                    subtitle: Text(_fmtDate(expenseDate)),
-                    trailing: const Icon(Icons.calendar_today),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: expenseDate,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                      );
-                      if (picked != null)
-                        setDialogState(() => expenseDate = picked);
-                    },
-                  ),
-                  TextField(
-                    controller: noteCtrl,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Remark / Note',
-                      hintText:
-                          'Salary given to Ravi, Rent paid for April, Diesel for van',
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1E293B),
                     ),
                   ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel')),
-              FilledButton(
-                onPressed: () async {
-                  await ctrl.saveExpense(
-                    expenseId: expense?.id,
-                    expenseDate: expenseDate,
-                    category: categoryCtrl.text.trim(),
-                    amount: double.tryParse(amountCtrl.text.trim()) ?? 0,
-                    note: noteCtrl.text.trim(),
-                  );
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  await ctrl.loadExpenses(
-                      fromDate: fromDate,
-                      toDate: toDate,
-                      category: expenseCategoryCtrl.text);
-                },
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
+          ],
+        ),
       ),
     );
   }
@@ -1899,7 +2055,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           ? FloatingActionButton.extended(
               onPressed: () => _showExpenseDialog(),
               icon: const Icon(Icons.add),
-              label: const Text('Expense'))
+              label: const Text('Add Expense'))
           : _tabController.index == 3
               ? FloatingActionButton.extended(
                   onPressed: () => _showIncomeDialog(),
@@ -2912,65 +3068,119 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     }).toList(growable: false);
     return LayoutBuilder(
       builder: (context, constraints) {
+        final cols = constraints.maxWidth > 950
+            ? 4
+            : constraints.maxWidth > 700
+                ? 3
+                : constraints.maxWidth > 450
+                    ? 2
+                    : 1;
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             children: [
-          _summaryWrap([
-            _summaryCard(
-                'Deposit', _money(ctrl.depositTotal), Colors.blueGrey),
-            _summaryCard('Credit', _money(_ledgerCreditGrandTotal), Colors.green),
-            _summaryCard('Debit', _money(_ledgerDebitGrandTotal), Colors.red),
-            _summaryCard(
-                'Outstanding', _money(_ledgerOutstandingGrandTotal), Colors.deepOrange),
-            _summaryCard('Closing', _money(ctrl.closingBalance), Colors.indigo),
-            ...visibleLedgerMethods.map(
-              (entry) => _summaryCard(
-                entry.paymentMethod,
-                _plainAmount(entry.amountIn > 0 ? entry.amountIn : entry.amountOut),
-                const Color(0xFF0F766E),
+              const SizedBox(height: 12),
+              GridView.count(
+                crossAxisCount: cols,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: cols == 4
+                    ? 2.4
+                    : cols >= 2
+                        ? 2.8
+                        : 3.4,
+                children: [
+                  _buildKpiCard(
+                    title: 'Deposit',
+                    value: _money(ctrl.depositTotal),
+                    icon: Icons.account_balance_rounded,
+                    color: Colors.blueGrey,
+                  ),
+                  _buildKpiCard(
+                    title: 'Credit',
+                    value: _money(_ledgerCreditGrandTotal),
+                    icon: Icons.arrow_downward_rounded,
+                    color: Colors.green,
+                  ),
+                  _buildKpiCard(
+                    title: 'Debit',
+                    value: _money(_ledgerDebitGrandTotal),
+                    icon: Icons.arrow_upward_rounded,
+                    color: Colors.red,
+                  ),
+                  _buildKpiCard(
+                    title: 'Outstanding',
+                    value: _money(_ledgerOutstandingGrandTotal),
+                    icon: Icons.warning_amber_rounded,
+                    color: Colors.deepOrange,
+                  ),
+                  _buildKpiCard(
+                    title: 'Closing',
+                    value: _money(ctrl.closingBalance),
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: Colors.indigo,
+                  ),
+                  ...visibleLedgerMethods.map(
+                    (entry) => _buildKpiCard(
+                      title: entry.paymentMethod,
+                      value: _plainAmount(entry.amountIn > 0 ? entry.amountIn : entry.amountOut),
+                      icon: Icons.payment_rounded,
+                      color: const Color(0xFF0F766E),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.indigo.withOpacity(.06),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Text(
-              'Selected range opening deposit: ${_money(ctrl.openingBalance)}. Each day below starts with its deposit row first, then the day transactions.',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.indigo, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Selected range opening deposit: ${_money(ctrl.openingBalance)}. Each day below starts with its deposit row first, then the day transactions.',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1E293B)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               ..._ledgerDaysAsc.map(
-            (day) {
-              final dayOutstandingTotal = day.entries.fold<double>(
-                0,
-                (sum, entry) => sum + _ledgerOutstanding(entry),
-              );
-              final dayCreditTotal = day.entries.fold<double>(
-                0,
-                (sum, entry) => sum + entry.amountIn,
-              );
-              final dayDebitTotal = day.entries.fold<double>(
-                0,
-                (sum, entry) =>
-                    sum +
-                    (entry.amountOut > 0
-                        ? entry.amountOut
-                        : entry.adjustmentAmount),
-              );
-              return Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-              ),
+                (day) {
+                  final dayOutstandingTotal = day.entries.fold<double>(
+                    0,
+                    (sum, entry) => sum + _ledgerOutstanding(entry),
+                  );
+                  final dayCreditTotal = day.entries.fold<double>(
+                    0,
+                    (sum, entry) => sum + entry.amountIn,
+                  );
+                  final dayDebitTotal = day.entries.fold<double>(
+                    0,
+                    (sum, entry) =>
+                        sum +
+                        (entry.amountOut > 0
+                            ? entry.amountOut
+                            : entry.adjustmentAmount),
+                  );
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -3104,6 +3314,18 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           final debitAmount = entry.amountOut > 0
               ? entry.amountOut
               : entry.adjustmentAmount;
+          final isExpense = entry.transactionType.trim().toUpperCase() == 'EXPENSE' ||
+              entry.referenceType.trim().toUpperCase() == 'EXPENSE';
+
+          Widget wrapCell(Widget cell) {
+            if (!isExpense) return cell;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _onLedgerRowTapped(entry),
+              child: cell,
+            );
+          }
+
           return TableRow(
             decoration: BoxDecoration(
               color: _ledgerRowColor(entry),
@@ -3112,36 +3334,36 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               ),
             ),
             children: [
-              _LedgerCell(_fmtDateTime(entry.txnDate)),
-              _LedgerCell(_ledgerTypeLabel(entry.transactionType)),
-              _LedgerCell(entry.referenceNo.isEmpty ? '-' : entry.referenceNo),
-              _LedgerCell(entry.partyName.isEmpty ? '-' : entry.partyName),
-              _LedgerCell(entry.paymentMethod.isEmpty ? '-' : entry.paymentMethod),
-              _LedgerCell(_ledgerNote(entry)),
-              _LedgerCell(
+              wrapCell(_LedgerCell(_fmtDateTime(entry.txnDate))),
+              wrapCell(_LedgerCell(_ledgerTypeLabel(entry.transactionType))),
+              wrapCell(_LedgerCell(entry.referenceNo.isEmpty ? '-' : entry.referenceNo)),
+              wrapCell(_LedgerCell(entry.partyName.isEmpty ? '-' : entry.partyName)),
+              wrapCell(_LedgerCell(entry.paymentMethod.isEmpty ? '-' : entry.paymentMethod)),
+              wrapCell(_LedgerCell(_ledgerNote(entry))),
+              wrapCell(_LedgerCell(
                 _ledgerOutstanding(entry) <= 0 ? '-' : _money(_ledgerOutstanding(entry)),
                 align: TextAlign.right,
                 color: _ledgerOutstanding(entry) > 0 ? Colors.deepOrange : null,
                 bold: _ledgerOutstanding(entry) > 0,
-              ),
-              _LedgerCell(
+              )),
+              wrapCell(_LedgerCell(
                 entry.amountIn <= 0 ? '-' : _money(entry.amountIn),
                 align: TextAlign.right,
                 color: entry.amountIn > 0 ? Colors.green : null,
                 bold: entry.amountIn > 0,
-              ),
-              _LedgerCell(
+              )),
+              wrapCell(_LedgerCell(
                 debitAmount <= 0 ? '-' : _money(debitAmount),
                 align: TextAlign.right,
                 color: debitAmount > 0 ? Colors.red : null,
                 bold: debitAmount > 0,
-              ),
-              _LedgerCell(
+              )),
+              wrapCell(_LedgerCell(
                 _money(entry.balance),
                 align: TextAlign.right,
                 color: Colors.indigo,
                 bold: true,
-              ),
+              )),
             ],
           );
         }),
@@ -3182,6 +3404,63 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   }
 
   Widget _expenseTab() {
+    Widget buildKpiCard({
+      required String title,
+      required String value,
+      required IconData icon,
+      required Color color,
+    }) {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Center(
@@ -3190,55 +3469,132 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _summaryWrap([
-                _summaryCard(
-                    'Expense Total', _money(ctrl.expenseTotal), Colors.red),
-                _summaryCard('Entries', '${ctrl.expenses.length}', Colors.orange),
-              ]),
-              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = constraints.maxWidth > 550 ? 2 : 1;
+                  return GridView.count(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: cols == 2 ? 2.8 : 3.4,
+                    children: [
+                      buildKpiCard(
+                        title: 'Expense Total',
+                        value: _money(ctrl.expenseTotal),
+                        icon: Icons.wallet_rounded,
+                        color: const Color(0xFFEF4444),
+                      ),
+                      buildKpiCard(
+                        title: 'Entries',
+                        value: '${ctrl.expenses.length}',
+                        icon: Icons.list_alt_rounded,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ExpenseAnalyticsScreen(ctrl: ctrl),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.bar_chart_outlined, size: 22),
+                label: const Text(
+                  'View Deep Expense Analytics & Tax Outflows',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+              const SizedBox(height: 16),
               Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                color: Colors.white,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Quick expense entry',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B))),
                         const SizedBox(height: 8),
-                        const Text(
-                            'Add salary, petrol, diesel, commission, rent and keep remarks like who was paid and why.'),
+                        Text(
+                            'Add salary, petrol, diesel, commission, rent and keep remarks like who was paid and why.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                         const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: expensePresets
-                              .map((preset) => OutlinedButton(
-                                  onPressed: () =>
-                                      _showExpenseDialog(initialCategory: preset),
-                                  child: Text(preset)))
-                              .toList(),
-                        ),
+                        if (ctrl.expenseCategories.isNotEmpty)
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: ctrl.expenseCategories
+                                .map((cat) => OutlinedButton.icon(
+                                    onPressed: () =>
+                                        _showExpenseDialog(initialCategory: cat.categoryName),
+                                    icon: const Icon(Icons.add, size: 14),
+                                    label: Text(cat.categoryName)))
+                                .toList(),
+                          )
+                        else
+                          OutlinedButton.icon(
+                            onPressed: _addNewCategory,
+                            icon: const Icon(Icons.add, size: 14),
+                            label: const Text('Add Category First'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                            ),
+                          ),
                       ]),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               ...ctrl.expenses.map((expense) => Card(
+                    elevation: 0,
                     margin: const EdgeInsets.symmetric(vertical: 4),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    color: Colors.white,
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      title: Text(expense.category,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      title: Text('${expense.category} (${expense.vendorName})',
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(
-                          '${_fmtDate(expense.expenseDate)}  -  ${expense.note}'),
+                        '${_fmtDate(expense.expenseDate)}  -  ${expense.note}\n'
+                        'Method: ${expense.paymentMethod} | Status: ${expense.status}\n'
+                        'Base: ${_money(expense.baseAmount)} | Tax: ${_money(expense.totalTaxAmount)} | Ded: ${_money(expense.totalDeductionAmount)}'
+                      ),
                       trailing: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                         Text(_money(expense.amount),
                             style: const TextStyle(
                                 color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)),
                         IconButton(
+                            tooltip: 'Print Receipt',
+                            onPressed: () => ExpenseEntryDialog.printExpenseReceipt(expense),
+                            icon: const Icon(Icons.print_outlined, color: Colors.teal)),
+                        IconButton(
                             onPressed: () => _showExpenseDialog(expense: expense),
                             icon: const Icon(Icons.edit_outlined)),
+                        IconButton(
+                            onPressed: () => _confirmDelete(expense.id),
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
                       ]),
                     ),
                   )),
@@ -3261,14 +3617,41 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _summaryWrap([
-                _summaryCard(
-                    'Income Total', _money(ctrl.incomeTotal), Colors.green),
-                _summaryCard('Entries', '${ctrl.incomes.length}', Colors.teal),
-              ]),
-              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = constraints.maxWidth > 550 ? 2 : 1;
+                  return GridView.count(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: cols == 2 ? 2.8 : 3.4,
+                    children: [
+                      _buildKpiCard(
+                        title: 'Income Total',
+                        value: _money(ctrl.incomeTotal),
+                        icon: Icons.account_balance_wallet_rounded,
+                        color: const Color(0xFF16A34A),
+                      ),
+                      _buildKpiCard(
+                        title: 'Entries',
+                        value: '${ctrl.incomes.length}',
+                        icon: Icons.list_alt_rounded,
+                        color: const Color(0xFF0D9488),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
               Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                color: Colors.white,
                 child: const Padding(
                   padding: EdgeInsets.all(16),
                   child: Column(
@@ -3276,21 +3659,27 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     children: [
                       Text(
                         'Other income',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
                       ),
                       SizedBox(height: 8),
                       Text(
                         'Use this for income like box sale, loading charges, rent recovery, or any extra cash received. It will be adjusted in the ledger automatically.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               ...ctrl.incomes.map(
                 (income) => Card(
+                  elevation: 0,
                   margin: const EdgeInsets.symmetric(vertical: 4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  color: Colors.white,
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     title: Text(
@@ -3340,15 +3729,41 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _summaryWrap([
-                _summaryCard(
-                    'Withdrawal Total', _money(ctrl.withdrawalTotal), Colors.red),
-                _summaryCard(
-                    'Entries', '${ctrl.withdrawals.length}', Colors.deepOrange),
-              ]),
-              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = constraints.maxWidth > 550 ? 2 : 1;
+                  return GridView.count(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: cols == 2 ? 2.8 : 3.4,
+                    children: [
+                      _buildKpiCard(
+                        title: 'Withdrawal Total',
+                        value: _money(ctrl.withdrawalTotal),
+                        icon: Icons.money_off_rounded,
+                        color: const Color(0xFFEF4444),
+                      ),
+                      _buildKpiCard(
+                        title: 'Entries',
+                        value: '${ctrl.withdrawals.length}',
+                        icon: Icons.list_alt_rounded,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
               Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                color: Colors.white,
                 child: const Padding(
                   padding: EdgeInsets.all(16),
                   child: Column(
@@ -3356,21 +3771,27 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     children: [
                       Text(
                         'Cash withdrawal',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
                       ),
                       SizedBox(height: 8),
                       Text(
                         'Use this tab for owner withdrawal, bank deposit, petty cash movement, or other cash taken out. It will be posted to ledger debit automatically.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               ...ctrl.withdrawals.map(
                 (withdrawal) => Card(
+                  elevation: 0,
                   margin: const EdgeInsets.symmetric(vertical: 4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  color: Colors.white,
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     title: Text(
@@ -3421,14 +3842,41 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _summaryWrap([
-                _summaryCard(
-                    'Carry Forward', _money(ctrl.carriedOpeningBalance), Colors.blue),
-                _summaryCard('Saved Days', '${ctrl.openings.length}', Colors.teal),
-              ]),
-              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = constraints.maxWidth > 550 ? 2 : 1;
+                  return GridView.count(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: cols == 2 ? 2.8 : 3.4,
+                    children: [
+                      _buildKpiCard(
+                        title: 'Carry Forward',
+                        value: _money(ctrl.carriedOpeningBalance),
+                        icon: Icons.double_arrow_rounded,
+                        color: const Color(0xFF2563EB),
+                      ),
+                      _buildKpiCard(
+                        title: 'Saved Days',
+                        value: '${ctrl.openings.length}',
+                        icon: Icons.date_range_rounded,
+                        color: const Color(0xFF0D9488),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
               Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                color: Colors.white,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(children: [
@@ -3437,11 +3885,21 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(.08),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.grey.shade200),
                       ),
-                      child: const Text(
-                        'Opening deposit is carried forward automatically at local day-end. If you do not save a new deposit for the next day, the previous closing balance will be used.',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: const Text(
+                              'Opening deposit is carried forward automatically at local day-end. If you do not save a new deposit for the next day, the previous closing balance will be used.',
+                              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     ListTile(
@@ -3477,10 +3935,15 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   ]),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               ...ctrl.openings.map((item) => Card(
+                  elevation: 0,
                   margin: const EdgeInsets.symmetric(vertical: 4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  color: Colors.white,
                   child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       title: Text(_fmtDate(item.balanceDate),
@@ -3502,21 +3965,48 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         final isWide = constraints.maxWidth >= 980;
         final leftWidth = isWide ? 320.0 : constraints.maxWidth;
         final rightWidth = isWide ? 220.0 : constraints.maxWidth;
+        final cols = constraints.maxWidth > 750 ? 3 : 1;
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(children: [
-          _summaryWrap([
-          _summaryCard('Sales', '${ctrl.deliveries.length}', Colors.blue),
-          _summaryCard('Amount', _money(ctrl.deliveryTotal), Colors.green),
-          _summaryCard(
-              'Outstanding', _money(ctrl.deliveryOutstanding), Colors.red),
-        ]),
-        const SizedBox(height: 12),
-        ...ctrl.deliveries.map(
-          (item) => Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: cols,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: cols == 3 ? 2.6 : 3.4,
+              children: [
+                _buildKpiCard(
+                  title: 'Sales',
+                  value: '${ctrl.deliveries.length}',
+                  icon: Icons.point_of_sale_rounded,
+                  color: const Color(0xFF2563EB),
+                ),
+                _buildKpiCard(
+                  title: 'Amount',
+                  value: _money(ctrl.deliveryTotal),
+                  icon: Icons.currency_rupee_rounded,
+                  color: const Color(0xFF16A34A),
+                ),
+                _buildKpiCard(
+                  title: 'Outstanding',
+                  value: _money(ctrl.deliveryOutstanding),
+                  icon: Icons.warning_amber_rounded,
+                  color: const Color(0xFFEF4444),
+                ),
+              ],
             ),
+            const SizedBox(height: 16),
+            ...ctrl.deliveries.map(
+              (item) => Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                color: Colors.white,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Wrap(
@@ -3562,32 +4052,66 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   }
 
   Widget _expiryTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(children: [
-        _summaryWrap([
-          _summaryCard('Expired', '${ctrl.expiredCount}', Colors.red),
-          _summaryCard(
-              'Near Expiry', '${ctrl.nearExpiryCount}', Colors.amber.shade800),
-          _summaryCard('Items', '${ctrl.expiryItems.length}', Colors.blue),
-        ]),
-        const SizedBox(height: 12),
-        ...ctrl.expiryItems.map((item) => Card(
-                child: ListTile(
-              title: Text('${item.itemName} (${item.itemCode})',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(
-                  'Qty ${item.qty.toStringAsFixed(2)} ${item.unit}  -  Expiry ${_fmtDate(item.expiryDate)}'),
-              trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _statusChip(item.status),
-                    Text('${item.daysLeft} days')
-                  ]),
-            ))),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = constraints.maxWidth > 750 ? 3 : 1;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(children: [
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: cols,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: cols == 3 ? 2.6 : 3.4,
+              children: [
+                _buildKpiCard(
+                  title: 'Expired',
+                  value: '${ctrl.expiredCount}',
+                  icon: Icons.lock_clock,
+                  color: const Color(0xFFEF4444),
+                ),
+                _buildKpiCard(
+                  title: 'Near Expiry',
+                  value: '${ctrl.nearExpiryCount}',
+                  icon: Icons.access_time_filled,
+                  color: Colors.amber.shade800,
+                ),
+                _buildKpiCard(
+                  title: 'Items',
+                  value: '${ctrl.expiryItems.length}',
+                  icon: Icons.inventory_2_rounded,
+                  color: const Color(0xFF2563EB),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...ctrl.expiryItems.map((item) => Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  color: Colors.white,
+                  child: ListTile(
+                    title: Text('${item.itemName} (${item.itemCode})',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(
+                        'Qty ${item.qty.toStringAsFixed(2)} ${item.unit}  -  Expiry ${_fmtDate(item.expiryDate)}'),
+                    trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _statusChip(item.status),
+                          Text('${item.daysLeft} days')
+                        ]),
+                  ))),
         if (ctrl.expiryItems.isEmpty) _emptyCard('No expiry items found.'),
       ]),
+        );
+      },
     );
   }
 
@@ -3836,6 +4360,1169 @@ class _LedgerCell extends StatelessWidget {
           color: color,
         ),
       ),
+    );
+  }
+}
+
+class ExpenseEntryDialog extends StatefulWidget {
+  final ExpenseEntryReport? expense;
+  final FinanceHubController ctrl;
+  final VoidCallback onSaved;
+  final String initialCategory;
+
+  const ExpenseEntryDialog({
+    super.key,
+    this.expense,
+    required this.ctrl,
+    required this.onSaved,
+    this.initialCategory = '',
+  });
+
+  static Future<void> printExpenseReceipt(ExpenseEntryReport expense) async {
+    final propertyCtrl = PropertyInfoController();
+    await propertyCtrl.load();
+    final property = propertyCtrl.data;
+    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
+    
+    // Parse manual vendor details
+    String displayVendor = expense.vendorName;
+    String displayNote = expense.note;
+    if (expense.vendorName == 'Direct Cash' && expense.note.startsWith('Paid To: ')) {
+      final parts = expense.note.split(' | ');
+      displayVendor = parts.first.substring(9);
+      displayNote = parts.length > 1 ? parts.sublist(1).join(' | ') : '';
+    }
+    
+    await Printing.layoutPdf(
+      name: 'Expense_Receipt_${expense.id.length >= 8 ? expense.id.substring(0, 8) : expense.id}',
+      onLayout: (format) async {
+        final pdf = pw.Document();
+        final mono = pw.Font.courier();
+        final bold = pw.Font.helveticaBold();
+        final regular = pw.Font.helvetica();
+        
+        pw.Widget divider() => pw.Container(
+              margin: const pw.EdgeInsets.symmetric(vertical: 5),
+              width: double.infinity,
+              height: 1,
+              color: PdfColors.black,
+            );
+
+        pw.Widget kvLine(String label, String value, {bool boldFont = false}) {
+          final style = pw.TextStyle(
+            font: mono,
+            fontSize: 9,
+            fontWeight: boldFont ? pw.FontWeight.bold : pw.FontWeight.normal,
+          );
+          return pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(label, style: style),
+              pw.Text(value, style: style),
+            ],
+          );
+        }
+
+        pdf.addPage(
+          pw.MultiPage(
+            pageFormat: const PdfPageFormat(
+              72 * PdfPageFormat.mm,
+              double.infinity,
+              marginAll: 2 * PdfPageFormat.mm,
+              marginTop: 3 * PdfPageFormat.mm,
+              marginBottom: 3 * PdfPageFormat.mm,
+            ),
+            build: (context) => [
+              PosInvoicePrinter.buildStandardThermalHeader(
+                property: property,
+                logo: logo,
+                fontRegular: regular,
+                fontBold: bold,
+              ),
+              pw.SizedBox(height: 6),
+              pw.Center(
+                child: pw.Text(
+                  'EXPENSE RECEIPT',
+                  style: pw.TextStyle(
+                    font: mono,
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              divider(),
+              kvLine('Receipt No:', expense.invoiceRefNo.isNotEmpty ? expense.invoiceRefNo : 'EXP-${expense.id.length >= 8 ? expense.id.substring(0, 8).toUpperCase() : expense.id.toUpperCase()}'),
+              kvLine('Date:', DateFormat('dd-MMM-yyyy').format(expense.expenseDate)),
+              kvLine('Category:', expense.category),
+              kvLine('Vendor:', displayVendor.isNotEmpty ? displayVendor : '-'),
+              kvLine('Method:', expense.paymentMethod),
+              kvLine('Status:', expense.status),
+              if (displayNote.isNotEmpty) ...[
+                divider(),
+                pw.Text('Notes: $displayNote', style: pw.TextStyle(font: mono, fontSize: 8.5)),
+              ],
+              divider(),
+              kvLine('Base Amount:', 'Rs. ${expense.baseAmount.toStringAsFixed(2)}'),
+              if (expense.taxes.isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text('TAX DETAILS:', style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                ...expense.taxes.map((t) => kvLine('  ${t.taxName} (${t.taxPercentage}%):', 'Rs. ${t.taxAmount.toStringAsFixed(2)}')),
+              ],
+              if (expense.deductions.isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text('DEDUCTION DETAILS:', style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                ...expense.deductions.map((d) => kvLine('  ${d.deductionType} (${d.deductionPercentage}%):', '-Rs. ${d.deductionAmount.toStringAsFixed(2)}')),
+              ],
+              divider(),
+              kvLine('Net Payable:', 'Rs. ${expense.amount.toStringAsFixed(2)}', boldFont: true),
+              divider(),
+              pw.SizedBox(height: 10),
+              pw.Center(
+                child: pw.Text(
+                  'Signature / Authorized Sign',
+                  style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold),
+                ),
+              ),
+              pw.SizedBox(height: 5),
+              pw.Center(
+                child: pw.Text(
+                  'Thank you!',
+                  style: pw.TextStyle(font: mono, fontSize: 8),
+                ),
+              ),
+            ],
+          ),
+        );
+        return pdf.save();
+      },
+    );
+  }
+
+  @override
+  State<ExpenseEntryDialog> createState() => _ExpenseEntryDialogState();
+}
+
+class TaxRowState {
+  String taxName;
+  double taxPercentage;
+  bool isCustom;
+  final TextEditingController nameCtrl;
+  final TextEditingController percentCtrl;
+
+  TaxRowState({
+    required this.taxName,
+    required this.taxPercentage,
+    this.isCustom = false,
+  })  : nameCtrl = TextEditingController(text: taxName),
+        percentCtrl = TextEditingController(text: taxPercentage.toStringAsFixed(2));
+}
+
+class DeductionRowState {
+  String deductionType;
+  double deductionPercentage;
+  final TextEditingController percentCtrl;
+
+  DeductionRowState({
+    required this.deductionType,
+    required this.deductionPercentage,
+  })  : percentCtrl = TextEditingController(text: deductionPercentage.toStringAsFixed(2));
+}
+
+class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
+  final amountCtrl = TextEditingController();
+  final invoiceRefNoCtrl = TextEditingController();
+  final noteCtrl = TextEditingController();
+  final manualVendorCtrl = TextEditingController();
+ 
+  DateTime paymentDate = DateTime.now();
+  String? selectedCategoryId;
+  int? selectedVendorId;
+  String vendorType = 'Supplier'; // 'Supplier', 'Staff', 'Other'
+  List<AppUser> staffList = [];
+  AppUser? selectedStaffUser;
+  String paymentMethod = 'CASH';
+  List<String> paymentMethodsList = ['CASH', 'BANK', 'UPI', 'CARD', 'CREDIT'];
+  String status = 'Paid';
+  bool isTaxInclusive = false;
+ 
+  List<Supplier> suppliers = [];
+  List<TaxRowState> taxRows = [];
+  List<DeductionRowState> deductionRows = [];
+  bool loadingData = true;
+ 
+  double baseAmount = 0.0;
+  double totalTaxAmount = 0.0;
+  double totalDeductionAmount = 0.0;
+  double netPayableAmount = 0.0;
+ 
+  @override
+  void initState() {
+    super.initState();
+    _initData();
+    amountCtrl.addListener(_recalculate);
+  }
+ 
+  @override
+  void dispose() {
+    amountCtrl.dispose();
+    invoiceRefNoCtrl.dispose();
+    noteCtrl.dispose();
+    manualVendorCtrl.dispose();
+    for (var r in taxRows) {
+      r.nameCtrl.dispose();
+      r.percentCtrl.dispose();
+    }
+    for (var r in deductionRows) {
+      r.percentCtrl.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _initData() async {
+    try {
+      await widget.ctrl.loadExpenseCategories();
+      await widget.ctrl.loadTaxesMaster();
+      await widget.ctrl.loadCustomPaymentMethods();
+      if (widget.ctrl.customPaymentMethods.isNotEmpty) {
+        paymentMethodsList = List<String>.from(widget.ctrl.customPaymentMethods);
+      }
+      final supplierRes = await ApiClient.get('/api/inventory/suppliers');
+      suppliers = (supplierRes['data'] as List? ?? [])
+          .map((e) => Supplier.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
+      try {
+        final userRes = await ApiClient.get(ApiEndpoints.users);
+        staffList = (userRes['data'] as List? ?? [])
+            .map((e) => AppUser.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      } catch (e) {
+        debugPrint('Error loading staff list: $e');
+      }
+
+      if (widget.expense != null) {
+        final exp = widget.expense!;
+        amountCtrl.text = exp.isTaxInclusive 
+            ? (exp.baseAmount + exp.totalTaxAmount).toStringAsFixed(2)
+            : exp.baseAmount.toStringAsFixed(2);
+        invoiceRefNoCtrl.text = exp.invoiceRefNo;
+        if (exp.vendorId != null) {
+          vendorType = 'Supplier';
+          selectedVendorId = exp.vendorId;
+          noteCtrl.text = exp.note;
+        } else if (exp.note.startsWith('Paid To Staff: ')) {
+          vendorType = 'Staff';
+          final parts = exp.note.split(' | ');
+          final staffName = parts.first.substring(15);
+          final matchIdx = staffList.indexWhere((u) => u.fullName == staffName || u.username == staffName);
+          if (matchIdx != -1) {
+            selectedStaffUser = staffList[matchIdx];
+          } else {
+            manualVendorCtrl.text = staffName;
+          }
+          noteCtrl.text = parts.length > 1 ? parts.sublist(1).join(' | ') : '';
+        } else if (exp.note.startsWith('Paid To: ')) {
+          vendorType = 'Other';
+          final parts = exp.note.split(' | ');
+          manualVendorCtrl.text = parts.first.substring(9);
+          noteCtrl.text = parts.length > 1 ? parts.sublist(1).join(' | ') : '';
+        } else {
+          vendorType = 'Supplier';
+          noteCtrl.text = exp.note;
+        }
+        paymentDate = exp.expenseDate;
+        selectedCategoryId = exp.categoryId;
+        paymentMethod = exp.paymentMethod;
+        status = exp.status;
+        isTaxInclusive = exp.isTaxInclusive;
+
+        if (!paymentMethodsList.contains(paymentMethod)) {
+          paymentMethodsList.add(paymentMethod);
+        }
+
+        taxRows = exp.taxes.map((t) {
+          final isStd = widget.ctrl.taxesMasterList.any((std) => std.taxName == t.taxName);
+          return TaxRowState(
+            taxName: t.taxName,
+            taxPercentage: t.taxPercentage,
+            isCustom: !isStd,
+          );
+        }).toList();
+
+        deductionRows = exp.deductions.map((d) {
+          return DeductionRowState(
+            deductionType: d.deductionType,
+            deductionPercentage: d.deductionPercentage,
+          );
+        }).toList();
+      } else {
+        if (widget.ctrl.expenseCategories.isNotEmpty) {
+          if (widget.initialCategory.isNotEmpty) {
+            final idx = widget.ctrl.expenseCategories.indexWhere(
+              (c) => c.categoryName.trim().toLowerCase() == widget.initialCategory.trim().toLowerCase()
+            );
+            selectedCategoryId = idx != -1 ? widget.ctrl.expenseCategories[idx].id : widget.ctrl.expenseCategories.first.id;
+          } else {
+            selectedCategoryId = widget.ctrl.expenseCategories.first.id;
+          }
+        }
+        if (paymentMethodsList.isNotEmpty && !paymentMethodsList.contains(paymentMethod)) {
+          paymentMethod = paymentMethodsList.first;
+        }
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => loadingData = false);
+          _recalculate();
+        }
+      });
+    } catch (e) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => loadingData = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load form dependencies: $e')),
+          );
+        }
+      });
+    }
+  }
+
+  void _recalculate() {
+    final amount = double.tryParse(amountCtrl.text) ?? 0.0;
+    final totalTaxPercent = taxRows.fold<double>(0.0, (sum, row) => sum + (double.tryParse(row.percentCtrl.text) ?? 0.0));
+
+    if (isTaxInclusive) {
+      baseAmount = amount / (1.0 + (totalTaxPercent / 100.0));
+      totalTaxAmount = amount - baseAmount;
+    } else {
+      baseAmount = amount;
+      totalTaxAmount = baseAmount * (totalTaxPercent / 100.0);
+    }
+
+    baseAmount = double.parse(baseAmount.toStringAsFixed(2));
+    totalTaxAmount = double.parse(totalTaxAmount.toStringAsFixed(2));
+
+    totalDeductionAmount = 0.0;
+    for (var row in deductionRows) {
+      final percent = double.tryParse(row.percentCtrl.text) ?? 0.0;
+      final dedAmt = baseAmount * (percent / 100.0);
+      totalDeductionAmount += double.parse(dedAmt.toStringAsFixed(2));
+    }
+
+    totalDeductionAmount = double.parse(totalDeductionAmount.toStringAsFixed(2));
+
+    final grossAmount = isTaxInclusive ? amount : (baseAmount + totalTaxAmount);
+    netPayableAmount = double.parse((grossAmount - totalDeductionAmount).toStringAsFixed(2));
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _addNewCategory() async {
+    final nameCtrl = TextEditingController();
+    final newCat = await showDialog<ExpenseCategoryModel>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Category'),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Category Name',
+            hintText: 'e.g. Office Supplies, Shipping...',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              try {
+                final cat = await widget.ctrl.saveExpenseCategory(name);
+                Navigator.pop(context, cat);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to save category: $e')),
+                );
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    if (newCat != null) {
+      setState(() {
+        selectedCategoryId = newCat.id;
+      });
+      _recalculate();
+    }
+  }
+
+  void _addTaxRow() {
+    setState(() {
+      final defaultTax = widget.ctrl.taxesMasterList.isNotEmpty 
+          ? widget.ctrl.taxesMasterList.first 
+          : null;
+      final newRow = TaxRowState(
+        taxName: defaultTax?.taxName ?? 'CGST',
+        taxPercentage: defaultTax?.defaultRate ?? 9.0,
+        isCustom: defaultTax == null,
+      );
+      newRow.percentCtrl.addListener(_recalculate);
+      newRow.nameCtrl.addListener(_recalculate);
+      taxRows.add(newRow);
+    });
+    _recalculate();
+  }
+
+  void _addDeductionRow() {
+    setState(() {
+      final newRow = DeductionRowState(
+        deductionType: 'TDS',
+        deductionPercentage: 2.0,
+      );
+      newRow.percentCtrl.addListener(_recalculate);
+      deductionRows.add(newRow);
+    });
+    _recalculate();
+  }
+
+  Future<void> _save() async {
+    if (selectedCategoryId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select or add a category.')),
+      );
+      return;
+    }
+    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Amount must be greater than 0.')),
+      );
+      return;
+    }
+
+    try {
+      final taxesPayload = taxRows.map((r) => {
+        'tax_name': r.isCustom ? r.nameCtrl.text.trim() : r.taxName,
+        'tax_percentage': double.tryParse(r.percentCtrl.text.trim()) ?? 0.0,
+      }).toList();
+
+      final deductionsPayload = deductionRows.map((r) => {
+        'deduction_type': r.deductionType,
+        'deduction_percentage': double.tryParse(r.percentCtrl.text.trim()) ?? 0.0,
+      }).toList();
+
+      String finalNote = noteCtrl.text.trim();
+      int? finalVendorId = selectedVendorId;
+      if (vendorType == 'Staff') {
+        finalVendorId = null;
+        final staffName = selectedStaffUser?.fullName ?? manualVendorCtrl.text.trim();
+        if (staffName.isNotEmpty) {
+          finalNote = 'Paid To Staff: $staffName${finalNote.isNotEmpty ? ' | $finalNote' : ''}';
+        }
+      } else if (vendorType == 'Other') {
+        finalVendorId = null;
+        if (manualVendorCtrl.text.trim().isNotEmpty) {
+          finalNote = 'Paid To: ${manualVendorCtrl.text.trim()}${finalNote.isNotEmpty ? ' | $finalNote' : ''}';
+        }
+      } else {
+        // Supplier case
+      }
+
+      final savedExpense = await widget.ctrl.saveExpense(
+        expenseId: widget.expense?.id,
+        paymentDate: paymentDate,
+        categoryId: selectedCategoryId!,
+        amount: amount,
+        vendorId: finalVendorId,
+        invoiceRefNo: invoiceRefNoCtrl.text.trim().isEmpty ? null : invoiceRefNoCtrl.text.trim(),
+        paymentMethod: paymentMethod,
+        isTaxInclusive: isTaxInclusive,
+        note: finalNote,
+        status: status,
+        taxes: taxesPayload,
+        deductions: deductionsPayload,
+      );
+
+      widget.onSaved();
+      Navigator.pop(context);
+
+      await ExpenseEntryDialog.printExpenseReceipt(savedExpense);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save expense: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loadingData) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final initialVendor = selectedVendorId != null
+        ? suppliers.firstWhere((s) => s.id == selectedVendorId, orElse: () => suppliers.first)
+        : null;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 16,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 800, maxHeight: 650),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    widget.expense == null ? 'Add Expense' : 'Edit Expense',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // CARD 1: Vendor & Reference Info
+                            Card(
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              color: Colors.white,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Vendor & Billing Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        ChoiceChip(
+                                          label: const Text('Supplier'),
+                                          selected: vendorType == 'Supplier',
+                                          onSelected: (val) {
+                                            if (val) {
+                                              setState(() {
+                                                vendorType = 'Supplier';
+                                              });
+                                            }
+                                          },
+                                        ),
+                                        const SizedBox(width: 8),
+                                        ChoiceChip(
+                                          label: const Text('Staff'),
+                                          selected: vendorType == 'Staff',
+                                          onSelected: (val) {
+                                            if (val) {
+                                              setState(() {
+                                                vendorType = 'Staff';
+                                              });
+                                            }
+                                          },
+                                        ),
+                                        const SizedBox(width: 8),
+                                        ChoiceChip(
+                                          label: const Text('Other'),
+                                          selected: vendorType == 'Other',
+                                          onSelected: (val) {
+                                            if (val) {
+                                              setState(() {
+                                                vendorType = 'Other';
+                                              });
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    if (vendorType == 'Supplier')
+                                      Autocomplete<Supplier>(
+                                        displayStringForOption: (Supplier option) => option.supplierName,
+                                        optionsBuilder: (TextEditingValue textEditingValue) {
+                                          if (textEditingValue.text.isEmpty) {
+                                            return suppliers;
+                                          }
+                                          return suppliers.where((Supplier option) {
+                                            return option.supplierName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                                option.phone.contains(textEditingValue.text);
+                                          });
+                                        },
+                                        onSelected: (Supplier selection) {
+                                          setState(() {
+                                            selectedVendorId = selection.id;
+                                          });
+                                        },
+                                        fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                                          if (initialVendor != null && textEditingController.text.isEmpty) {
+                                            textEditingController.text = initialVendor.supplierName;
+                                          }
+                                          return TextField(
+                                            controller: textEditingController,
+                                            focusNode: focusNode,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Vendor / Supplier',
+                                              hintText: 'Search vendor...',
+                                              prefixIcon: Icon(Icons.business_outlined),
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    else if (vendorType == 'Staff')
+                                      Autocomplete<AppUser>(
+                                        displayStringForOption: (AppUser option) => option.fullName,
+                                        optionsBuilder: (TextEditingValue textEditingValue) {
+                                          if (textEditingValue.text.isEmpty) {
+                                            return staffList;
+                                          }
+                                          return staffList.where((AppUser option) {
+                                            return option.fullName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                                option.username.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                                          });
+                                        },
+                                        onSelected: (AppUser selection) {
+                                          setState(() {
+                                            selectedStaffUser = selection;
+                                          });
+                                        },
+                                        fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                                          if (selectedStaffUser != null && textEditingController.text.isEmpty) {
+                                            textEditingController.text = selectedStaffUser!.fullName;
+                                          }
+                                          return TextField(
+                                            controller: textEditingController,
+                                            focusNode: focusNode,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Select Staff Member',
+                                              hintText: 'Search staff user...',
+                                              prefixIcon: Icon(Icons.badge_outlined),
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    else
+                                      TextField(
+                                        controller: manualVendorCtrl,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Custom Paid To Name',
+                                          hintText: 'Type custom name manually (e.g. host name, direct utility)...',
+                                          prefixIcon: Icon(Icons.person_outline),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: invoiceRefNoCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Invoice / Ref No',
+                                        prefixIcon: Icon(Icons.description_outlined),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // CARD 2: Expense Category & Amount Details
+                            Card(
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              color: Colors.white,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Expense Category & Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            value: selectedCategoryId,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Expense Category',
+                                              prefixIcon: Icon(Icons.category_outlined),
+                                            ),
+                                            items: widget.ctrl.expenseCategories.map((cat) {
+                                              return DropdownMenuItem(
+                                                value: cat.id,
+                                                child: Text(cat.categoryName),
+                                              );
+                                            }).toList(),
+                                            onChanged: (val) {
+                                              setState(() => selectedCategoryId = val);
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        IconButton.filledTonal(
+                                          onPressed: _addNewCategory,
+                                          icon: const Icon(Icons.add),
+                                          tooltip: 'Add New Category',
+                                        ),
+                                      ],
+                                    ),
+                                    if (widget.ctrl.expenseCategories.isNotEmpty) ...[
+                                      const SizedBox(height: 12),
+                                      const Text('Quick Select Category:', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 6),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: widget.ctrl.expenseCategories.take(8).map((cat) {
+                                          final isSelected = selectedCategoryId == cat.id;
+                                          return ChoiceChip(
+                                            label: Text(cat.categoryName, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontSize: 11)),
+                                            selected: isSelected,
+                                            selectedColor: Theme.of(context).colorScheme.primary,
+                                            backgroundColor: const Color(0xFFF1F5F9),
+                                            labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87),
+                                            onSelected: (selected) {
+                                              if (selected) {
+                                                setState(() {
+                                                  selectedCategoryId = cat.id;
+                                                });
+                                                _recalculate();
+                                              }
+                                            },
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 3,
+                                          child: TextField(
+                                            controller: amountCtrl,
+                                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Amount (₹)',
+                                              hintText: 'Enter amount',
+                                              prefixIcon: Icon(Icons.currency_rupee),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          flex: 3,
+                                          child: CheckboxListTile(
+                                            title: const Text('Inclusive of Tax', style: TextStyle(fontSize: 12)),
+                                            value: isTaxInclusive,
+                                            contentPadding: EdgeInsets.zero,
+                                            dense: true,
+                                            onChanged: (val) {
+                                              setState(() {
+                                                isTaxInclusive = val ?? false;
+                                              });
+                                              _recalculate();
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // CARD 3: Tax Rows & Deductions
+                            Card(
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              color: Colors.white,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('Tax Multi-layers', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
+                                        TextButton.icon(
+                                          onPressed: _addTaxRow,
+                                          icon: const Icon(Icons.add_circle_outline, size: 16),
+                                          label: const Text('Add Tax', style: TextStyle(fontSize: 12)),
+                                        ),
+                                      ],
+                                    ),
+                                    ...taxRows.map((row) {
+                                      final index = taxRows.indexOf(row);
+                                      return Card(
+                                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                flex: 3,
+                                                child: row.isCustom
+                                                    ? TextField(
+                                                        controller: row.nameCtrl,
+                                                        decoration: const InputDecoration(
+                                                          labelText: 'Tax Name',
+                                                          isDense: true,
+                                                        ),
+                                                      )
+                                                    : DropdownButtonFormField<String>(
+                                                        value: row.taxName,
+                                                        decoration: const InputDecoration(isDense: true),
+                                                        items: [
+                                                          ...widget.ctrl.taxesMasterList.map((t) => DropdownMenuItem(value: t.taxName, child: Text(t.taxName))),
+                                                          const DropdownMenuItem(value: 'CUSTOM', child: Text('Custom...')),
+                                                        ],
+                                                        onChanged: (val) {
+                                                          if (val == 'CUSTOM') {
+                                                            setState(() {
+                                                              row.isCustom = true;
+                                                            });
+                                                          } else if (val != null) {
+                                                            final taxObj = widget.ctrl.taxesMasterList.firstWhere((t) => t.taxName == val);
+                                                            setState(() {
+                                                              row.taxName = val;
+                                                              row.percentCtrl.text = taxObj.defaultRate.toStringAsFixed(2);
+                                                            });
+                                                            _recalculate();
+                                                          }
+                                                        },
+                                                      ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                flex: 2,
+                                                child: TextField(
+                                                  controller: row.percentCtrl,
+                                                  keyboardType: TextInputType.number,
+                                                  decoration: const InputDecoration(
+                                                    labelText: 'Rate %',
+                                                    isDense: true,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '₹${((isTaxInclusive ? baseAmount : baseAmount) * (double.tryParse(row.percentCtrl.text) ?? 0) / 100).toStringAsFixed(2)}',
+                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    taxRows.removeAt(index);
+                                                  });
+                                                  _recalculate();
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                    const Divider(height: 24),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('Deductions (TDS, TCS)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
+                                        TextButton.icon(
+                                          onPressed: _addDeductionRow,
+                                          icon: const Icon(Icons.add_circle_outline, size: 16),
+                                          label: const Text('Add Deduction', style: TextStyle(fontSize: 12)),
+                                        ),
+                                      ],
+                                    ),
+                                    ...deductionRows.map((row) {
+                                      final index = deductionRows.indexOf(row);
+                                      return Card(
+                                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                flex: 3,
+                                                child: DropdownButtonFormField<String>(
+                                                  value: row.deductionType,
+                                                  decoration: const InputDecoration(isDense: true),
+                                                  items: const [
+                                                    DropdownMenuItem(value: 'TDS', child: Text('TDS')),
+                                                    DropdownMenuItem(value: 'TCS', child: Text('TCS')),
+                                                    DropdownMenuItem(value: 'Penalty', child: Text('Penalty')),
+                                                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                                                  ],
+                                                  onChanged: (val) {
+                                                    if (val != null) {
+                                                      setState(() {
+                                                        row.deductionType = val;
+                                                      });
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                flex: 2,
+                                                child: TextField(
+                                                  controller: row.percentCtrl,
+                                                  keyboardType: TextInputType.number,
+                                                  decoration: const InputDecoration(
+                                                    labelText: 'Rate %',
+                                                    isDense: true,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '-₹${(baseAmount * (double.tryParse(row.percentCtrl.text) ?? 0) / 100).toStringAsFixed(2)}',
+                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.red),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    deductionRows.removeAt(index);
+                                                  });
+                                                  _recalculate();
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // CARD 4: Payment Method, Status, Date & Remarks
+                            Card(
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              color: Colors.white,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Payment & Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            value: paymentMethod,
+                                            decoration: const InputDecoration(labelText: 'Payment Method'),
+                                            items: paymentMethodsList.map((m) {
+                                              return DropdownMenuItem(value: m, child: Text(m));
+                                            }).toList(),
+                                            onChanged: (val) => setState(() => paymentMethod = val ?? 'CASH'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            value: status,
+                                            decoration: const InputDecoration(labelText: 'Status'),
+                                            items: const [
+                                              DropdownMenuItem(value: 'Paid', child: Text('Paid')),
+                                              DropdownMenuItem(value: 'Unpaid', child: Text('Unpaid')),
+                                              DropdownMenuItem(value: 'Void', child: Text('Void')),
+                                            ],
+                                            onChanged: (val) => setState(() => status = val ?? 'Paid'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text('Payment Date', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                      subtitle: Text(DateFormat('dd-MMM-yyyy').format(paymentDate)),
+                                      trailing: const Icon(Icons.calendar_today, size: 18),
+                                      onTap: () async {
+                                        final picked = await showDatePicker(
+                                          context: context,
+                                          initialDate: paymentDate,
+                                          firstDate: DateTime(2020),
+                                          lastDate: DateTime(2100),
+                                        );
+                                        if (picked != null) {
+                                          setState(() => paymentDate = picked);
+                                        }
+                                      },
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: noteCtrl,
+                                      maxLines: 2,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Expense Note / Remarks',
+                                        hintText: 'Enter any additional details...',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Theme.of(context).colorScheme.primaryContainer),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Financial Summary',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            _summaryRow('Base Amount', '₹${baseAmount.toStringAsFixed(2)}'),
+                            const SizedBox(height: 8),
+                            _summaryRow('Total Taxes (+)', '₹${totalTaxAmount.toStringAsFixed(2)}', isBold: true),
+                            const SizedBox(height: 4),
+                            ...taxRows.map((tr) {
+                              final percent = double.tryParse(tr.percentCtrl.text) ?? 0.0;
+                              final rowAmt = baseAmount * (percent / 100);
+                              return Padding(
+                                padding: const EdgeInsets.only(left: 12, bottom: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('${tr.isCustom ? tr.nameCtrl.text : tr.taxName} ($percent%)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    Text('₹${rowAmt.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  ],
+                                ),
+                              );
+                            }),
+                            const Divider(),
+                            _summaryRow('Total Deductions (-)', '₹${totalDeductionAmount.toStringAsFixed(2)}', isBold: true, color: Colors.red),
+                            const SizedBox(height: 4),
+                            ...deductionRows.map((dr) {
+                              final percent = double.tryParse(dr.percentCtrl.text) ?? 0.0;
+                              final rowAmt = baseAmount * (percent / 100);
+                              return Padding(
+                                padding: const EdgeInsets.only(left: 12, bottom: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('${dr.deductionType} ($percent%)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    Text('-₹${rowAmt.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  ],
+                                ),
+                              );
+                            }),
+                            const Divider(height: 24),
+                            Container(
+                              color: Theme.of(context).colorScheme.primaryContainer,
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                              child: _summaryRow(
+                                'Net Payable',
+                                '₹${netPayableAmount.toStringAsFixed(2)}',
+                                isBold: true,
+                                fontSize: 16,
+                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                            const Spacer(),
+                            FilledButton.icon(
+                              onPressed: _save,
+                              icon: const Icon(Icons.check),
+                              label: const Text('Save Expense'),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value, {bool isBold = false, double fontSize = 13, Color? color}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+            fontSize: fontSize,
+            color: color,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+            fontSize: fontSize,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }

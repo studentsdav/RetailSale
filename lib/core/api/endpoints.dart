@@ -79,6 +79,9 @@ class ApiEndpoints {
   static const requests = '/api/inventory/requests';
   static const financeLedger = '/api/finance/ledger';
   static const financeExpenses = '/api/finance/expenses';
+  static const financeExpenseCategories = '/api/finance/expense-categories';
+  static const financeTaxesMaster = '/api/finance/taxes-master';
+  static const financeExpenseAnalytics = '/api/finance/expense-analytics';
   static const financeIncome = '/api/finance/income';
   static const financeWithdrawals = '/api/finance/withdrawals';
   static const financeRepayments = '/api/finance/repayments';

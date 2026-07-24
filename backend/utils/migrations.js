@@ -2922,6 +2922,163 @@ COMMIT;
         ADD COLUMN IF NOT EXISTS thermal_footer_note TEXT;
       `);
     }
+  },
+  {
+    version: 82,
+    description: "Create professional-grade expense schema (expense_categories, taxes_master, expenses, expense_taxes, expense_deductions) and migrate basic expense entries",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        -- 1. Create pgcrypto extension for gen_random_uuid if not exists
+        CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+        -- 2. Alter cash_ledger.reference_id to type VARCHAR(50)
+        ALTER TABLE cash_ledger ALTER COLUMN reference_id TYPE VARCHAR(50);
+
+        -- 3. Create expense_categories table
+        CREATE TABLE IF NOT EXISTS expense_categories (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          outlet_id INT NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          user_id INT REFERENCES users(id) ON DELETE SET NULL,
+          category_name VARCHAR(255) NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_expense_categories_name 
+        ON expense_categories(outlet_id, lower(category_name));
+
+        -- 4. Create taxes_master table
+        CREATE TABLE IF NOT EXISTS taxes_master (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          outlet_id INT NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          tax_name VARCHAR(255) NOT NULL,
+          default_rate DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          is_editable BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_taxes_master_name 
+        ON taxes_master(outlet_id, lower(tax_name));
+
+        -- 5. Create expenses table
+        CREATE TABLE IF NOT EXISTS expenses (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          outlet_id INT NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          vendor_id INT REFERENCES supplier_master(id) ON DELETE SET NULL,
+          category_id UUID REFERENCES expense_categories(id) ON DELETE SET NULL,
+          invoice_ref_no VARCHAR(255),
+          payment_date DATE NOT NULL,
+          payment_method VARCHAR(100) NOT NULL,
+          is_tax_inclusive BOOLEAN NOT NULL DEFAULT FALSE,
+          base_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          total_tax_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          total_deduction_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          net_payable_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          expense_note TEXT,
+          status VARCHAR(50) NOT NULL DEFAULT 'Paid',
+          created_by INT REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 6. Create expense_taxes table
+        CREATE TABLE IF NOT EXISTS expense_taxes (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          expense_id UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+          tax_name VARCHAR(255) NOT NULL,
+          tax_percentage DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          tax_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 7. Create expense_deductions table
+        CREATE TABLE IF NOT EXISTS expense_deductions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          expense_id UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+          deduction_type VARCHAR(255) NOT NULL,
+          deduction_percentage DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          deduction_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 8. Seed default categories for all outlets
+        INSERT INTO expense_categories (outlet_id, category_name, is_active)
+        SELECT o.id, cat.name, true
+        FROM outlets o
+        CROSS JOIN (
+          SELECT 'Office Supplies' AS name UNION ALL
+          SELECT 'Marketing' UNION ALL
+          SELECT 'Rent' UNION ALL
+          SELECT 'Utilities' UNION ALL
+          SELECT 'Travel' UNION ALL
+          SELECT 'Maintenance' UNION ALL
+          SELECT 'Software/Subscriptions' UNION ALL
+          SELECT 'Salary' UNION ALL
+          SELECT 'Logistics' UNION ALL
+          SELECT 'Miscellaneous'
+        ) cat
+        ON CONFLICT (outlet_id, lower(category_name)) DO NOTHING;
+
+        -- 9. Seed default taxes for all outlets
+        INSERT INTO taxes_master (outlet_id, tax_name, default_rate, is_editable)
+        SELECT o.id, tax.name, tax.rate, true
+        FROM outlets o
+        CROSS JOIN (
+          SELECT 'CGST' AS name, 9.00 AS rate UNION ALL
+          SELECT 'SGST', 9.00 UNION ALL
+          SELECT 'IGST', 18.00
+        ) tax
+        ON CONFLICT (outlet_id, lower(tax_name)) DO NOTHING;
+
+        -- 10. Migrate historical expense entries
+        -- 10a. Ensure category strings in expense_entries exist in expense_categories
+        INSERT INTO expense_categories (outlet_id, category_name, is_active)
+        SELECT DISTINCT outlet_id, category, true
+        FROM expense_entries
+        ON CONFLICT (outlet_id, lower(category_name)) DO NOTHING;
+
+        -- 10b. Copy from expense_entries into expenses, keeping IDs consistent in the cash ledger
+        WITH migrated AS (
+          INSERT INTO expenses (
+            outlet_id, category_id, base_amount, total_tax_amount, total_deduction_amount,
+            net_payable_amount, payment_date, payment_method, expense_note, status,
+            created_by, created_at, updated_at
+          )
+          SELECT 
+            e.outlet_id, 
+            c.id, 
+            e.amount, 
+            0.00, 
+            0.00, 
+            e.amount, 
+            e.expense_date, 
+            'CASH', 
+            e.note, 
+            'Paid', 
+            e.created_by, 
+            e.created_at, 
+            e.updated_at
+          FROM expense_entries e
+          LEFT JOIN expense_categories c ON c.outlet_id = e.outlet_id AND lower(c.category_name) = lower(e.category)
+          RETURNING id, outlet_id, base_amount, payment_date, expense_note
+        )
+        -- Update the cash_ledger entries to point to the new UUIDs
+        UPDATE cash_ledger cl
+        SET reference_id = m.id::varchar
+        FROM migrated m
+        WHERE cl.outlet_id = m.outlet_id 
+          AND cl.transaction_type = 'EXPENSE'
+          AND cl.reference_type = 'EXPENSE'
+          AND cl.txn_date::date = m.payment_date
+          AND cl.amount_out = m.base_amount;
+
+        COMMIT;
+      `);
+    }
   }
 ];
 

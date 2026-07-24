@@ -7,7 +7,13 @@ router.use(auth, license('REPORTS'));
 
 router.post('/expenses', advancedCtrl.createExpense);
 router.put('/expenses/:id', advancedCtrl.updateExpense);
+router.delete('/expenses/:id', advancedCtrl.deleteExpense);
 router.get('/expenses', advancedCtrl.getExpenseReport);
+router.get('/expense-categories', advancedCtrl.getExpenseCategories);
+router.post('/expense-categories', advancedCtrl.createExpenseCategory);
+router.get('/taxes-master', advancedCtrl.getTaxesMaster);
+router.post('/taxes-master', advancedCtrl.createTaxesMaster);
+router.get('/expense-analytics', advancedCtrl.getExpenseAnalytics);
 router.post('/income', advancedCtrl.createIncome);
 router.put('/income/:id', advancedCtrl.updateIncome);
 router.get('/income', advancedCtrl.getIncomeReport);

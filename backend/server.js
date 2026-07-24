@@ -239,8 +239,12 @@ if (!fs.existsSync(licensePath)) {
         await runMigrations(propertyDb);
 
         console.log('✅ Database migrations complete');
-        await propertyDb.sync({ alter: false });
-        console.log('✅ Models synced');
+        try {
+            await propertyDb.sync({ alter: false });
+            console.log('✅ Models synced');
+        } catch (syncErr) {
+            console.warn('⚠️ Model sync skipped or failed:', syncErr.message);
+        }
 
         initializeAllBackups();
         startLoyaltyExpiryJob(propertyDb);
@@ -339,4 +343,4 @@ function initializeAllBackups() {
         console.error(`❌ Failed to initialize backups: ${error.message}`);
     }
 }
-// Trigger restart: 2026-06-22-1
+// Trigger restart: 2026-07-25-1

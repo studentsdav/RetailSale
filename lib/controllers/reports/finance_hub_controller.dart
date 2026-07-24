@@ -23,6 +23,9 @@ class FinanceHubController extends ChangeNotifier {
 
   List<ExpenseEntryReport> expenses = [];
   double expenseTotal = 0;
+  List<ExpenseCategoryModel> expenseCategories = [];
+  List<TaxesMasterModel> taxesMasterList = [];
+  ExpenseAnalyticsModel? expenseAnalytics;
 
   List<IncomeEntryReport> incomes = [];
   double incomeTotal = 0;
@@ -160,13 +163,14 @@ class FinanceHubController extends ChangeNotifier {
     }
   }
 
-  Future<void> loadExpenses({required DateTime fromDate, required DateTime toDate, String category = ''}) async {
+  Future<void> loadExpenses({required DateTime fromDate, required DateTime toDate, String category = '', String categoryId = ''}) async {
     await _run(() async {
       final params = <String>[
         'from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}',
         'to_date=${DateFormat('yyyy-MM-dd').format(toDate)}',
       ];
       if (category.trim().isNotEmpty) params.add('category=${Uri.encodeComponent(category.trim())}');
+      if (categoryId.trim().isNotEmpty) params.add('category_id=${Uri.encodeComponent(categoryId.trim())}');
       final res = await ApiClient.get('${ApiEndpoints.financeExpenses}?${params.join('&')}');
       expenseTotal = _num(res['summary']?['totalAmount']);
       expenses = (res['data'] as List? ?? const [])
@@ -175,18 +179,118 @@ class FinanceHubController extends ChangeNotifier {
     });
   }
 
-  Future<void> saveExpense({int? expenseId, required DateTime expenseDate, required String category, required double amount, String note = ''}) async {
+  Future<ExpenseEntryReport> saveExpense({
+    String? expenseId,
+    required DateTime paymentDate,
+    required String categoryId,
+    required double amount,
+    int? vendorId,
+    String? invoiceRefNo,
+    required String paymentMethod,
+    required bool isTaxInclusive,
+    required String note,
+    required String status,
+    required List<Map<String, dynamic>> taxes,
+    required List<Map<String, dynamic>> deductions,
+  }) async {
     final body = {
-      'expense_date': DateFormat('yyyy-MM-dd').format(expenseDate),
-      'category': category,
+      'payment_date': DateFormat('yyyy-MM-dd').format(paymentDate),
+      'category_id': categoryId,
       'amount': amount,
-      'note': note,
+      'vendor_id': vendorId,
+      'invoice_ref_no': invoiceRefNo,
+      'payment_method': paymentMethod,
+      'is_tax_inclusive': isTaxInclusive,
+      'expense_note': note,
+      'status': status,
+      'taxes': taxes,
+      'deductions': deductions,
     };
+    final dynamic res;
     if (expenseId == null) {
-      await ApiClient.post(ApiEndpoints.financeExpenses, body);
+      res = await ApiClient.post(ApiEndpoints.financeExpenses, body);
     } else {
-      await ApiClient.put('${ApiEndpoints.financeExpenses}/$expenseId', body);
+      res = await ApiClient.put('${ApiEndpoints.financeExpenses}/$expenseId', body);
     }
+    return ExpenseEntryReport.fromJson(Map<String, dynamic>.from(res['data']));
+  }
+
+  Future<void> deleteExpense(String expenseId) async {
+    await ApiClient.delete('${ApiEndpoints.financeExpenses}/$expenseId');
+  }
+
+  List<String> customPaymentMethods = [];
+
+  Future<void> loadCustomPaymentMethods() async {
+    try {
+      final res = await ApiClient.get('/api/sales/payment-methods');
+      final list = res['data'] as List? ?? const [];
+      customPaymentMethods = list
+          .where((e) => e['is_active'] == true || e['is_active'] == 1)
+          .map((e) => (e['name'] ?? '').toString())
+          .toList();
+      if (customPaymentMethods.isEmpty) {
+        customPaymentMethods = ['CASH', 'BANK', 'UPI', 'CARD', 'CREDIT'];
+      }
+    } catch (e) {
+      customPaymentMethods = ['CASH', 'BANK', 'UPI', 'CARD', 'CREDIT'];
+    }
+  }
+
+  Future<ExpenseEntryReport?> fetchExpenseById(String expenseId) async {
+    try {
+      final res = await ApiClient.get('${ApiEndpoints.financeExpenses}?id=$expenseId');
+      final list = res['data'] as List? ?? const [];
+      if (list.isNotEmpty) {
+        return ExpenseEntryReport.fromJson(Map<String, dynamic>.from(list.first));
+      }
+    } catch (e) {
+      debugPrint('Error fetchExpenseById: $e');
+    }
+    return null;
+  }
+
+  Future<void> loadExpenseCategories() async {
+    final res = await ApiClient.get(ApiEndpoints.financeExpenseCategories);
+    expenseCategories = (res['data'] as List? ?? const [])
+        .map((e) => ExpenseCategoryModel.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<ExpenseCategoryModel> saveExpenseCategory(String categoryName) async {
+    final res = await ApiClient.post(ApiEndpoints.financeExpenseCategories, {
+      'category_name': categoryName,
+    });
+    final cat = ExpenseCategoryModel.fromJson(Map<String, dynamic>.from(res['data']));
+    await loadExpenseCategories();
+    return cat;
+  }
+
+  Future<void> loadTaxesMaster() async {
+    final res = await ApiClient.get(ApiEndpoints.financeTaxesMaster);
+    taxesMasterList = (res['data'] as List? ?? const [])
+        .map((e) => TaxesMasterModel.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<TaxesMasterModel> saveTaxesMaster(String taxName, double defaultRate) async {
+    final res = await ApiClient.post(ApiEndpoints.financeTaxesMaster, {
+      'tax_name': taxName,
+      'default_rate': defaultRate,
+    });
+    final tax = TaxesMasterModel.fromJson(Map<String, dynamic>.from(res['data']));
+    await loadTaxesMaster();
+    return tax;
+  }
+
+  Future<void> loadExpenseAnalytics({required DateTime fromDate, required DateTime toDate, bool allOutlets = false}) async {
+    final params = <String>[
+      'from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}',
+      'to_date=${DateFormat('yyyy-MM-dd').format(toDate)}',
+      'all_outlets=$allOutlets',
+    ];
+    final res = await ApiClient.get('${ApiEndpoints.financeExpenseAnalytics}?${params.join('&')}');
+    expenseAnalytics = ExpenseAnalyticsModel.fromJson(Map<String, dynamic>.from(res));
   }
 
   Future<void> loadIncome({required DateTime fromDate, required DateTime toDate, String search = ''}) async {

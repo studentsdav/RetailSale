@@ -130,19 +130,90 @@ async function findLinkedLedgerEntry(db, outlet_id, reference_type, reference_id
     });
 }
 
-async function ensureExpenseDuplicateFree({ req, expense_date, category, amount, note, excludeId = null, transaction }) {
+function calculateExpenseAmounts({ amount, isTaxInclusive, taxes = [], deductions = [] }) {
+    const totalTaxPercent = taxes.reduce((sum, t) => sum + Number(t.tax_percentage || t.tax_percent || 0), 0);
+
+    let baseAmount = 0;
+    let totalTaxAmount = 0;
+
+    if (isTaxInclusive) {
+        baseAmount = amount / (1 + (totalTaxPercent / 100));
+        totalTaxAmount = amount - baseAmount;
+    } else {
+        baseAmount = amount;
+        totalTaxAmount = baseAmount * (totalTaxPercent / 100);
+    }
+
+    baseAmount = Math.round(baseAmount * 100) / 100;
+    totalTaxAmount = Math.round(totalTaxAmount * 100) / 100;
+
+    let calculatedTaxes = [];
+    if (totalTaxPercent > 0) {
+        let remainingTax = totalTaxAmount;
+        taxes.forEach((tax, index) => {
+            let taxAmt = 0;
+            const percent = Number(tax.tax_percentage || tax.tax_percent || 0);
+            if (index === taxes.length - 1) {
+                taxAmt = remainingTax;
+            } else {
+                taxAmt = Math.round((totalTaxAmount * (percent / totalTaxPercent)) * 100) / 100;
+                remainingTax -= taxAmt;
+            }
+            calculatedTaxes.push({
+                tax_name: tax.tax_name,
+                tax_percentage: percent,
+                tax_amount: taxAmt
+            });
+        });
+    }
+
+    let totalDeductionAmount = 0;
+    const calculatedDeductions = deductions.map((ded) => {
+        const percent = Number(ded.deduction_percentage || ded.deduction_percent || 0);
+        const dedAmt = Math.round((baseAmount * (percent / 100)) * 100) / 100;
+        totalDeductionAmount += dedAmt;
+        return {
+            deduction_type: ded.deduction_type || ded.deduction_name || 'Other',
+            deduction_percentage: percent,
+            deduction_amount: dedAmt
+        };
+    });
+
+    totalDeductionAmount = Math.round(totalDeductionAmount * 100) / 100;
+
+    const grossAmount = isTaxInclusive ? amount : (baseAmount + totalTaxAmount);
+    const netPayableAmount = Math.round((grossAmount - totalDeductionAmount) * 100) / 100;
+
+    return {
+        base_amount: baseAmount,
+        total_tax_amount: totalTaxAmount,
+        total_deduction_amount: totalDeductionAmount,
+        net_payable_amount: netPayableAmount,
+        taxes: calculatedTaxes,
+        deductions: calculatedDeductions
+    };
+}
+
+async function ensureExpenseDuplicateFree({ req, payment_date, category_id, net_payable_amount, invoice_ref_no, expense_note = null, vendor_id = null, excludeId = null, transaction }) {
     const where = {
         outlet_id: req.user.outlet_id,
-        expense_date,
-        category,
-        amount: toAmount(amount),
-        note: note || null
+        payment_date,
+        category_id,
+        net_payable_amount: toAmount(net_payable_amount)
     };
+
+    if (invoice_ref_no) {
+        where.invoice_ref_no = invoice_ref_no;
+    } else {
+        where.vendor_id = vendor_id || null;
+        where.expense_note = expense_note || null;
+        where.invoice_ref_no = null;
+    }
 
     if (excludeId) where.id = { [Op.ne]: excludeId };
 
-    const existing = await req.propertyDb.models.expense_entries.findOne({ where, transaction });
-    if (existing) throw new Error('Duplicate expense entry already exists for the same date and amount');
+    const existing = await req.propertyDb.models.expenses.findOne({ where, transaction });
+    if (existing) throw new Error('Duplicate expense entry already exists for the same date, category, amount, vendor and note');
 }
 
 async function ensureRepaymentDuplicateFree({ req, sale_id, payment_date, amount, payment_mode, reference_no, excludeId = null, transaction }) {
@@ -571,40 +642,105 @@ exports.createExpense = async (req, res) => {
     const t = await req.propertyDb.transaction();
 
     try {
-        const expense_date = dateKey(req.body.expense_date || new Date());
-        const category = String(req.body.category || req.body.type || '').trim();
         const amount = toAmount(req.body.amount);
-        const note = String(req.body.note || '').trim() || null;
+        const is_tax_inclusive = req.body.is_tax_inclusive === true || req.body.is_tax_inclusive === 'true';
+        const taxes = req.body.taxes || [];
+        const deductions = req.body.deductions || [];
+        const vendor_id = req.body.vendor_id ? Number(req.body.vendor_id) : null;
+        const category_id = req.body.category_id;
+        const invoice_ref_no = req.body.invoice_ref_no ? String(req.body.invoice_ref_no).trim() : null;
+        const payment_date = dateKey(req.body.payment_date || new Date());
+        const payment_method = String(req.body.payment_method || req.body.payment_mode || 'CASH').trim();
+        const expense_note = req.body.expense_note || req.body.note || null;
+        const status = req.body.status || 'Paid';
 
-        if (!category) throw new Error('Expense type is required');
+        if (!category_id) throw new Error('Category is required');
         if (amount <= 0) throw new Error('Amount must be greater than 0');
 
-        await ensureExpenseDuplicateFree({ req, expense_date, category, amount, note, transaction: t });
+        const categoryRow = await req.propertyDb.models.expense_categories.findOne({
+            where: { id: category_id, outlet_id: req.user.outlet_id },
+            transaction: t
+        });
+        if (!categoryRow) throw new Error('Category not found');
 
-        const expense = await req.propertyDb.models.expense_entries.create({
+        const {
+            base_amount,
+            total_tax_amount,
+            total_deduction_amount,
+            net_payable_amount,
+            taxes: calculatedTaxes,
+            deductions: calculatedDeductions
+        } = calculateExpenseAmounts({ amount, isTaxInclusive: is_tax_inclusive, taxes, deductions });
+
+        await ensureExpenseDuplicateFree({ 
+            req, 
+            payment_date, 
+            category_id, 
+            net_payable_amount, 
+            invoice_ref_no, 
+            expense_note,
+            vendor_id,
+            transaction: t 
+        });
+
+        const expense = await req.propertyDb.models.expenses.create({
             outlet_id: req.user.outlet_id,
-            expense_date,
-            category,
-            amount,
-            note,
+            vendor_id,
+            category_id,
+            invoice_ref_no,
+            payment_date,
+            payment_method,
+            is_tax_inclusive,
+            base_amount,
+            total_tax_amount,
+            total_deduction_amount,
+            net_payable_amount,
+            expense_note,
+            status,
             created_by: req.user.id
         }, { transaction: t });
 
-        await createLedgerEntry({
-            db: req.propertyDb,
-            outlet_id: req.user.outlet_id,
-            txn_date: expense_date,
-            transaction_type: 'EXPENSE',
-            reference_type: 'EXPENSE',
-            reference_id: expense.id,
-            reference_no: `EXP-${expense.id}`,
-            party_name: category,
-            payment_method: 'CASH',
-            amount_out: amount,
-            notes: note,
-            created_by: req.user.id,
-            transaction: t
-        });
+        if (calculatedTaxes.length > 0) {
+            await req.propertyDb.models.expense_taxes.bulkCreate(
+                calculatedTaxes.map(tax => ({
+                    expense_id: expense.id,
+                    tax_name: tax.tax_name,
+                    tax_percentage: tax.tax_percentage,
+                    tax_amount: tax.tax_amount
+                })),
+                { transaction: t }
+            );
+        }
+
+        if (calculatedDeductions.length > 0) {
+            await req.propertyDb.models.expense_deductions.bulkCreate(
+                calculatedDeductions.map(ded => ({
+                    expense_id: expense.id,
+                    deduction_type: ded.deduction_type,
+                    deduction_percentage: ded.deduction_percentage,
+                    deduction_amount: ded.deduction_amount
+                })),
+                { transaction: t }
+            );
+        }
+
+        if (status === 'Paid') {
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                txn_date: payment_date,
+                transaction_type: 'EXPENSE',
+                reference_type: 'EXPENSE',
+                reference_id: expense.id,
+                reference_no: invoice_ref_no || `EXP-${expense.id.slice(0, 8)}`,
+                party_name: categoryRow.category_name,
+                payment_method: payment_method,
+                amount_out: net_payable_amount,
+                notes: expense_note,
+                created_by: req.user.id,
+                transaction: t
+            });
+        }
 
         await t.commit();
         res.json({ success: true, data: expense });
@@ -618,30 +754,143 @@ exports.updateExpense = async (req, res) => {
     const t = await req.propertyDb.transaction();
 
     try {
-        const expense = await req.propertyDb.models.expense_entries.findOne({
+        const expense = await req.propertyDb.models.expenses.findOne({
             where: { id: req.params.id, outlet_id: req.user.outlet_id },
             transaction: t
         });
 
         if (!expense) throw new Error('Expense entry not found');
 
-        const expense_date = dateKey(req.body.expense_date || expense.expense_date);
-        const category = String(req.body.category || req.body.type || expense.category || '').trim();
-        const amount = toAmount(req.body.amount ?? expense.amount);
-        const note = String(req.body.note ?? expense.note ?? '').trim() || null;
+        const amount = toAmount(req.body.amount ?? (expense.is_tax_inclusive ? (Number(expense.base_amount) + Number(expense.total_tax_amount)) : expense.base_amount));
+        const is_tax_inclusive = req.body.is_tax_inclusive !== undefined ? (req.body.is_tax_inclusive === true || req.body.is_tax_inclusive === 'true') : expense.is_tax_inclusive;
+        const taxes = req.body.taxes || [];
+        const deductions = req.body.deductions || [];
+        const vendor_id = req.body.vendor_id !== undefined ? (req.body.vendor_id ? Number(req.body.vendor_id) : null) : expense.vendor_id;
+        const category_id = req.body.category_id || expense.category_id;
+        const invoice_ref_no = req.body.invoice_ref_no !== undefined ? String(req.body.invoice_ref_no).trim() : expense.invoice_ref_no;
+        const payment_date = dateKey(req.body.payment_date || expense.payment_date);
+        const payment_method = req.body.payment_method || req.body.payment_mode || expense.payment_method;
+        const expense_note = req.body.expense_note !== undefined ? req.body.expense_note : expense.expense_note;
+        const status = req.body.status || expense.status;
 
-        await ensureExpenseDuplicateFree({ req, expense_date, category, amount, note, excludeId: expense.id, transaction: t });
-        await expense.update({ expense_date, category, amount, note }, { transaction: t });
+        const categoryRow = await req.propertyDb.models.expense_categories.findOne({
+            where: { id: category_id, outlet_id: req.user.outlet_id },
+            transaction: t
+        });
+        if (!categoryRow) throw new Error('Category not found');
+
+        const {
+            base_amount,
+            total_tax_amount,
+            total_deduction_amount,
+            net_payable_amount,
+            taxes: calculatedTaxes,
+            deductions: calculatedDeductions
+        } = calculateExpenseAmounts({ amount, isTaxInclusive: is_tax_inclusive, taxes, deductions });
+
+        await ensureExpenseDuplicateFree({ 
+            req, 
+            payment_date, 
+            category_id, 
+            net_payable_amount, 
+            invoice_ref_no, 
+            expense_note,
+            vendor_id,
+            excludeId: expense.id,
+            transaction: t 
+        });
+
+        await expense.update({
+            vendor_id,
+            category_id,
+            invoice_ref_no,
+            payment_date,
+            payment_method,
+            is_tax_inclusive,
+            base_amount,
+            total_tax_amount,
+            total_deduction_amount,
+            net_payable_amount,
+            expense_note,
+            status
+        }, { transaction: t });
+
+        await req.propertyDb.models.expense_taxes.destroy({
+            where: { expense_id: expense.id },
+            transaction: t
+        });
+        await req.propertyDb.models.expense_deductions.destroy({
+            where: { expense_id: expense.id },
+            transaction: t
+        });
+
+        if (calculatedTaxes.length > 0) {
+            await req.propertyDb.models.expense_taxes.bulkCreate(
+                calculatedTaxes.map(tax => ({
+                    expense_id: expense.id,
+                    tax_name: tax.tax_name,
+                    tax_percentage: tax.tax_percentage,
+                    tax_amount: tax.tax_amount
+                })),
+                { transaction: t }
+            );
+        }
+
+        if (calculatedDeductions.length > 0) {
+            await req.propertyDb.models.expense_deductions.bulkCreate(
+                calculatedDeductions.map(ded => ({
+                    expense_id: expense.id,
+                    deduction_type: ded.deduction_type,
+                    deduction_percentage: ded.deduction_percentage,
+                    deduction_amount: ded.deduction_amount
+                })),
+                { transaction: t }
+            );
+        }
 
         const ledgerEntry = await findLinkedLedgerEntry(req.propertyDb, req.user.outlet_id, 'EXPENSE', expense.id, t);
-        if (ledgerEntry) {
-            await updateLedgerEntry({
-                db: req.propertyDb,
-                entryId: ledgerEntry.id,
-                outlet_id: req.user.outlet_id,
-                values: { txn_date: expense_date, party_name: category, amount_out: amount, notes: note },
-                transaction: t
-            });
+        if (status === 'Paid') {
+            if (ledgerEntry) {
+                await updateLedgerEntry({
+                    db: req.propertyDb,
+                    entryId: ledgerEntry.id,
+                    outlet_id: req.user.outlet_id,
+                    values: {
+                        txn_date: payment_date,
+                        party_name: categoryRow.category_name,
+                        payment_method: payment_method,
+                        amount_out: net_payable_amount,
+                        notes: expense_note
+                    },
+                    transaction: t
+                });
+            } else {
+                await createLedgerEntry({
+                    db: req.propertyDb,
+                    outlet_id: req.user.outlet_id,
+                    txn_date: payment_date,
+                    transaction_type: 'EXPENSE',
+                    reference_type: 'EXPENSE',
+                    reference_id: expense.id,
+                    reference_no: invoice_ref_no || `EXP-${expense.id.slice(0, 8)}`,
+                    party_name: categoryRow.category_name,
+                    payment_method: payment_method,
+                    amount_out: net_payable_amount,
+                    notes: expense_note,
+                    created_by: req.user.id,
+                    transaction: t
+                });
+            }
+        } else {
+            if (ledgerEntry) {
+                await ledgerEntry.destroy({ transaction: t });
+                await recalculateLedgerBalances({
+                    db: req.propertyDb,
+                    outlet_id: req.user.outlet_id,
+                    fromDate: ledgerEntry.txn_date,
+                    transaction: t
+                });
+            }
         }
 
         await t.commit();
@@ -1384,21 +1633,272 @@ exports.getOpeningBalances = async (req, res) => {
 
 exports.getExpenseReport = async (req, res) => {
     try {
+        console.log("--- getExpenseReport Hit ---");
+        const [info] = await req.propertyDb.query("SELECT current_database(), current_schema(), current_user");
+        console.log("Database Info from HTTP Server:", info[0]);
+        console.log("req.user:", req.user);
+        console.log("req.query:", req.query);
         const where = { outlet_id: req.user.outlet_id };
-        if (req.query.from_date || req.query.to_date) {
-            where.expense_date = {};
-            if (req.query.from_date) where.expense_date[Op.gte] = dateKey(req.query.from_date);
-            if (req.query.to_date) where.expense_date[Op.lte] = dateKey(req.query.to_date);
+        if (req.query.id) {
+            where.id = req.query.id;
         }
-        if (req.query.category) where.category = req.query.category;
+        if (req.query.from_date || req.query.to_date) {
+            where.payment_date = {};
+            if (req.query.from_date) where.payment_date[Op.gte] = req.query.from_date;
+            if (req.query.to_date) where.payment_date[Op.lte] = req.query.to_date;
+        }
+        if (req.query.category_id) {
+            where.category_id = req.query.category_id;
+        }
+        if (req.query.category) {
+            where['$category.category_name$'] = { [Op.iLike]: `%${req.query.category}%` };
+        }
 
-        const data = await req.propertyDb.models.expense_entries.findAll({
+        console.log("getExpenseReport query where:", where);
+
+        const data = await req.propertyDb.models.expenses.findAll({
             where,
-            order: [['expense_date', 'DESC'], ['id', 'DESC']]
+            include: [
+                { model: req.propertyDb.models.expense_taxes, as: 'taxes', required: false },
+                { model: req.propertyDb.models.expense_deductions, as: 'deductions', required: false },
+                { model: req.propertyDb.models.expense_categories, as: 'category', required: false },
+                { model: req.propertyDb.models.supplier_master, as: 'vendor', required: false }
+            ],
+            order: [['payment_date', 'DESC'], ['created_at', 'DESC']],
+            logging: (sql) => console.log("SQL QUERY:", sql)
         });
 
-        const totalAmount = data.reduce((sum, entry) => sum + toAmount(entry.amount), 0);
-        res.json({ success: true, summary: { totalAmount, totalCount: data.length }, data });
+        console.log("getExpenseReport query returned count:", data.length);
+
+        const totalAmount = data.reduce((sum, entry) => sum + Number(entry.net_payable_amount || 0), 0);
+        res.json({ 
+            success: true, 
+            summary: { 
+                totalAmount: Math.round(totalAmount * 100) / 100, 
+                totalCount: data.length 
+            }, 
+            data 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.deleteExpense = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const expense = await req.propertyDb.models.expenses.findOne({
+            where: { id: req.params.id, outlet_id: req.user.outlet_id },
+            transaction: t
+        });
+        if (!expense) throw new Error('Expense not found');
+
+        const ledgerEntry = await findLinkedLedgerEntry(req.propertyDb, req.user.outlet_id, 'EXPENSE', expense.id, t);
+        if (ledgerEntry) {
+            await ledgerEntry.destroy({ transaction: t });
+            await recalculateLedgerBalances({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                fromDate: ledgerEntry.txn_date,
+                transaction: t
+            });
+        }
+
+        await expense.destroy({ transaction: t });
+
+        await t.commit();
+        res.json({ success: true });
+    } catch (error) {
+        await t.rollback();
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.getExpenseCategories = async (req, res) => {
+    try {
+        const categories = await req.propertyDb.models.expense_categories.findAll({
+            where: { outlet_id: req.user.outlet_id, is_active: true },
+            order: [['category_name', 'ASC']]
+        });
+        res.json({ success: true, data: categories });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.createExpenseCategory = async (req, res) => {
+    try {
+        const category_name = String(req.body.category_name || '').trim();
+        if (!category_name) throw new Error('Category name is required');
+
+        const [category, created] = await req.propertyDb.models.expense_categories.findOrCreate({
+            where: {
+                outlet_id: req.user.outlet_id,
+                category_name: Sequelize.where(
+                    Sequelize.fn('lower', Sequelize.col('category_name')),
+                    category_name.toLowerCase()
+                )
+            },
+            defaults: {
+                outlet_id: req.user.outlet_id,
+                user_id: req.user.id,
+                category_name,
+                is_active: true
+            }
+        });
+
+        if (!created && !category.is_active) {
+            await category.update({ is_active: true });
+        }
+
+        res.json({ success: true, data: category });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.getTaxesMaster = async (req, res) => {
+    try {
+        const taxes = await req.propertyDb.models.taxes_master.findAll({
+            where: { outlet_id: req.user.outlet_id },
+            order: [['tax_name', 'ASC']]
+        });
+        res.json({ success: true, data: taxes });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.createTaxesMaster = async (req, res) => {
+    try {
+        const tax_name = String(req.body.tax_name || '').trim();
+        const default_rate = Number(req.body.default_rate || 0);
+        if (!tax_name) throw new Error('Tax name is required');
+
+        const [tax, created] = await req.propertyDb.models.taxes_master.findOrCreate({
+            where: {
+                outlet_id: req.user.outlet_id,
+                tax_name: Sequelize.where(
+                    Sequelize.fn('lower', Sequelize.col('tax_name')),
+                    tax_name.toLowerCase()
+                )
+            },
+            defaults: {
+                outlet_id: req.user.outlet_id,
+                tax_name,
+                default_rate,
+                is_editable: true
+            }
+        });
+
+        if (!created) {
+            await tax.update({ default_rate });
+        }
+
+        res.json({ success: true, data: tax });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.getExpenseAnalytics = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const allOutlets = req.query.all_outlets === 'true' && req.user.role === 'ADMIN';
+
+        const where = {};
+        if (!allOutlets) {
+            where.outlet_id = outlet_id;
+        }
+
+        if (req.query.from_date || req.query.to_date) {
+            where.payment_date = {};
+            if (req.query.from_date) where.payment_date[Op.gte] = req.query.from_date;
+            if (req.query.to_date) where.payment_date[Op.lte] = req.query.to_date;
+        }
+
+        const expenses = await req.propertyDb.models.expenses.findAll({
+            where,
+            include: [
+                { model: req.propertyDb.models.expense_taxes, as: 'taxes', required: false },
+                { model: req.propertyDb.models.expense_deductions, as: 'deductions', required: false },
+                { model: req.propertyDb.models.expense_categories, as: 'category', required: false },
+                { model: req.propertyDb.models.supplier_master, as: 'vendor', required: false }
+            ],
+            bypassOutletFilter: allOutlets
+        });
+
+        let totalInputTaxPaid = 0;
+        let totalTdsDeducted = 0;
+        let totalTcsCollected = 0;
+
+        const taxBreakdown = {};
+        const categoryBreakdown = {};
+        const vendorSpend = {};
+
+        expenses.forEach(exp => {
+            if (exp.taxes) {
+                exp.taxes.forEach(t => {
+                    const name = t.tax_name || 'Other';
+                    const amount = Number(t.tax_amount || 0);
+                    totalInputTaxPaid += amount;
+                    taxBreakdown[name] = (taxBreakdown[name] || 0) + amount;
+                });
+            }
+
+            if (exp.deductions) {
+                exp.deductions.forEach(d => {
+                    const amount = Number(d.deduction_amount || 0);
+                    if (d.deduction_type === 'TDS') {
+                        totalTdsDeducted += amount;
+                    } else if (d.deduction_type === 'TCS') {
+                        totalTcsCollected += amount;
+                    }
+                });
+            }
+
+            const catName = exp.category ? exp.category.category_name : 'Uncategorized';
+            categoryBreakdown[catName] = (categoryBreakdown[catName] || 0) + Number(exp.base_amount || 0);
+
+            let vendorName = exp.vendor ? exp.vendor.supplier_name : 'Direct Cash';
+            if (!exp.vendor && exp.expense_note) {
+                if (exp.expense_note.startsWith('Paid To: ')) {
+                    vendorName = exp.expense_note.split(' | ')[0].substring(9);
+                } else if (exp.expense_note.startsWith('Paid To Staff: ')) {
+                    vendorName = exp.expense_note.split(' | ')[0].substring(15);
+                }
+            }
+            vendorSpend[vendorName] = (vendorSpend[vendorName] || 0) + Number(exp.net_payable_amount || 0);
+        });
+
+        const taxPieData = Object.keys(taxBreakdown).map(name => ({
+            name,
+            value: Math.round(taxBreakdown[name] * 100) / 100
+        }));
+
+        const categoryBarData = Object.keys(categoryBreakdown).map(name => ({
+            category: name,
+            amount: Math.round(categoryBreakdown[name] * 100) / 100
+        })).sort((a, b) => b.amount - a.amount);
+
+        const allVendorsSpend = Object.keys(vendorSpend).map(name => ({
+            vendor: name,
+            amount: Math.round(vendorSpend[name] * 100) / 100
+        })).sort((a, b) => b.amount - a.amount);
+
+        res.json({
+            success: true,
+            summary: {
+                totalInputTaxPaid: Math.round(totalInputTaxPaid * 100) / 100,
+                totalTdsDeducted: Math.round(totalTdsDeducted * 100) / 100,
+                totalTcsCollected: Math.round(totalTcsCollected * 100) / 100,
+                totalSpend: Math.round(expenses.reduce((sum, e) => sum + Number(e.net_payable_amount), 0) * 100) / 100
+            },
+            taxBreakdown: taxPieData,
+            categoryBreakdown: categoryBarData,
+            vendorSpend: allVendorsSpend,
+            expenses: expenses
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
