@@ -58,19 +58,23 @@ http://127.0.0.1:3000
 
 ### Dashboard
 
-![Retail Inventory Dashboard](./assets/Screenshot%202026-05-07%20171632.png)
+![Retail Inventory Dashboard](./assets/Screenshot%202026-07-25%20204731.png)
 
 ### Sales Screen
 
-![Sales screen](./assets/Screenshot%202026-05-07%20171711.png)
+![Sales Screen](./assets/Screenshot%202026-07-25%20204823.png)
 
 ### Stock Balance Report
 
-![Stock balance report](./assets/Screenshot%202026-05-07%20171814.png)
+![Stock Balance Report](./assets/Screenshot%202026-07-25%20204843.png)
 
-### Finance and Reports
+### Finance & Expense Analytics
 
-![Finance and reports screen](./assets/Screenshot%202026-05-07%20171846.png)
+![Finance & Expense Analytics](./assets/Screenshot%202026-07-25%20204900.png)
+
+### Brand Analysis
+
+![Brand Analysis](./assets/Screenshot%202026-07-25%20204949.png)
 
 ## Contributing
 
