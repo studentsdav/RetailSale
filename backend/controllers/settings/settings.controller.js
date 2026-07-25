@@ -6,6 +6,10 @@ const TRANSACTION_TABLES = [
     'customer_draw_progress',
     'lucky_draw_campaigns',
 
+    // WhatsApp tables (dependent children first)
+    'whatsapp_logs',
+    'whatsapp_campaigns',
+
     // 1. Supplier Return tables (dependent children first)
     'supplier_return_refunds',
     'supplier_return_items',
@@ -73,7 +77,8 @@ const TRANSACTION_TABLES = [
     'daily_opening_balances',
     'stock_ledger',
     'system_notifications',
-    'audit_logs'
+    'audit_logs',
+    'commission_rules'
 ];
 
 const PROTECTED_TABLES = new Set([

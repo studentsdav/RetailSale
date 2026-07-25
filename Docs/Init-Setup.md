@@ -1,8 +1,10 @@
-# Init Setup Guide
+# Developer Init Setup Guide
 
-This guide covers the first-time setup and initialization flow for the project.
+> [!NOTE]
+> This guide covers manual developer setup and initialization directly from the source code.
+> If you are a **retailer or end-user** looking to deploy in a production store environment, please use our automated installers and follow the **[Retailer Installation & Update Guide](./Retailer-Installation-Guide.md)** instead.
 
-## What You Need
+## What You Need (Developer Environment)
 
 - Flutter SDK
 - Node.js `18+`
@@ -10,7 +12,7 @@ This guide covers the first-time setup and initialization flow for the project.
 - PostgreSQL
 - Git
 
-## Required Files
+## Required Files (Backend Configuration)
 
 Make sure these files exist in `backend/` before starting the server:
 
@@ -21,7 +23,7 @@ Make sure these files exist in `backend/` before starting the server:
 
 If these files are missing, the backend may boot in recovery mode or fail health checks.
 
-## First-Time Setup
+## First-Time Developer Setup (Manual)
 
 1. Clone the repository.
 2. Install Flutter packages:

@@ -33,31 +33,21 @@ http://127.0.0.1:3000
 
 ## 3. Start the System
 
-### Step 1: Start Backend
+### Option A: For Production (Retailers/Installers)
+If you installed the application using the automated installers:
+1. **Backend Server**: Starts automatically in the background at user logon (registered as a Windows Scheduled Task `INVINS_Server` executing `run_hidden.vbs`). You do not need to launch it manually.
+2. **POS App**: Simply double-click the **Retailpos** shortcut on your Desktop.
+3. If the app shows a connection error, verify that the server is running by opening `http://127.0.0.1:3000/health` in your browser.
 
-1. Open terminal in `backend`.
-2. Run:
-
-```bash
-npm start
-```
-
-3. Confirm backend is healthy at:
-
-```text
-GET /health
-```
-
-### Step 2: Start App
-
-1. Open terminal in project root.
-2. Run:
-
-```bash
-flutter run
-```
-
-3. Wait for login screen.
+### Option B: For Developers (Manual Boot)
+1. **Start Backend**:
+   * Open a terminal in the `backend` directory.
+   * Run: `npm start`
+   * Confirm the backend is healthy at: `http://127.0.0.1:3000/health`
+2. **Start App**:
+   * Open a terminal in the project root.
+   * Run: `flutter run`
+3. Wait for the login screen to load.
 
 ## 4. Login and Session
 
@@ -229,18 +219,20 @@ Important:
 
 Common screens:
 
-- Supplier Payment
-- Cash Ledger
-- Finance Hub (dashboard/API-backed)
-- Closing Report
+- **Supplier Payment**: Pay vendor balances and adjust advances.
+- **Cash Ledger**: Track cash flows with upgraded real-time transaction history.
+- **Credit Ledger**: Record and review credits extended to customers or delivery riders.
+- **Expense Analytics**: View visual category-wise breakdown charts and analytics reports of store overheads.
+- **Finance Hub**: A central console consolidating daily collections, pending receivables, and expense trends.
+- **Closing Report**: Perform daily counter closing and cash reconciliation.
 
 Daily process:
 
-1. Record supplier payments.
-2. Verify credit/debit entries.
-3. Check customer/supplier outstanding amounts.
-4. Close daily books from closing report.
-5. Keep variance notes if mismatch found.
+1. **Record Payments & Receipts**: Record supplier settlements and customer collections.
+2. **Review Credit Ledgers**: Verify that rider collection limits and customer credit bounds are respected.
+3. **Verify Cash Balances**: Inspect the Cash Ledger to trace incoming counter sales and outgoing expense payments.
+4. **Monitor Expense Trends**: Open the Expense Analytics screen to identify spending surges or anomalies.
+5. **Generate Closing Report**: Reconcile physical drawer cash with system records and submit the daily closing report.
 
 ## 9. Reports (Step-by-Step)
 
@@ -274,13 +266,16 @@ Standard report process:
 
 Common settings:
 
-- Property/Outlet information
-- Document sequence settings
-- Stock locations
-- Loyalty master config
-- Notifications preference
-- Theme/UI preference
-- User management
+- **Property & Branding Configuration**: Set up business identifiers on printed bills. Customizable properties include:
+  * **Invoice Format**: Switch between standard 3-inch POS thermal printing and full-size **A4 paper printing**.
+  * **Logo Size**: Adjust the scaling height/width for custom invoice headers.
+  * **Email & Phone**: Configure custom contact options printed on receipts.
+  * **Footer Text**: Specify custom terms, greetings, or refund policies at the bottom of the invoice.
+- **Document Sequence Settings**: Configure starting numbers, prefix codes, and suffix patterns.
+- **Stock Locations**: Define inventory warehouses and store counters.
+- **Loyalty Program**: Manage client points rules and redemption limits.
+- **System Preferences**: Configure auto-backup schedules, low-stock warnings, and direct printing paths.
+- **User Management**: Create employee accounts and assign access roles.
 
 ### User Management Steps
 

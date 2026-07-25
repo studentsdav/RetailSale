@@ -2,22 +2,26 @@
 
 This guide is for staff, operators, and day-to-day users of the inventory system.
 
+> [!TIP]
+> For instructions on automated installation and software updates, please refer to the **[Retailer Installation & Update Guide](./Retailer-Installation-Guide.md)**.
+
 ## How to Use the App
 
-1. Start the backend server.
-2. Open the Flutter app.
+1. Ensure the backend server is running (either started manually or via the automated startup task).
+2. Open the POS app from your Desktop shortcut.
 3. Log in with your assigned credentials.
-4. Use the modules you need for your role.
+4. Use the sidebar to navigate to the modules authorized for your user role.
 
-## Common Modules
+## Core & Upgraded Modules
 
-- Inventory management
-- Purchases and purchase orders
-- Receiving and GRN processing
-- Sales and customer management
-- Supplier management and bill payments
-- Finance and reports
-- Notifications
+- **Inventory Management**: Track stock levels, set reorder points, and perform stock counts.
+- **Purchases & Receiving**: Manage Purchase Orders (PO) and process Goods Received Notes (GRN).
+- **Sales & Counter POS**: Dynamic sales screen supporting product scanning, discount schemes, and dual-format printing (**A4 Size** and **Standard POS Thermal** formats).
+- **Invoice Customization**: Edit logo size, email, phone number, and custom footer texts via `Settings > Property Configuration`.
+- **Expense Analytics**: Track overheads and categories with interactive visual charts inside the Finance Hub.
+- **Advanced Cash & Credit Ledgers**: Manage double-entry accounting records, customer accounts, and supplier bill payments, as well as Credit tracking for business accounts.
+- **Customer & Rider Delivery Console**: Monitor online orders, authenticate riders, and track order fulfillment states in real-time.
+- **Notifications**: View system alerts and low-stock warnings.
 
 ## Recovery and Setup Screens
 

@@ -1,17 +1,33 @@
-# Retail Store Management System
+# Retailer Store POS & Inventory Management System
 
-Flutter client + Node.js backend for inventory, sales, purchase orders, receiving, suppliers, finance, reporting, and recovery workflows.
+A production-ready POS system with a Flutter client and Node.js backend for inventory, sales billing, purchase orders, receiving, suppliers, finance, reporting, and recovery workflows.
 
-## Documentation
+---
 
-- [Developer Guide](./Docs/Developer-Guide.md)
+> [!NOTE]
+> This repository is actively maintained and sponsored by **Famalth Technologies**.
+
+---
+
+## 🚀 Retailer Installation & Updates
+
+For automated production deployments on Windows terminals:
+* 📥 **[Download Backend Installer (v1.0.0.0)](https://github.com/studentsdav/RetailSale/releases/download/1.0.0.0/backend_Installer.exe)** - Run this **first time** on the main server to setup database, runtimes, and local configurations automatically.
+* 📥 **[Download Update Installer (v1.0.0.0)](https://github.com/studentsdav/RetailSale/releases/download/1.0.0.0/Retailpos_Installer.exe)** - Run this to **update** existing terminals, or to install secondary billing clients on the network.
+
+For step-by-step setup details, see the new **[Retailer Installation & Update Guide](./Docs/Retailer-Installation-Guide.md)**.
+
+## 📚 Documentation
+
+- [Retailer Installation & Update Guide](./Docs/Retailer-Installation-Guide.md)
 - [User Guide](./Docs/User-Guide.md)
 - [Complete Help File](./Docs/Help-File.md)
-- [Frontend Guide](./Docs/Frontend-Guide.md)
-- [Backend Guide](./Docs/Backend-Guide.md)
+- [Developer Guide](./Docs/Developer-Guide.md)
+- [Init Setup Guide (Dev/Manual)](./Docs/Init-Setup.md)
+- [Frontend Developer Guide](./Docs/Frontend-Guide.md)
+- [Backend Developer Guide](./Docs/Backend-Guide.md)
 - [Own Server Online Deployment Guide](./Docs/Own-Server-Online-Deployment-Guide.md)
 - [Endpoint Reference](./Docs/Endpoint-Reference.md)
-- [Init Setup Guide](./Docs/Init-Setup.md)
 
 ## Quick Start
 
