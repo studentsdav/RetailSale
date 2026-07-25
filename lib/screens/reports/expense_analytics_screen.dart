@@ -22,6 +22,7 @@ class _ExpenseAnalyticsScreenState extends State<ExpenseAnalyticsScreen> {
   DateTime toDate = DateTime.now();
   bool allOutlets = false;
   bool loading = true;
+  final ScrollController _tableScrollController = ScrollController();
 
   @override
   void initState() {
@@ -34,6 +35,7 @@ class _ExpenseAnalyticsScreenState extends State<ExpenseAnalyticsScreen> {
   void dispose() {
     _fromCtrl.dispose();
     _toCtrl.dispose();
+    _tableScrollController.dispose();
     super.dispose();
   }
 
@@ -593,37 +595,43 @@ class _ExpenseAnalyticsScreenState extends State<ExpenseAnalyticsScreen> {
             else
               Theme(
                 data: Theme.of(context).copyWith(dividerColor: const Color(0xFFE2E8F0)),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Vendor', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Method', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Ref No', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Base Amount (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                      DataColumn(label: Text('Tax (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                      DataColumn(label: Text('Deduction (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                      DataColumn(label: Text('Net Total (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                      DataColumn(label: Text('Remarks / Notes', style: TextStyle(fontWeight: FontWeight.bold))),
-                    ],
-                    rows: list.map((item) {
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(DateFormat('dd-MMM-yyyy').format(item.expenseDate))),
-                          DataCell(Text(item.category)),
-                          DataCell(Text(item.vendorName.isNotEmpty ? item.vendorName : 'Direct Cash')),
-                          DataCell(Text(item.paymentMethod)),
-                          DataCell(Text(item.invoiceRefNo.isNotEmpty ? item.invoiceRefNo : '-')),
-                          DataCell(Text(item.baseAmount.toStringAsFixed(2))),
-                          DataCell(Text(item.totalTaxAmount.toStringAsFixed(2))),
-                          DataCell(Text(item.totalDeductionAmount.toStringAsFixed(2))),
-                          DataCell(Text(item.amount.toStringAsFixed(2))),
-                          DataCell(Text(item.note.isNotEmpty ? item.note : '-')),
-                        ],
-                      );
-                    }).toList(),
+                child: Scrollbar(
+                  controller: _tableScrollController,
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: _tableScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Vendor', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Method', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Ref No', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Base Amount (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('Tax (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('Deduction (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('Net Total (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('Remarks / Notes', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                      rows: list.map((item) {
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(DateFormat('dd-MMM-yyyy').format(item.expenseDate))),
+                            DataCell(Text(item.category)),
+                            DataCell(Text(item.vendorName.isNotEmpty ? item.vendorName : 'Direct Cash')),
+                            DataCell(Text(item.paymentMethod)),
+                            DataCell(Text(item.invoiceRefNo.isNotEmpty ? item.invoiceRefNo : '-')),
+                            DataCell(Text(item.baseAmount.toStringAsFixed(2))),
+                            DataCell(Text(item.totalTaxAmount.toStringAsFixed(2))),
+                            DataCell(Text(item.totalDeductionAmount.toStringAsFixed(2))),
+                            DataCell(Text(item.amount.toStringAsFixed(2))),
+                            DataCell(Text(item.note.isNotEmpty ? item.note : '-')),
+                          ],
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),

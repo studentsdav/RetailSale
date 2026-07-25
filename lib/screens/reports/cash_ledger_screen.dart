@@ -429,53 +429,53 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     required IconData icon,
     required Color color,
   }) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(.08),
+        borderRadius: BorderRadius.circular(12),
       ),
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: color,
+            radius: 17,
+            child: Icon(icon, color: Colors.white, size: 17),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
                     value,
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                       color: Color(0xFF1E293B),
                     ),
+                    maxLines: 1,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          )
+        ],
       ),
     );
   }
@@ -2227,62 +2227,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       return customer.totalAdvance > 0.009 || customer.totalOutstanding > 0.009;
     }).toList();
 
-    Widget buildKpiCard({
-      required String title,
-      required String value,
-      required IconData icon,
-      required Color color,
-    }) {
-      return Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.grey.shade200),
-        ),
-        color: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      value,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+
 
     Widget miniSummaryText(String label, String value, {bool isHighlight = false}) {
       return Container(
@@ -2313,34 +2258,41 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               // KPIs Grid
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final cols = constraints.maxWidth > 750 ? 3 : 1;
-                  return GridView.count(
-                    crossAxisCount: cols,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: cols == 3 ? 2.6 : 3.2,
-                    children: [
-                      buildKpiCard(
-                        title: 'Total Outstanding',
-                        value: _money(ctrl.totalOutstanding),
-                        icon: Icons.money_off_rounded,
-                        color: const Color(0xFFEF4444),
+                  final cols = constraints.maxWidth > 550 ? 3 : (constraints.maxWidth > 350 ? 2 : 1);
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: cols == 3 ? 650 : (cols == 2 ? 440 : 320),
                       ),
-                      buildKpiCard(
-                        title: 'Total Advance',
-                        value: _money(ctrl.totalAdvance),
-                        icon: Icons.account_balance_wallet_rounded,
-                        color: const Color(0xFF16A34A),
+                      child: GridView.count(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        childAspectRatio: cols == 3 ? 2.6 : (cols == 2 ? 2.4 : 3.2),
+                        children: [
+                          _buildKpiCard(
+                            title: 'Total Outstanding',
+                            value: _money(ctrl.totalOutstanding),
+                            icon: Icons.money_off_rounded,
+                            color: const Color(0xFFEF4444),
+                          ),
+                          _buildKpiCard(
+                            title: 'Total Advance',
+                            value: _money(ctrl.totalAdvance),
+                            icon: Icons.account_balance_wallet_rounded,
+                            color: const Color(0xFF16A34A),
+                          ),
+                          _buildKpiCard(
+                            title: 'Net Outstanding',
+                            value: _money(ctrl.totalOutstanding - ctrl.totalAdvance),
+                            icon: Icons.payments_rounded,
+                            color: const Color(0xFF2563EB),
+                          ),
+                        ],
                       ),
-                      buildKpiCard(
-                        title: 'Net Outstanding',
-                        value: _money(ctrl.totalOutstanding - ctrl.totalAdvance),
-                        icon: Icons.payments_rounded,
-                        color: const Color(0xFF2563EB),
-                      ),
-                    ],
+                    ),
                   );
                 },
               ),
@@ -3068,13 +3020,15 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     }).toList(growable: false);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cols = constraints.maxWidth > 950
-            ? 4
-            : constraints.maxWidth > 700
-                ? 3
-                : constraints.maxWidth > 450
-                    ? 2
-                    : 1;
+        final cols = constraints.maxWidth > 1200
+            ? 6
+            : constraints.maxWidth > 950
+                ? 5
+                : constraints.maxWidth > 700
+                    ? 4
+                    : constraints.maxWidth > 450
+                        ? 3
+                        : 2;
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
@@ -3082,15 +3036,17 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               const SizedBox(height: 12),
               GridView.count(
                 crossAxisCount: cols,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: cols == 4
-                    ? 2.4
-                    : cols >= 2
-                        ? 2.8
-                        : 3.4,
+                childAspectRatio: cols >= 5
+                    ? 2.3
+                    : cols == 4
+                        ? 2.1
+                        : cols == 3
+                            ? 1.9
+                            : 1.7,
                 children: [
                   _buildKpiCard(
                     title: 'Deposit',
@@ -3404,62 +3360,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   }
 
   Widget _expenseTab() {
-    Widget buildKpiCard({
-      required String title,
-      required String value,
-      required IconData icon,
-      required Color color,
-    }) {
-      return Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.grey.shade200),
-        ),
-        color: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      value,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -3471,28 +3372,35 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final cols = constraints.maxWidth > 550 ? 2 : 1;
-                  return GridView.count(
-                    crossAxisCount: cols,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: cols == 2 ? 2.8 : 3.4,
-                    children: [
-                      buildKpiCard(
-                        title: 'Expense Total',
-                        value: _money(ctrl.expenseTotal),
-                        icon: Icons.wallet_rounded,
-                        color: const Color(0xFFEF4444),
+                  final cols = constraints.maxWidth > 450 ? 2 : 1;
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: cols == 2 ? 440 : 320,
                       ),
-                      buildKpiCard(
-                        title: 'Entries',
-                        value: '${ctrl.expenses.length}',
-                        icon: Icons.list_alt_rounded,
-                        color: const Color(0xFFF59E0B),
+                      child: GridView.count(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        childAspectRatio: cols == 2 ? 2.6 : 3.2,
+                        children: [
+                          _buildKpiCard(
+                            title: 'Expense Total',
+                            value: _money(ctrl.expenseTotal),
+                            icon: Icons.wallet_rounded,
+                            color: const Color(0xFFEF4444),
+                          ),
+                          _buildKpiCard(
+                            title: 'Entries',
+                            value: '${ctrl.expenses.length}',
+                            icon: Icons.list_alt_rounded,
+                            color: const Color(0xFFF59E0B),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   );
                 },
               ),
@@ -3619,28 +3527,35 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final cols = constraints.maxWidth > 550 ? 2 : 1;
-                  return GridView.count(
-                    crossAxisCount: cols,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: cols == 2 ? 2.8 : 3.4,
-                    children: [
-                      _buildKpiCard(
-                        title: 'Income Total',
-                        value: _money(ctrl.incomeTotal),
-                        icon: Icons.account_balance_wallet_rounded,
-                        color: const Color(0xFF16A34A),
+                  final cols = constraints.maxWidth > 450 ? 2 : 1;
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: cols == 2 ? 440 : 320,
                       ),
-                      _buildKpiCard(
-                        title: 'Entries',
-                        value: '${ctrl.incomes.length}',
-                        icon: Icons.list_alt_rounded,
-                        color: const Color(0xFF0D9488),
+                      child: GridView.count(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        childAspectRatio: cols == 2 ? 2.6 : 3.2,
+                        children: [
+                          _buildKpiCard(
+                            title: 'Income Total',
+                            value: _money(ctrl.incomeTotal),
+                            icon: Icons.account_balance_wallet_rounded,
+                            color: const Color(0xFF16A34A),
+                          ),
+                          _buildKpiCard(
+                            title: 'Entries',
+                            value: '${ctrl.incomes.length}',
+                            icon: Icons.list_alt_rounded,
+                            color: const Color(0xFF0D9488),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   );
                 },
               ),
@@ -3731,28 +3646,35 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final cols = constraints.maxWidth > 550 ? 2 : 1;
-                  return GridView.count(
-                    crossAxisCount: cols,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: cols == 2 ? 2.8 : 3.4,
-                    children: [
-                      _buildKpiCard(
-                        title: 'Withdrawal Total',
-                        value: _money(ctrl.withdrawalTotal),
-                        icon: Icons.money_off_rounded,
-                        color: const Color(0xFFEF4444),
+                  final cols = constraints.maxWidth > 450 ? 2 : 1;
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: cols == 2 ? 440 : 320,
                       ),
-                      _buildKpiCard(
-                        title: 'Entries',
-                        value: '${ctrl.withdrawals.length}',
-                        icon: Icons.list_alt_rounded,
-                        color: const Color(0xFFF59E0B),
+                      child: GridView.count(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        childAspectRatio: cols == 2 ? 2.6 : 3.2,
+                        children: [
+                          _buildKpiCard(
+                            title: 'Withdrawal Total',
+                            value: _money(ctrl.withdrawalTotal),
+                            icon: Icons.money_off_rounded,
+                            color: const Color(0xFFEF4444),
+                          ),
+                          _buildKpiCard(
+                            title: 'Entries',
+                            value: '${ctrl.withdrawals.length}',
+                            icon: Icons.list_alt_rounded,
+                            color: const Color(0xFFF59E0B),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   );
                 },
               ),
@@ -3844,28 +3766,35 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final cols = constraints.maxWidth > 550 ? 2 : 1;
-                  return GridView.count(
-                    crossAxisCount: cols,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: cols == 2 ? 2.8 : 3.4,
-                    children: [
-                      _buildKpiCard(
-                        title: 'Carry Forward',
-                        value: _money(ctrl.carriedOpeningBalance),
-                        icon: Icons.double_arrow_rounded,
-                        color: const Color(0xFF2563EB),
+                  final cols = constraints.maxWidth > 450 ? 2 : 1;
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: cols == 2 ? 440 : 320,
                       ),
-                      _buildKpiCard(
-                        title: 'Saved Days',
-                        value: '${ctrl.openings.length}',
-                        icon: Icons.date_range_rounded,
-                        color: const Color(0xFF0D9488),
+                      child: GridView.count(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        childAspectRatio: cols == 2 ? 2.6 : 3.2,
+                        children: [
+                          _buildKpiCard(
+                            title: 'Carry Forward',
+                            value: _money(ctrl.carriedOpeningBalance),
+                            icon: Icons.double_arrow_rounded,
+                            color: const Color(0xFF2563EB),
+                          ),
+                          _buildKpiCard(
+                            title: 'Saved Days',
+                            value: '${ctrl.openings.length}',
+                            icon: Icons.date_range_rounded,
+                            color: const Color(0xFF0D9488),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   );
                 },
               ),
@@ -3965,38 +3894,45 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         final isWide = constraints.maxWidth >= 980;
         final leftWidth = isWide ? 320.0 : constraints.maxWidth;
         final rightWidth = isWide ? 220.0 : constraints.maxWidth;
-        final cols = constraints.maxWidth > 750 ? 3 : 1;
+        final cols = constraints.maxWidth > 550 ? 3 : (constraints.maxWidth > 350 ? 2 : 1);
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(children: [
             const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: cols,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: cols == 3 ? 2.6 : 3.4,
-              children: [
-                _buildKpiCard(
-                  title: 'Sales',
-                  value: '${ctrl.deliveries.length}',
-                  icon: Icons.point_of_sale_rounded,
-                  color: const Color(0xFF2563EB),
+            Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: cols == 3 ? 650 : (cols == 2 ? 440 : 320),
                 ),
-                _buildKpiCard(
-                  title: 'Amount',
-                  value: _money(ctrl.deliveryTotal),
-                  icon: Icons.currency_rupee_rounded,
-                  color: const Color(0xFF16A34A),
+                child: GridView.count(
+                  crossAxisCount: cols,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  childAspectRatio: cols == 3 ? 2.6 : (cols == 2 ? 2.4 : 3.2),
+                  children: [
+                    _buildKpiCard(
+                      title: 'Sales',
+                      value: '${ctrl.deliveries.length}',
+                      icon: Icons.point_of_sale_rounded,
+                      color: const Color(0xFF2563EB),
+                    ),
+                    _buildKpiCard(
+                      title: 'Amount',
+                      value: _money(ctrl.deliveryTotal),
+                      icon: Icons.currency_rupee_rounded,
+                      color: const Color(0xFF16A34A),
+                    ),
+                    _buildKpiCard(
+                      title: 'Outstanding',
+                      value: _money(ctrl.deliveryOutstanding),
+                      icon: Icons.warning_amber_rounded,
+                      color: const Color(0xFFEF4444),
+                    ),
+                  ],
                 ),
-                _buildKpiCard(
-                  title: 'Outstanding',
-                  value: _money(ctrl.deliveryOutstanding),
-                  icon: Icons.warning_amber_rounded,
-                  color: const Color(0xFFEF4444),
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 16),
             ...ctrl.deliveries.map(
@@ -4054,38 +3990,45 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   Widget _expiryTab() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cols = constraints.maxWidth > 750 ? 3 : 1;
+        final cols = constraints.maxWidth > 550 ? 3 : (constraints.maxWidth > 350 ? 2 : 1);
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(children: [
             const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: cols,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: cols == 3 ? 2.6 : 3.4,
-              children: [
-                _buildKpiCard(
-                  title: 'Expired',
-                  value: '${ctrl.expiredCount}',
-                  icon: Icons.lock_clock,
-                  color: const Color(0xFFEF4444),
+            Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: cols == 3 ? 650 : (cols == 2 ? 440 : 320),
                 ),
-                _buildKpiCard(
-                  title: 'Near Expiry',
-                  value: '${ctrl.nearExpiryCount}',
-                  icon: Icons.access_time_filled,
-                  color: Colors.amber.shade800,
+                child: GridView.count(
+                  crossAxisCount: cols,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  childAspectRatio: cols == 3 ? 2.6 : (cols == 2 ? 2.4 : 3.2),
+                  children: [
+                    _buildKpiCard(
+                      title: 'Expired',
+                      value: '${ctrl.expiredCount}',
+                      icon: Icons.lock_clock,
+                      color: const Color(0xFFEF4444),
+                    ),
+                    _buildKpiCard(
+                      title: 'Near Expiry',
+                      value: '${ctrl.nearExpiryCount}',
+                      icon: Icons.access_time_filled,
+                      color: Colors.amber.shade800,
+                    ),
+                    _buildKpiCard(
+                      title: 'Items',
+                      value: '${ctrl.expiryItems.length}',
+                      icon: Icons.inventory_2_rounded,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ],
                 ),
-                _buildKpiCard(
-                  title: 'Items',
-                  value: '${ctrl.expiryItems.length}',
-                  icon: Icons.inventory_2_rounded,
-                  color: const Color(0xFF2563EB),
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 16),
             ...ctrl.expiryItems.map((item) => Card(
@@ -4427,8 +4370,9 @@ class ExpenseEntryDialog extends StatefulWidget {
           pw.MultiPage(
             pageFormat: const PdfPageFormat(
               72 * PdfPageFormat.mm,
-              double.infinity,
-              marginAll: 2 * PdfPageFormat.mm,
+              220 * PdfPageFormat.mm,
+              marginLeft: 2 * PdfPageFormat.mm,
+              marginRight: 2 * PdfPageFormat.mm,
               marginTop: 3 * PdfPageFormat.mm,
               marginBottom: 3 * PdfPageFormat.mm,
             ),
