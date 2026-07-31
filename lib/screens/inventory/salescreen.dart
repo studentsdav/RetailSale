@@ -52,6 +52,9 @@ class _SaleScreenState extends State<SaleScreen> {
   final propertyCtrl = PropertyInfoController();
   final settingsCtrl = SystemSettingsController();
 
+  List<Map<String, dynamic>> _salespersons = [];
+  Map<String, dynamic>? _selectedSalesperson;
+
   final _saleNo = TextEditingController();
   final _saleDateCtrl = TextEditingController();
   final _customerName = TextEditingController();
@@ -213,6 +216,7 @@ class _SaleScreenState extends State<SaleScreen> {
       await settingsCtrl.load();
       await _loadCashierName();
       await _loadSaleSettings();
+      await _fetchSalespersons();
       _saleNo.text = await ctrl.getNextSaleNo();
       _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
       _applyBillingDefaults();
@@ -236,6 +240,17 @@ class _SaleScreenState extends State<SaleScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _fetchSalespersons() async {
+    try {
+      final res = await ApiClient.get('/api/hrms/employees?status=Active');
+      if (res['success'] == true && res['data'] != null) {
+        setState(() {
+          _salespersons = List<Map<String, dynamic>>.from(res['data']);
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadSaleSettings() async {
@@ -367,6 +382,15 @@ class _SaleScreenState extends State<SaleScreen> {
       _voucherCode.clear();
       _redeemPointsInput = order.loyaltyPointsRedeemed;
       _affectStockOnEdit = true;
+      if (order.salesmanId != null && _salespersons.isNotEmpty) {
+        final match = _salespersons.firstWhere(
+          (s) => s['id'] == order.salesmanId,
+          orElse: () => const <String, dynamic>{},
+        );
+        _selectedSalesperson = match.isNotEmpty ? match : null;
+      } else {
+        _selectedSalesperson = null;
+      }
     });
     if (_customerName.text.trim().isNotEmpty ||
         _customerPhone.text.trim().isNotEmpty) {
@@ -3012,6 +3036,86 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
+  Future<void> _showSalespersonPickerDialog() async {
+    await _fetchSalespersons();
+    Map<String, dynamic>? selected = _selectedSalesperson;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Select Salesperson / Staff'),
+            content: SizedBox(
+              width: 420,
+              child: DropdownSearch<Map<String, dynamic>>(
+                selectedItem: selected,
+                items: (filter, _) async {
+                  if (filter.isEmpty) return _salespersons;
+                  return _salespersons
+                      .where((s) => s['full_name']
+                          .toString()
+                          .toLowerCase()
+                          .contains(filter.toLowerCase()) ||
+                          s['employee_code']
+                          .toString()
+                          .toLowerCase()
+                          .contains(filter.toLowerCase()))
+                      .toList();
+                },
+                itemAsString: (s) {
+                  final name = s['full_name'] ?? '';
+                  final code = s['employee_code'] ?? '';
+                  final pct = double.tryParse(s['commission_percent']?.toString() ?? '0')?.toStringAsFixed(1) ?? '0.0';
+                  return '$name ($code) — Comm: $pct%';
+                },
+                compareFn: (first, second) => first['id'] == second['id'],
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  searchFieldProps: TextFieldProps(
+                    decoration: InputDecoration(
+                      hintText: 'Search by name or code...',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                  ),
+                ),
+                decoratorProps: const DropDownDecoratorProps(
+                  decoration: InputDecoration(
+                    labelText: 'Choose Salesperson',
+                    hintText: 'Select an employee...',
+                  ),
+                ),
+                onChanged: (value) {
+                  setDialogState(() {
+                    selected = value;
+                  });
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _selectedSalesperson = selected;
+                  });
+                  Navigator.pop(dialogContext);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E3A5F),
+                ),
+                child: const Text('Confirm', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _showCustomerDialog({bool clearSelection = true, String? preFillText}) async {
     String initialName = clearSelection ? '' : _customerName.text;
     String initialPhone = clearSelection ? '' : _customerPhone.text;
@@ -5196,6 +5300,7 @@ class _SaleScreenState extends State<SaleScreen> {
           isEditing ? (modReason ?? 'Sales bill updated from reprint section') : null,
       affectStock: !isEditing || _affectStockOnEdit,
       items: orderItems,
+      salesmanId: _selectedSalesperson?['id'],
     );
     Map<String, dynamic>? saveResponse;
     Map<String, dynamic>? modifyResponse;
@@ -8169,6 +8274,63 @@ class _SaleScreenState extends State<SaleScreen> {
               ],
             ),
           ),
+          if (settingsCtrl.settings?.enableSalespersonTagging == true) ...[
+            const SizedBox(height: 10),
+            _surfaceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Salesperson / Staff',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      _customerIconAction(
+                        tooltip: 'Select Salesperson',
+                        onPressed: _showSalespersonPickerDialog,
+                        icon: Icons.person_add_alt_1_rounded,
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        foregroundColor: const Color(0xFF1D4ED8),
+                      ),
+                      if (_selectedSalesperson != null)
+                        _customerIconAction(
+                          tooltip: 'Remove Salesperson',
+                          onPressed: () {
+                            setState(() {
+                              _selectedSalesperson = null;
+                            });
+                          },
+                          icon: Icons.person_remove_alt_1_rounded,
+                          backgroundColor: const Color(0xFFFDECEC),
+                          foregroundColor: const Color(0xFFDC2626),
+                        ),
+                    ],
+                  ),
+                  if (_selectedSalesperson != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _selectedSalesperson!['full_name']?.toString() ?? 'Staff',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Code: ${_selectedSalesperson!['employee_code'] ?? '—'} | Commission: ${double.tryParse(_selectedSalesperson!['commission_percent']?.toString() ?? '0')?.toStringAsFixed(1) ?? '0.0'}%',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      'No salesperson tagged',
+                      style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           _surfaceCard(
             child: Column(

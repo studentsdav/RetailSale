@@ -47,11 +47,32 @@ const TRANSACTION_TABLES = [
     'request_items',
     'request_headers',
 
-    // 10. Milk Subscription tables
+    // Milk Subscription tables
     'milk_subscription_consumptions',
     'milk_subscription_settlements',
     'milk_subscription_schemes',
     'milk_subscriptions',
+
+    // HRMS tables (dependent children first)
+    'hr_loan_transactions',
+    'hr_loans',
+    'hr_sales_commissions',
+    'hr_cashier_handovers',
+    'hr_payroll_details',
+    'hr_payroll_runs',
+    'hr_salary_revisions',
+    'hr_arrears',
+    'hr_attendance_punches',
+    'hr_leave_balances',
+    'hr_leave_applications',
+    'hr_employees',
+    'hr_pay_structure_components',
+    'hr_pay_structures',
+    'hr_salary_components',
+    'hr_leave_types',
+    'hr_shifts',
+    'hr_designations',
+    'hr_holidays',
 
     // 11. Sales & Customer Advances tables
     'sales_items',
@@ -143,7 +164,8 @@ exports.getSettings = async (req, res) => {
                     sub_delivery_charge_amount: 0.0,
                     sub_delivery_charge_type: 'FLAT',
                     sub_delivery_charge_gst_percent: 0.0,
-                    sub_delivery_free_above: 0.0
+                    sub_delivery_free_above: 0.0,
+                    enable_salesperson_tagging: false
                 }
             });
         }
@@ -202,7 +224,8 @@ exports.saveSettings = async (req, res) => {
             sub_delivery_charge_amount: req.body.sub_delivery_charge_amount ?? 0.0,
             sub_delivery_charge_type: req.body.sub_delivery_charge_type || 'FLAT',
             sub_delivery_charge_gst_percent: req.body.sub_delivery_charge_gst_percent ?? 0.0,
-            sub_delivery_free_above: req.body.sub_delivery_free_above ?? 0.0
+            sub_delivery_free_above: req.body.sub_delivery_free_above ?? 0.0,
+            enable_salesperson_tagging: req.body.enable_salesperson_tagging ?? false
         };
 
         let record;

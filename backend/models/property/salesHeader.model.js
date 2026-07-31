@@ -70,7 +70,8 @@ module.exports = (sequelize, DataTypes) => {
         net_payout: DataTypes.DECIMAL(12, 2),
         applied_rules: DataTypes.STRING,
         commission_percentage_amount: DataTypes.DECIMAL(12, 2),
-        commission_fixed_amount: DataTypes.DECIMAL(12, 2)
+        commission_fixed_amount: DataTypes.DECIMAL(12, 2),
+        salesman_id: DataTypes.INTEGER
     }, {
         tableName: 'sales_headers',
         timestamps: true,

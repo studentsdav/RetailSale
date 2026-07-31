@@ -126,6 +126,10 @@ module.exports = (sequelize, DataTypes) => {
         sub_delivery_free_above: {
             type: DataTypes.DECIMAL(12, 2),
             defaultValue: 0.0
+        },
+        enable_salesperson_tagging: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         }
     }, {
         tableName: 'system_settings',

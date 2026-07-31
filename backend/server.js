@@ -285,6 +285,7 @@ app.use('/api/delivery', require('./routes/delivery.routes'));
 app.use('/api/audit', require('./routes/audit.routes'));
 app.use('/webhooks/whatsapp', require('./routes/whatsappWebhook.routes'));
 app.use('/api/whatsapp', require('./routes/whatsapp.routes'));
+app.use('/api/hrms', require('./routes/hrms.routes'));
 
 // not found
 app.use((req, res) => {

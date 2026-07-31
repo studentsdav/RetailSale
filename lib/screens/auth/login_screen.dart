@@ -36,7 +36,9 @@ class _LoginScreenState extends State<LoginScreen>
   final List<String> _roles = [
     'ADMIN',
     'STORE',
+    'RETAIL',
     'ACCOUNTS',
+    'HR',
   ];
 
   bool _isloading = false;

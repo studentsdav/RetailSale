@@ -2638,8 +2638,95 @@ async function createSaleVersion({
         modified_at: overrides.modified_at ?? null,
         modification_note: header.modification_note || overrides.modification_note || null,
         ...commFields,
-        ...overrides
+        ...overrides,
+        salesman_id: header.salesman_id || null
     }, { transaction });
+
+    // ── HRMS: Queue sales commission if salesman tagged ──
+    if (header.salesman_id && req.propertyDb.models.hr_employees && req.propertyDb.models.hr_sales_commissions) {
+        try {
+            const salesman = await req.propertyDb.models.hr_employees.findOne({
+                where: { id: header.salesman_id, outlet_id, status: 'Active' },
+                transaction
+            });
+            if (salesman && parseFloat(salesman.commission_percent) > 0) {
+                const moment = require('moment');
+                let saleAmountForCommission = netAmount;
+
+                if (salesman.commission_target_type === 'Daily' && parseFloat(salesman.commission_target_amount) > 0) {
+                    const targetAmt = parseFloat(salesman.commission_target_amount);
+                    const startOfDay = moment().startOf('day').toDate();
+                    const endOfDay = moment().endOf('day').toDate();
+
+                    const existingSalesSum = await req.propertyDb.models.sales_headers.sum('net_amount', {
+                        where: {
+                            salesman_id: salesman.id,
+                            outlet_id,
+                            is_deleted: false,
+                            sale_date: {
+                                [Op.between]: [startOfDay, endOfDay]
+                            },
+                            id: {
+                                [Op.ne]: sale.id
+                            }
+                        },
+                        transaction
+                    }) || 0;
+
+                    const totalSalesWithCurrent = parseFloat(existingSalesSum) + netAmount;
+                    if (totalSalesWithCurrent <= targetAmt) {
+                        saleAmountForCommission = 0;
+                    } else if (parseFloat(existingSalesSum) < targetAmt) {
+                        saleAmountForCommission = totalSalesWithCurrent - targetAmt;
+                    } else {
+                        saleAmountForCommission = netAmount;
+                    }
+                } else if (salesman.commission_target_type === 'Monthly' && parseFloat(salesman.commission_target_amount) > 0) {
+                    const targetAmt = parseFloat(salesman.commission_target_amount);
+                    const startOfMonth = moment().startOf('month').toDate();
+                    const endOfMonth = moment().endOf('month').toDate();
+
+                    const existingSalesSum = await req.propertyDb.models.sales_headers.sum('net_amount', {
+                        where: {
+                            salesman_id: salesman.id,
+                            outlet_id,
+                            is_deleted: false,
+                            sale_date: {
+                                [Op.between]: [startOfMonth, endOfMonth]
+                            },
+                            id: {
+                                [Op.ne]: sale.id
+                            }
+                        },
+                        transaction
+                    }) || 0;
+
+                    const totalSalesWithCurrent = parseFloat(existingSalesSum) + netAmount;
+                    if (totalSalesWithCurrent <= targetAmt) {
+                        saleAmountForCommission = 0;
+                    } else if (parseFloat(existingSalesSum) < targetAmt) {
+                        saleAmountForCommission = totalSalesWithCurrent - targetAmt;
+                    } else {
+                        saleAmountForCommission = netAmount;
+                    }
+                }
+
+                const commAmt = parseFloat(((parseFloat(salesman.commission_percent) / 100) * saleAmountForCommission).toFixed(2));
+                await req.propertyDb.models.hr_sales_commissions.create({
+                    outlet_id,
+                    employee_id: salesman.id,
+                    sale_id: sale.id,
+                    sale_amount: netAmount,
+                    commission_percent: parseFloat(salesman.commission_percent),
+                    commission_amount: commAmt,
+                    status: 'Queued'
+                }, { transaction });
+            }
+        } catch (commErr) {
+            // Commission queueing is non-blocking — log but don't fail the sale
+            console.warn('[HRMS] Commission queue error:', commErr.message);
+        }
+    }
 
     for (const row of saleItems) {
         const qty = toAmount(row.qty);

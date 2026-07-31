@@ -215,6 +215,46 @@ propertyDb.models.assembly_headers =
 propertyDb.models.assembly_items =
     require('../../models/property/assemblyItem.model')(propertyDb, DataTypes);
 
+// HRMS
+propertyDb.models.hr_salary_components =
+    require('../../models/property/hrSalaryComponent.model')(propertyDb, DataTypes);
+propertyDb.models.hr_pay_structures =
+    require('../../models/property/hrPayStructure.model')(propertyDb, DataTypes);
+propertyDb.models.hr_pay_structure_components =
+    require('../../models/property/hrPayStructureComponent.model')(propertyDb, DataTypes);
+propertyDb.models.hr_leave_types =
+    require('../../models/property/hrLeaveType.model')(propertyDb, DataTypes);
+propertyDb.models.hr_shifts =
+    require('../../models/property/hrShift.model')(propertyDb, DataTypes);
+propertyDb.models.hr_holidays =
+    require('../../models/property/hrHoliday.model')(propertyDb, DataTypes);
+propertyDb.models.hr_designations =
+    require('../../models/property/hrDesignation.model')(propertyDb, DataTypes);
+propertyDb.models.hr_employees =
+    require('../../models/property/hrEmployee.model')(propertyDb, DataTypes);
+propertyDb.models.hr_attendance_punches =
+    require('../../models/property/hrAttendancePunch.model')(propertyDb, DataTypes);
+propertyDb.models.hr_leave_applications =
+    require('../../models/property/hrLeaveApplication.model')(propertyDb, DataTypes);
+propertyDb.models.hr_leave_balances =
+    require('../../models/property/hrLeaveBalance.model')(propertyDb, DataTypes);
+propertyDb.models.hr_salary_revisions =
+    require('../../models/property/hrSalaryRevision.model')(propertyDb, DataTypes);
+propertyDb.models.hr_arrears =
+    require('../../models/property/hrArrear.model')(propertyDb, DataTypes);
+propertyDb.models.hr_loans =
+    require('../../models/property/hrLoan.model')(propertyDb, DataTypes);
+propertyDb.models.hr_loan_transactions =
+    require('../../models/property/hrLoanTransaction.model')(propertyDb, DataTypes);
+propertyDb.models.hr_sales_commissions =
+    require('../../models/property/hrSalesCommission.model')(propertyDb, DataTypes);
+propertyDb.models.hr_cashier_handovers =
+    require('../../models/property/hrCashierHandover.model')(propertyDb, DataTypes);
+propertyDb.models.hr_payroll_runs =
+    require('../../models/property/hrPayrollRun.model')(propertyDb, DataTypes);
+propertyDb.models.hr_payroll_details =
+    require('../../models/property/hrPayrollDetail.model')(propertyDb, DataTypes);
+
 
 Object.values(propertyDb.models).forEach(model => {
     if (typeof model.associate === 'function') {

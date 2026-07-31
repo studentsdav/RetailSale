@@ -38,6 +38,10 @@ import '../inventory/return_issue_screen.dart';
 import '../inventory/supplier_return_refund_screen.dart';
 import '../inventory/supplier_return_screen.dart';
 import '../inventory/return_issue_screen.dart';
+import '../hrms/employee_screen.dart';
+import '../hrms/attendance_screen.dart';
+import '../hrms/payroll_screen.dart';
+import '../hrms/hrms_masters_screen.dart';
 import '../inventory/supplier_master_screen.dart';
 import '../inventory/approval_center_screen.dart';
 import '../inventory/submitted_status_screen.dart';
@@ -2023,6 +2027,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       case 'Masters':
       case 'Masters & Departments':
         return Icons.folder_shared_outlined;
+      case 'HR & Payroll':
+        return Icons.people_outline;
       case 'Stock View':
         return Icons.inventory_2_outlined;
       case 'Reports':
@@ -2078,7 +2084,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           'category': 'Operations',
           'icon': Icons.shopping_bag_outlined,
           'label': 'Customer App (Delivery)',
-          'permission': 'RETAIL_SALES',
+          'permission': 'CUSTOMER_APP',
           'isBeta': true,
           'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerAppScreen())),
         },
@@ -2086,7 +2092,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           'category': 'Operations',
           'icon': Icons.admin_panel_settings_outlined,
           'label': 'Supplier / Retailer Console',
-          'permission': 'RETAIL_SALES',
+          'permission': 'RETAILER_CONSOLE',
           'isBeta': true,
           'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RetailerConsoleScreen())),
         },
@@ -2094,7 +2100,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           'category': 'Operations',
           'icon': Icons.delivery_dining_outlined,
           'label': 'Rider Delivery Portal',
-          'permission': 'RETAIL_SALES',
+          'permission': 'RIDER_PORTAL',
           'isBeta': true,
           'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RiderConsoleScreen())),
         },
@@ -2110,28 +2116,28 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Operations',
         'icon': Icons.swap_horiz,
         'label': 'Stock Transfer',
-        'permission': 'STOCK_OUT',
+        'permission': 'STOCK_TRANSFER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockTransferScreen())),
       },
       {
         'category': 'Operations',
         'icon': Icons.build,
         'label': 'Product Assembly',
-        'permission': 'STOCK_OUT',
+        'permission': 'PRODUCT_ASSEMBLY',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AssemblyScreen())),
       },
       {
         'category': 'Operations',
         'icon': Icons.undo,
         'label': 'Return Department Items',
-        'permission': 'RETURN',
+        'permission': 'RETURN_ISSUE',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReturnIssueScreen())),
       },
       {
         'category': 'Operations',
         'icon': Icons.assignment_return,
         'label': 'Return Purchase to Vendor',
-        'permission': 'RETURN',
+        'permission': 'SUPPLIER_RETURN',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierReturnScreen())),
       },
       {
@@ -2152,14 +2158,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Operations',
         'icon': Icons.account_balance_wallet,
         'label': 'Vendor Return Refund',
-        'permission': 'SUPPLIER_PAYMENT',
+        'permission': 'SUPPLIER_RETURN_REFUND',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierReturnRefundScreen())),
       },
       {
         'category': 'Operations',
         'icon': Icons.assignment_return_outlined,
         'label': 'Pending Refunds',
-        'permission': 'REPORTS',
+        'permission': 'PENDING_REFUNDS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RefundPendingReportScreen())),
       },
       if (userRole == 'ADMIN')
@@ -2173,6 +2179,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Operations',
         'icon': Icons.history_edu,
         'label': 'My Submissions Status',
+        'permission': 'SUBMISSIONS_STATUS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SubmittedStatusScreen())),
       },
 
@@ -2260,16 +2267,46 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
         'icon': Icons.stars_outlined,
         'label': 'Loyalty Program',
-        'permission': 'SETTINGS',
+        'permission': 'LOYALTY_PROGRAM',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoyaltyMasterConfigScreen())),
       },
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
         'icon': Icons.chat_bubble_outline,
         'label': 'WhatsApp Integration',
-        'permission': 'SETTINGS',
+        'permission': 'WHATSAPP_INTEGRATION',
         'isBeta': true,
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WhatsAppDashboardScreen())),
+      },
+
+      // HR & Payroll
+      {
+        'category': 'HR & Payroll',
+        'icon': Icons.people_outline,
+        'label': 'Employee Management',
+        'permission': 'HR_EMPLOYEES',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EmployeeScreen())),
+      },
+      {
+        'category': 'HR & Payroll',
+        'icon': Icons.access_time,
+        'label': 'Attendance & Leaves',
+        'permission': 'HR_ATTENDANCE',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendanceScreen())),
+      },
+      {
+        'category': 'HR & Payroll',
+        'icon': Icons.account_balance_wallet_outlined,
+        'label': 'Payroll',
+        'permission': 'HR_PAYROLL',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayrollScreen())),
+      },
+      {
+        'category': 'HR & Payroll',
+        'icon': Icons.tune_outlined,
+        'label': 'HR Masters',
+        'permission': 'HR_MASTERS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HrmsMastersScreen())),
       },
 
       // Stock View
@@ -2307,7 +2344,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Reports',
         'icon': Icons.swap_horiz,
         'label': 'Stock Transfer Report',
-        'permission': 'STOCK_OUT_REPORT',
+        'permission': 'STOCK_TRANSFER_REPORT',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockTransferReportScreen())),
       },
       if (_showRetailSalesReportSection) ...[
@@ -2322,7 +2359,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           'category': 'Reports',
           'icon': Icons.water_drop,
           'label': 'Subscription Report',
-          'permission': 'REPORTS',
+          'permission': 'SUBSCRIPTION_REPORT',
           'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionReportScreen())),
         },
       ],
@@ -2330,35 +2367,35 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Reports',
         'icon': Icons.local_offer_outlined,
         'label': 'Scheme Report',
-        'permission': 'REPORTS',
+        'permission': 'SCHEME_REPORT',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SchemeReportScreen())),
       },
       {
         'category': 'Reports',
         'icon': Icons.analytics_outlined,
         'label': 'Scheme Analysis',
-        'permission': 'REPORTS',
+        'permission': 'SCHEME_ANALYSIS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SchemeAnalysisScreen())),
       },
       {
         'category': 'Reports',
         'icon': Icons.workspace_premium_outlined,
         'label': 'Loyalty Report',
-        'permission': 'REPORTS',
+        'permission': 'LOYALTY_REPORT',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoyaltyReportScreen())),
       },
       {
         'category': 'Reports',
         'icon': Icons.insights_outlined,
         'label': 'Store Analysis',
-        'permission': 'REPORTS',
+        'permission': 'STORE_ANALYSIS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StoreAnalysisScreen())),
       },
       {
         'category': 'Operations',
         'icon': Icons.confirmation_number_outlined,
         'label': 'Lucky Draw Campaigns',
-        'permission': 'REPORTS',
+        'permission': 'LUCKY_DRAW',
         'isBeta': true,
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LuckyDrawCampaignScreen())),
       },
@@ -2366,35 +2403,35 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Reports',
         'icon': Icons.analytics_outlined,
         'label': 'Brand Analysis',
-        'permission': 'REPORTS',
+        'permission': 'BRAND_ANALYSIS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BrandAnalysisScreen())),
       },
       {
         'category': 'Reports',
         'icon': Icons.source_outlined,
         'label': 'Sale Source Analysis',
-        'permission': 'REPORTS',
+        'permission': 'SOURCE_ANALYSIS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SourceAnalysisScreen())),
       },
       {
         'category': 'Reports',
         'icon': Icons.percent_outlined,
         'label': 'Commission Report',
-        'permission': 'REPORTS',
+        'permission': 'COMMISSION_REPORT',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommissionReportScreen())),
       },
       {
         'category': 'Reports',
         'icon': Icons.payments_outlined,
         'label': 'Payment Method Analysis',
-        'permission': 'REPORTS',
+        'permission': 'PAYMENT_ANALYSIS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentAnalysisScreen())),
       },
       {
         'category': 'Reports',
         'icon': Icons.auto_awesome,
         'label': 'AI Query Analytics',
-        'permission': 'REPORTS',
+        'permission': 'AI_QUERY_ANALYTICS',
         'isBeta': true,
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiQueryAnalyticsScreen())),
       },
@@ -2409,14 +2446,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Reports',
         'icon': Icons.receipt_long_outlined,
         'label': 'Stock Ledger Report',
-        'permission': 'CLOSING_REPORT',
+        'permission': 'STOCK_LEDGER_REPORT',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockLedgerReportScreen())),
       },
       {
         'category': 'Reports',
         'icon': Icons.payment_outlined,
         'label': 'Vendor Payment Report',
-        'permission': 'REPORTS',
+        'permission': 'VENDOR_PAYMENT_REPORT',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierPaymentsReportScreen())),
       },
       {
@@ -2430,7 +2467,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Reports',
         'icon': Icons.account_balance,
         'label': 'Finance & Reports',
-        'permission': 'REPORTS',
+        'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashLedgerScreen())),
       },
       {
@@ -2502,6 +2539,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       'Operations',
       'Modify',
       _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+      'HR & Payroll',
       'Stock View',
       'Reports',
       'System',

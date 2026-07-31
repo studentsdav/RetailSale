@@ -461,10 +461,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _settingRow(
                         title: 'Show Item Images in Sales',
                         description: 'Display item photographs directly on the POS sale screen',
-                        isLast: true,
                         control: Switch.adaptive(
                           value: s.enableItemImagesInSales,
                           onChanged: (v) => setState(() => s.enableItemImagesInSales = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Enable Salesperson Tagging',
+                        description: 'Show salesperson selector and calculate commission on sale',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: s.enableSalespersonTagging,
+                          onChanged: (v) => setState(() => s.enableSalespersonTagging = v),
                         ),
                       ),
                     ],

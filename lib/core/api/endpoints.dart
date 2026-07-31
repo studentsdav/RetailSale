@@ -135,4 +135,20 @@ class ApiEndpoints {
   // Sale Sources & Payment Methods
   static const saleSources = '/api/sales/sources';
   static const paymentMethods = '/api/sales/payment-methods';
+
+  // HRMS Endpoints
+  static const hrmsEmployees = '/api/hrms/employees';
+  static const hrmsAttendance = '/api/hrms/attendance';
+  static const hrmsLeaves = '/api/hrms/leaves';
+  static const hrmsShifts = '/api/hrms/shifts';
+  static const hrmsLeaveTypes = '/api/hrms/leave-types';
+  static const hrmsDesignations = '/api/hrms/designations';
+  static const hrmsPayStructures = '/api/hrms/pay-structures';
+  static const hrmsSalaryComponents = '/api/hrms/salary-components';
+  static const hrmsLoans = '/api/hrms/loans';
+  static const hrmsPayroll = '/api/hrms/payroll';
+  static const hrmsPayrollHistory = '/api/hrms/payroll/history';
+  static const hrmsPayrollSettings = '/api/hrms/payroll/settings';
+  static const hrmsHandover = '/api/hrms/handover';
+  static const hrmsHandovers = '/api/hrms/handovers';
 }

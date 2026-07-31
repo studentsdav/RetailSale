@@ -3079,6 +3079,406 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 83,
+    description: "HRMS: Add HR tables for employees, attendance, leaves, payroll, loans, commissions, cashier handovers",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        -- ===========================
+        -- HR SALARY COMPONENTS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_salary_components (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(150) NOT NULL,
+          nature VARCHAR(50) NOT NULL DEFAULT 'Earning',
+          type VARCHAR(50) NOT NULL DEFAULT 'Fixed',
+          formula VARCHAR(255) NULL,
+          is_taxable BOOLEAN NOT NULL DEFAULT TRUE,
+          frequency VARCHAR(50) NOT NULL DEFAULT 'Monthly',
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR PAY STRUCTURES
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_pay_structures (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(150) NOT NULL,
+          description TEXT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR PAY STRUCTURE COMPONENTS (Junction)
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_pay_structure_components (
+          id SERIAL PRIMARY KEY,
+          pay_structure_id INTEGER NOT NULL REFERENCES hr_pay_structures(id) ON DELETE CASCADE,
+          salary_component_id INTEGER NOT NULL REFERENCES hr_salary_components(id) ON DELETE CASCADE
+        );
+
+        -- ===========================
+        -- HR LEAVE TYPES
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_leave_types (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(100) NOT NULL,
+          is_paid BOOLEAN NOT NULL DEFAULT TRUE,
+          annual_quota INTEGER NOT NULL DEFAULT 14,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR SHIFTS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_shifts (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(100) NOT NULL,
+          start_time TIME NOT NULL,
+          end_time TIME NOT NULL,
+          grace_period_mins INTEGER NOT NULL DEFAULT 15,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR DESIGNATIONS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_designations (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(150) NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR EMPLOYEES
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_employees (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          employee_code VARCHAR(50) NOT NULL,
+          full_name VARCHAR(255) NOT NULL,
+          contact_email VARCHAR(150) NULL,
+          mobile VARCHAR(30) NULL,
+          gender VARCHAR(20) NULL,
+          date_of_birth DATE NULL,
+          blood_group VARCHAR(10) NULL,
+          bank_name VARCHAR(150) NULL,
+          bank_account_no VARCHAR(100) NULL,
+          bank_ifsc VARCHAR(30) NULL,
+          hire_date DATE NOT NULL,
+          base_salary DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          requires_attendance BOOLEAN NOT NULL DEFAULT TRUE,
+          status VARCHAR(50) NOT NULL DEFAULT 'Active',
+          kyc_documents JSONB NULL,
+          pay_structure_id INTEGER NULL REFERENCES hr_pay_structures(id) ON DELETE SET NULL,
+          designation_id INTEGER NULL REFERENCES hr_designations(id) ON DELETE SET NULL,
+          shift_id INTEGER NULL REFERENCES hr_shifts(id) ON DELETE SET NULL,
+          commission_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+          level1_approver_id INTEGER NULL REFERENCES hr_employees(id) ON DELETE SET NULL,
+          level2_approver_id INTEGER NULL REFERENCES hr_employees(id) ON DELETE SET NULL,
+          terminated_date DATE NULL,
+          termination_reason TEXT NULL,
+          created_by INTEGER NULL REFERENCES users(id),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT uq_employee_code_outlet UNIQUE (outlet_id, employee_code)
+        );
+
+        -- ===========================
+        -- HR ATTENDANCE PUNCHES
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_attendance_punches (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+          punch_date DATE NOT NULL,
+          punch_in TIMESTAMP NULL,
+          punch_out TIMESTAMP NULL,
+          hours_worked DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+          overtime_hours DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+          lateness_mins INTEGER NOT NULL DEFAULT 0,
+          status VARCHAR(50) NOT NULL DEFAULT 'Absent',
+          punch_source VARCHAR(50) NOT NULL DEFAULT 'Manual',
+          updated_by INTEGER NULL REFERENCES users(id),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT uq_employee_punch_date UNIQUE (employee_id, punch_date)
+        );
+
+        -- ===========================
+        -- HR LEAVE APPLICATIONS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_leave_applications (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+          leave_type_id INTEGER NOT NULL REFERENCES hr_leave_types(id) ON DELETE CASCADE,
+          start_date DATE NOT NULL,
+          end_date DATE NOT NULL,
+          total_days DECIMAL(4,1) NOT NULL,
+          reason TEXT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+          approved_by INTEGER NULL REFERENCES users(id),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR LEAVE BALANCES
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_leave_balances (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+          leave_type_id INTEGER NOT NULL REFERENCES hr_leave_types(id) ON DELETE CASCADE,
+          year INTEGER NOT NULL,
+          allocated_quota INTEGER NOT NULL,
+          used_quota DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+          CONSTRAINT uq_emp_leave_year UNIQUE (employee_id, leave_type_id, year)
+        );
+
+        -- ===========================
+        -- HR SALARY REVISIONS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_salary_revisions (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+          previous_salary DECIMAL(12,2) NOT NULL,
+          new_salary DECIMAL(12,2) NOT NULL,
+          effective_date DATE NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+          approved_by INTEGER NULL REFERENCES users(id),
+          created_by INTEGER NOT NULL REFERENCES users(id),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR ARREARS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_arrears (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+          amount DECIMAL(12,2) NOT NULL,
+          reason TEXT NOT NULL,
+          payment_month VARCHAR(7) NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR LOANS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_loans (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+          loan_amount DECIMAL(12,2) NOT NULL,
+          monthly_emi DECIMAL(12,2) NOT NULL,
+          remaining_balance DECIMAL(12,2) NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'Active',
+          notes TEXT NULL,
+          created_by INTEGER NOT NULL REFERENCES users(id),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR LOAN TRANSACTIONS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_loan_transactions (
+          id SERIAL PRIMARY KEY,
+          loan_id INTEGER NOT NULL REFERENCES hr_loans(id) ON DELETE CASCADE,
+          transaction_type VARCHAR(50) NOT NULL,
+          amount DECIMAL(12,2) NOT NULL,
+          transaction_date DATE NOT NULL,
+          payroll_run_id INTEGER NULL,
+          notes TEXT NULL,
+          created_by INTEGER NOT NULL REFERENCES users(id),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR SALES COMMISSIONS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_sales_commissions (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+          sale_id INTEGER NOT NULL REFERENCES sales_headers(id) ON DELETE CASCADE,
+          sale_amount DECIMAL(12,2) NOT NULL,
+          commission_percent DECIMAL(5,2) NOT NULL,
+          commission_amount DECIMAL(12,2) NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'Queued',
+          payroll_run_id INTEGER NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR CASHIER HANDOVERS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_cashier_handovers (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          cashier_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          handover_date DATE NOT NULL,
+          expected_cash DECIMAL(12,2) NOT NULL,
+          physical_cash DECIMAL(12,2) NOT NULL,
+          denominations JSONB NOT NULL DEFAULT '{}',
+          variance DECIMAL(12,2) NOT NULL,
+          shortage_status VARCHAR(50) NOT NULL DEFAULT 'Logged',
+          penalty_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          payroll_run_id INTEGER NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR PAYROLL RUNS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_payroll_runs (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          pay_period VARCHAR(7) NOT NULL,
+          run_date DATE NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'Draft',
+          approved_by INTEGER NULL REFERENCES users(id),
+          expense_id UUID NULL,
+          total_gross DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          total_deductions DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          total_net DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ===========================
+        -- HR PAYROLL DETAILS
+        -- ===========================
+        CREATE TABLE IF NOT EXISTS hr_payroll_details (
+          id SERIAL PRIMARY KEY,
+          payroll_run_id INTEGER NOT NULL REFERENCES hr_payroll_runs(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+          base_salary DECIMAL(12,2) NOT NULL,
+          prorated_salary DECIMAL(12,2) NOT NULL,
+          overtime_pay DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          sales_commission DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          arrears DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          bonuses DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          total_additions DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          shortage_penalties DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          loan_emi DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          statutory_deductions DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          total_deductions DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          gross_pay DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          net_pay DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+          components_breakdown JSONB NOT NULL DEFAULT '{}',
+          days_present DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+          days_absent DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+          days_on_leave DECIMAL(4,1) NOT NULL DEFAULT 0.0
+        );
+
+        -- ===========================
+        -- ALTER sales_headers to add salesman_id
+        -- ===========================
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS salesman_id INTEGER NULL REFERENCES hr_employees(id) ON DELETE SET NULL;
+
+        -- ===========================
+        -- PERFORMANCE INDEXES
+        -- ===========================
+        CREATE INDEX IF NOT EXISTS idx_hr_punches ON hr_attendance_punches (outlet_id, employee_id, punch_date);
+        CREATE INDEX IF NOT EXISTS idx_hr_leaves ON hr_leave_applications (outlet_id, employee_id, status);
+        CREATE INDEX IF NOT EXISTS idx_hr_loans ON hr_loans (outlet_id, employee_id, status);
+        CREATE INDEX IF NOT EXISTS idx_hr_payroll_runs ON hr_payroll_runs (outlet_id, pay_period);
+        CREATE INDEX IF NOT EXISTS idx_hr_commissions ON hr_sales_commissions (outlet_id, employee_id, status);
+        CREATE INDEX IF NOT EXISTS idx_hr_employees ON hr_employees (outlet_id, status);
+
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 84,
+    description: "HRMS: Add payroll_start_date column to hr_employees table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS payroll_start_date DATE NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 85,
+    description: "HRMS: Add hr_holidays table and weekly_offs column to hr_shifts",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        CREATE TABLE IF NOT EXISTS hr_holidays (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(150) NOT NULL,
+          holiday_date DATE NOT NULL,
+          is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT uq_outlet_holiday_date UNIQUE (outlet_id, holiday_date)
+        );
+        ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS weekly_offs JSONB NOT NULL DEFAULT '["Sunday"]';
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 86,
+    description: "HRMS: Add father_name column to hr_employees table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS father_name VARCHAR(255) NULL;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 87,
+    description: "POS Settings: Add enable_salesperson_tagging column to system_settings",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS enable_salesperson_tagging BOOLEAN DEFAULT FALSE;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 88,
+    description: "HRMS: Add commission_target_type and commission_target_amount columns to hr_employees",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS commission_target_type VARCHAR(50) NULL;
+        ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS commission_target_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00;
+        COMMIT;
+      `);
+    }
   }
 ];
 

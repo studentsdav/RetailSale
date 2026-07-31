@@ -30,6 +30,7 @@ class SystemSettings {
   String subDeliveryChargeType;
   double subDeliveryChargeGstPercent;
   double subDeliveryFreeAbove;
+  bool enableSalespersonTagging;
 
   SystemSettings({
     required this.autoReorder,
@@ -58,6 +59,7 @@ class SystemSettings {
     required this.subDeliveryChargeType,
     required this.subDeliveryChargeGstPercent,
     required this.subDeliveryFreeAbove,
+    required this.enableSalespersonTagging,
   });
 
   factory SystemSettings.fromJson(Map<String, dynamic> json) {
@@ -88,6 +90,7 @@ class SystemSettings {
       subDeliveryChargeType: json['sub_delivery_charge_type'] ?? 'FLAT',
       subDeliveryChargeGstPercent: double.tryParse(json['sub_delivery_charge_gst_percent']?.toString() ?? '0.0') ?? 0.0,
       subDeliveryFreeAbove: double.tryParse(json['sub_delivery_free_above']?.toString() ?? '0.0') ?? 0.0,
+      enableSalespersonTagging: json['enable_salesperson_tagging'] ?? false,
       defaultCharges: rawCharges is List
           ? rawCharges
               .map((e) => BillingCharge.fromJson(Map<String, dynamic>.from(e)))
@@ -159,6 +162,7 @@ class SystemSettings {
       'sub_delivery_charge_type': subDeliveryChargeType,
       'sub_delivery_charge_gst_percent': subDeliveryChargeGstPercent,
       'sub_delivery_free_above': subDeliveryFreeAbove,
+      'enable_salesperson_tagging': enableSalespersonTagging,
     };
   }
 }

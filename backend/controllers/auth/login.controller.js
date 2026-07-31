@@ -75,6 +75,34 @@ exports.login = async (req, res, next) => {
             console.warn(`[AUTH] Cloud license check bypassed: ${err.message}`);
         }
 
+        const ROLE_PERMISSIONS = {
+            ADMIN: ['*'],
+            STORE: [
+                'ITEM_REQUEST', 'PURCHASE_ORDER', 'STOCK_IN', 'STOCK_OUT', 'RETURN', 'DAMAGE',
+                'ITEM_MASTER', 'SUPPLIER_MASTER', 'STOCK_LOCATION',
+                'STOCK_BALANCE', 'DAMAGE_SUMMARY', 'STOCK_IN_REPORT', 'STOCK_OUT_REPORT',
+                'DAMAGE_REPORT', 'REQUEST_REPORT', 'PURCHASE_REPORT', 'RETURN_REPORT',
+                'STOCK_TRANSFER', 'PRODUCT_ASSEMBLY', 'RETURN_ISSUE', 'SUPPLIER_RETURN',
+                'STOCK_TRANSFER_REPORT', 'SUBMISSIONS_STATUS'
+            ],
+            RETAIL: [
+                'RETAIL_SALES', 'REPRINT_SALES_BILL', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT',
+                'CUSTOMER_APP', 'RETAILER_CONSOLE', 'RIDER_PORTAL'
+            ],
+            ACCOUNTS: [
+                'SUPPLIER_PAYMENT', 'REPORTS', 'STOCK_BALANCE', 'DAMAGE_SUMMARY', 'STOCK_IN_REPORT',
+                'STOCK_OUT_REPORT', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT', 'PURCHASE_REPORT',
+                'RETURN_REPORT', 'REQUEST_REPORT', 'DAMAGE_REPORT',
+                'SUPPLIER_RETURN_REFUND', 'PENDING_REFUNDS', 'CASH_LEDGER', 'STOCK_LEDGER_REPORT',
+                'VENDOR_PAYMENT_REPORT', 'SUBSCRIPTION_REPORT', 'SCHEME_REPORT', 'SCHEME_ANALYSIS',
+                'LOYALTY_REPORT', 'STORE_ANALYSIS', 'BRAND_ANALYSIS', 'SOURCE_ANALYSIS',
+                'COMMISSION_REPORT', 'PAYMENT_ANALYSIS', 'AI_QUERY_ANALYTICS'
+            ],
+            HR: [
+                'HR_EMPLOYEES', 'HR_ATTENDANCE', 'HR_PAYROLL', 'HR_MASTERS'
+            ]
+        };
+
         let permissions = [];
         if (user.role === 'ADMIN') {
             permissions = ['*'];
@@ -83,6 +111,16 @@ exports.login = async (req, res, next) => {
                 where: { user_id: user.id }
             });
             permissions = perms.map(p => p.perm_key);
+
+            if (permissions.length === 0) {
+                const defaultPerms = ROLE_PERMISSIONS[user.role] || [];
+                if (defaultPerms.length > 0) {
+                    await db.models.user_permissions.bulkCreate(
+                        defaultPerms.map(p => ({ user_id: user.id, perm_key: p }))
+                    );
+                    permissions = defaultPerms;
+                }
+            }
         }
 
         const token = jwt.sign({

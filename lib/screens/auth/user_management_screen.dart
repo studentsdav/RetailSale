@@ -11,6 +11,12 @@ class Permission1 {
   Permission1(this.key, this.label);
 }
 
+class PermissionGroup {
+  final String categoryName;
+  final List<Permission1> items;
+  PermissionGroup(this.categoryName, this.items);
+}
+
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({super.key});
 
@@ -21,65 +27,106 @@ class UserManagementScreen extends StatefulWidget {
 class _UserManagementScreenState extends State<UserManagementScreen> {
   final _search = TextEditingController();
   final UserController userCtrl = UserController();
-  final ScrollController _horizontalScrollController = ScrollController();
+  final _horizontalScrollController = ScrollController();
   final password = TextEditingController();
   List<AppUser> users = [];
   final outletCtrl = OutletController();
 
-  /// -------- ALL PERMISSIONS --------
-  final allPermissions = <Permission1>[
-    /// ================= INVENTORY TRANSACTIONS =================
-    Permission1('ITEM_REQUEST', 'Item Request'),
-    Permission1('PURCHASE_ORDER', 'Purchase Order'),
-    Permission1('STOCK_IN', 'Stock In (Receiving)'),
-    Permission1('STOCK_OUT', 'Stock Dispatch'),
-    Permission1('RETAIL_SALES', 'Retail Sales'),
-    Permission1('RETURN', 'Department Return'),
-    Permission1('DAMAGE', 'Damage Items'),
-    Permission1('SUPPLIER_PAYMENT', 'Supplier Payment'),
-
-    /// ================= MODIFY MODULE =================
-    Permission1('MODIFY_REQUEST', 'Modify Request'),
-    Permission1('MODIFY_PURCHASE', 'Modify Purchase Order'),
-    Permission1('MODIFY_RECEIVING', 'Modify Receiving'),
-    Permission1('MODIFY_ISSUE', 'Modify Stock Dispatch'),
-    Permission1('REPRINT_REQUEST', 'Reprint Request'),
-    Permission1('REPRINT_PURCHASE', 'Reprint Purchase Order'),
-    Permission1('REPRINT_RECEIVING', 'Reprint Receiving'),
-    Permission1('REPRINT_ISSUE', 'Reprint Stock Dispatch'),
-    Permission1('REPRINT_SALES_BILL', 'Reprint Sales Bill'),
-    Permission1('MODIFY_SALES_BILL', 'Modify Sales Bill'),
-    Permission1('MODIFY_SALES_PAYMENT', 'Modify Sales Payment'),
-
-    /// ================= MASTER DATA =================
-    Permission1('ITEM_MASTER', 'Item Master'),
-    Permission1('SUPPLIER_MASTER', 'Supplier Master'),
-    Permission1('STOCK_LOCATION', 'Stock Location'),
-
-    /// ================= SETTINGS =================
-    Permission1('NUMBERING_SETTINGS', 'Document Sequence Settings'),
-    Permission1('PROPERTY_INFORMATION', 'Property Information'),
-
-    /// ================= REPORTS =================
-    Permission1('REPORTS', 'Reports'),
-    Permission1('STOCK_BALANCE', 'Stock Balance'),
-    Permission1('DAMAGE_SUMMARY', 'Damage Summary'),
-    Permission1('STOCK_IN_REPORT', 'Stock In Report'),
-    Permission1('STOCK_OUT_REPORT', 'Stock Dispatch Report'),
-    Permission1('RETAIL_SALES_REPORT', 'Retail Sales Report'),
-    Permission1('CLOSING_REPORT', 'Closing Report'),
-    Permission1('PURCHASE_REPORT', 'Purchase Report'),
-    Permission1('RETURN_REPORT', 'Return Report'),
-    Permission1('REQUEST_REPORT', 'Request Report'),
-    Permission1('DAMAGE_REPORT', 'Damage Report'),
-
-    /// ================= ADMIN =================
-    Permission1('USER_MANAGEMENT', 'User Management'),
-
-    /// ================= SYSTEM =================
-    Permission1('SETTINGS', 'Settings'),
-    Permission1('SYSTEM_UPDATE', 'System Update'),
+  /// -------- ALL PERMISSIONS GROUPED BY CATEGORY --------
+  final List<PermissionGroup> permissionGroups = [
+    PermissionGroup('Inventory & Stock', [
+      Permission1('ITEM_REQUEST', 'Item Request'),
+      Permission1('PURCHASE_ORDER', 'Purchase Order'),
+      Permission1('STOCK_IN', 'Receive from Vendor (GRN)'),
+      Permission1('STOCK_OUT', 'Stock Dispatch'),
+      Permission1('STOCK_TRANSFER', 'Stock Transfer'),
+      Permission1('PRODUCT_ASSEMBLY', 'Product Assembly'),
+      Permission1('RETURN', 'Department Return (Main Key)'),
+      Permission1('RETURN_ISSUE', 'Return Department Items'),
+      Permission1('SUPPLIER_RETURN', 'Return Purchase to Vendor'),
+      Permission1('DAMAGE', 'Damage Items Entry'),
+      Permission1('ITEM_MASTER', 'Item Master'),
+      Permission1('SUPPLIER_MASTER', 'Vendor Master'),
+      Permission1('STOCK_LOCATION', 'Stock Location / Department'),
+      Permission1('SUBMISSIONS_STATUS', 'My Submissions Status'),
+    ]),
+    PermissionGroup('Retail Sales', [
+      Permission1('RETAIL_SALES', 'Retail Sales'),
+      Permission1('REPRINT_SALES_BILL', 'Reprint Sales Bill'),
+      Permission1('MODIFY_SALES_BILL', 'Modify Sales Bill'),
+      Permission1('MODIFY_SALES_PAYMENT', 'Modify Sales Payment'),
+      Permission1('CUSTOMER_APP', 'Customer App (Delivery)'),
+      Permission1('RETAILER_CONSOLE', 'Supplier / Retailer Console'),
+      Permission1('RIDER_PORTAL', 'Rider Delivery Portal'),
+    ]),
+    PermissionGroup('Accounts & Finance', [
+      Permission1('SUPPLIER_PAYMENT', 'Vendor Payment'),
+      Permission1('SUPPLIER_RETURN_REFUND', 'Vendor Return Refund'),
+      Permission1('PENDING_REFUNDS', 'Pending Refunds View'),
+      Permission1('CASH_LEDGER', 'Finance & Reports (Cash Ledger)'),
+      Permission1('HR_PAYROLL', 'Payroll Processing'),
+      Permission1('RETAIL_SALES_REPORT', 'Retail Sales Report'),
+      Permission1('CLOSING_REPORT', 'Closing Report'),
+      Permission1('STOCK_LEDGER_REPORT', 'Stock Ledger Report'),
+      Permission1('VENDOR_PAYMENT_REPORT', 'Vendor Payment Report'),
+      Permission1('PURCHASE_REPORT', 'Vendor Purchase Order Report'),
+      Permission1('RETURN_REPORT', 'Return Report'),
+      Permission1('REQUEST_REPORT', 'Request Report'),
+      Permission1('DAMAGE_REPORT', 'Damage Report'),
+    ]),
+    PermissionGroup('Modify Documents', [
+      Permission1('MODIFY_REQUEST', 'Modify Request'),
+      Permission1('MODIFY_PURCHASE', 'Modify Purchase Order'),
+      Permission1('MODIFY_RECEIVING', 'Modify Receiving'),
+      Permission1('MODIFY_ISSUE', 'Modify Stock Dispatch'),
+      Permission1('REPRINT_REQUEST', 'Reprint Request'),
+      Permission1('REPRINT_PURCHASE', 'Reprint Purchase Order'),
+      Permission1('REPRINT_RECEIVING', 'Reprint Receiving'),
+      Permission1('REPRINT_ISSUE', 'Reprint Stock Dispatch'),
+    ]),
+    PermissionGroup('HR & Attendance', [
+      Permission1('HR_EMPLOYEES', 'Employee Directory'),
+      Permission1('HR_ATTENDANCE', 'Attendance & Leaves'),
+      Permission1('HR_MASTERS', 'HR Masters & Scales'),
+    ]),
+    PermissionGroup('Reports & Analysis', [
+      Permission1('STOCK_BALANCE', 'Stock Balance'),
+      Permission1('DAMAGE_SUMMARY', 'Damage Summary'),
+      Permission1('STOCK_IN_REPORT', 'Receiving Report'),
+      Permission1('STOCK_OUT_REPORT', 'Stock Dispatch Report'),
+      Permission1('STOCK_TRANSFER_REPORT', 'Stock Transfer Report'),
+      Permission1('SUBSCRIPTION_REPORT', 'Subscription Report'),
+      Permission1('SCHEME_REPORT', 'Scheme Report'),
+      Permission1('SCHEME_ANALYSIS', 'Scheme Analysis'),
+      Permission1('LOYALTY_REPORT', 'Loyalty Report'),
+      Permission1('STORE_ANALYSIS', 'Store Analysis'),
+      Permission1('BRAND_ANALYSIS', 'Brand Analysis'),
+      Permission1('SOURCE_ANALYSIS', 'Sale Source Analysis'),
+      Permission1('COMMISSION_REPORT', 'Commission Report'),
+      Permission1('PAYMENT_ANALYSIS', 'Payment Method Analysis'),
+      Permission1('AI_QUERY_ANALYTICS', 'AI Query Analytics'),
+    ]),
+    PermissionGroup('Settings & Customizer', [
+      Permission1('PROPERTY_INFORMATION', 'Property Information'),
+      Permission1('NUMBERING_SETTINGS', 'Document Sequence Settings'),
+      Permission1('SETTINGS', 'System Settings'),
+      Permission1('SYSTEM_UPDATE', 'System Update'),
+    ]),
+    PermissionGroup('Admin & Integrations', [
+      Permission1('USER_MANAGEMENT', 'User Management'),
+      Permission1('LOYALTY_PROGRAM', 'Loyalty Program'),
+      Permission1('WHATSAPP_INTEGRATION', 'WhatsApp Integration'),
+      Permission1('LUCKY_DRAW', 'Lucky Draw Campaigns'),
+    ]),
   ];
+
+  List<Permission1> get allPermissions {
+    final list = <Permission1>[];
+    for (final gp in permissionGroups) {
+      list.addAll(gp.items);
+    }
+    return list;
+  }
 
   @override
   void initState() {
@@ -361,7 +408,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           initialValue: role,
                           decoration: const InputDecoration(
                               labelText: 'Role', border: OutlineInputBorder()),
-                          items: ['ADMIN', 'STORE', 'ACCOUNTS']
+                          items: ['ADMIN', 'STORE', 'RETAIL', 'ACCOUNTS', 'HR']
                               .map((e) =>
                                   DropdownMenuItem(value: e, child: Text(e)))
                               .toList(),
@@ -529,31 +576,93 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             return AlertDialog(
               title: Text('Permissions - ${u.username}'),
               content: SizedBox(
-                width: 400,
+                width: 450,
                 child: ListView(
                   shrinkWrap: true,
-                  children: allPermissions.map((p) {
-                    final checked = u.permissions.contains('ALL') ||
-                        u.permissions.contains(p.key);
+                  children: [
+                    ...() {
+                      final widgets = <Widget>[];
+                      for (final group in permissionGroups) {
+                        final hasAll = group.items.every((p) => u.permissions.contains(p.key));
+                        final hasNone = group.items.every((p) => !u.permissions.contains(p.key));
+                        
+                        bool? groupChecked;
+                        if (hasAll) {
+                          groupChecked = true;
+                        } else if (hasNone) {
+                          groupChecked = false;
+                        } else {
+                          groupChecked = null;
+                        }
 
-                    return CheckboxListTile(
-                      title: Text(p.label),
-                      subtitle: Text(p.key),
-                      value: checked,
-                      onChanged: (v) {
-                        setDialogState(() {
-                          // ✅ correct setState
-                          if (v == true) {
-                            u.permissions.add(p.key);
-                            u.permissions
-                                .remove('ALL'); // remove ALL if manual select
-                          } else {
-                            u.permissions.remove(p.key);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
+                        widgets.add(
+                          Container(
+                            color: const Color(0xFFF3F4F6),
+                            margin: const EdgeInsets.only(top: 12, bottom: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  group.categoryName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                ),
+                                Checkbox(
+                                  value: groupChecked,
+                                  tristate: true,
+                                  onChanged: (v) {
+                                    setDialogState(() {
+                                      if (groupChecked == true || groupChecked == null) {
+                                        for (final p in group.items) {
+                                          u.permissions.remove(p.key);
+                                        }
+                                      } else {
+                                        for (final p in group.items) {
+                                          u.permissions.add(p.key);
+                                        }
+                                        u.permissions.remove('ALL');
+                                      }
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+
+                        for (final p in group.items) {
+                          final checked = u.permissions.contains('ALL') || u.permissions.contains(p.key);
+                          widgets.add(
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: CheckboxListTile(
+                                title: Text(p.label, style: const TextStyle(fontSize: 13)),
+                                subtitle: Text(p.key, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                value: checked,
+                                dense: true,
+                                controlAffinity: ListTileControlAffinity.trailing,
+                                onChanged: (v) {
+                                  setDialogState(() {
+                                    if (v == true) {
+                                      u.permissions.add(p.key);
+                                      u.permissions.remove('ALL');
+                                    } else {
+                                      u.permissions.remove(p.key);
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                      }
+                      return widgets;
+                    }()
+                  ],
                 ),
               ),
               actions: [
@@ -671,7 +780,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           initialValue: role,
                           decoration: const InputDecoration(
                               labelText: 'Role', border: OutlineInputBorder()),
-                          items: ['ADMIN', 'STORE', 'ACCOUNTS']
+                          items: ['ADMIN', 'STORE', 'RETAIL', 'ACCOUNTS', 'HR']
                               .map((e) =>
                                   DropdownMenuItem(value: e, child: Text(e)))
                               .toList(),

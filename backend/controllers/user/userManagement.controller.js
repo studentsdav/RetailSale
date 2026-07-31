@@ -1,6 +1,34 @@
 const audit = require('../../services/audit.service');
 const bcrypt = require("bcryptjs");
 
+const ROLE_PERMISSIONS = {
+    ADMIN: ['*'],
+    STORE: [
+        'ITEM_REQUEST', 'PURCHASE_ORDER', 'STOCK_IN', 'STOCK_OUT', 'RETURN', 'DAMAGE',
+        'ITEM_MASTER', 'SUPPLIER_MASTER', 'STOCK_LOCATION',
+        'STOCK_BALANCE', 'DAMAGE_SUMMARY', 'STOCK_IN_REPORT', 'STOCK_OUT_REPORT',
+        'DAMAGE_REPORT', 'REQUEST_REPORT', 'PURCHASE_REPORT', 'RETURN_REPORT',
+        'STOCK_TRANSFER', 'PRODUCT_ASSEMBLY', 'RETURN_ISSUE', 'SUPPLIER_RETURN',
+        'STOCK_TRANSFER_REPORT', 'SUBMISSIONS_STATUS'
+    ],
+    RETAIL: [
+        'RETAIL_SALES', 'REPRINT_SALES_BILL', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT',
+        'CUSTOMER_APP', 'RETAILER_CONSOLE', 'RIDER_PORTAL'
+    ],
+    ACCOUNTS: [
+        'SUPPLIER_PAYMENT', 'REPORTS', 'STOCK_BALANCE', 'DAMAGE_SUMMARY', 'STOCK_IN_REPORT',
+        'STOCK_OUT_REPORT', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT', 'PURCHASE_REPORT',
+        'RETURN_REPORT', 'REQUEST_REPORT', 'DAMAGE_REPORT',
+        'SUPPLIER_RETURN_REFUND', 'PENDING_REFUNDS', 'CASH_LEDGER', 'STOCK_LEDGER_REPORT',
+        'VENDOR_PAYMENT_REPORT', 'SUBSCRIPTION_REPORT', 'SCHEME_REPORT', 'SCHEME_ANALYSIS',
+        'LOYALTY_REPORT', 'STORE_ANALYSIS', 'BRAND_ANALYSIS', 'SOURCE_ANALYSIS',
+        'COMMISSION_REPORT', 'PAYMENT_ANALYSIS', 'AI_QUERY_ANALYTICS'
+    ],
+    HR: [
+        'HR_EMPLOYEES', 'HR_ATTENDANCE', 'HR_PAYROLL', 'HR_MASTERS'
+    ]
+};
+
 exports.listUsers = async (req, res) => {
     const outlet_id = req.user.outlet_id;
     const users = await req.propertyDb.models.users.findAll({
@@ -35,9 +63,14 @@ exports.createUser = async (req, res) => {
         is_active: true
     });
 
-    if (permissions?.length) {
+    let permsToAssign = permissions;
+    if (!permsToAssign || permsToAssign.length === 0) {
+        permsToAssign = ROLE_PERMISSIONS[role] || [];
+    }
+
+    if (permsToAssign?.length) {
         await req.propertyDb.models.user_permissions.bulkCreate(
-            permissions.map(p => ({
+            permsToAssign.map(p => ({
                 user_id: user.id,
                 perm_key: p
             }))
@@ -92,8 +125,24 @@ exports.updateUser = async (req, res) => {
     }
 
     const oldData = user.toJSON();
+    const roleChanged = role && role !== oldData.role;
 
     await user.update({ full_name, mobile, role, contact_email });
+
+    if (roleChanged) {
+        // Destroy existing permissions for this user
+        await req.propertyDb.models.user_permissions.destroy({
+            where: { user_id: user.id }
+        });
+
+        // Add new permissions corresponding to the new role
+        const defaultPerms = ROLE_PERMISSIONS[role] || [];
+        if (defaultPerms.length > 0) {
+            await req.propertyDb.models.user_permissions.bulkCreate(
+                defaultPerms.map(p => ({ user_id: user.id, perm_key: p }))
+            );
+        }
+    }
 
     await audit.log({
         req,
