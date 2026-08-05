@@ -420,6 +420,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
   int? _designationId;
   int? _shiftId;
   bool _requiresAttendance = true;
+  bool _payIfUnmarked = false;
   int? _approver1Id;
   int? _approver2Id;
   int? _userId;
@@ -469,6 +470,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
       _designationId = emp['designation_id'] as int?;
       _shiftId = emp['shift_id'] as int?;
       _requiresAttendance = emp['requires_attendance'] == true;
+      _payIfUnmarked = emp['pay_if_unmarked'] == true;
       _approver1Id = emp['level1_approver_id'] as int?;
       _approver2Id = emp['level2_approver_id'] as int?;
       _userId = emp['user_id'] as int?;
@@ -759,6 +761,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
         'designation_id'     : _designationId,
         'shift_id'           : _shiftId,
         'requires_attendance': _requiresAttendance,
+        'pay_if_unmarked': _payIfUnmarked,
         'level1_approver_id' : _approver1Id,
         'level2_approver_id' : _approver2Id,
         'user_id'            : _userId,
@@ -1215,6 +1218,42 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
                 value: _requiresAttendance,
                 activeColor: const Color(0xFFE03E2D),
                 onChanged: (v) => setState(() => _requiresAttendance = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.amber.shade200),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Pay Full if Attendance Unmarked',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(
+                      _payIfUnmarked
+                          ? 'Days with no punch will be counted as Present (special policy)'
+                          : 'Days with no punch counted as Absent — pay only for marked days',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Switch(
+                value: _payIfUnmarked,
+                activeColor: Colors.amber.shade700,
+                onChanged: (v) => setState(() => _payIfUnmarked = v),
               ),
             ],
           ),
@@ -2098,6 +2137,8 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
           _infoRow('Status', emp['status']),
           _infoRow('Requires Attendance',
               emp['requires_attendance'] == true ? 'Yes' : 'No'),
+          _infoRow('Pay if Attendance Unmarked',
+              emp['pay_if_unmarked'] == true ? 'Yes (Full Pay)' : 'No (Paid Days Only)'),
         ]),
         _infoCard('LEAVE APPROVERS', [
           _infoRow('Level 1 Approver',

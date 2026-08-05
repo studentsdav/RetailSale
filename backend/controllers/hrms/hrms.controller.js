@@ -1154,19 +1154,27 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
               total_less_hours += (workingHoursPerDay - hw);
             }
           } else {
-            const isFutureDay = d.isAfter(moment());
-            if (isFutureDay) {
+            // No punch record for this working day
+            if (emp.pay_if_unmarked) {
+              // Special policy: employee receives pay even without daily attendance records
+              // (e.g. management, off-site, or contractual staff)
               present++;
             } else {
-              if (emp.requires_attendance) {
-                absent++;
-              } else {
-                present++;
-              }
+              // Default enterprise policy: no punch = absent = no pay for that day
+              // This applies to both past AND future unpunched days.
+              // Running payroll mid-month or in advance pays only for verified attendance.
+              absent++;
             }
           }
         }
       }
+      
+      // ── Payroll Calculation ─────────────────────────────────────────────────────
+      // Enterprise standard: Full monthly salary minus deductions for absent days.
+      // Divisor = total working days in active period (excludes weekly offs & holidays).
+      // Per-day rate = base_salary / divisor.
+      // Paid days = present + (0.5 × half_day) + on_leave (approved paid leave).
+      // Absent deduction = absent_days × per_day_rate (no pay for missed working days).
       
       const absentDays = absent + (0.5 * half_day);
       const divisor = (calculationMethod === 'Fixed Days') 
@@ -1177,14 +1185,16 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
       const prorated_salary_days = Math.min(divisor, salary_days);
 
       const base = parseFloat(emp.base_salary) || 0;
-      let prorated_salary = parseFloat(((base / divisor) * prorated_salary_days).toFixed(2));
+      // Per-day salary rate
+      const perDayRate = base / divisor;
+      // Salary = (paid_days / divisor) × monthly_base
+      let prorated_salary = parseFloat((perDayRate * prorated_salary_days).toFixed(2));
 
-      // Overrides if employee requires attendance, but did not work any hours and has no paid leaves
-      const salaryOverrideZero = emp.requires_attendance && total_working_hours === 0 && on_leave === 0;
+      // If employee has zero verified attendance and no approved leaves → zero salary
+      // Used as a flag to skip commissions/bonuses for completely absent employees
+      const salaryOverrideZero = prorated_salary_days === 0;
       if (salaryOverrideZero) {
-        present = 0;
-        half_day = 0;
-        absent = activeDaysInPeriod - weekly_offs_count - holidays_count;
+        absent = divisor; // all working days marked absent for display
         prorated_salary = 0;
       }
       
@@ -1594,14 +1604,32 @@ exports.getPayrollDashboardStats = async (req, res) => {
   try {
     const { hr_payroll_runs, hr_payroll_details } = req.propertyDb.models;
     
-    // Find the latest approved run
-    const latestRun = await hr_payroll_runs.findOne({
-      where: { outlet_id: req.user.outlet_id, status: 'Approved' },
-      order: [['pay_period', 'DESC']]
-    });
+    const requestedPeriod = req.query.pay_period || null;
+    
+    let targetRun = null;
+    if (requestedPeriod) {
+      // Strict lookup: only show data that belongs to the requested period
+      // Prefer Approved, then Draft — never fall back to a different month
+      targetRun = await hr_payroll_runs.findOne({
+        where: { outlet_id: req.user.outlet_id, pay_period: requestedPeriod, status: 'Approved' }
+      });
+      if (!targetRun) {
+        targetRun = await hr_payroll_runs.findOne({
+          where: { outlet_id: req.user.outlet_id, pay_period: requestedPeriod, status: 'Draft' },
+          order: [['created_at', 'DESC']]
+        });
+      }
+    } else {
+      // No period specified — fall back to latest approved run for general dashboard view
+      targetRun = await hr_payroll_runs.findOne({
+        where: { outlet_id: req.user.outlet_id, status: 'Approved' },
+        order: [['pay_period', 'DESC']]
+      });
+    }
 
     let kpis = {
-      pay_period: 'None',
+      pay_period: requestedPeriod || 'None',
+      has_data: false,  // Frontend checks this — if false, hide the analytics summary section
       total_leave_deduction: 0,
       total_absent_deduction: 0,
       total_late_deduction: 0,
@@ -1612,13 +1640,14 @@ exports.getPayrollDashboardStats = async (req, res) => {
       increment_from_prev_month: 0
     };
 
-    if (latestRun) {
-      kpis.pay_period = latestRun.pay_period;
-      kpis.total_net_paid = parseFloat(latestRun.total_net) || 0;
-      kpis.total_deductions = parseFloat(latestRun.total_deductions) || 0;
+    if (targetRun) {
+      kpis.has_data = true;
+      kpis.pay_period = targetRun.pay_period;
+      kpis.total_net_paid = parseFloat(targetRun.total_net) || 0;
+      kpis.total_deductions = parseFloat(targetRun.total_deductions) || 0;
 
       const details = await hr_payroll_details.findAll({
-        where: { payroll_run_id: latestRun.id }
+        where: { payroll_run_id: targetRun.id }
       });
 
       for (const d of details) {
@@ -1639,17 +1668,18 @@ exports.getPayrollDashboardStats = async (req, res) => {
       kpis.total_overtime_paid = parseFloat(kpis.total_overtime_paid.toFixed(2));
       kpis.total_bonuses_paid = parseFloat(kpis.total_bonuses_paid.toFixed(2));
 
-      // Fetch the run before this one
-      const momentPrev = moment(latestRun.pay_period, 'YYYY-MM').subtract(1, 'month').format('YYYY-MM');
+      // Compare with same period last month (approved runs only for increment comparison)
+      const momentPrev = moment(targetRun.pay_period, 'YYYY-MM').subtract(1, 'month').format('YYYY-MM');
       const prevRun = await hr_payroll_runs.findOne({
         where: { pay_period: momentPrev, status: 'Approved', outlet_id: req.user.outlet_id }
       });
       if (prevRun) {
-        const extraPaid = (parseFloat(latestRun.total_net) || 0) - (parseFloat(prevRun.total_net) || 0);
+        const extraPaid = (parseFloat(targetRun.total_net) || 0) - (parseFloat(prevRun.total_net) || 0);
         kpis.increment_from_prev_month = parseFloat(extraPaid.toFixed(2));
       }
     }
 
+    // Chart data: always show last 6 approved runs for historical context
     const runs = await hr_payroll_runs.findAll({
       where: { outlet_id: req.user.outlet_id, status: 'Approved' },
       order: [['pay_period', 'DESC']],

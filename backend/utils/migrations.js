@@ -3479,6 +3479,17 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 89,
+    description: "HRMS: Add pay_if_unmarked column to hr_employees",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS pay_if_unmarked BOOLEAN NOT NULL DEFAULT FALSE;
+        COMMIT;
+      `);
+    }
   }
 ];
 

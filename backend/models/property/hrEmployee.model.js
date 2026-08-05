@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
         hire_date: { type: DataTypes.DATEONLY, allowNull: false },
         base_salary: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0.00 },
         requires_attendance: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+        pay_if_unmarked: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
         status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'Active' },
         kyc_documents: { type: DataTypes.JSONB, allowNull: true },
         pay_structure_id: { type: DataTypes.INTEGER, allowNull: true },

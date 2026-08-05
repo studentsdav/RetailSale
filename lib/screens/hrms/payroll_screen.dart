@@ -314,7 +314,8 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     try {
       if (_tabController.index == 0) {
         await _checkPayrollStatus();
-        final stats = await ApiClient.get('/api/hrms/payroll/dashboard-stats');
+        final period = DateFormat('yyyy-MM').format(_currentMonth);
+        final stats = await ApiClient.get('/api/hrms/payroll/dashboard-stats?pay_period=$period');
         if (stats['success'] == true) {
           setState(() {
             _chartData = List<Map<String, dynamic>>.from(stats['data'] ?? []);
@@ -386,14 +387,14 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
     });
-    _checkPayrollStatus();
+    _loadTabContent();
   }
 
   void _nextMonth() {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
     });
-    _checkPayrollStatus();
+    _loadTabContent();
   }
 
   Future<void> _printPayrollSummaryReport() async {
@@ -2583,7 +2584,12 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
   }
 
   Widget _buildDashboardKpisGrid() {
-    if (_dashboardKpis.isEmpty || _dashboardKpis['pay_period'] == 'None' || _dashboardKpis['pay_period'] == null) {
+    final selectedPeriod = DateFormat('yyyy-MM').format(_currentMonth);
+    if (_dashboardKpis.isEmpty || 
+        _dashboardKpis['pay_period'] == 'None' || 
+        _dashboardKpis['pay_period'] == null ||
+        _dashboardKpis['has_data'] == false ||
+        _dashboardKpis['pay_period'] != selectedPeriod) {
       return const SizedBox.shrink();
     }
     
