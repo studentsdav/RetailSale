@@ -85,6 +85,9 @@ class AppBrandingController extends ChangeNotifier {
           ? 'Powered by $companyName'
           : value.poweredByLabel.trim(),
       themeKey: value.themeKey.trim().isEmpty ? defaults.themeKey : value.themeKey.trim(),
+      homeBgImagePath: value.homeBgImagePath,
+      homeBgImageSize: value.homeBgImageSize,
+      homeThemeStyle: value.homeThemeStyle,
     );
   }
 }

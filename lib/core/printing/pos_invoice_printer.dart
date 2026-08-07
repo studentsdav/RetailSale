@@ -376,28 +376,60 @@ class PosInvoicePrinter {
           _dashedDivider(),
           _thermalAmountRow('Total Items', totalItems.toDouble()),
           _thermalAmountRow('Total Qty', order.totalQty),
-          _thermalAmountRow('Subtotal', order.subTotal),
-          if (order.refundAmount > 0) ...[
-            _dashedDivider(),
-            _thermalAmountRow('Refunded Amt', order.refundAmount),
-            _thermalAmountRow('Net Payable', order.netAmount - order.refundAmount),
-          ],
-          if (savingsAmount > 0.0009)
-            _thermalAmountRow(_savingLabel(order), savingsAmount),
-          if (order.loyaltyPointsRedeemed > 0 &&
-              order.loyaltyDiscountAmount > 0)
-            pw.Text(
-              'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
-              style: emphasisStyle,
+          if (order.items.any((item) => item.isTaxInclusive)) ...[
+            _thermalAmountRow(
+              'Subtotal (Incl. GST)',
+              order.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))),
             ),
-          if (hasTaxData) _dashedDivider(),
-          if (hasTaxData) _thermalAmountRow('Taxable Amt', _adjustedItemTaxableTotal(order)),
-          if (hasTaxData && cgstTotal > 0)
-            _thermalAmountRow('CGST', cgstTotal),
-          if (hasTaxData && sgstTotal > 0)
-            _thermalAmountRow('SGST', sgstTotal),
-          if (hasTaxData && igstTotal > 0)
-            _thermalAmountRow('IGST', igstTotal),
+            if (savingsAmount > 0.0009)
+              _thermalAmountRow(_savingLabel(order), savingsAmount),
+            _thermalAmountRow(
+              'Net Amount (Incl. GST)',
+              order.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))) - savingsAmount,
+            ),
+            if (order.refundAmount > 0) ...[
+              _dashedDivider(),
+              _thermalAmountRow('Refunded Amt', order.refundAmount),
+              _thermalAmountRow('Net Payable', order.netAmount - order.refundAmount),
+            ],
+            if (order.loyaltyPointsRedeemed > 0 &&
+                order.loyaltyDiscountAmount > 0)
+              pw.Text(
+                'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
+                style: emphasisStyle,
+              ),
+            if (hasTaxData) _dashedDivider(),
+            if (hasTaxData) _thermalAmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
+            if (hasTaxData && cgstTotal > 0)
+              _thermalAmountRow('CGST', cgstTotal),
+            if (hasTaxData && sgstTotal > 0)
+              _thermalAmountRow('SGST', sgstTotal),
+            if (hasTaxData && igstTotal > 0)
+              _thermalAmountRow('IGST', igstTotal),
+          ] else ...[
+            _thermalAmountRow('Subtotal', order.subTotal),
+            if (order.refundAmount > 0) ...[
+              _dashedDivider(),
+              _thermalAmountRow('Refunded Amt', order.refundAmount),
+              _thermalAmountRow('Net Payable', order.netAmount - order.refundAmount),
+            ],
+            if (savingsAmount > 0.0009)
+              _thermalAmountRow(_savingLabel(order), savingsAmount),
+            if (order.loyaltyPointsRedeemed > 0 &&
+                order.loyaltyDiscountAmount > 0)
+              pw.Text(
+                'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
+                style: emphasisStyle,
+              ),
+            if (hasTaxData) _dashedDivider(),
+            if (hasTaxData) _thermalAmountRow('Taxable Amt', _adjustedItemTaxableTotal(order)),
+            if (hasTaxData && cgstTotal > 0)
+              _thermalAmountRow('CGST', cgstTotal),
+            if (hasTaxData && sgstTotal > 0)
+              _thermalAmountRow('SGST', sgstTotal),
+            if (hasTaxData && igstTotal > 0)
+              _thermalAmountRow('IGST', igstTotal),
+          ],
           ...order.charges.where((charge) => charge.amount > 0).map(
                 (charge) => _thermalAmountRow(
                   charge.name,
@@ -1038,11 +1070,11 @@ class PosInvoicePrinter {
           item.hsnSacCode.isEmpty ? item.itemCode : item.hsnSacCode,
           _qty(item.qty),
           item.unit,
-          _money(_displayRate(item)),
+          item.isTaxInclusive ? '${_money(_displayRate(item))} (Incl.)' : _money(_displayRate(item)),
           _money(item.lineDiscount),
           _money(_taxableAmountForItem(item)),
-          item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'CGST')} / ${_money(_taxAmount(order, item, 'CGST'))}',
-          item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'SGST')} / ${_money(_taxAmount(order, item, 'SGST'))}',
+          item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'CGST')} / ${_money(_taxAmount(order, item, 'CGST'))}${item.isTaxInclusive ? ' (Incl.)' : ''}',
+          item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'SGST')} / ${_money(_taxAmount(order, item, 'SGST'))}${item.isTaxInclusive ? ' (Incl.)' : ''}',
           _money(item.lineTotal),
         ];
       }
@@ -1052,7 +1084,7 @@ class PosInvoicePrinter {
         item.hsnSacCode.isEmpty ? item.itemCode : item.hsnSacCode,
         _qty(item.qty),
         item.unit,
-        _money(_displayRate(item)),
+        item.isTaxInclusive ? '${_money(_displayRate(item))} (Incl.)' : _money(_displayRate(item)),
         _money(item.lineDiscount),
         _money(item.lineTotal),
       ];
@@ -1105,6 +1137,7 @@ class PosInvoicePrinter {
       summaryTaxTotal: summaryTaxTotal,
       subscriptionAdjustment: subscriptionAdjustment,
     );
+    final bool anyInclusive = order.items.any((item) => item.isTaxInclusive);
     return pw.Container(
       width: double.infinity,
       padding: const pw.EdgeInsets.all(10),
@@ -1113,24 +1146,53 @@ class PosInvoicePrinter {
       ),
       child: pw.Column(
         children: [
-          if (savingsAmount > 0.0009)
-            _a4AmountRow(savingsLabel, savingsAmount),
-          if (order.loyaltyPointsRedeemed > 0 &&
-              order.loyaltyDiscountAmount > 0)
-            pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(vertical: 2),
-              child: pw.Text(
-                'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
-                style: pw.TextStyle(
-                  fontSize: 9,
-                  fontWeight: pw.FontWeight.bold,
+          if (anyInclusive) ...[
+            _a4AmountRow(
+              'Subtotal (Incl. GST)',
+              order.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))),
+            ),
+            if (savingsAmount > 0.0009)
+              _a4AmountRow(savingsLabel, savingsAmount),
+            _a4AmountRow(
+              'Net Amount (Incl. GST)',
+              order.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))) - savingsAmount,
+            ),
+            if (order.loyaltyPointsRedeemed > 0 &&
+                order.loyaltyDiscountAmount > 0)
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                child: pw.Text(
+                  'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-          if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
-          if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
-          if (hasTaxData) _a4AmountRow('Total SGST Amount', sgstTotal),
-          if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
+            if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
+            if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
+            if (hasTaxData) _a4AmountRow('Total SGST Amount', sgstTotal),
+            if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
+          ] else ...[
+            if (savingsAmount > 0.0009)
+              _a4AmountRow(savingsLabel, savingsAmount),
+            if (order.loyaltyPointsRedeemed > 0 &&
+                order.loyaltyDiscountAmount > 0)
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                child: pw.Text(
+                  'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+            if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
+            if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
+            if (hasTaxData) _a4AmountRow('Total SGST Amount', sgstTotal),
+            if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
+          ],
           if (roundOff.abs() > 0.0009)
             _a4AmountRow(
               'Round Off',
@@ -1401,11 +1463,14 @@ class PosInvoicePrinter {
 
     // 1. Group Qty, Unit, and Rate together beautifully
     final qtyUnitRate =
-        '${_qty(item.qty)} ${item.unit.trim()} x ${_money(_displayRate(item))}';
+        '${_qty(item.qty)} ${item.unit.trim()} x ${_money(_displayRate(item))}${item.isTaxInclusive ? ' (Incl.)' : ''}';
 
     double itemDiscount = item.lineDiscount;
     if (itemDiscount <= 0 && !item.isSchemeFree && !item.isAdvanceFree) {
-      final diff = (item.qty * item.rate) - item.taxableAmount;
+      final double grossExclusive = item.isTaxInclusive
+          ? (item.qty * item.rate) / (1 + item.taxPercent / 100)
+          : (item.qty * item.rate);
+      final diff = grossExclusive - item.taxableAmount;
       if (diff > 0.01) {
         itemDiscount = diff;
       }
@@ -1418,7 +1483,7 @@ class PosInvoicePrinter {
       if (item.isSchemeFree || item.isAdvanceFree) 'FREE',
       if (item.taxPercent > 0)
         // Show plain "GST 18% = Rs. X.XX" so customer clearly sees rate + amount
-        'GST ${_formatTaxPercent(item.taxPercent)}%'
+        'GST ${_formatTaxPercent(item.taxPercent)}%${item.isTaxInclusive ? ' (Incl.)' : ''}'
             '${item.taxAmount > 0 ? ' = ${_money(item.taxAmount)}' : ''}'
       else
         'GST NILL',
@@ -1758,7 +1823,7 @@ class PosInvoicePrinter {
     }
     final lineDiscount = order.items.fold<double>(
       0,
-      (sum, item) => sum + item.lineDiscount,
+      (sum, item) => sum + (item.isTaxInclusive ? item.lineDiscount : (item.lineDiscount * (1 + item.taxPercent / 100))),
     );
     if (lineDiscount > 0.0009) {
       return lineDiscount;

@@ -478,7 +478,7 @@ exports.placeOrder = async (req, res) => {
                 txn_date: new Date(),
                 transaction_type: 'SALE_CASH',
                 reference_type: 'DELIVERY_ORDER',
-                reference_id: order.id,
+                reference_id: String(order.id),
                 reference_no: `ORD-${order.id}`,
                 party_name: customer_name,
                 payment_method: finalPaymentMode,
@@ -953,7 +953,21 @@ exports.acceptOrder = async (req, res) => {
             });
 
         const finalItems = subscriptionAllocation.items;
-        const derivedSubTotal = finalItems.reduce((sum, item) => sum + (toAmount(item.qty) * toAmount(item.reference_rate || item.rate)), 0);
+
+        // Fetch item master entries to resolve is_tax_inclusive
+        const itemIds = finalItems.map(item => item.item_id).filter(Boolean);
+        const itemMasters = await req.propertyDb.models.item_master.findAll({
+            where: { id: itemIds },
+            transaction: t
+        });
+        const itemMasterMap = new Map(itemMasters.map(im => [im.id, im]));
+
+        const isInclusive = (item_id) => {
+            const im = itemMasterMap.get(item_id);
+            return im ? !!im.is_tax_inclusive : false;
+        };
+
+        const anyInclusive = finalItems.some(item => isInclusive(item.item_id));
 
         // 3. Local tax calculation helpers
         const taxSummary = new Map();
@@ -1014,15 +1028,45 @@ exports.acceptOrder = async (req, res) => {
             ];
         };
 
+        // Calculate non-subscription subtotal for coupon discount distribution
+        let nonSubscriptionSubTotal = 0.0;
+        let nonSubscriptionSubTotalInclusive = 0.0;
+        for (const item of finalItems) {
+            const isFree = item._subscription_free === true || item.is_advance_free === true;
+            if (!isFree) {
+                const itemQty = toAmount(item.qty);
+                const itemRate = toAmount(item.reference_rate || item.rate);
+                const amount = itemQty * itemRate;
+                const taxPercent = parseFloat(item.tax_percent || 0.0);
+                
+                if (anyInclusive) {
+                    if (isInclusive(item.item_id)) {
+                        nonSubscriptionSubTotal += amount / (1 + taxPercent / 100);
+                        nonSubscriptionSubTotalInclusive += amount;
+                    } else {
+                        nonSubscriptionSubTotal += amount;
+                        nonSubscriptionSubTotalInclusive += amount * (1 + taxPercent / 100);
+                    }
+                } else {
+                    nonSubscriptionSubTotal += amount;
+                    nonSubscriptionSubTotalInclusive += amount;
+                }
+            }
+        }
+
         const gatewayDetails = parseJsonObject(order.payment_gateway_details);
         const couponCharge = (order.charges || []).find(c => c.code === 'COUPON_DISCOUNT');
         const couponDiscountAmountFromCharges = couponCharge ? Math.abs(toAmount(couponCharge.amount)) : 0;
-        const resolvedCouponDiscountAmount = Math.max(
+        let resolvedCouponDiscountAmount = Math.max(
             toAmount(order.coupon_discount_amount || 0),
             toAmount(gatewayDetails.coupon_discount_amount || 0),
             couponDiscountAmountFromCharges,
             0
         );
+
+        if (anyInclusive && nonSubscriptionSubTotal > 0) {
+            resolvedCouponDiscountAmount = toAmount(resolvedCouponDiscountAmount * (nonSubscriptionSubTotalInclusive / nonSubscriptionSubTotal));
+        }
 
         // Process charges
         let chargeTaxTotal = 0.0;
@@ -1043,41 +1087,71 @@ exports.acceptOrder = async (req, res) => {
             }
         }
 
-        // Calculate non-subscription subtotal for coupon discount distribution
-        let nonSubscriptionSubTotal = 0.0;
+        // Apportion coupon discount
         for (const item of finalItems) {
             const isFree = item._subscription_free === true || item.is_advance_free === true;
-            if (!isFree) {
-                const itemQty = toAmount(item.qty);
-                const itemRate = toAmount(item.reference_rate || item.rate);
-                nonSubscriptionSubTotal += itemQty * itemRate;
+            if (isFree) {
+                item.line_discount = 0.0;
+                continue;
             }
+            const itemQty = toAmount(item.qty);
+            const itemRate = toAmount(item.reference_rate || item.rate);
+            const amount = itemQty * itemRate;
+            const taxPercent = parseFloat(item.tax_percent || 0.0);
+            
+            const grossInclusive = isInclusive(item.item_id)
+                ? amount
+                : amount * (1 + taxPercent / 100);
+                
+            let itemDiscountInclusive = 0.0;
+            if (resolvedCouponDiscountAmount > 0 && nonSubscriptionSubTotalInclusive > 0) {
+                itemDiscountInclusive = (grossInclusive / nonSubscriptionSubTotalInclusive) * resolvedCouponDiscountAmount;
+            }
+            
+            const lineDiscount = isInclusive(item.item_id)
+                ? itemDiscountInclusive
+                : itemDiscountInclusive / (1 + taxPercent / 100);
+                
+            item.line_discount = lineDiscount;
         }
-
-        const discountRatio = (resolvedCouponDiscountAmount > 0 && nonSubscriptionSubTotal > 0)
-            ? Math.max(0, (nonSubscriptionSubTotal - resolvedCouponDiscountAmount) / nonSubscriptionSubTotal)
-            : 1.0;
 
         // Process items tax breakup
         let itemsTaxTotal = 0.0;
+        let derivedSubTotal = 0.0;
+        let derivedDiscount = 0.0;
+
         for (const item of finalItems) {
             const itemQty = toAmount(item.qty);
             const itemRate = toAmount(item.reference_rate || item.rate);
-            const itemAmount = itemQty * itemRate;
-            const itemTaxPercent = parseFloat(item.tax_percent || 0.0);
-
-            const isFree = item._subscription_free === true || item.is_advance_free === true;
+            const amount = itemQty * itemRate;
+            const taxPercent = parseFloat(item.tax_percent || 0.0);
+            
+            const lineDiscount = item.line_discount || 0.0;
+            
             let itemTaxableAmount;
-            if (isFree) {
-                itemTaxableAmount = itemAmount;
+            let itemTaxAmount;
+            
+            if (isInclusive(item.item_id)) {
+                const netInclusive = Math.max(0, amount - lineDiscount);
+                itemTaxableAmount = toAmount(netInclusive / (1 + taxPercent / 100));
+                itemTaxAmount = toAmount(netInclusive - itemTaxableAmount);
+                
+                derivedSubTotal += toAmount(amount / (1 + taxPercent / 100));
+                derivedDiscount += toAmount(lineDiscount / (1 + taxPercent / 100));
             } else {
-                itemTaxableAmount = toAmount(itemAmount * discountRatio);
+                itemTaxableAmount = Math.max(0, amount - lineDiscount);
+                itemTaxAmount = toAmount(itemTaxableAmount * taxPercent / 100);
+                
+                derivedSubTotal += amount;
+                derivedDiscount += lineDiscount;
             }
-            const itemTaxAmount = toAmount(itemTaxableAmount * itemTaxPercent / 100);
-
+            
             itemsTaxTotal += itemTaxAmount;
+            
+            item.taxable_amount = itemTaxableAmount;
+            item.tax_amount = itemTaxAmount;
 
-            const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemTaxableAmount);
+            const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', taxPercent, itemTaxableAmount);
             addTaxBreakup(itemBreakup);
         }
 
@@ -1108,13 +1182,23 @@ exports.acceptOrder = async (req, res) => {
             if (item._subscription_free === true || item.is_advance_free === true) {
                 const itemQty = toAmount(item.qty);
                 const itemRate = toAmount(item.reference_rate || item.rate);
-                const itemAmount = itemQty * itemRate;
-                const itemTaxPercent = parseFloat(item.tax_percent ?? 0.0);
-                const itemTaxAmount = itemAmount * itemTaxPercent / 100;
+                const amount = itemQty * itemRate;
+                const taxPercent = parseFloat(item.tax_percent ?? 0.0);
+                let itemTaxAmount;
+                let itemTaxable;
+                
+                if (isInclusive(item.item_id)) {
+                    itemTaxable = toAmount(amount / (1 + taxPercent / 100));
+                    itemTaxAmount = toAmount(amount - itemTaxable);
+                } else {
+                    itemTaxable = amount;
+                    itemTaxAmount = toAmount(amount * taxPercent / 100);
+                }
+                
                 subscriptionTaxAmount += itemTaxAmount;
-                subscriptionTaxableAmount += itemAmount;
+                subscriptionTaxableAmount += itemTaxable;
 
-                const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemAmount);
+                const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', taxPercent, itemTaxable);
                 for (const tax of itemBreakup) {
                     if (tax.code === 'CGST') subscriptionTaxCgst += tax.taxAmount;
                     else if (tax.code === 'SGST') subscriptionTaxSgst += tax.taxAmount;
@@ -1154,7 +1238,7 @@ exports.acceptOrder = async (req, res) => {
         // 2. Prepare POS Sale parameters
         const isPrepaid = order.payment_status === 'PAID';
         const isCredit = order.payment_mode === 'CREDIT';
-        const finalPayableNetAmount = Math.max(0, derivedNetAmount - subscriptionAllocation.totalCoveredAmount - resolvedCouponDiscountAmount);
+        const finalPayableNetAmount = toAmount(order.net_amount);
         const amountPaid = isPrepaid ? finalPayableNetAmount : 0;
         const balanceDue = isPrepaid ? 0 : finalPayableNetAmount;
         const paymentMode = isPrepaid ? 'UPI' : (isCredit ? 'CREDIT' : 'CASH');
@@ -1201,6 +1285,7 @@ exports.acceptOrder = async (req, res) => {
             charge_total: toAmount(chargeSubtotal),
             charge_tax_total: toAmount(chargeTaxTotal),
             total_discount: subscriptionAllocation.totalCoveredAmount - subscriptionTaxAmount + resolvedCouponDiscountAmount,
+            coupon_discount_amount: resolvedCouponDiscountAmount,
             round_off_amount: 0,
             net_amount: finalPayableNetAmount,
             status: 'COMPLETED',
@@ -1219,14 +1304,10 @@ exports.acceptOrder = async (req, res) => {
             const itemTaxPercent = parseFloat(item.tax_percent || 0.0);
 
             const isFree = item._subscription_free === true || item.is_advance_free === true;
-            let itemTaxableAmount;
-            if (isFree) {
-                itemTaxableAmount = itemAmount;
-            } else {
-                itemTaxableAmount = toAmount(itemAmount * discountRatio);
-            }
-            const itemTaxAmount = toAmount(itemTaxableAmount * itemTaxPercent / 100);
-            const itemLineTotal = itemTaxableAmount + itemTaxAmount;
+            const itemTaxableAmount = item.taxable_amount;
+            const itemTaxAmount = item.tax_amount;
+            const lineDiscount = item.line_discount || 0.0;
+            const itemLineTotal = toAmount(itemTaxableAmount + itemTaxAmount);
             const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemTaxableAmount);
 
             // Fetch unit from item master if it is not sent in the order items payload
@@ -1244,7 +1325,7 @@ exports.acceptOrder = async (req, res) => {
                 unit: resolvedUnit || '',
                 qty: itemQty,
                 rate: itemRate,
-                line_discount: 0,
+                line_discount: lineDiscount,
                 amount: itemAmount,
                 taxable_amount: itemTaxableAmount,
                 tax_type: 'GST',
@@ -1258,50 +1339,58 @@ exports.acceptOrder = async (req, res) => {
             }, { transaction: t });
 
 
-            // Deduct the parent item stock
-            await insertLedger({
-                db: req.propertyDb,
-                outlet_id,
-                item_code: item.item_code,
-                txn_date: new Date(),
-                txn_type: 'SALE',
-                ref_no: saleNo,
-                qty_out: toAmount(item.qty),
-                transaction: t,
-                allow_negative: !!for_edit
-            });
+            const dbItem = itemMasterMap.get(item.item_id);
+            const isRecipeBased = dbItem?.is_recipe_based ?? false;
+            const isStockable = dbItem?.stockable ?? true;
+
+            // Deduct the parent item stock if NOT recipe-based and IS stockable
+            if (!isRecipeBased && isStockable) {
+                await insertLedger({
+                    db: req.propertyDb,
+                    outlet_id,
+                    item_code: item.item_code,
+                    txn_date: new Date(),
+                    txn_type: 'SALE',
+                    ref_no: saleNo,
+                    qty_out: toAmount(item.qty),
+                    transaction: t,
+                    allow_negative: !!for_edit
+                });
+            }
 
             // If it is a composite item, also deduct components
-            const bomComponents = await req.propertyDb.models.item_boms.findAll({
-                where: { outlet_id, parent_item_id: item.item_id },
-                include: [
-                    {
-                        model: req.propertyDb.models.item_master,
-                        as: 'component_item',
-                        where: { is_active: true }
+            if (isRecipeBased) {
+                const bomComponents = await req.propertyDb.models.item_boms.findAll({
+                    where: { outlet_id, parent_item_id: item.item_id },
+                    include: [
+                        {
+                            model: req.propertyDb.models.item_master,
+                            as: 'component_item',
+                            where: { is_active: true }
+                        }
+                    ],
+                    transaction: t
+                });
+
+                if (bomComponents && bomComponents.length > 0) {
+                    for (const bomComp of bomComponents) {
+                        const compItem = bomComp.component_item;
+                        if (!compItem) continue;
+                        const qtyRequiredPerUnit = Number(bomComp.quantity);
+                        const totalQtyNeeded = qtyRequiredPerUnit * toAmount(item.qty);
+
+                        await insertLedger({
+                            db: req.propertyDb,
+                            outlet_id,
+                            item_code: compItem.item_code,
+                            txn_date: new Date(),
+                            txn_type: 'SALE',
+                            ref_no: saleNo,
+                            qty_out: totalQtyNeeded,
+                            transaction: t,
+                            allow_negative: !!for_edit
+                        });
                     }
-                ],
-                transaction: t
-            });
-
-            if (bomComponents && bomComponents.length > 0) {
-                for (const bomComp of bomComponents) {
-                    const compItem = bomComp.component_item;
-                    if (!compItem) continue;
-                    const qtyRequiredPerUnit = Number(bomComp.quantity);
-                    const totalQtyNeeded = qtyRequiredPerUnit * toAmount(item.qty);
-
-                    await insertLedger({
-                        db: req.propertyDb,
-                        outlet_id,
-                        item_code: compItem.item_code,
-                        txn_date: new Date(),
-                        txn_type: 'SALE',
-                        ref_no: saleNo,
-                        qty_out: totalQtyNeeded,
-                        transaction: t,
-                        allow_negative: !!for_edit
-                    });
                 }
             }
         }
@@ -1374,7 +1463,7 @@ exports.acceptOrder = async (req, res) => {
                             txn_date: saleHeader.sale_date || new Date(),
                             transaction_type: 'ADVANCE_APPLY',
                             reference_type: 'SUBSCRIPTION',
-                            reference_id: coverage.subscriptionId,
+                            reference_id: String(coverage.subscriptionId),
                             reference_no: saleHeader.sale_no,
                             party_name: order.customer_name || order.customer_phone || 'Subscription Customer',
                             payment_method: 'SUBSCRIPTION',
@@ -1399,7 +1488,7 @@ exports.acceptOrder = async (req, res) => {
                         txn_date: new Date(),
                         transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
                         reference_type: 'SALE',
-                        reference_id: saleHeader.id,
+                        reference_id: String(saleHeader.id),
                         reference_no: saleHeader.sale_no,
                         party_name: order.customer_name || order.customer_phone || 'Walk-in Customer',
                         payment_method: 'SUBSCRIPTION',
@@ -1478,7 +1567,7 @@ exports.acceptOrder = async (req, res) => {
                 where: {
                     outlet_id,
                     reference_type: 'DELIVERY_ORDER',
-                    reference_id: order.id
+                    reference_id: String(order.id)
                 },
                 transaction: t
             });
@@ -1490,7 +1579,7 @@ exports.acceptOrder = async (req, res) => {
                 txn_date: new Date(),
                 transaction_type: 'SALE_CASH',
                 reference_type: 'SALE',
-                reference_id: saleHeader.id,
+                reference_id: String(saleHeader.id),
                 reference_no: saleHeader.sale_no,
                 party_name: saleHeader.customer_name || saleHeader.customer_phone || 'Walk-in Customer',
                 payment_method: paymentMode,
@@ -1511,7 +1600,7 @@ exports.acceptOrder = async (req, res) => {
                 txn_date: new Date(),
                 transaction_type: 'SALE_DISCOUNT_EXPENSE',
                 reference_type: 'SALE',
-                reference_id: saleHeader.id,
+                reference_id: String(saleHeader.id),
                 reference_no: saleHeader.sale_no,
                 party_name: saleHeader.customer_name || saleHeader.customer_phone || 'Walk-in Customer',
                 payment_method: paymentMode,
@@ -1524,6 +1613,28 @@ exports.acceptOrder = async (req, res) => {
 
         await t.commit();
 
+        const saleDetails = await req.propertyDb.models.sales_headers.findOne({
+            where: { id: saleHeader.id },
+            include: [
+                {
+                    model: req.propertyDb.models.sales_items,
+                    as: 'items',
+                    include: [
+                        {
+                            model: req.propertyDb.models.item_master,
+                            as: 'item',
+                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand', 'is_tax_inclusive']
+                        }
+                    ]
+                },
+                {
+                    model: req.propertyDb.models.customer_repayments,
+                    as: 'repayments',
+                    required: false
+                }
+            ]
+        });
+
         res.json({
             success: true,
             message: 'Order accepted, POS sale created, receipt printed, and delivery rider assigned.',
@@ -1533,7 +1644,8 @@ exports.acceptOrder = async (req, res) => {
                 assigned_rider_id: order.assigned_partner_id,
                 is_assigned: assigned,
                 sale_no: saleNo,
-                sale_id: saleHeader.id
+                sale_id: saleHeader.id,
+                sale: saleDetails
             }
         });
     } catch (error) {
@@ -1631,7 +1743,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                         where: {
                             outlet_id: order.outlet_id,
                             reference_type: 'SALE',
-                            reference_id: { [Op.in]: saleIds }
+                            reference_id: { [Op.in]: saleIds.map(String) }
                         },
                         transaction: t
                     });
@@ -1646,7 +1758,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                         txn_date: new Date(),
                         transaction_type: 'SALE_CREDIT',
                         reference_type: 'SALE',
-                        reference_id: sale.id,
+                        reference_id: String(sale.id),
                         reference_no: sale.sale_no,
                         party_name: sale.customer_name || sale.customer_phone || 'Walk-in Customer',
                         payment_method: 'CREDIT',
@@ -1666,7 +1778,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                         txn_date: new Date(),
                         transaction_type: 'SALE_CASH',
                         reference_type: 'SALE',
-                        reference_id: sale.id,
+                        reference_id: String(sale.id),
                         reference_no: sale.sale_no,
                         party_name: sale.customer_name || sale.customer_phone || 'Walk-in Customer',
                         payment_method: finalPaymentMode,
@@ -1698,7 +1810,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                             txn_date: new Date(),
                             transaction_type: 'SALE_DISCOUNT_EXPENSE',
                             reference_type: 'SALE',
-                            reference_id: sale.id,
+                            reference_id: String(sale.id),
                             reference_no: sale.sale_no,
                             party_name: expParty,
                             payment_method: finalPaymentMode,
@@ -1729,7 +1841,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                             txn_date: new Date(),
                             transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
                             reference_type: 'SALE',
-                            reference_id: sale.id,
+                            reference_id: String(sale.id),
                             reference_no: sale.sale_no,
                             party_name: expParty,
                             payment_method: 'SUBSCRIPTION',
@@ -2310,8 +2422,9 @@ exports.payRiderCommission = async (req, res) => {
             outlet_id,
             txn_date: new Date(),
             transaction_type: 'EXPENSE',
-            reference_type: 'RIDER_COMMISSION',
-            reference_id: rider.id,
+            reference_type: 'RIDER',
+            reference_id: String(rider.id),
+            reference_no: `RIDER-COMM-${rider.id}`,
             party_name: rider.name,
             payment_method: paymentMethod,
             amount_out: totalCommission,
@@ -2468,7 +2581,7 @@ exports.cancelOrder = async (req, res) => {
                         where: {
                             outlet_id,
                             reference_type: 'SALE',
-                            reference_id: { [Op.in]: saleIds }
+                            reference_id: { [Op.in]: saleIds.map(String) }
                         },
                         transaction: t
                     });
@@ -2536,7 +2649,7 @@ exports.cancelOrder = async (req, res) => {
                 txn_date: new Date(),
                 transaction_type: 'REFUND',
                 reference_type: 'DELIVERY_ORDER',
-                reference_id: order.id,
+                reference_id: String(order.id),
                 reference_no: `ORD-${order.id}`,
                 party_name: order.customer_name,
                 payment_method: isGatewayRefunded ? 'GATEWAY' : (order.payment_mode || 'UPI'),
@@ -2638,7 +2751,7 @@ exports.cancelOrderAsCustomer = async (req, res) => {
                         where: {
                             outlet_id,
                             reference_type: 'SALE',
-                            reference_id: { [Op.in]: saleIds }
+                            reference_id: { [Op.in]: saleIds.map(String) }
                         },
                         transaction: t
                     });
@@ -2752,7 +2865,7 @@ exports.cancelOrderAsCustomer = async (req, res) => {
                 txn_date: new Date(),
                 transaction_type: 'REFUND',
                 reference_type: 'DELIVERY_ORDER',
-                reference_id: order.id,
+                reference_id: String(order.id),
                 reference_no: `ORD-${order.id}`,
                 party_name: order.customer_name,
                 payment_method: isGatewayRefunded ? 'GATEWAY' : (order.payment_mode || 'UPI'),
@@ -3613,7 +3726,7 @@ exports.finalReceiveReturn = async (req, res) => {
                             where: {
                                 outlet_id,
                                 reference_type: 'SALE',
-                                reference_id: replSale.id
+                                reference_id: String(replSale.id)
                             },
                             transaction: t
                         });
@@ -3939,7 +4052,7 @@ exports.finalReceiveReturn = async (req, res) => {
                             txn_date: new Date(),
                             transaction_type: 'SALE_REFUND',
                             reference_type: 'SALE_REFUND',
-                            reference_id: refundRecord.id,
+                            reference_id: String(refundRecord.id),
                             reference_no: refundRecord.refund_no,
                             party_name: sale?.customer_name || sale?.customer_phone || 'Walk-in Customer',
                             payment_method: refund_payment_mode,
@@ -4068,7 +4181,7 @@ exports.markRefundPaid = async (req, res) => {
             txn_date: new Date(),
             transaction_type: 'REFUND',
             reference_type: 'DELIVERY_ORDER',
-            reference_id: order.id,
+            reference_id: String(order.id),
             reference_no: `ORD-${order.id}`,
             party_name: order.customer_name,
             payment_method: method,
@@ -4424,7 +4537,7 @@ exports.refundGatewayPayment = async (req, res) => {
             txn_date: new Date(),
             transaction_type: 'REFUND',
             reference_type: 'DELIVERY_ORDER',
-            reference_id: order.id,
+            reference_id: String(order.id),
             reference_no: `ORD-${order.id}`,
             party_name: order.customer_name,
             payment_method: order.payment_mode || 'UPI',
@@ -4614,7 +4727,7 @@ exports.refundGatewayViaCreditNote = async (req, res) => {
             txn_date: new Date(),
             transaction_type: 'SALE_REFUND',
             reference_type: 'SALE_REFUND',
-            reference_id: refund.id,
+            reference_id: String(refund.id),
             reference_no: refund.refund_no,
             party_name: order.customer_name || 'Walk-in Customer',
             payment_method: 'GATEWAY',
@@ -4655,7 +4768,7 @@ exports.getSaleDetailsPublic = async (req, res) => {
                         {
                             model: req.propertyDb.models.item_master,
                             as: 'item',
-                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand']
+                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand', 'is_tax_inclusive']
                         }
                     ]
                 },

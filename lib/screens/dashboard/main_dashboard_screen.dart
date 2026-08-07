@@ -43,6 +43,12 @@ import '../hrms/attendance_screen.dart';
 import '../hrms/payroll_screen.dart';
 import '../hrms/hrms_masters_screen.dart';
 import '../inventory/supplier_master_screen.dart';
+import '../restaurant/captain_dashboard_screen.dart';
+import '../restaurant/floor_plan_configurator.dart';
+import '../restaurant/restaurant_setup_screen.dart';
+import '../restaurant/kds_screen.dart';
+import '../restaurant/delivery_challan_screen.dart';
+import '../restaurant/recurring_expenses_screen.dart';
 import '../inventory/approval_center_screen.dart';
 import '../inventory/submitted_status_screen.dart';
 import 'customer_app_screen.dart';
@@ -2309,6 +2315,50 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HrmsMastersScreen())),
       },
 
+      // Restaurant (Beta)
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.restaurant_menu,
+        'label': 'Captain Console',
+        'permission': 'RESTAURANT_CONSOLE',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CaptainDashboardScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.map_outlined,
+        'label': 'Floor Designer',
+        'permission': 'RESTAURANT_FLOOR_DESIGN',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FloorPlanConfigurator())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.soup_kitchen_outlined,
+        'label': 'Kitchen KDS Queue',
+        'permission': 'RESTAURANT_KDS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const KdsScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.settings_applications_outlined,
+        'label': 'Restaurant Setup',
+        'permission': 'RESTAURANT_SETUP',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RestaurantSetupScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.local_shipping_outlined,
+        'label': 'Delivery Challans',
+        'permission': 'DELIVERY_CHALLANS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeliveryChallanScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.schedule_outlined,
+        'label': 'Recurring Expenses',
+        'permission': 'RECURRING_EXPENSES',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecurringExpensesScreen())),
+      },
+
       // Stock View
       {
         'category': 'Stock View',
@@ -2540,6 +2590,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       'Modify',
       _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
       'HR & Payroll',
+      'Restaurant (Beta)',
       'Stock View',
       'Reports',
       'System',

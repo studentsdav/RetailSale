@@ -151,4 +151,18 @@ class ApiEndpoints {
   static const hrmsPayrollSettings = '/api/hrms/payroll/settings';
   static const hrmsHandover = '/api/hrms/handover';
   static const hrmsHandovers = '/api/hrms/handovers';
+
+  // Restaurant & Core Addon Endpoints
+  static const String restaurantFloors = '/api/restaurant/floors';
+  static const String restaurantDiningAreas = '/api/restaurant/dining-areas';
+  static const String restaurantTableTypes = '/api/restaurant/table-types';
+  static const String restaurantTables = '/api/restaurant/tables';
+  static const String restaurantReservations = '/api/restaurant/reservations';
+  static const String restaurantPrinters = '/api/restaurant/printers';
+  static const String restaurantKitchenStations = '/api/restaurant/kitchen-stations';
+  static const String restaurantKots = '/api/restaurant/kots';
+  static const String restaurantChallans = '/api/restaurant/challans';
+  static const String emailConfigurations = '/api/restaurant/email-configurations';
+  static const String emailTemplates = '/api/restaurant/email-templates';
+  static const String recurringExpenses = '/api/finance/recurring-expenses';
 }

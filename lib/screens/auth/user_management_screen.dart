@@ -89,6 +89,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       Permission1('HR_ATTENDANCE', 'Attendance & Leaves'),
       Permission1('HR_MASTERS', 'HR Masters & Scales'),
     ]),
+    PermissionGroup('Restaurant (Beta)', [
+      Permission1('RESTAURANT_CONSOLE', 'Captain Console'),
+      Permission1('RESTAURANT_FLOOR_DESIGN', 'Floor Designer'),
+      Permission1('RESTAURANT_KDS', 'Kitchen KDS Queue'),
+      Permission1('RESTAURANT_SETUP', 'Restaurant Setup'),
+      Permission1('DELIVERY_CHALLANS', 'Delivery Challans'),
+      Permission1('RECURRING_EXPENSES', 'Recurring Expenses'),
+    ]),
     PermissionGroup('Reports & Analysis', [
       Permission1('STOCK_BALANCE', 'Stock Balance'),
       Permission1('DAMAGE_SUMMARY', 'Damage Summary'),

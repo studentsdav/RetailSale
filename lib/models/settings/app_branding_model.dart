@@ -7,6 +7,9 @@ class AppBrandingModel {
   final String openSourceNotice;
   final String poweredByLabel;
   final String themeKey;
+  final String homeBgImagePath;
+  final String homeBgImageSize;
+  final String homeThemeStyle;
 
   const AppBrandingModel({
     required this.companyName,
@@ -17,6 +20,9 @@ class AppBrandingModel {
     required this.openSourceNotice,
     required this.poweredByLabel,
     required this.themeKey,
+    required this.homeBgImagePath,
+    required this.homeBgImageSize,
+    required this.homeThemeStyle,
   });
 
   factory AppBrandingModel.defaults() {
@@ -30,6 +36,9 @@ class AppBrandingModel {
           'Famalth Technologies branding is applied across the product. Third-party packages remain available under their respective open-source licenses.',
       poweredByLabel: 'Powered by Famalth Technologies',
       themeKey: 'famalth_classic',
+      homeBgImagePath: '',
+      homeBgImageSize: 'Cover',
+      homeThemeStyle: 'Default',
     );
   }
 
@@ -62,6 +71,9 @@ class AppBrandingModel {
         'Powered by ${companyName.isEmpty ? defaults.companyName : companyName}',
       ),
       themeKey: _valueOrDefault(json['theme_key'], defaults.themeKey),
+      homeBgImagePath: _valueOrDefault(json['home_bg_image_path'], defaults.homeBgImagePath),
+      homeBgImageSize: _valueOrDefault(json['home_bg_image_size'], defaults.homeBgImageSize),
+      homeThemeStyle: _valueOrDefault(json['home_theme_style'], defaults.homeThemeStyle),
     );
   }
 
@@ -75,6 +87,9 @@ class AppBrandingModel {
       'open_source_notice': openSourceNotice,
       'powered_by_label': poweredByLabel,
       'theme_key': themeKey,
+      'home_bg_image_path': homeBgImagePath,
+      'home_bg_image_size': homeBgImageSize,
+      'home_theme_style': homeThemeStyle,
     };
   }
 
@@ -87,6 +102,9 @@ class AppBrandingModel {
     String? openSourceNotice,
     String? poweredByLabel,
     String? themeKey,
+    String? homeBgImagePath,
+    String? homeBgImageSize,
+    String? homeThemeStyle,
   }) {
     return AppBrandingModel(
       companyName: companyName ?? this.companyName,
@@ -97,6 +115,9 @@ class AppBrandingModel {
       openSourceNotice: openSourceNotice ?? this.openSourceNotice,
       poweredByLabel: poweredByLabel ?? this.poweredByLabel,
       themeKey: themeKey ?? this.themeKey,
+      homeBgImagePath: homeBgImagePath ?? this.homeBgImagePath,
+      homeBgImageSize: homeBgImageSize ?? this.homeBgImageSize,
+      homeThemeStyle: homeThemeStyle ?? this.homeThemeStyle,
     );
   }
 

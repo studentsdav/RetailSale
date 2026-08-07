@@ -168,12 +168,19 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   double _getItemPrice(Map<String, dynamic> item) {
     final b2bRate = double.tryParse(item['b2b_rate']?.toString() ?? '') ?? 0.0;
-    if (_gstin.isNotEmpty && b2bRate > 0) {
-      return b2bRate;
+    final double rawPrice = (_gstin.isNotEmpty && b2bRate > 0)
+        ? b2bRate
+        : (double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
+            double.tryParse(item['rate']?.toString() ?? '') ??
+            0.0);
+    final bool isInclusive = item['is_tax_inclusive'] == true ||
+        item['is_tax_inclusive'] == 1 ||
+        item['is_tax_inclusive'].toString() == 'true';
+    if (isInclusive) {
+      final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+      return double.parse((rawPrice * (1 + taxPercent / 100)).toStringAsFixed(2));
     }
-    return double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
-        double.tryParse(item['rate']?.toString() ?? '') ??
-        0.0;
+    return rawPrice;
   }
 
   void _scrollListener() {
@@ -1310,6 +1317,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       double subscriptionTaxDiscount = 0.0;
       final List<Map<String, dynamic>> itemsList = [];
 
+      double calculatedSubTotalExclusive = 0.0;
+      double calculatedCouponDiscountExclusive = 0.0;
+      double calculatedSubscriptionDiscountExclusive = 0.0;
+
       _cart.forEach((itemId, value) {
         final item = value['item'];
         final qty = value['qty'];
@@ -1332,15 +1343,40 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         final double discountedPaidItemTotal = paidItemTotal * discountRatio;
         final double discountedItemTotal = discountedPaidItemTotal + freeItemTotal;
 
+        final bool isInclusive = item['is_tax_inclusive'] == true ||
+            item['is_tax_inclusive'] == 1 ||
+            item['is_tax_inclusive'].toString() == 'true';
         final itemTaxPercent =
             double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-        final itemTaxAmount = discountedItemTotal * itemTaxPercent / 100.0;
-        tax += itemTaxAmount;
 
-        if (coveredQty > 0) {
-          subscriptionDiscount += rate * coveredQty;
-          subscriptionTaxDiscount += (rate * coveredQty) * itemTaxPercent / 100.0;
+        double taxableAmount;
+        double itemTaxAmount;
+
+        if (isInclusive) {
+          taxableAmount = discountedItemTotal / (1 + itemTaxPercent / 100);
+          itemTaxAmount = discountedItemTotal - taxableAmount;
+          
+          calculatedSubTotalExclusive += (rate * qty) / (1 + itemTaxPercent / 100);
+          calculatedCouponDiscountExclusive += (paidItemTotal - discountedPaidItemTotal) / (1 + itemTaxPercent / 100);
+          if (coveredQty > 0) {
+            final double subTaxable = (rate * coveredQty) / (1 + itemTaxPercent / 100);
+            calculatedSubscriptionDiscountExclusive += subTaxable;
+            subscriptionDiscount += rate * coveredQty;
+            subscriptionTaxDiscount += (rate * coveredQty) - subTaxable;
+          }
+        } else {
+          taxableAmount = discountedItemTotal;
+          itemTaxAmount = discountedItemTotal * itemTaxPercent / 100.0;
+          
+          calculatedSubTotalExclusive += rate * qty;
+          calculatedCouponDiscountExclusive += paidItemTotal - discountedPaidItemTotal;
+          if (coveredQty > 0) {
+            calculatedSubscriptionDiscountExclusive += rate * coveredQty;
+            subscriptionDiscount += rate * coveredQty;
+            subscriptionTaxDiscount += (rate * coveredQty) * itemTaxPercent / 100.0;
+          }
         }
+        tax += itemTaxAmount;
 
         itemsList.add({
           'item_id': itemId,
@@ -1352,10 +1388,14 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           'rate': rate,
           'amount': itemTotal,
           'tax_percent': itemTaxPercent,
-          'taxable_amount': discountedItemTotal,
+          'taxable_amount': taxableAmount,
           'tax_amount': itemTaxAmount,
         });
       });
+
+      subTotal = calculatedSubTotalExclusive;
+      couponDiscount = calculatedCouponDiscountExclusive;
+      subscriptionDiscount = calculatedSubscriptionDiscountExclusive;
 
       double delivery =
           (subTotal < _minDeliveryOrderValue) ? _deliveryCharge : 0.00;
@@ -2560,6 +2600,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     double subscriptionDiscount = 0.0;
     double subscriptionTaxDiscount = 0.0;
 
+    double calculatedSubTotalExclusive = 0.0;
+    double calculatedCouponDiscountExclusive = 0.0;
+    double calculatedSubscriptionDiscountExclusive = 0.0;
+
     _cart.forEach((itemId, value) {
       final item = value['item'];
       final qty = value['qty'];
@@ -2582,20 +2626,51 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       final double discountedPaidItemTotal = paidItemTotal * discountRatio;
       final double discountedItemTotal = discountedPaidItemTotal + freeItemTotal;
 
+      final bool isInclusive = item['is_tax_inclusive'] == true ||
+          item['is_tax_inclusive'] == 1 ||
+          item['is_tax_inclusive'].toString() == 'true';
       final itemTaxPercent =
           double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-      final itemTax = discountedItemTotal * itemTaxPercent / 100.0;
-      tax += itemTax;
 
-      if (coveredQty > 0) {
-        subscriptionDiscount += price * coveredQty;
-        subscriptionTaxDiscount += (price * coveredQty) * itemTaxPercent / 100.0;
+      double taxableAmount;
+      double itemTaxAmount;
+
+      if (isInclusive) {
+        taxableAmount = discountedItemTotal / (1 + itemTaxPercent / 100);
+        itemTaxAmount = discountedItemTotal - taxableAmount;
+        
+        calculatedSubTotalExclusive += (price * qty) / (1 + itemTaxPercent / 100);
+        calculatedCouponDiscountExclusive += (paidItemTotal - discountedPaidItemTotal) / (1 + itemTaxPercent / 100);
+        if (coveredQty > 0) {
+          final double subTaxable = (price * coveredQty) / (1 + itemTaxPercent / 100);
+          calculatedSubscriptionDiscountExclusive += subTaxable;
+          subscriptionDiscount += price * coveredQty;
+          subscriptionTaxDiscount += (price * coveredQty) - subTaxable;
+        }
+      } else {
+        taxableAmount = discountedItemTotal;
+        itemTaxAmount = discountedItemTotal * itemTaxPercent / 100.0;
+        
+        calculatedSubTotalExclusive += price * qty;
+        calculatedCouponDiscountExclusive += paidItemTotal - discountedPaidItemTotal;
+        if (coveredQty > 0) {
+          calculatedSubscriptionDiscountExclusive += price * coveredQty;
+          subscriptionDiscount += price * coveredQty;
+          subscriptionTaxDiscount += (price * coveredQty) * itemTaxPercent / 100.0;
+        }
       }
+      tax += itemTaxAmount;
     });
+
+    final double thresholdSubTotal = subTotal;
+
+    subTotal = calculatedSubTotalExclusive;
+    couponDiscount = calculatedCouponDiscountExclusive;
+    subscriptionDiscount = calculatedSubscriptionDiscountExclusive;
 
     double delivery = _cart.isEmpty
         ? 0.00
-        : ((subTotal < _minDeliveryOrderValue) ? _deliveryCharge : 0.00);
+        : ((thresholdSubTotal < _minDeliveryOrderValue) ? _deliveryCharge : 0.00);
     double deliveryGst =
         _cart.isEmpty ? 0.00 : ((delivery * _deliveryGstPercent) / 100.0);
 
@@ -2623,6 +2698,50 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
     // couponDiscount is already calculated above
 
+    final bool anyInclusive = _cart.values.any((val) {
+      final item = val['item'];
+      return item['is_tax_inclusive'] == true ||
+          item['is_tax_inclusive'] == 1 ||
+          item['is_tax_inclusive'].toString() == 'true';
+    });
+
+    double displaySubTotal = subTotal;
+    double displayCouponDiscount = couponDiscount;
+    double displaySubscriptionDiscount = subscriptionDiscount;
+
+    if (anyInclusive) {
+      displaySubTotal = 0.0;
+      displayCouponDiscount = 0.0;
+      displaySubscriptionDiscount = 0.0;
+
+      _cart.forEach((itemId, value) {
+        final item = value['item'];
+        final qty = value['qty'];
+        final price = _getItemPrice(item);
+        final bool itemInclusive = item['is_tax_inclusive'] == true ||
+            item['is_tax_inclusive'] == 1 ||
+            item['is_tax_inclusive'].toString() == 'true';
+        final itemTaxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+        final double factor = itemInclusive ? 1.0 : (1 + itemTaxPercent / 100);
+
+        displaySubTotal += price * qty * factor;
+
+        final sub = _subscriptions.firstWhere(
+          (s) => s['item_id'] == itemId && (s['active_subscription'] == true || s['status'] == 'ACTIVE'),
+          orElse: () => null,
+        );
+        double coveredQty = 0.0;
+        if (sub != null) {
+          final double remainingQty = double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0;
+          coveredQty = qty < remainingQty ? qty : remainingQty;
+        }
+        final double paidQty = qty - coveredQty;
+
+        displayCouponDiscount += paidQty * price * (1.0 - discountRatio) * factor;
+        displaySubscriptionDiscount += coveredQty * price * factor;
+      });
+    }
+
     double totalCharges = delivery + customChargesTotal;
     double totalChargesGst = deliveryGst + customChargesGstTotal;
     double finalTax = (tax - subscriptionTaxDiscount) + totalChargesGst;
@@ -2632,92 +2751,187 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Sub-total'),
-            Text('Rs. ${subTotal.toStringAsFixed(2)}'),
-          ],
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('GST / Taxes (Items)'),
-            Text('Rs. ${tax.toStringAsFixed(2)}'),
-          ],
-        ),
-        if (delivery > 0) ...[
+        if (anyInclusive) ...[
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Delivery Charge'),
-              Text('Rs. ${delivery.toStringAsFixed(2)}'),
+              const Text('Sub-total (Incl. GST)'),
+              Text('Rs. ${displaySubTotal.toStringAsFixed(2)}'),
             ],
           ),
-          if (deliveryGst > 0)
+          if (displayCouponDiscount > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('  • Delivery GST'),
-                Text('Rs. ${deliveryGst.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text('Coupon Discount (${_appliedCoupon!['code']})',
+                    style: const TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
+                Text('-Rs. ${displayCouponDiscount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
               ],
             ),
-        ],
-        for (final cc in computedCustomCharges) ...[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(cc['name']),
-              Text('Rs. ${cc['amount'].toStringAsFixed(2)}'),
-            ],
-          ),
-          if (cc['gst_amount'] > 0)
+          if (displaySubscriptionDiscount > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('  • ${cc['name']} GST'),
-                Text('Rs. ${cc['gst_amount'].toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const Text('Subscription Discount',
+                    style: TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
+                Text('-Rs. ${displaySubscriptionDiscount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Net Amount (Incl. GST)',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                'Rs. ${(displaySubTotal - displayCouponDiscount - displaySubscriptionDiscount).toStringAsFixed(2)}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          if (delivery > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Delivery Charge'),
+                Text('Rs. ${delivery.toStringAsFixed(2)}'),
+              ],
+            ),
+            if (deliveryGst > 0)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('  • Delivery GST'),
+                  Text('Rs. ${deliveryGst.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+          ],
+          for (final cc in computedCustomCharges) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(cc['name']),
+                Text('Rs. ${cc['amount'].toStringAsFixed(2)}'),
+              ],
+            ),
+            if (cc['gst_amount'] > 0)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('  • ${cc['name']} GST'),
+                  Text('Rs. ${cc['gst_amount'].toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+          ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Taxable Value (Items)'),
+              Text('Rs. ${(subTotal - couponDiscount - subscriptionDiscount).toStringAsFixed(2)}'),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('GST / Taxes (Items)'),
+              Text('Rs. ${tax.toStringAsFixed(2)}'),
+            ],
+          ),
+        ] else ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Sub-total'),
+              Text('Rs. ${subTotal.toStringAsFixed(2)}'),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('GST / Taxes (Items)'),
+              Text('Rs. ${tax.toStringAsFixed(2)}'),
+            ],
+          ),
+          if (delivery > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Delivery Charge'),
+                Text('Rs. ${delivery.toStringAsFixed(2)}'),
+              ],
+            ),
+            if (deliveryGst > 0)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('  • Delivery GST'),
+                  Text('Rs. ${deliveryGst.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+          ],
+          for (final cc in computedCustomCharges) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(cc['name']),
+                Text('Rs. ${cc['amount'].toStringAsFixed(2)}'),
+              ],
+            ),
+            if (cc['gst_amount'] > 0)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('  • ${cc['name']} GST'),
+                  Text('Rs. ${cc['gst_amount'].toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+          ],
+          if (couponDiscount > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Coupon Discount (${_appliedCoupon!['code']})',
+                    style: const TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
+                Text('-Rs. ${couponDiscount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          if (subscriptionDiscount > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Subscription Discount',
+                    style: TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
+                Text('-Rs. ${subscriptionDiscount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          if (subscriptionTaxDiscount > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Subscription Tax Adjustment',
+                    style: TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
+                Text('-Rs. ${subscriptionTaxDiscount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
               ],
             ),
         ],
-        if (couponDiscount > 0)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Coupon Discount (${_appliedCoupon!['code']})',
-                  style: const TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold)),
-              Text('-Rs. ${couponDiscount.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        if (subscriptionDiscount > 0)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Subscription Discount',
-                  style: TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold)),
-              Text('-Rs. ${subscriptionDiscount.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        if (subscriptionTaxDiscount > 0)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Subscription Tax Adjustment',
-                  style: TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold)),
-              Text('-Rs. ${subscriptionTaxDiscount.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold)),
-            ],
-          ),
         const SizedBox(height: 4),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

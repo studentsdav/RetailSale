@@ -255,6 +255,43 @@ propertyDb.models.hr_payroll_runs =
 propertyDb.models.hr_payroll_details =
     require('../../models/property/hrPayrollDetail.model')(propertyDb, DataTypes);
 
+// RESTAURANT & CORE ADDONS
+propertyDb.models.floors =
+    require('../../models/property/floor.model')(propertyDb, DataTypes);
+propertyDb.models.dining_areas =
+    require('../../models/property/diningArea.model')(propertyDb, DataTypes);
+propertyDb.models.table_types =
+    require('../../models/property/tableType.model')(propertyDb, DataTypes);
+propertyDb.models.restaurant_printers =
+    require('../../models/property/restaurantPrinter.model')(propertyDb, DataTypes);
+propertyDb.models.restaurant_tables =
+    require('../../models/property/restaurantTable.model')(propertyDb, DataTypes);
+propertyDb.models.kitchen_stations =
+    require('../../models/property/kitchenStation.model')(propertyDb, DataTypes);
+propertyDb.models.table_reservations =
+    require('../../models/property/tableReservation.model')(propertyDb, DataTypes);
+propertyDb.models.email_configurations =
+    require('../../models/property/emailConfig.model')(propertyDb, DataTypes);
+propertyDb.models.email_templates =
+    require('../../models/property/emailTemplate.model')(propertyDb, DataTypes);
+propertyDb.models.kot_headers =
+    require('../../models/property/kotHeader.model')(propertyDb, DataTypes);
+propertyDb.models.kot_items =
+    require('../../models/property/kotItem.model')(propertyDb, DataTypes);
+propertyDb.models.kot_revisions =
+    require('../../models/property/kotRevision.model')(propertyDb, DataTypes);
+propertyDb.models.item_modifiers =
+    require('../../models/property/itemModifier.model')(propertyDb, DataTypes);
+propertyDb.models.restaurant_audit_trail =
+    require('../../models/property/restaurantAuditTrail.model')(propertyDb, DataTypes);
+propertyDb.models.delivery_challan_headers =
+    require('../../models/property/deliveryChallanHeader.model')(propertyDb, DataTypes);
+propertyDb.models.delivery_challan_items =
+    require('../../models/property/deliveryChallanItem.model')(propertyDb, DataTypes);
+propertyDb.models.recurring_expenses =
+    require('../../models/property/recurringExpense.model')(propertyDb, DataTypes);
+propertyDb.models.milk_subscription_items =
+    require('../../models/property/milkSubscriptionItem.model')(propertyDb, DataTypes);
 
 Object.values(propertyDb.models).forEach(model => {
     if (typeof model.associate === 'function') {

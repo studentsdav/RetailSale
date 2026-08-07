@@ -939,6 +939,8 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
         return existing;
     };
 
+    const allSubscriptions = await getActiveMilkSubscriptions(req, identity, null, saleDate);
+
     for (const sourceRow of Array.isArray(items) ? items : []) {
         const itemId = Number(sourceRow.item_id) || 0;
         const qty = toAmount(sourceRow.qty);
@@ -955,7 +957,7 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
             continue;
         }
 
-        const subscriptions = await getActiveMilkSubscriptions(req, identity, itemId, saleDate);
+        const subscriptions = allSubscriptions.filter(s => Number(s.item_id) === itemId);
         if (!subscriptions.length) {
             updatedItems.push(sourceRow);
             continue;
@@ -2807,7 +2809,7 @@ async function createSaleVersion({
         }
 
         totalQty += qty;
-        subTotal += amount;
+        subTotal += taxableAmount + lineDiscount;
         itemsTaxableTotal += taxableAmount;
         itemsTaxTotal += taxAmount;
         itemsLineTotal += lineTotal;
@@ -2867,48 +2869,57 @@ async function createSaleVersion({
         }, { transaction });
 
         if (status === 'COMPLETED' && affectStock) {
-            // Always deduct the parent item itself
-            await insertLedger({
-                db: req.propertyDb,
-                outlet_id,
-                item_code: row.item_code,
-                txn_date: header.sale_date,
-                txn_type: stockTxnType,
-                ref_no: header.sale_no,
-                qty_out: qty,
-                transaction
-            });
+            // Retrieve item details directly from cached map instead of querying findOne in loop
+            const dbItem = itemMasterMap.get(Number(row.item_id));
+            const isRecipeBased = dbItem?.is_recipe_based ?? false;
+            const isStockable = dbItem?.stockable ?? true;
 
-            // If it is a composite item, also deduct components
-            const bomComponents = await req.propertyDb.models.item_boms.findAll({
-                where: { outlet_id, parent_item_id: row.item_id },
-                include: [
-                    {
-                        model: req.propertyDb.models.item_master,
-                        as: 'component_item',
-                        where: { is_active: true }
+            // Only deduct the parent item itself if it is NOT recipe-based and IS stockable
+            if (!isRecipeBased && isStockable) {
+                await insertLedger({
+                    db: req.propertyDb,
+                    outlet_id,
+                    item_code: row.item_code,
+                    txn_date: header.sale_date,
+                    txn_type: stockTxnType,
+                    ref_no: header.sale_no,
+                    qty_out: qty,
+                    transaction
+                });
+            }
+
+            // If it is a composite/recipe-based item, also deduct components
+            if (isRecipeBased) {
+                const bomComponents = await req.propertyDb.models.item_boms.findAll({
+                    where: { outlet_id, parent_item_id: row.item_id },
+                    include: [
+                        {
+                            model: req.propertyDb.models.item_master,
+                            as: 'component_item',
+                            where: { is_active: true }
+                        }
+                    ],
+                    transaction
+                });
+
+                if (bomComponents && bomComponents.length > 0) {
+                    for (const bomComp of bomComponents) {
+                        const compItem = bomComp.component_item;
+                        if (!compItem) continue;
+                        const qtyRequiredPerUnit = Number(bomComp.quantity);
+                        const totalQtyNeeded = qtyRequiredPerUnit * qty;
+
+                        await insertLedger({
+                            db: req.propertyDb,
+                            outlet_id,
+                            item_code: compItem.item_code,
+                            txn_date: header.sale_date,
+                            txn_type: stockTxnType,
+                            ref_no: header.sale_no,
+                            qty_out: totalQtyNeeded,
+                            transaction
+                        });
                     }
-                ],
-                transaction
-            });
-
-            if (bomComponents && bomComponents.length > 0) {
-                for (const bomComp of bomComponents) {
-                    const compItem = bomComp.component_item;
-                    if (!compItem) continue;
-                    const qtyRequiredPerUnit = Number(bomComp.quantity);
-                    const totalQtyNeeded = qtyRequiredPerUnit * qty;
-
-                    await insertLedger({
-                        db: req.propertyDb,
-                        outlet_id,
-                        item_code: compItem.item_code,
-                        txn_date: header.sale_date,
-                        txn_type: stockTxnType,
-                        ref_no: header.sale_no,
-                        qty_out: totalQtyNeeded,
-                        transaction
-                    });
                 }
             }
         }
@@ -2972,7 +2983,7 @@ async function createSaleVersion({
         ? Math.max(toAmount(header.change_amount), 0)
         : (paymentMode === 'CASH' ? Math.max(amountPaid - derivedNetAmount, 0) : 0);
     const effectiveBalanceDue = Math.max(
-        derivedNetAmount - Math.min(amountPaid, derivedNetAmount),
+        derivedNetAmount - roundOffAmount - Math.min(amountPaid, derivedNetAmount - roundOffAmount),
         0
     );
 
@@ -3270,6 +3281,9 @@ exports.getNextSaleNo = async (req, res) => {
 exports.createSale = async (req, res) => {
     const t = await req.propertyDb.transaction();
     let luckyDrawVouchers = [];
+    const createdSales = [];
+    let primarySale;
+    let freeSale;
 
     try {
         const { header, items } = req.body;
@@ -3409,9 +3423,51 @@ exports.createSale = async (req, res) => {
             ...extra
         });
 
-        const createdSales = [];
-        let primarySale = null;
-        let freeSale = null;
+        const paymentMode = String(headerForCreate.payment_mode || 'CASH').trim().toUpperCase();
+        if (paymentMode === 'CREDIT_NOTE' && header.credit_note_redeemed_id && status === 'COMPLETED') {
+            const creditNote = await req.propertyDb.models.sales_credit_notes.findOne({
+                where: { id: header.credit_note_redeemed_id, outlet_id: req.user.outlet_id },
+                transaction: t
+            });
+
+            if (!creditNote) {
+                await t.rollback();
+                return res.status(400).json({ success: false, message: 'Credit Note not found' });
+            }
+
+            if (creditNote.status !== 'Active' && creditNote.status !== 'PENDING') {
+                await t.rollback();
+                return res.status(400).json({ success: false, message: `Credit Note is not active. Status: ${creditNote.status}` });
+            }
+
+            const redeemAmount = toAmount(header.credit_note_amount || netAmount);
+            if (redeemAmount <= 0) {
+                await t.rollback();
+                return res.status(400).json({ success: false, message: 'Redemption amount must be greater than zero' });
+            }
+
+            const remaining = toAmount(creditNote.remaining_balance ?? creditNote.net_amount);
+            if (redeemAmount > remaining) {
+                await t.rollback();
+                return res.status(400).json({ success: false, message: `Redemption amount exceeds remaining balance (Available: ${remaining})` });
+            }
+
+            const newRemaining = remaining - redeemAmount;
+            await creditNote.update({
+                remaining_balance: newRemaining,
+                status: newRemaining === 0 ? 'Fully_Redeemed' : 'Active'
+            }, { transaction: t });
+
+            headerForCreate.credit_note_redeemed_id = header.credit_note_redeemed_id;
+            headerForCreate.credit_note_amount = redeemAmount;
+
+            await req.propertyDb.models.restaurant_audit_trail.create({
+                outlet_id: req.user.outlet_id,
+                user_id: req.user.id,
+                action_type: 'CREDIT_NOTE_REDEMPTION',
+                description: `Redeemed ${redeemAmount} from Credit Note ${creditNote.credit_note_no} for Sale No ${paidSaleNo}`
+            }, { transaction: t });
+        }
 
         if (splitItems.paid.length > 0) {
             primarySale = await createSaleVersion({
@@ -3721,6 +3777,34 @@ exports.createSale = async (req, res) => {
                 }
             } catch (ldErr) {
                 console.error('[LUCKY DRAW CHECKOUT HOOK FAIL]', ldErr.message);
+            }
+        }
+
+        const tableId = req.body.table_id || req.body.header?.table_id;
+        if (tableId) {
+            try {
+                // 1. Mark table as Available
+                await req.propertyDb.models.restaurant_tables.update({
+                    status: 'Available',
+                    current_guest_count: 0,
+                    current_waiter_id: null,
+                    current_captain_id: null,
+                    active_sale_id: null
+                }, {
+                    where: { id: tableId, outlet_id },
+                    transaction: t
+                });
+
+                // 2. Mark active KOTs as Closed and link to this sale ID
+                await req.propertyDb.models.kot_headers.update({
+                    status: 'Closed',
+                    sales_header_id: referenceSale.id
+                }, {
+                    where: { table_id: tableId, status: { [Op.ne]: 'Closed' }, outlet_id },
+                    transaction: t
+                });
+            } catch (tblErr) {
+                console.error('[TABLE CHECKOUT HOOK FAIL]', tblErr.message);
             }
         }
 
@@ -4168,7 +4252,7 @@ exports.updateSalePaymentMode = async (req, res) => {
                 where: {
                     outlet_id: req.user.outlet_id,
                     reference_type: 'SALE',
-                    reference_id: sale.id
+                    reference_id: String(sale.id)
                 },
                 transaction: t
             }
@@ -4178,7 +4262,7 @@ exports.updateSalePaymentMode = async (req, res) => {
             where: {
                 outlet_id: req.user.outlet_id,
                 reference_type: 'SALE',
-                reference_id: sale.id,
+                reference_id: String(sale.id),
                 transaction_type: { [Op.in]: ['SALE_CASH', 'SALE_CREDIT'] }
             },
             transaction: t
@@ -6580,7 +6664,7 @@ exports.deleteSubscription = async (req, res) => {
             where: {
                 outlet_id: req.user.outlet_id,
                 reference_type: 'SUBSCRIPTION',
-                reference_id: subscriptionId
+                reference_id: String(subscriptionId)
             },
             transaction: t
         });

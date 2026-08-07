@@ -20,7 +20,9 @@ module.exports = (sequelize, DataTypes) => {
         auto_select_on_customer: DataTypes.BOOLEAN,
         next_purchase_valid_days: DataTypes.INTEGER,
         is_active: DataTypes.BOOLEAN,
-        created_by: DataTypes.INTEGER
+        created_by: DataTypes.INTEGER,
+        free_item_id: DataTypes.INTEGER,
+        days_of_week: DataTypes.STRING
     }, {
         tableName: 'sales_schemes',
         timestamps: true,

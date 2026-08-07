@@ -12,10 +12,12 @@ import '../../controllers/dashboard/dashboard_controller.dart' as UserProfiledat
 import '../../models/security/app_user_model.dart';
 import '../inventory/salescreen.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../utils/branding_storage.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../models/common/property_info_model.dart';
 import '../../controllers/settings/notification_services.dart';
 import '../../utils/order_status_display.dart';
 
@@ -30,6 +32,7 @@ class RetailerConsoleScreen extends StatefulWidget {
 class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   UserProfile? _currentUser;
   bool _isLoading = false;
+  PropertyInfo? _propertyInfo;
 
   // --- Retailer Tab State ---
   List<dynamic> _retailerOrders = [];
@@ -138,6 +141,16 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     setState(() => _isLoading = true);
     _currentUser = await UserProfiledata.load();
     setState(() => _isLoading = false);
+    try {
+      final propertyCtrl = PropertyInfoController();
+      await propertyCtrl.load();
+      _propertyInfo = propertyCtrl.data;
+      if (_propertyInfo?.logoPath != null) {
+        BrandingStorage.loadPdfLogo(_propertyInfo!.logoPath).catchError((_) => null);
+      }
+    } catch (e) {
+      debugPrint('Error pre-loading property info: $e');
+    }
     _fetchRetailerData();
     _fetchB2bItems();
     _fetchReturnSettings();
@@ -497,8 +510,11 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
         }
         
         try {
-          final propertyCtrl = PropertyInfoController();
-          await propertyCtrl.load();
+          if (_propertyInfo == null) {
+            final propertyCtrl = PropertyInfoController();
+            await propertyCtrl.load();
+            _propertyInfo = propertyCtrl.data;
+          }
           
           final order = res['data'] ?? {};
           final details = _safeGatewayDetails(order);
@@ -521,7 +537,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           if (printReceipt == true) {
             await PosInvoicePrinter.printRefundReceipt(
               order: order,
-              property: propertyCtrl.data,
+              property: _propertyInfo,
               refundAmt: finalRefundAmt,
               refundTxnId: details['refund_txn_id'] ?? 'N/A',
               refundedAt: details['refunded_at'] ?? DateTime.now().toIso8601String(),
@@ -702,15 +718,18 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                               Navigator.pop(dialogCtx);
                               setState(() => _isLoading = true);
                               try {
-                                final propertyCtrl = PropertyInfoController();
-                                await propertyCtrl.load();
+                                if (_propertyInfo == null) {
+                                  final propertyCtrl = PropertyInfoController();
+                                  await propertyCtrl.load();
+                                  _propertyInfo = propertyCtrl.data;
+                                }
                                 
                                 final pmDetails = details['payment_method'] ?? txn['payment_mode'] ?? 'ONLINE';
                                 final provider = details['provider'] ?? 'GATEWAY';
                                 
                                 await PosInvoicePrinter.printRefundReceipt(
                                   order: txn,
-                                  property: propertyCtrl.data,
+                                  property: _propertyInfo,
                                   refundAmt: refundAmt,
                                   refundTxnId: refundTxnId,
                                   refundedAt: refundedAt,
@@ -997,8 +1016,11 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
         }
 
         try {
-          final propertyCtrl = PropertyInfoController();
-          await propertyCtrl.load();
+          if (_propertyInfo == null) {
+            final propertyCtrl = PropertyInfoController();
+            await propertyCtrl.load();
+            _propertyInfo = propertyCtrl.data;
+          }
 
           final order = res['data'] ?? {};
           final details = _safeGatewayDetails(order);
@@ -1020,7 +1042,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           if (printReceipt == true) {
             await PosInvoicePrinter.printRefundReceipt(
               order: order,
-              property: propertyCtrl.data,
+              property: _propertyInfo,
               refundAmt: finalRefundAmt,
               refundTxnId: details['refund_txn_id'] ?? 'N/A',
               refundedAt: details['refunded_at'] ?? DateTime.now().toIso8601String(),
@@ -1899,24 +1921,33 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     );
   }
 
-  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder) async {
+  Future<void> _printReceiptNative(dynamic record, bool isOnlineOrder, {dynamic saleDetails}) async {
     setState(() => _isLoading = true);
     try {
-      final propertyCtrl = PropertyInfoController();
-      await propertyCtrl.load();
+      if (_propertyInfo == null) {
+        final propertyCtrl = PropertyInfoController();
+        await propertyCtrl.load();
+        _propertyInfo = propertyCtrl.data;
+      }
 
       SaleOrder? order;
-      final saleId = record['sale_id'] ?? record['sale_no'] ?? record['id'] ?? record['order_id'];
-      if (saleId != null) {
-        try {
-          final res = await ApiClient.get('/api/delivery/sales/$saleId');
-          final details = Map<String, dynamic>.from(res['data'] ?? const {});
-          if (details.isNotEmpty) {
-            details['bill_format'] = _billFormat;
-            order = SaleOrder.fromJson(details);
+      if (saleDetails != null && saleDetails is Map) {
+        final Map<String, dynamic> details = Map<String, dynamic>.from(saleDetails);
+        details['bill_format'] = _billFormat;
+        order = SaleOrder.fromJson(details);
+      } else {
+        final saleId = record['sale_id'] ?? record['sale_no'] ?? record['id'] ?? record['order_id'];
+        if (saleId != null) {
+          try {
+            final res = await ApiClient.get('/api/delivery/sales/$saleId');
+            final details = Map<String, dynamic>.from(res['data'] ?? const {});
+            if (details.isNotEmpty) {
+              details['bill_format'] = _billFormat;
+              order = SaleOrder.fromJson(details);
+            }
+          } catch (e) {
+            debugPrint('Error fetching public sale details: $e');
           }
-        } catch (e) {
-          debugPrint('Error fetching public sale details: $e');
         }
       }
 
@@ -1924,7 +1955,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
 
       await PosInvoicePrinter.printSaleInvoice(
         order: order,
-        property: propertyCtrl.data,
+        property: _propertyInfo,
         cashierName: 'System',
         termsAndConditions: 'Goods once sold will not be taken back. Subject to local jurisdiction.',
         thankYouMessage: 'Thank you for shopping with us. Please visit again.',
@@ -2311,11 +2342,10 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       final res = await ApiClient.post('/api/delivery/retailer/orders/$orderId/accept', body);
       if (res['success'] == true) {
         final data = res['data'];
-        await _fetchRetailerData();
-        
         if (mounted) {
           _showReceiptDialog(data);
         }
+        _fetchRetailerData(isBackground: true);
       }
     } catch (e) {
       debugPrint('Error accepting order: $e');
@@ -4885,8 +4915,16 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
 
   void _showReceiptDialog(Map<String, dynamic> data) {
     final orderId = data['order_id'] ?? data['id'] ?? '--';
-    final order = _retailerOrders.firstWhere((o) => o['id'] == orderId, orElse: () => null) ?? data;
-    _printReceiptNative(order, true);
+    final order = _retailerOrders.firstWhere((o) => o['id'].toString() == orderId.toString(), orElse: () => null);
+    final dynamic saleDetails = data['sale'];
+    if (order != null) {
+      final Map<String, dynamic> updatedOrder = Map<String, dynamic>.from(order);
+      updatedOrder['sale_id'] = data['sale_id'] ?? updatedOrder['sale_id'];
+      updatedOrder['sale_no'] = data['sale_no'] ?? updatedOrder['sale_no'];
+      _printReceiptNative(updatedOrder, true, saleDetails: saleDetails);
+    } else {
+      _printReceiptNative(data, true, saleDetails: saleDetails);
+    }
   }
 
   Widget _buildReceiptSummaryRow(Map<String, dynamic> order) {
@@ -6870,15 +6908,18 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                   onPressed: () async {
                                                     setState(() => _isLoading = true);
                                                     try {
-                                                      final propertyCtrl = PropertyInfoController();
-                                                      await propertyCtrl.load();
-                                                      
+                                                      if (_propertyInfo == null) {
+                                                        final propertyCtrl = PropertyInfoController();
+                                                        await propertyCtrl.load();
+                                                        _propertyInfo = propertyCtrl.data;
+                                                      }
+
                                                       final pmDetails = details['payment_method'] ?? txn['payment_mode'] ?? 'ONLINE';
                                                       final provider = details['provider'] ?? 'GATEWAY';
                                                       
                                                       await PosInvoicePrinter.printRefundReceipt(
                                                         order: txn,
-                                                        property: propertyCtrl.data,
+                                                        property: _propertyInfo,
                                                         refundAmt: refundAmt,
                                                         refundTxnId: refundTxnId,
                                                         refundedAt: refundedAt,

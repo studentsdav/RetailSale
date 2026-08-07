@@ -3490,6 +3490,273 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 90,
+    description: "Restaurant KDS Captain POS, Challans, Credit Notes, SMTP Email, Themes, Recurring Expenses, Multi-Item Subscriptions Integration",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+
+        -- Master Tables
+        CREATE TABLE IF NOT EXISTS floors (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(100) NOT NULL,
+          status VARCHAR(20) DEFAULT 'ACTIVE'
+        );
+
+        CREATE TABLE IF NOT EXISTS dining_areas (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(100) NOT NULL,
+          description TEXT,
+          status VARCHAR(20) DEFAULT 'ACTIVE'
+        );
+
+        CREATE TABLE IF NOT EXISTS table_types (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(100) NOT NULL,
+          charge_type VARCHAR(20) DEFAULT 'FLAT',
+          charge_amount DECIMAL(12, 2) DEFAULT 0.00
+        );
+
+        CREATE TABLE IF NOT EXISTS restaurant_printers (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          printer_name VARCHAR(150) NOT NULL,
+          printer_type VARCHAR(30) DEFAULT 'NETWORK',
+          ip_address VARCHAR(50),
+          port INTEGER,
+          status VARCHAR(20) DEFAULT 'ACTIVE'
+        );
+
+        CREATE TABLE IF NOT EXISTS restaurant_tables (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          floor_id INTEGER REFERENCES floors(id) ON DELETE SET NULL,
+          dining_area_id INTEGER REFERENCES dining_areas(id) ON DELETE SET NULL,
+          table_type_id INTEGER REFERENCES table_types(id) ON DELETE SET NULL,
+          table_name VARCHAR(100) NOT NULL,
+          capacity INTEGER DEFAULT 4,
+          status VARCHAR(30) DEFAULT 'Available',
+          current_guest_count INTEGER DEFAULT 0,
+          current_waiter_id INTEGER REFERENCES hr_employees(id) ON DELETE SET NULL,
+          current_captain_id INTEGER REFERENCES hr_employees(id) ON DELETE SET NULL,
+          active_sale_id INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS kitchen_stations (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          station_name VARCHAR(100) NOT NULL,
+          printer_id INTEGER REFERENCES restaurant_printers(id) ON DELETE SET NULL,
+          status VARCHAR(20) DEFAULT 'ACTIVE'
+        );
+
+        CREATE TABLE IF NOT EXISTS table_reservations (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          table_id INTEGER NOT NULL REFERENCES restaurant_tables(id) ON DELETE CASCADE,
+          customer_name VARCHAR(150) NOT NULL,
+          customer_phone VARCHAR(20) NOT NULL,
+          reservation_time TIMESTAMP NOT NULL,
+          guest_count INTEGER DEFAULT 1,
+          status VARCHAR(30) DEFAULT 'Pending',
+          remarks TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS email_configurations (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          smtp_host VARCHAR(255) NOT NULL,
+          smtp_port INTEGER NOT NULL,
+          smtp_user VARCHAR(255) NOT NULL,
+          smtp_pass VARCHAR(255) NOT NULL,
+          encryption_type VARCHAR(20) DEFAULT 'TLS',
+          from_name VARCHAR(255),
+          from_email VARCHAR(255) NOT NULL,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS email_templates (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          template_type VARCHAR(50) NOT NULL,
+          subject VARCHAR(255) NOT NULL,
+          body_html TEXT NOT NULL,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT uq_outlet_email_template UNIQUE (outlet_id, template_type)
+        );
+
+        -- Transactional Tables
+        CREATE TABLE IF NOT EXISTS kot_headers (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          kot_no VARCHAR(50) NOT NULL,
+          table_id INTEGER REFERENCES restaurant_tables(id) ON DELETE SET NULL,
+          service_type VARCHAR(50) DEFAULT 'Dine In',
+          status VARCHAR(30) DEFAULT 'New',
+          waiter_id INTEGER REFERENCES hr_employees(id) ON DELETE SET NULL,
+          captain_id INTEGER REFERENCES hr_employees(id) ON DELETE SET NULL,
+          remarks TEXT,
+          revision_no INTEGER DEFAULT 1,
+          created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          accepted_time TIMESTAMP,
+          cooking_start TIMESTAMP,
+          ready_time TIMESTAMP,
+          served_time TIMESTAMP,
+          closed_time TIMESTAMP,
+          sales_header_id INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS kot_items (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          kot_header_id INTEGER NOT NULL REFERENCES kot_headers(id) ON DELETE CASCADE,
+          item_id INTEGER NOT NULL REFERENCES item_master(id),
+          item_name VARCHAR(255) NOT NULL,
+          qty DECIMAL(12, 4) NOT NULL DEFAULT 1.0000,
+          status VARCHAR(30) DEFAULT 'New',
+          item_remark TEXT,
+          modifier_details JSONB DEFAULT '[]'::jsonb,
+          kitchen_station_id INTEGER REFERENCES kitchen_stations(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS kot_revisions (
+          id SERIAL PRIMARY KEY,
+          kot_header_id INTEGER NOT NULL REFERENCES kot_headers(id) ON DELETE CASCADE,
+          revision_no INTEGER NOT NULL,
+          change_details JSONB DEFAULT '[]'::jsonb,
+          modified_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          modification_reason VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS item_modifiers (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          item_master_id INTEGER NOT NULL REFERENCES item_master(id) ON DELETE CASCADE,
+          modifier_name VARCHAR(150) NOT NULL,
+          price DECIMAL(12, 2) DEFAULT 0.00,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS restaurant_audit_trail (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          action_type VARCHAR(50) NOT NULL,
+          description TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS delivery_challan_headers (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          challan_no VARCHAR(50) NOT NULL,
+          challan_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          customer_name VARCHAR(150),
+          customer_phone VARCHAR(20),
+          total_qty DECIMAL(12, 2) DEFAULT 0.00,
+          status VARCHAR(30) DEFAULT 'Issued',
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS delivery_challan_items (
+          id SERIAL PRIMARY KEY,
+          challan_id INTEGER NOT NULL REFERENCES delivery_challan_headers(id) ON DELETE CASCADE,
+          item_id INTEGER NOT NULL REFERENCES item_master(id),
+          item_code VARCHAR(50) NOT NULL,
+          item_name VARCHAR(150) NOT NULL,
+          qty DECIMAL(12, 2) NOT NULL DEFAULT 1.00,
+          unit VARCHAR(30)
+        );
+
+        CREATE TABLE IF NOT EXISTS recurring_expenses (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          expense_category_id UUID REFERENCES expense_categories(id) ON DELETE SET NULL,
+          description TEXT,
+          amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          frequency VARCHAR(30) DEFAULT 'MONTHLY',
+          start_date DATE NOT NULL,
+          end_date DATE,
+          last_generation_date DATE,
+          next_generation_date DATE NOT NULL,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS milk_subscription_items (
+          id SERIAL PRIMARY KEY,
+          subscription_id INTEGER NOT NULL REFERENCES milk_subscriptions(id) ON DELETE CASCADE,
+          item_id INTEGER NOT NULL REFERENCES item_master(id) ON DELETE CASCADE,
+          daily_qty DECIMAL(12, 4) NOT NULL DEFAULT 1.0000,
+          rate_override DECIMAL(12, 2)
+        );
+
+        -- Database Extensions
+        ALTER TABLE item_master 
+          ADD COLUMN IF NOT EXISTS kitchen_station_id INTEGER REFERENCES kitchen_stations(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS printer_location_id INTEGER REFERENCES restaurant_printers(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS is_modifier_applicable BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS is_recipe_based BOOLEAN DEFAULT FALSE;
+
+        ALTER TABLE sales_headers 
+          ADD COLUMN IF NOT EXISTS table_id INTEGER REFERENCES restaurant_tables(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS waiter_id INTEGER REFERENCES hr_employees(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS captain_id INTEGER REFERENCES hr_employees(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS restaurant_service_type VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS guest_count INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS credit_note_redeemed_id INTEGER,
+          ADD COLUMN IF NOT EXISTS credit_note_amount DECIMAL(12, 2) DEFAULT 0.00;
+
+        ALTER TABLE sales_items 
+          ADD COLUMN IF NOT EXISTS item_remark TEXT,
+          ADD COLUMN IF NOT EXISTS modifier_details JSONB DEFAULT '[]'::jsonb;
+
+        ALTER TABLE sales_credit_notes 
+          ADD COLUMN IF NOT EXISTS remaining_balance DECIMAL(12, 2) DEFAULT 0.00,
+          ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'Active';
+
+        -- Make sure remaining_balance is populated for existing credit notes
+        UPDATE sales_credit_notes SET remaining_balance = COALESCE(remaining_balance, net_amount) WHERE remaining_balance IS NULL;
+
+        ALTER TABLE system_settings 
+          ADD COLUMN IF NOT EXISTS home_bg_image_path VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS home_bg_image_size VARCHAR(30) DEFAULT 'Cover',
+          ADD COLUMN IF NOT EXISTS home_theme_style VARCHAR(30) DEFAULT 'Standard';
+
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 91,
+    description: "Add free_item_id and days_of_week to sales_schemes, and original_rate and scheme_discount_per_unit to sales_items",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE sales_schemes ADD COLUMN IF NOT EXISTS free_item_id INTEGER REFERENCES item_master(id) ON DELETE SET NULL;
+        ALTER TABLE sales_schemes ADD COLUMN IF NOT EXISTS days_of_week VARCHAR(255);
+        ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS original_rate DECIMAL(12, 2);
+        ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS scheme_discount_per_unit DECIMAL(12, 2);
+        COMMIT;
+      `);
+    }
   }
 ];
 

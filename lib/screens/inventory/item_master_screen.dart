@@ -465,6 +465,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         maxLevel: int.parse(_max.text.isEmpty ? "0" : _max.text),
         stockable: _stockable,
         isSaleable: _isSaleable,
+        isTaxInclusive: _useInclusiveRates,
       );
 
       Item savedItem;
@@ -620,11 +621,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       orElse: () => _brands.first,
     );
     _unit = it.unit;
-
-    _rate.text = it.rate.toString();
-    _retailSalePrice.text = it.retailSalePrice.toString();
     _packQty.text = it.packQty.toString();
     _looseItemCode.text = it.looseItemCode;
+
     _taxType = it.taxType;
     _taxPercent.text = it.taxPercent.toString();
     _discountApplicable = it.discountApplicable;
@@ -634,8 +633,17 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _max.text = it.maxLevel.toString();
     _stockable = it.stockable;
     _isSaleable = it.isSaleable;
-    _useInclusiveRates = false;
+    _useInclusiveRates = it.isTaxInclusive;
     _inclusiveRateScope = 'BOTH';
+
+    if (it.isTaxInclusive) {
+      final double taxFactor = 1 + (it.taxPercent / 100);
+      _rate.text = (it.rate * taxFactor).toStringAsFixed(2);
+      _retailSalePrice.text = (it.retailSalePrice * taxFactor).toStringAsFixed(2);
+    } else {
+      _rate.text = it.rate.toString();
+      _retailSalePrice.text = it.retailSalePrice.toString();
+    }
 
     setState(() {});
     _nameFocus.requestFocus(); // Focus to name when editing

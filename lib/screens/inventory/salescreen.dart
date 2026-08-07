@@ -25,6 +25,7 @@ import '../../core/billing/pos_billing_engine.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../utils/branding_storage.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../models/inventory/item_model.dart';
 import '../../models/inventory/sale_customer_model.dart';
@@ -41,8 +42,15 @@ import '../../core/api/api_client.dart';
 
 class SaleScreen extends StatefulWidget {
   final int? editSaleId;
+  final int? preloadedTableId;
+  final List<Map<String, dynamic>>? preloadedItems;
 
-  const SaleScreen({super.key, this.editSaleId});
+  const SaleScreen({
+    super.key,
+    this.editSaleId,
+    this.preloadedTableId,
+    this.preloadedItems,
+  });
   @override
   State<SaleScreen> createState() => _SaleScreenState();
 }
@@ -51,6 +59,8 @@ class _SaleScreenState extends State<SaleScreen> {
   final ctrl = SalesController();
   final propertyCtrl = PropertyInfoController();
   final settingsCtrl = SystemSettingsController();
+  Printer? _defaultPrinter;
+  int? _preloadedTableId;
 
   List<Map<String, dynamic>> _salespersons = [];
   Map<String, dynamic>? _selectedSalesperson;
@@ -211,9 +221,18 @@ class _SaleScreenState extends State<SaleScreen> {
 
   Future<void> _init() async {
     try {
+      _preloadedTableId = widget.preloadedTableId;
       await ctrl.loadInitialData();
       await propertyCtrl.load();
+      // Pre-warm the PDF logo cache in the background so printing is instant
+      if (propertyCtrl.data?.logoPath != null) {
+        BrandingStorage.loadPdfLogo(propertyCtrl.data!.logoPath).catchError((_) => null);
+      }
       await settingsCtrl.load();
+      // Load default printer in the background so printing is instant
+      _resolveDefaultPrinter().then((printer) {
+        _defaultPrinter = printer;
+      }).catchError((_) => null);
       await _loadCashierName();
       await _loadSaleSettings();
       await _fetchSalespersons();
@@ -226,6 +245,60 @@ class _SaleScreenState extends State<SaleScreen> {
       } else {
         _saleNo.text = await ctrl.getNextSaleNo();
         _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
+      }
+
+      if (widget.preloadedItems != null && widget.preloadedItems!.isNotEmpty) {
+        _paymentEntries = const [];
+        _pendingPreviousAdjustment = 0;
+        _pendingAdvanceApplied = 0;
+        _pendingAdvanceCreated = 0;
+
+        for (final preload in widget.preloadedItems!) {
+          final int itemId = preload['item_id'];
+          final double qty = double.tryParse(preload['qty'].toString()) ?? 1.0;
+          final double rate = double.tryParse(preload['rate']?.toString() ?? '') ?? 0.0;
+
+          // Find this item in ctrl.items
+          Item? matched;
+          try {
+            matched = ctrl.items.firstWhere((i) => i.id == itemId);
+          } catch (_) {
+            matched = null;
+          }
+
+          double resolvedRate = rate;
+          if (matched != null) {
+            final baseRate = matched.retailSalePrice > 0
+                ? matched.retailSalePrice
+                : (matched.rate > 0 ? matched.rate : rate);
+            if (matched.isTaxInclusive) {
+              resolvedRate = double.parse((baseRate * (1 + matched.taxPercent / 100)).toStringAsFixed(2));
+            } else {
+              resolvedRate = baseRate;
+            }
+          }
+
+          final saleItem = SaleItem(
+            itemId: itemId,
+            itemCode: matched?.itemCode ?? 'ITEM-$itemId',
+            itemName: matched?.itemName ?? preload['item_name'] ?? 'Unknown Item',
+            barcode: matched?.barcode ?? '',
+            unit: matched?.unit ?? 'PCS',
+            qty: qty,
+            rate: resolvedRate,
+            taxType: matched?.taxType ?? 'GST',
+            taxPercent: (matched?.taxPercent ?? 0.0).toDouble(),
+            brand: matched?.brand,
+            isTaxInclusive: matched?.isTaxInclusive ?? false,
+          );
+
+          _items.add(saleItem);
+        }
+
+        _syncSelectedSchemePointers();
+        _rebuildItemAdvanceFreeLines();
+        _rebuildItemSchemeFreeLines();
+        _syncAmountPaidWithInvoice();
       }
 
       if (mounted) setState(() {});
@@ -1636,7 +1709,11 @@ class _SaleScreenState extends State<SaleScreen> {
           orElse: () => null,
         );
     if (item == null) return 0;
-    return item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
+    final double rawPrice = item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
+    if (item.isTaxInclusive) {
+      return double.parse((rawPrice * (1 + item.taxPercent / 100)).toStringAsFixed(2));
+    }
+    return rawPrice;
   }
 
   void _syncCartRatesWithLatestCatalog() {
@@ -1660,8 +1737,11 @@ class _SaleScreenState extends State<SaleScreen> {
     required double qty,
     SaleItem? seed,
   }) {
-    final defaultRate =
+    double defaultRate =
         item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
+    if (item.isTaxInclusive) {
+      defaultRate = double.parse((defaultRate * (1 + item.taxPercent / 100)).toStringAsFixed(2));
+    }
     return SaleItem(
       itemId: item.id,
       itemCode: seed?.itemCode ?? item.itemCode,
@@ -1677,6 +1757,7 @@ class _SaleScreenState extends State<SaleScreen> {
       discountApplicable: seed?.discountApplicable ?? item.discountApplicable,
       schemeApplicable: seed?.schemeApplicable ?? item.schemeApplicable,
       brand: seed?.brand ?? item.brand,
+      isTaxInclusive: item.isTaxInclusive,
     );
   }
 
@@ -2701,6 +2782,7 @@ class _SaleScreenState extends State<SaleScreen> {
             discountApplicable: false,
             schemeApplicable: false,
             isAdvanceFree: true,
+            isTaxInclusive: source.isTaxInclusive,
             brand: source.brand,
           ),
         );
@@ -2888,6 +2970,7 @@ class _SaleScreenState extends State<SaleScreen> {
           schemeApplicable: false,
           isSchemeFree: true,
           appliedSchemeId: scheme.id,
+          isTaxInclusive: it.isTaxInclusive,
           brand: it.brand,
         );
 
@@ -5152,13 +5235,7 @@ class _SaleScreenState extends State<SaleScreen> {
       }
     }
 
-    // Refresh catalog before save so billing uses latest current item rates.
-    try {
-      await ctrl.loadInitialData();
-      _syncCartRatesWithLatestCatalog();
-    } catch (_) {
-      // Continue with cached rates if refresh fails.
-    }
+
 
     // Ensure item-advance (qty) is applied on the bill lines before totals are computed/saved.
     _rebuildItemAdvanceFreeLines();
@@ -5301,6 +5378,7 @@ class _SaleScreenState extends State<SaleScreen> {
       affectStock: !isEditing || _affectStockOnEdit,
       items: orderItems,
       salesmanId: _selectedSalesperson?['id'],
+      tableId: _preloadedTableId,
     );
     Map<String, dynamic>? saveResponse;
     Map<String, dynamic>? modifyResponse;
@@ -5336,7 +5414,7 @@ class _SaleScreenState extends State<SaleScreen> {
         _pendingPreviousAdjustment > 0 &&
         _previousCreditBills.isNotEmpty &&
         _hasCustomerContext) {
-      await ctrl.settlePreviousCredit(
+      ctrl.settlePreviousCredit(
         bills: _previousCreditBills,
         amount: _pendingPreviousAdjustment,
         paymentDate: _saleDate,
@@ -5345,8 +5423,9 @@ class _SaleScreenState extends State<SaleScreen> {
             : paymentSummary.primaryMode,
         referenceNo: _saleNo.text,
         note: 'Adjusted while billing ${_saleNo.text}',
-      );
-      await _loadCustomerOutstanding();
+      ).then((_) => _loadCustomerOutstanding()).catchError((e) {
+        debugPrint('Error settling credit: $e');
+      });
     }
     final savedSaleId = savedSaleIds.isNotEmpty
         ? savedSaleIds.first
@@ -5355,7 +5434,7 @@ class _SaleScreenState extends State<SaleScreen> {
         _pendingAdvanceApplied > 0 &&
         savedSaleId > 0 &&
         _hasCustomerContext) {
-      await ctrl.applyCustomerAdvance(
+      ctrl.applyCustomerAdvance(
         saleId: savedSaleId,
         customerName: _customerName.text.trim(),
         customerPhone: _customerPhone.text.trim(),
@@ -5365,13 +5444,14 @@ class _SaleScreenState extends State<SaleScreen> {
         paymentMode: 'ADVANCE',
         referenceNo: _saleNo.text,
         note: 'Advance adjusted while billing ${_saleNo.text}',
-      );
-      await _loadCustomerOutstanding();
+      ).then((_) => _loadCustomerOutstanding()).catchError((e) {
+        debugPrint('Error applying advance: $e');
+      });
     }
     if (status == 'COMPLETED' &&
         _pendingAdvanceCreated > 0 &&
         _hasCustomerContext) {
-      await ctrl.createCustomerAdvance(
+      ctrl.createCustomerAdvance(
         customerName: _customerName.text.trim(),
         customerPhone: _customerPhone.text.trim(),
         customerGstin: _customerGstin.text.trim(),
@@ -5383,18 +5463,29 @@ class _SaleScreenState extends State<SaleScreen> {
         referenceNo: _saleNo.text,
         note: 'Advance received while billing ${_saleNo.text}',
         sourceSaleId: savedSaleId > 0 ? savedSaleId : null,
-      );
-      await _loadCustomerOutstanding();
+      ).then((_) => _loadCustomerOutstanding()).catchError((e) {
+        debugPrint('Error creating advance: $e');
+      });
     }
     final shouldPrint = status == 'COMPLETED' &&
         (printAfterSave || (settingsCtrl.settings?.autoPrintOnSave ?? false));
     if (shouldPrint) {
       final idsToPrint = savedSaleIds.isNotEmpty ? savedSaleIds : [savedSaleId];
-      for (final saleId in idsToPrint) {
+      final List<String> savedSaleNos = (saveResponse?['sale_nos'] as List?)?.map((e) => e.toString()).toList() ?? [];
+      for (int i = 0; i < idsToPrint.length; i++) {
+        final saleId = idsToPrint[i];
         if (saleId <= 0) continue;
-        SaleOrder printOrder = order;
-        final details = await ctrl.getSaleDetails(saleId);
-        printOrder = _saleOrderFromDetails(details);
+        
+        String finalSaleNo = order.saleNo;
+        if (savedSaleNos.length > i) {
+          finalSaleNo = savedSaleNos[i];
+        }
+        
+        final printOrder = order.copyWith(
+          saleNo: finalSaleNo,
+          hasBillNo: finalSaleNo.isNotEmpty,
+          orderId: saleId,
+        );
         await _handlePrintAfterSave(printOrder);
       }
     }
@@ -5538,28 +5629,33 @@ class _SaleScreenState extends State<SaleScreen> {
       _pendingPreviousAdjustment = 0;
     });
     if (preserveCustomer) {
-      await ctrl.refreshSchemes(
+      ctrl.refreshSchemes(
         customerName: _customerName.text.trim(),
         customerPhone: _customerPhone.text.trim(),
         customerGstin: _customerGstin.text.trim(),
-      );
-      _refreshSelectedScheme();
-      _refreshItemSchemeStatus();
+      ).then((_) {
+        _refreshSelectedScheme();
+        _refreshItemSchemeStatus();
+      }).catchError((_) => null);
       _loadCustomerOutstanding();
     } else {
-      await ctrl.refreshSchemes();
-      await ctrl.searchCustomers('');
+      ctrl.refreshSchemes().catchError((_) => null);
+      ctrl.searchCustomers('').catchError((_) => null);
     }
-    try {
-      _saleNo.text = await ctrl.getNextSaleNo();
-    } catch (error) {
+    ctrl.getNextSaleNo().then((nextNo) {
+      if (mounted) {
+        setState(() {
+          _saleNo.text = nextNo;
+        });
+      }
+    }).catchError((error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error.toString().replaceFirst('Exception: ', '')),
         ),
       );
-    }
+    });
     _loadSubscriptionDraftCounts();
     _focusBarcodeField();
   }
@@ -5588,6 +5684,11 @@ class _SaleScreenState extends State<SaleScreen> {
       taxableAmount: _jsonDouble(json['taxable_amount']),
       taxAmount: _jsonDouble(json['tax_amount']),
       lineTotal: _jsonDouble(json['line_total']),
+      isTaxInclusive: json['is_tax_inclusive'] == true ||
+          json['is_tax_inclusive'] == 1 ||
+          (json['item'] is Map &&
+              (json['item']['is_tax_inclusive'] == true ||
+                  json['item']['is_tax_inclusive'] == 1)),
       brand: json['brand'] ?? (json['item'] is Map ? json['item']['brand']?.toString() : null),
     );
   }
@@ -6889,7 +6990,7 @@ class _SaleScreenState extends State<SaleScreen> {
     }
 
     if (printMode == 'DIRECT_DEFAULT') {
-      final printer = await _resolveDefaultPrinter();
+      final printer = _defaultPrinter ?? await _resolveDefaultPrinter();
       if (printer != null) {
         await PosInvoicePrinter.printSaleInvoice(
           order: order,
@@ -7794,18 +7895,24 @@ class _SaleScreenState extends State<SaleScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Expanded(
-                                        child: Text(
-                                          item.productTemplateId != null
-                                              ? 'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}+'
-                                              : 'Rs. ${(item.retailSalePrice > 0 ? item.retailSalePrice : item.rate).toStringAsFixed(2)}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Color(0xFFD67D25),
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 15,
-                                          ),
-                                        ),
+                                        child: (() {
+                                          final double rawPrice = item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
+                                          final double displayPrice = item.isTaxInclusive
+                                              ? double.parse((rawPrice * (1 + item.taxPercent / 100)).toStringAsFixed(2))
+                                              : rawPrice;
+                                          return Text(
+                                            item.productTemplateId != null
+                                                ? 'Rs. ${displayPrice.toStringAsFixed(2)}+'
+                                                : 'Rs. ${displayPrice.toStringAsFixed(2)}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Color(0xFFD67D25),
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 15,
+                                            ),
+                                          );
+                                        })(),
                                       ),
                                     ],
                                   ),
@@ -8033,26 +8140,55 @@ class _SaleScreenState extends State<SaleScreen> {
                   ),
           ),
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _miniInfoCard('Sub Total', _invoice.subTotal),
-              _miniInfoCard(
-                _invoice.subTotal > 0 && _invoice.totalDiscount > 0
-                    ? 'Discount (${((_invoice.totalDiscount / _invoice.subTotal) * 100).toStringAsFixed(((_invoice.totalDiscount / _invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
-                    : 'Discount',
-                _invoice.totalDiscount,
-              ),
-              _miniInfoCard(
-                _invoice.taxableAmount > 0 && _invoice.totalTax > 0
-                    ? 'Tax (${((_invoice.totalTax / _invoice.taxableAmount) * 100).toStringAsFixed(((_invoice.totalTax / _invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
-                    : 'Tax',
-                _invoice.totalTax,
-              ),
-              _miniInfoCard('Total', _invoice.netAmount, highlight: true),
-            ],
-          ),
+          (() {
+            final bool anyInclusiveCart = _invoice.items.isNotEmpty && _invoice.items.any((item) => item.isTaxInclusive);
+            if (anyInclusiveCart) {
+              final double displaySubTotal = _invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100))));
+              final double displayDiscount = _invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.lineDiscount : (item.lineDiscount * (1 + item.taxPercent / 100))));
+              final double discountPercent = displaySubTotal > 0 ? (displayDiscount / displaySubTotal) * 100 : 0.0;
+              final double cgst = _invoice.totalTax / 2;
+              final double sgst = _invoice.totalTax / 2;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _miniInfoCard('Sub Total (Incl. GST)', displaySubTotal),
+                  _miniInfoCard(
+                    displaySubTotal > 0 && displayDiscount > 0
+                        ? 'Discount (${discountPercent.toStringAsFixed(discountPercent % 1 == 0 ? 0 : 1)}%)'
+                        : 'Discount',
+                    displayDiscount,
+                  ),
+                  _miniInfoCard('Net Amount (Incl. GST)', displaySubTotal - displayDiscount),
+                  _miniInfoCard('Taxable Value', _invoice.taxableAmount),
+                  _miniInfoCard('CGST', cgst),
+                  _miniInfoCard('SGST', sgst),
+                  _miniInfoCard('Total Payable', _invoice.netAmount, highlight: true),
+                ],
+              );
+            } else {
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _miniInfoCard('Sub Total', _invoice.subTotal),
+                  _miniInfoCard(
+                    _invoice.subTotal > 0 && _invoice.totalDiscount > 0
+                        ? 'Discount (${((_invoice.totalDiscount / _invoice.subTotal) * 100).toStringAsFixed(((_invoice.totalDiscount / _invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
+                        : 'Discount',
+                    _invoice.totalDiscount,
+                  ),
+                  _miniInfoCard(
+                    _invoice.taxableAmount > 0 && _invoice.totalTax > 0
+                        ? 'Tax (${((_invoice.totalTax / _invoice.taxableAmount) * 100).toStringAsFixed(((_invoice.totalTax / _invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
+                        : 'Tax',
+                    _invoice.totalTax,
+                  ),
+                  _miniInfoCard('Total', _invoice.netAmount, highlight: true),
+                ],
+              );
+            }
+          })(),
         ],
       ),
     );
@@ -8395,20 +8531,48 @@ class _SaleScreenState extends State<SaleScreen> {
                     ),
                   ],
                 ),
-                _summaryRow('Sub Total', invoice.subTotal),
-                _summaryRow(
-                  invoice.subTotal > 0 && invoice.totalDiscount > 0
-                      ? 'Discount (${((invoice.totalDiscount / invoice.subTotal) * 100).toStringAsFixed(((invoice.totalDiscount / invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
-                      : 'Discount',
-                  invoice.totalDiscount,
-                ),
-                _summaryRow('Charges', invoice.chargeTotal),
-                _summaryRow(
-                  invoice.taxableAmount > 0 && invoice.totalTax > 0
-                      ? 'Tax (${((invoice.totalTax / invoice.taxableAmount) * 100).toStringAsFixed(((invoice.totalTax / invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
-                      : 'Tax',
-                  invoice.totalTax,
-                ),
+                ...(() {
+                  final bool anyInclusiveCart = invoice.items.isNotEmpty && invoice.items.any((item) => item.isTaxInclusive);
+                  if (anyInclusiveCart) {
+                    final double displaySubTotal = invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100))));
+                    final double displayDiscount = invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.lineDiscount : (item.lineDiscount * (1 + item.taxPercent / 100))));
+                    final double discountPercent = displaySubTotal > 0 ? (displayDiscount / displaySubTotal) * 100 : 0.0;
+                    final double cgst = invoice.totalTax / 2;
+                    final double sgst = invoice.totalTax / 2;
+                    return [
+                      _summaryRow('Sub Total (Incl. GST)', displaySubTotal),
+                      _summaryRow(
+                        displaySubTotal > 0 && displayDiscount > 0
+                            ? 'Discount (${discountPercent.toStringAsFixed(discountPercent % 1 == 0 ? 0 : 1)}%)'
+                            : 'Discount',
+                        displayDiscount,
+                      ),
+                      _summaryRow('Net Amount (Incl. GST)', displaySubTotal - displayDiscount),
+                      if (invoice.chargeTotal > 0)
+                        _summaryRow('Charges', invoice.chargeTotal),
+                      _summaryRow('Taxable Value', invoice.taxableAmount),
+                      _summaryRow('CGST', cgst),
+                      _summaryRow('SGST', sgst),
+                    ];
+                  } else {
+                    return [
+                      _summaryRow('Sub Total', invoice.subTotal),
+                      _summaryRow(
+                        invoice.subTotal > 0 && invoice.totalDiscount > 0
+                            ? 'Discount (${((invoice.totalDiscount / invoice.subTotal) * 100).toStringAsFixed(((invoice.totalDiscount / invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
+                            : 'Discount',
+                        invoice.totalDiscount,
+                      ),
+                      _summaryRow('Charges', invoice.chargeTotal),
+                      _summaryRow(
+                        invoice.taxableAmount > 0 && invoice.totalTax > 0
+                            ? 'Tax (${((invoice.totalTax / invoice.taxableAmount) * 100).toStringAsFixed(((invoice.totalTax / invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
+                            : 'Tax',
+                        invoice.totalTax,
+                      ),
+                    ];
+                  }
+                })(),
                 const Divider(height: 18),
                 _summaryRow('Total', _payableInvoiceTotal, emphasized: true),
               ],

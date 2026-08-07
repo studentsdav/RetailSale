@@ -38,6 +38,10 @@ const { apiLimiter } = require('./middlewares/rateLimit.middleware');
 const { contextMiddleware } = require('./middlewares/context.middleware');
 const app = express();
 app.use(contextMiddleware);
+app.use((req, res, next) => {
+    console.log(`[REQUEST] ${req.method} ${req.originalUrl || req.url}`);
+    next();
+});
 
 const loadConfig = require("./utils/decryptConfig");
 require('pg');
@@ -256,6 +260,10 @@ if (!fs.existsSync(licensePath)) {
         const { startWhatsappQueueJob } = require('./jobs/whatsappQueueJob');
         startWhatsappQueueJob(propertyDb);
 
+        // Start background recurring expenses worker
+        const { startRecurringExpensesJob } = require('./jobs/recurringExpensesJob');
+        startRecurringExpensesJob(propertyDb);
+
     } catch (err) {
         console.error('❌ Database connection failed', err);
         process.exit(1);
@@ -286,6 +294,7 @@ app.use('/api/audit', require('./routes/audit.routes'));
 app.use('/webhooks/whatsapp', require('./routes/whatsappWebhook.routes'));
 app.use('/api/whatsapp', require('./routes/whatsapp.routes'));
 app.use('/api/hrms', require('./routes/hrms.routes'));
+app.use('/api/restaurant', require('./routes/restaurant.routes'));
 
 // not found
 app.use((req, res) => {

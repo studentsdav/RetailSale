@@ -40,6 +40,7 @@ module.exports = (sequelize, DataTypes) => {
         charge_total: DataTypes.DECIMAL(12, 2),
         charge_tax_total: DataTypes.DECIMAL(12, 2),
         total_discount: DataTypes.DECIMAL(12, 2),
+        coupon_discount_amount: DataTypes.DECIMAL(12, 2),
         round_off_amount: DataTypes.DECIMAL(12, 2),
         net_amount: DataTypes.DECIMAL(12, 2),
         voucher_code: DataTypes.STRING,

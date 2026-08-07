@@ -132,6 +132,16 @@ module.exports = (sequelize, DataTypes) => {
                 defaultValue: true
             },
 
+            is_recipe_based: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false
+            },
+
+            is_tax_inclusive: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false
+            },
+
             is_saleable: {
                 type: DataTypes.BOOLEAN,
                 defaultValue: true

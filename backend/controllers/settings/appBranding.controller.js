@@ -71,7 +71,10 @@ exports.saveBranding = async (req, res) => {
                 `Powered by ${companyName}`,
             theme_key: String(
                 req.body.theme_key || defaultBranding.theme_key
-            ).trim() || defaultBranding.theme_key
+            ).trim() || defaultBranding.theme_key,
+            home_bg_image_path: req.body.home_bg_image_path ? String(req.body.home_bg_image_path).trim() : null,
+            home_bg_image_size: req.body.home_bg_image_size ? String(req.body.home_bg_image_size).trim() : 'Cover',
+            home_theme_style: req.body.home_theme_style ? String(req.body.home_theme_style).trim() : 'Default'
         };
 
         let record;

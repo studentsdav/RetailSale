@@ -24,6 +24,7 @@ class Item {
   final int maxLevel;
   final bool stockable;
   final bool isSaleable;
+  final bool isTaxInclusive;
   final int? productTemplateId;
   final List<AttributeValue> attributeValues;
 
@@ -51,6 +52,7 @@ class Item {
     required this.maxLevel,
     required this.stockable,
     required this.isSaleable,
+    this.isTaxInclusive = false,
     this.productTemplateId,
     this.attributeValues = const [],
   });
@@ -86,6 +88,7 @@ class Item {
       maxLevel: json['max_level'] ?? 0,
       stockable: json['stockable'] ?? true,
       isSaleable: json['is_saleable'] ?? true,
+      isTaxInclusive: json['is_tax_inclusive'] == true || json['is_tax_inclusive'] == 1,
       productTemplateId: json['product_template_id'],
       attributeValues: vals,
     );
@@ -116,6 +119,7 @@ class Item {
       'max_level': maxLevel,
       'stockable': stockable,
       'is_saleable': isSaleable,
+      'is_tax_inclusive': isTaxInclusive,
       'product_template_id': productTemplateId,
       'attribute_values': attributeValues.map((e) => e.toJson()).toList(),
     };

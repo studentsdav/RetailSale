@@ -73,6 +73,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: 0
         },
+        remaining_balance: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: false,
+            defaultValue: 0
+        },
         reason: {
             type: DataTypes.STRING(100),
             allowNull: true

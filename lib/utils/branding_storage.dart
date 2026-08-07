@@ -25,6 +25,9 @@ class BrandingStorage {
 
   static String _logoKey(String outletCode) => 'brand_logo_$outletCode';
 
+  static String? _cachedPath;
+  static pw.MemoryImage? _cachedLogo;
+
   static Future<String?> saveLogoForOutlet({
     required String outletCode,
     required String sourcePath,
@@ -48,6 +51,8 @@ class BrandingStorage {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_logoKey(outletCode), targetPath);
+    _cachedPath = null;
+    _cachedLogo = null;
     return targetPath;
   }
 
@@ -93,7 +98,14 @@ class BrandingStorage {
   }
 
   static Future<pw.MemoryImage?> loadPdfLogo(String? path) async {
+    if (path == null || path.isEmpty) return null;
+    if (_cachedPath == path && _cachedLogo != null) {
+      return _cachedLogo;
+    }
     final bytes = await readLogoBytes(path);
-    return bytes == null ? null : pw.MemoryImage(bytes);
+    if (bytes == null) return null;
+    _cachedPath = path;
+    _cachedLogo = pw.MemoryImage(bytes);
+    return _cachedLogo;
   }
 }

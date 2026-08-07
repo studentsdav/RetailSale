@@ -24,6 +24,7 @@ class SaleItem {
   final double lineTotal;
   final List<TaxBreakdown> taxBreakup;
   final String? brand;
+  final bool isTaxInclusive;
 
   SaleItem({
     required this.itemId,
@@ -49,6 +50,7 @@ class SaleItem {
     double? lineTotal,
     this.taxBreakup = const [],
     this.brand,
+    this.isTaxInclusive = false,
   })  : originalQty = originalQty ?? qty,
         referenceRate = referenceRate ?? rate,
         taxableAmount = taxableAmount ?? ((qty * rate) - lineDiscount),
@@ -77,6 +79,7 @@ class SaleItem {
     double? lineTotal,
     List<TaxBreakdown>? taxBreakup,
     String? brand,
+    bool? isTaxInclusive,
   }) {
     return SaleItem(
       itemId: itemId,
@@ -102,6 +105,7 @@ class SaleItem {
       lineTotal: lineTotal ?? this.lineTotal,
       taxBreakup: taxBreakup ?? this.taxBreakup,
       brand: brand ?? this.brand,
+      isTaxInclusive: isTaxInclusive ?? this.isTaxInclusive,
     );
   }
 
@@ -132,6 +136,7 @@ class SaleItem {
       'amount': amount,
       'net_amount': netAmount,
       'brand': brand,
+      'is_tax_inclusive': isTaxInclusive,
     };
   }
 
@@ -143,7 +148,7 @@ class SaleItem {
       itemId: json['item_id'] ?? 0,
       itemCode: json['item_code'] ?? '',
       itemName: json['item_name'] ?? '',
-      hsnSacCode: json['hsn_sac_code'] ?? '',
+      hsnSacCode: json['hsn_sac_code'] ?? json['hsn_code'] ?? json['hsn'] ?? '',
       barcode: json['barcode'] ?? '',
       unit: json['unit'] ?? '',
       qty: parseNum(json['qty']),
@@ -181,6 +186,11 @@ class SaleItem {
               TaxBreakdown.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),
       brand: json['brand'] ?? (json['item'] is Map ? json['item']['brand']?.toString() : null),
+      isTaxInclusive: json['is_tax_inclusive'] == true ||
+          json['is_tax_inclusive'] == 1 ||
+          (json['item'] is Map &&
+              (json['item']['is_tax_inclusive'] == true ||
+                  json['item']['is_tax_inclusive'] == 1)),
     );
   }
 }

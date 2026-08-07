@@ -1304,13 +1304,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _settingRow(
                         title: 'Support Website URL',
                         description: 'Reference business website domain linked in footer',
-                        isLast: true,
                         control: SizedBox(
                           width: 280,
                           child: TextFormField(
                             key: ValueKey('branding-web-${_branding.supportWebsite}'),
                             initialValue: _branding.supportWebsite,
                             onChanged: (value) => _branding = _branding.copyWith(supportWebsite: value),
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Home Screen Background Image',
+                        description: 'Path or asset name for home page screen theme image',
+                        control: SizedBox(
+                          width: 280,
+                          child: TextFormField(
+                            key: ValueKey('branding-bgpath-${_branding.homeBgImagePath}'),
+                            initialValue: _branding.homeBgImagePath,
+                            onChanged: (value) => _branding = _branding.copyWith(homeBgImagePath: value),
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Background Image Scale Mode',
+                        description: 'Size sizing mode used for the backdrop theme image',
+                        isLast: true,
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            value: _branding.homeBgImageSize,
+                            items: const [
+                              DropdownMenuItem(value: 'Cover', child: Text('Cover (Fill screen)')),
+                              DropdownMenuItem(value: 'Contain', child: Text('Contain (Fit constraints)')),
+                              DropdownMenuItem(value: 'Original', child: Text('Original (No scaling)')),
+                            ],
+                            onChanged: (value) => setState(() {
+                              _branding = _branding.copyWith(homeBgImageSize: value);
+                            }),
                           ),
                         ),
                       ),

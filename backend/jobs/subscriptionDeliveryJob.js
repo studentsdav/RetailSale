@@ -29,9 +29,51 @@ async function createDraftForSubscription(db, sub, outletId, today) {
             { replacements: { oid: outletId }, type: db.QueryTypes.SELECT }
         );
         const saleNo = 'SUB-' + today.replace(/-/g,'') + '-' + String(r?.[0]?.n ?? 1).padStart(4,'0');
-        const rate = parseFloat(sub.item_master?.retail_sale_price ?? sub.item_master?.rate ?? 0);
-        const qty = parseFloat(sub.daily_allowed_qty ?? 1);
-        const amt = rate * qty;
+
+        // Check if there are multi-item mappings
+        const subItems = await db.models.milk_subscription_items.findAll({
+            where: { subscription_id: sub.id },
+            include: [{ model: db.models.item_master, as: 'item_master' }]
+        });
+
+        let lines = [];
+        let totalQty = 0;
+        let subTotal = 0;
+
+        if (subItems && subItems.length > 0) {
+            for (const sItem of subItems) {
+                if (!sItem.item_master) continue;
+                const rate = parseFloat(sItem.item_master.retail_sale_price ?? sItem.item_master.rate ?? 0);
+                const qty = parseFloat(sItem.qty ?? 1);
+                const lineAmt = rate * qty;
+                totalQty += qty;
+                subTotal += lineAmt;
+                lines.push({
+                    item_id: sItem.item_id,
+                    item_master: sItem.item_master,
+                    qty,
+                    rate,
+                    amount: lineAmt
+                });
+            }
+        } else if (sub.item_master) {
+            const rate = parseFloat(sub.item_master.retail_sale_price ?? sub.item_master.rate ?? 0);
+            const qty = parseFloat(sub.daily_allowed_qty ?? 1);
+            const lineAmt = rate * qty;
+            totalQty = qty;
+            subTotal = lineAmt;
+            lines.push({
+                item_id: sub.item_id,
+                item_master: sub.item_master,
+                qty,
+                rate,
+                amount: lineAmt
+            });
+        }
+
+        if (lines.length === 0) {
+            throw new Error('No items to subscribe');
+        }
 
         const dailyDeliveryCharge = parseFloat(sub.delivery_charge_amount || 0.0);
         const dailyDeliveryGstPercent = parseFloat(sub.delivery_charge_gst_percent || 0.0);
@@ -53,7 +95,7 @@ async function createDraftForSubscription(db, sub, outletId, today) {
         ] : [];
 
         const totalChargesAmount = dailyDeliveryCharge + dailyDeliveryTaxAmount;
-        const totalPayable = amt + totalChargesAmount;
+        const totalPayable = subTotal + totalChargesAmount;
 
         const header = await db.models.sales_headers.create({
             outlet_id: outletId, sale_no: saleNo, sale_date: new Date(today),
@@ -63,26 +105,29 @@ async function createDraftForSubscription(db, sub, outletId, today) {
             payment_reference: null, initial_amount_paid: 0, amount_paid: 0,
             change_amount: 0, balance_due: totalPayable, order_type: 'B2C',
             billing_country: 'India', billing_tax_mode: 'CGST_SGST', bill_format: 'A4',
-            tax_percent: 0, total_qty: qty, sub_total: amt, taxable_amount: amt,
+            tax_percent: 0, total_qty: totalQty, sub_total: subTotal, taxable_amount: subTotal,
             cgst_amount: 0, sgst_amount: 0, igst_amount: 0, total_tax: 0,
             tax_breakup: [], charges: charges, charge_total: dailyDeliveryCharge, charge_tax_total: dailyDeliveryTaxAmount,
             total_discount: 0, round_off_amount: 0, net_amount: totalPayable,
             scheme_discount: 0, manual_discount_type: null,
             manual_discount_value: 0, manual_discount_amount: 0,
-            notes: '[SUBSCRIPTION_AUTO] subscription_id=' + sub.id + ' | ' + (sub.customer_name||'') + ' | ' + (sub.item_master?.item_name||''),
+            notes: '[SUBSCRIPTION_AUTO] subscription_id=' + sub.id + ' | ' + (sub.customer_name||''),
             status: 'DRAFT', version_no: 1, is_latest: true, is_deleted: false,
         });
-        if (db.models.sales_items && sub.item_master) {
-            await db.models.sales_items.create({
-                outlet_id: outletId, sale_id: header.id, item_id: sub.item_id,
-                item_code: sub.item_master.item_code||'', item_name: sub.item_master.item_name||'',
-                hsn_code: sub.item_master.hsn_code||'', batch_no: null, expiry_date: null,
-                qty, original_qty: qty, unit: sub.item_master.unit||'PCS', rate, amount: amt,
-                tax_percent: 0, cgst_percent: 0, sgst_percent: 0, igst_percent: 0, cess_percent: 0,
-                taxable_amount: amt, cgst_amount: 0, sgst_amount: 0, igst_amount: 0,
-                cess_amount: 0, tax_amount: 0, discount_percent: 0, discount_amount: 0,
-                scheme_id: null, scheme_name: null, is_scheme_free: true, is_advance_free: false,
-            });
+
+        if (db.models.sales_items) {
+            for (const ln of lines) {
+                await db.models.sales_items.create({
+                    outlet_id: outletId, sale_id: header.id, item_id: ln.item_id,
+                    item_code: ln.item_master.item_code||'', item_name: ln.item_master.item_name||'',
+                    hsn_code: ln.item_master.hsn_code||'', batch_no: null, expiry_date: null,
+                    qty: ln.qty, original_qty: ln.qty, unit: ln.item_master.unit||'PCS', rate: ln.rate, amount: ln.amount,
+                    tax_percent: 0, cgst_percent: 0, sgst_percent: 0, igst_percent: 0, cess_percent: 0,
+                    taxable_amount: ln.amount, cgst_amount: 0, sgst_amount: 0, igst_amount: 0,
+                    cess_amount: 0, tax_amount: 0, discount_percent: 0, discount_amount: 0,
+                    scheme_id: null, scheme_name: null, is_scheme_free: true, is_advance_free: false,
+                });
+            }
         }
         log('Draft created sub=' + sub.id + ' sale=' + saleNo + ' outlet=' + outletId);
         return header.id;
@@ -96,42 +141,138 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
             { replacements: { oid: outletId }, type: db.QueryTypes.SELECT }
         );
         const saleNo = 'SUB-' + today.replace(/-/g,'') + '-' + String(r?.[0]?.n ?? 1).padStart(4,'0');
-        const rate = parseFloat(sub.item_master?.retail_sale_price ?? sub.item_master?.rate ?? 0);
-        const qty = parseFloat(sub.daily_allowed_qty ?? 1);
-        const amt = rate * qty;
 
-        const taxPercent = parseFloat(sub.item_master?.tax_percent || 0.0);
-        const taxType = sub.item_master?.tax_type || 'GST';
-        const taxAmount = (amt * taxPercent) / 100;
-        const halfRate = taxPercent / 2;
-        const halfAmount = taxAmount / 2;
+        // Check if there are multi-item mappings
+        const subItems = await db.models.milk_subscription_items.findAll({
+            where: { subscription_id: sub.id },
+            include: [{ model: db.models.item_master, as: 'item_master' }]
+        });
 
-        const taxBreakup = taxPercent > 0 ? [
-            {
-                code: 'CGST',
-                label: `CGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
-                taxType: 'GST',
-                tax_type: 'GST',
-                rate: halfRate,
-                taxableAmount: amt,
-                taxable_amount: amt,
-                taxAmount: halfAmount,
-                tax_amount: halfAmount
-            },
-            {
-                code: 'SGST',
-                label: `SGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
-                taxType: 'GST',
-                tax_type: 'GST',
-                rate: halfRate,
-                taxableAmount: amt,
-                taxable_amount: amt,
-                taxAmount: halfAmount,
-                tax_amount: halfAmount
+        let lines = [];
+        let totalQty = 0;
+        let subTotal = 0;
+        let totalTax = 0;
+        let totalCgst = 0;
+        let totalSgst = 0;
+
+        if (subItems && subItems.length > 0) {
+            for (const sItem of subItems) {
+                if (!sItem.item_master) continue;
+                const rate = parseFloat(sItem.item_master.retail_sale_price ?? sItem.item_master.rate ?? 0);
+                const qty = parseFloat(sItem.qty ?? 1);
+                const amt = rate * qty;
+                totalQty += qty;
+                subTotal += amt;
+
+                const taxPercent = parseFloat(sItem.item_master.tax_percent || 0.0);
+                const taxAmount = (amt * taxPercent) / 100;
+                totalTax += taxAmount;
+                const halfRate = taxPercent / 2;
+                const halfAmount = taxAmount / 2;
+                totalCgst += halfAmount;
+                totalSgst += halfAmount;
+
+                const lineTotal = amt + taxAmount;
+
+                const taxBreakup = taxPercent > 0 ? [
+                    {
+                        code: 'CGST',
+                        label: `CGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
+                        taxType: 'GST',
+                        tax_type: 'GST',
+                        rate: halfRate,
+                        taxableAmount: amt,
+                        taxable_amount: amt,
+                        taxAmount: halfAmount,
+                        tax_amount: halfAmount
+                    },
+                    {
+                        code: 'SGST',
+                        label: `SGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
+                        taxType: 'GST',
+                        tax_type: 'GST',
+                        rate: halfRate,
+                        taxableAmount: amt,
+                        taxable_amount: amt,
+                        taxAmount: halfAmount,
+                        tax_amount: halfAmount
+                    }
+                ] : [];
+
+                lines.push({
+                    item_id: sItem.item_id,
+                    item_master: sItem.item_master,
+                    qty,
+                    rate,
+                    amount: amt,
+                    taxPercent,
+                    taxAmount,
+                    halfRate,
+                    halfAmount,
+                    lineTotal,
+                    taxBreakup
+                });
             }
-        ] : [];
+        } else if (sub.item_master) {
+            const rate = parseFloat(sub.item_master.retail_sale_price ?? sub.item_master.rate ?? 0);
+            const qty = parseFloat(sub.daily_allowed_qty ?? 1);
+            const amt = rate * qty;
+            totalQty = qty;
+            subTotal = amt;
 
-        const lineTotal = amt + taxAmount;
+            const taxPercent = parseFloat(sub.item_master.tax_percent || 0.0);
+            const taxAmount = (amt * taxPercent) / 100;
+            totalTax = taxAmount;
+            const halfRate = taxPercent / 2;
+            const halfAmount = taxAmount / 2;
+            totalCgst = halfAmount;
+            totalSgst = halfAmount;
+
+            const lineTotal = amt + taxAmount;
+
+            const taxBreakup = taxPercent > 0 ? [
+                {
+                    code: 'CGST',
+                    label: `CGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
+                    taxType: 'GST',
+                    tax_type: 'GST',
+                    rate: halfRate,
+                    taxableAmount: amt,
+                    taxable_amount: amt,
+                    taxAmount: halfAmount,
+                    tax_amount: halfAmount
+                },
+                {
+                    code: 'SGST',
+                    label: `SGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
+                    taxType: 'GST',
+                    tax_type: 'GST',
+                    rate: halfRate,
+                    taxableAmount: amt,
+                    taxable_amount: amt,
+                    taxAmount: halfAmount,
+                    tax_amount: halfAmount
+                }
+            ] : [];
+
+            lines.push({
+                item_id: sub.item_id,
+                item_master: sub.item_master,
+                qty,
+                rate,
+                amount: amt,
+                taxPercent,
+                taxAmount,
+                halfRate,
+                halfAmount,
+                lineTotal,
+                taxBreakup
+            });
+        }
+
+        if (lines.length === 0) {
+            throw new Error('No items to subscribe');
+        }
 
         const dailyDeliveryCharge = parseFloat(sub.delivery_charge_amount || 0.0);
         const dailyDeliveryGstPercent = parseFloat(sub.delivery_charge_gst_percent || 0.0);
@@ -154,7 +295,13 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
 
         const totalChargesAmount = dailyDeliveryCharge + dailyDeliveryTaxAmount;
         const netAmount = totalChargesAmount;
-        const deductionAmount = lineTotal + totalChargesAmount;
+        const totalLineTotals = lines.reduce((sum, ln) => sum + ln.lineTotal, 0);
+        const deductionAmount = totalLineTotals + totalChargesAmount;
+
+        const combinedTaxBreakups = [];
+        for (const ln of lines) {
+            combinedTaxBreakups.push(...ln.taxBreakup);
+        }
 
         const header = await db.models.sales_headers.create({
             outlet_id: outletId, sale_no: saleNo, sale_date: new Date(today),
@@ -164,82 +311,90 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
             payment_reference: null, initial_amount_paid: netAmount, amount_paid: netAmount,
             change_amount: 0, balance_due: 0, order_type: 'B2C',
             billing_country: 'India', billing_tax_mode: 'CGST_SGST', bill_format: 'A4',
-            tax_percent: 0, total_qty: qty, sub_total: amt, taxable_amount: amt,
-            cgst_amount: halfAmount, sgst_amount: halfAmount, igst_amount: 0, total_tax: taxAmount,
-            tax_breakup: taxBreakup, charges: charges, charge_total: dailyDeliveryCharge, charge_tax_total: dailyDeliveryTaxAmount,
-            total_discount: lineTotal, round_off_amount: 0, net_amount: netAmount,
-            notes: '[SUBSCRIPTION_AUTO] subscription_id=' + sub.id + ' | ' + (sub.customer_name||'') + ' | ' + (sub.item_master?.item_name||''),
+            tax_percent: 0, total_qty: totalQty, sub_total: subTotal, taxable_amount: subTotal,
+            cgst_amount: totalCgst, sgst_amount: totalSgst, igst_amount: 0, total_tax: totalTax,
+            tax_breakup: combinedTaxBreakups, charges: charges, charge_total: dailyDeliveryCharge, charge_tax_total: dailyDeliveryTaxAmount,
+            total_discount: totalLineTotals, round_off_amount: 0, net_amount: netAmount,
+            notes: '[SUBSCRIPTION_AUTO] subscription_id=' + sub.id + ' | ' + (sub.customer_name||''),
             status: 'COMPLETED', version_no: 1, is_latest: true, is_deleted: false,
         });
-        if (db.models.sales_items && sub.item_master) {
-            await db.models.sales_items.create({
-                outlet_id: outletId, sale_id: header.id, item_id: sub.item_id,
-                item_code: sub.item_master.item_code||'', item_name: sub.item_master.item_name||'',
-                hsn_code: sub.item_master.hsn_code||'', batch_no: null, expiry_date: null,
-                qty, original_qty: qty, unit: sub.item_master.unit||'PCS', rate, amount: amt,
-                tax_percent: taxPercent, cgst_percent: halfRate, sgst_percent: halfRate, igst_percent: 0, cess_percent: 0,
-                taxable_amount: amt, cgst_amount: halfAmount, sgst_amount: halfAmount, igst_amount: 0,
-                cess_amount: 0, tax_amount: taxAmount, discount_percent: 0, discount_amount: 0,
-                scheme_id: null, scheme_name: null, is_scheme_free: false, is_advance_free: true,
-                line_total: lineTotal, net_amount: lineTotal, tax_breakup: taxBreakup
-            });
-        }
-        if (db.models.milk_subscription_consumptions) {
-            await db.models.milk_subscription_consumptions.create({
-                outlet_id: outletId, subscription_id: sub.id, sale_id: header.id,
-                item_id: sub.item_id, txn_date: new Date(today),
-                cart_qty: qty, covered_qty: qty, excess_qty: 0, source: 'AUTO_JOB',
-            }).catch(() => {});
-        }
-        try {
-            const advance = await db.models.customer_item_advances.findOne({
-                where: {
-                    outlet_id: outletId,
-                    item_id: sub.item_id,
-                    [Op.or]: [
-                        { source_sale_id: sub.id },
-                        { note: { [Op.iLike]: `%Subscription #${sub.id}%` } }
-                    ]
-                }
-            });
-            if (advance) {
-                const currentAvailable = parseFloat(advance.available_qty ?? 0);
-                const nextAvailable = Math.max(currentAvailable - qty, 0);
-                await advance.update({ available_qty: nextAvailable });
 
-                const cashAdvance = await db.models.customer_advances.findOne({
+        for (const ln of lines) {
+            if (db.models.sales_items) {
+                await db.models.sales_items.create({
+                    outlet_id: outletId, sale_id: header.id, item_id: ln.item_id,
+                    item_code: ln.item_master.item_code||'', item_name: ln.item_master.item_name||'',
+                    hsn_code: ln.item_master.hsn_code||'', batch_no: null, expiry_date: null,
+                    qty: ln.qty, original_qty: ln.qty, unit: ln.item_master.unit||'PCS', rate: ln.rate, amount: ln.amount,
+                    tax_percent: ln.taxPercent, cgst_percent: ln.halfRate, sgst_percent: ln.halfRate, igst_percent: 0, cess_percent: 0,
+                    taxable_amount: ln.amount, cgst_amount: ln.halfAmount, sgst_amount: ln.halfAmount, igst_amount: 0,
+                    cess_amount: 0, tax_amount: ln.taxAmount, discount_percent: 0, discount_amount: 0,
+                    scheme_id: null, scheme_name: null, is_scheme_free: false, is_advance_free: true,
+                    line_total: ln.lineTotal, net_amount: ln.lineTotal, tax_breakup: ln.taxBreakup
+                });
+            }
+
+            if (db.models.milk_subscription_consumptions) {
+                await db.models.milk_subscription_consumptions.create({
+                    outlet_id: outletId, subscription_id: sub.id, sale_id: header.id,
+                    item_id: ln.item_id, txn_date: new Date(today),
+                    cart_qty: ln.qty, covered_qty: ln.qty, excess_qty: 0, source: 'AUTO_JOB',
+                }).catch(() => {});
+            }
+
+            try {
+                const advance = await db.models.customer_item_advances.findOne({
                     where: {
                         outlet_id: outletId,
+                        item_id: ln.item_id,
                         [Op.or]: [
                             { source_sale_id: sub.id },
-                            { reference_no: `SUBSCRIPTION-${sub.id}` }
+                            { note: { [Op.iLike]: `%Subscription #${sub.id}%` } }
                         ]
                     }
                 });
-                if (cashAdvance) {
-                    const currentCashAvailable = parseFloat(cashAdvance.available_amount ?? 0);
-                    const nextCashAvailable = Math.max(currentCashAvailable - deductionAmount, 0);
-                    await cashAdvance.update({ available_amount: nextCashAvailable });
+                if (advance) {
+                    const currentAvailable = parseFloat(advance.available_qty ?? 0);
+                    const nextAvailable = Math.max(currentAvailable - ln.qty, 0);
+                    await advance.update({ available_qty: nextAvailable });
                 }
-
-                // Keep the cash ledger in sync with the prepaid subscription consumption.
-                await createLedgerEntry({
-                    db,
-                    outlet_id: outletId,
-                    txn_date: new Date(today),
-                    transaction_type: 'ADVANCE_APPLY',
-                    reference_type: 'SUBSCRIPTION',
-                    reference_id: sub.id,
-                    reference_no: saleNo,
-                    party_name: sub.customer_name || sub.customer_phone || 'Subscription Customer',
-                    payment_method: 'SUBSCRIPTION',
-                    amount_out: deductionAmount,
-                    notes: `Advance adjusted for subscription item consumption in ${saleNo}`,
-                    created_by: sub.created_by || null
-                });
+            } catch (e) {
+                log('Failed to sync item advance for item=' + ln.item_id + ' sub=' + sub.id + ': ' + e.message, true);
             }
+        }
+
+        try {
+            const cashAdvance = await db.models.customer_advances.findOne({
+                where: {
+                    outlet_id: outletId,
+                    [Op.or]: [
+                        { source_sale_id: sub.id },
+                        { reference_no: `SUBSCRIPTION-${sub.id}` }
+                    ]
+                }
+            });
+            if (cashAdvance) {
+                const currentCashAvailable = parseFloat(cashAdvance.available_amount ?? 0);
+                const nextCashAvailable = Math.max(currentCashAvailable - deductionAmount, 0);
+                await cashAdvance.update({ available_amount: nextCashAvailable });
+            }
+
+            await createLedgerEntry({
+                db,
+                outlet_id: outletId,
+                txn_date: new Date(today),
+                transaction_type: 'ADVANCE_APPLY',
+                reference_type: 'SUBSCRIPTION',
+                reference_id: sub.id,
+                reference_no: saleNo,
+                party_name: sub.customer_name || sub.customer_phone || 'Subscription Customer',
+                payment_method: 'SUBSCRIPTION',
+                amount_out: deductionAmount,
+                notes: `Advance adjusted for subscription items consumption in ${saleNo}`,
+                created_by: sub.created_by || null
+            });
         } catch (e) {
-            log('Failed to sync subscription advance for sub=' + sub.id + ': ' + e.message, true);
+            log('Failed to sync global advances for sub=' + sub.id + ': ' + e.message, true);
         }
 
         log('Accepted sale created sub=' + sub.id + ' sale=' + saleNo + ' outlet=' + outletId);

@@ -180,7 +180,8 @@ exports.createItem = async (req, res) => {
             min_level,
             max_level,
             stockable,
-            is_saleable
+            is_saleable,
+            is_tax_inclusive
         } = req.body;
 
         const outlet_id = req.user.outlet_id;
@@ -229,6 +230,7 @@ exports.createItem = async (req, res) => {
             max_level,
             stockable,
             is_saleable: is_saleable ?? true,
+            is_tax_inclusive: is_tax_inclusive ?? false,
             is_active: true
         });
 

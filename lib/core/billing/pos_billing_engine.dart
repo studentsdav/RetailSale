@@ -13,44 +13,92 @@ class PosBillingEngine {
     required List<BillingCharge> charges,
     int? schemeItemId,
   }) {
-    final subTotal = items.fold<double>(0, (sum, item) => sum + item.amount);
     final totalQty = items.fold<double>(0, (sum, item) => sum + item.qty);
 
-    final schemeEligibleTotal = schemeItemId != null
+    final bool anyInclusive = items.any((item) => item.isTaxInclusive);
+
+    final double discountEligibleTotal = items
+        .where((item) => item.discountApplicable)
+        .fold<double>(0, (sum, item) => sum + (anyInclusive
+            ? (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))
+            : item.amount));
+
+    final double schemeEligibleTotal = schemeItemId != null
         ? items
             .where((item) => item.itemId == schemeItemId && item.schemeApplicable)
-            .fold<double>(0, (sum, item) => sum + item.amount)
+            .fold<double>(0, (sum, item) => sum + (anyInclusive
+                ? (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))
+                : item.amount))
         : items
             .where((item) => item.schemeApplicable)
-            .fold<double>(0, (sum, item) => sum + item.amount);
-    final discountEligibleTotal = items
-        .where((item) => item.discountApplicable)
-        .fold<double>(0, (sum, item) => sum + item.amount);
+            .fold<double>(0, (sum, item) => sum + (anyInclusive
+                ? (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))
+                : item.amount));
 
     final computedItems = <SaleItem>[];
     final taxSummary = <String, TaxBreakdown>{};
 
+    double calculatedSubTotal = 0.0;
+    double calculatedDiscount = 0.0;
+
     for (final item in items) {
-      final gross = item.amount;
-      final schemeShare = schemeEligibleTotal > 0 &&
+      final double gross = item.amount;
+      final double grossInclusive = item.isTaxInclusive
+          ? gross
+          : (gross * (1 + item.taxPercent / 100));
+
+      final double schemeShare = schemeEligibleTotal > 0 &&
               item.schemeApplicable &&
               (schemeItemId == null || item.itemId == schemeItemId)
-          ? (gross / schemeEligibleTotal) * schemeDiscountAmount
+          ? (anyInclusive
+              ? (grossInclusive / schemeEligibleTotal) * schemeDiscountAmount
+              : (gross / schemeEligibleTotal) * schemeDiscountAmount)
           : 0.0;
-      final manualShare = discountEligibleTotal > 0 && item.discountApplicable
-          ? (gross / discountEligibleTotal) * manualDiscountAmount
+
+      final double manualShare = discountEligibleTotal > 0 && item.discountApplicable
+          ? (anyInclusive
+              ? (grossInclusive / discountEligibleTotal) * manualDiscountAmount
+              : (gross / discountEligibleTotal) * manualDiscountAmount)
           : 0.0;
-      double lineDiscount = (schemeShare + manualShare).clamp(0, gross);
-      double taxableAmount = (gross - lineDiscount).clamp(0, double.infinity);
-      final lineTaxes = _resolveTaxes(
-        taxMode: taxMode,
-        taxType: item.taxType,
-        taxPercent: item.taxPercent,
-        taxableAmount: taxableAmount,
-      );
-      final taxAmount =
-          lineTaxes.fold<double>(0, (sum, entry) => sum + entry.taxAmount);
-      final lineTotal = taxableAmount + taxAmount;
+
+      final double lineDiscountInclusive = (schemeShare + manualShare).clamp(0.0, grossInclusive);
+      final double lineDiscount = item.isTaxInclusive
+          ? lineDiscountInclusive
+          : (lineDiscountInclusive / (1 + item.taxPercent / 100));
+
+      double taxableAmount;
+      double taxAmount;
+      double lineTotal;
+      List<TaxBreakdown> lineTaxes;
+
+      if (item.isTaxInclusive) {
+        final netInclusive = (gross - lineDiscount).clamp(0.0, double.infinity);
+        taxableAmount = netInclusive / (1 + item.taxPercent / 100);
+        lineTaxes = _resolveTaxes(
+          taxMode: taxMode,
+          taxType: item.taxType,
+          taxPercent: item.taxPercent,
+          taxableAmount: taxableAmount,
+        );
+        taxAmount = netInclusive - taxableAmount;
+        lineTotal = netInclusive;
+
+        calculatedSubTotal += gross / (1 + item.taxPercent / 100);
+        calculatedDiscount += lineDiscount / (1 + item.taxPercent / 100);
+      } else {
+        taxableAmount = (gross - lineDiscount).clamp(0.0, double.infinity);
+        lineTaxes = _resolveTaxes(
+          taxMode: taxMode,
+          taxType: item.taxType,
+          taxPercent: item.taxPercent,
+          taxableAmount: taxableAmount,
+        );
+        taxAmount = lineTaxes.fold<double>(0, (sum, entry) => sum + entry.taxAmount);
+        lineTotal = taxableAmount + taxAmount;
+
+        calculatedSubTotal += gross;
+        calculatedDiscount += lineDiscount;
+      }
 
       final enriched = item.copyWith(
         lineDiscount: lineDiscount,
@@ -78,6 +126,8 @@ class PosBillingEngine {
         }
       }
     }
+
+    final double subTotal = calculatedSubTotal;
 
     final activeCharges = charges
         .where(
@@ -148,8 +198,7 @@ class PosBillingEngine {
     final chargeTaxTotal = computedCharges.fold<double>(
         0, (sum, charge) => sum + charge.taxAmount);
 
-    double totalDiscount =
-        (schemeDiscountAmount + manualDiscountAmount).clamp(0, subTotal);
+    double totalDiscount = calculatedDiscount.clamp(0, subTotal);
 
     return InvoiceComputation(
       items: computedItems,
