@@ -16,6 +16,8 @@ import '../../models/inventory/billing_charge_model.dart';
 import '../../models/settings/app_branding_model.dart';
 import '../../controllers/sales/sales_controller.dart';
 import 'commission_rules_screen.dart';
+import 'happy_hour_config_screen.dart';
+import 'bill_value_promo_config_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -1634,6 +1636,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               Row(
                 children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const HappyHourConfigScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.alarm_on_rounded, size: 18),
+                    label: const Text('Configure Happy Hour'),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const BillValuePromoConfigScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.discount_rounded, size: 18),
+                    label: const Text('Configure Bill Value Promos'),
+                  ),
+                  const SizedBox(width: 12),
                   OutlinedButton.icon(
                     onPressed: () {
                       Navigator.push(

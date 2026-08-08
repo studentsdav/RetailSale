@@ -71,6 +71,10 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.DECIMAL(12, 2),
                 defaultValue: 0
             },
+            mrp: {
+                type: DataTypes.DECIMAL(12, 2),
+                defaultValue: 0
+            },
 
             b2b_rate: {
                 type: DataTypes.DECIMAL(12, 2),
@@ -150,6 +154,10 @@ module.exports = (sequelize, DataTypes) => {
             is_active: {
                 type: DataTypes.BOOLEAN,
                 defaultValue: true
+            },
+            is_happy_hour: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false
             },
 
             product_template_id: {

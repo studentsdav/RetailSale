@@ -5,6 +5,8 @@ const ctrl = require('../controllers/sales/sales.controller');
 const loyaltyCtrl = require('../controllers/sales/loyalty.controller');
 const settingsCtrl = require('../controllers/sales/saleSettings.controller');
 const commissionRulesCtrl = require('../controllers/sales/commissionRules.controller');
+const happyHourCtrl = require('../controllers/sales/happyHour.controller');
+const billValuePromoCtrl = require('../controllers/sales/billValuePromo.controller');
 const { getSubscriptionDraftOrdersToday } = require('../jobs/subscriptionDeliveryJob');
 
 router.use(auth, license('INVENTORY'));
@@ -12,6 +14,19 @@ router.use(auth, license('INVENTORY'));
 // Commission Rules
 router.get('/commission-rules', commissionRulesCtrl.listCommissionRules);
 router.post('/commission-rules', commissionRulesCtrl.createCommissionRule);
+
+// Happy Hours
+router.get('/happy-hours', happyHourCtrl.listHappyHours);
+router.post('/happy-hours', happyHourCtrl.createHappyHour);
+router.put('/happy-hours/:id', happyHourCtrl.updateHappyHour);
+router.delete('/happy-hours/:id', happyHourCtrl.deleteHappyHour);
+
+// Bill Value Promos
+router.get('/bill-value-promos', billValuePromoCtrl.listBillValuePromos);
+router.post('/bill-value-promos', billValuePromoCtrl.createBillValuePromo);
+router.put('/bill-value-promos/:id', billValuePromoCtrl.updateBillValuePromo);
+router.delete('/bill-value-promos/:id', billValuePromoCtrl.deleteBillValuePromo);
+
 router.put('/commission-rules/:id', commissionRulesCtrl.updateCommissionRule);
 router.delete('/commission-rules/:id', commissionRulesCtrl.deleteCommissionRule);
 

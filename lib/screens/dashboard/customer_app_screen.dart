@@ -168,11 +168,20 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   double _getItemPrice(Map<String, dynamic> item) {
     final b2bRate = double.tryParse(item['b2b_rate']?.toString() ?? '') ?? 0.0;
-    final double rawPrice = (_gstin.isNotEmpty && b2bRate > 0)
-        ? b2bRate
-        : (double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
-            double.tryParse(item['rate']?.toString() ?? '') ??
-            0.0);
+    final specialPrice = double.tryParse(item['special_price']?.toString() ?? '');
+    final originalPrice = double.tryParse(item['original_price']?.toString() ?? '');
+
+    double rawPrice = 0.0;
+    if (_gstin.isNotEmpty && b2bRate > 0) {
+      rawPrice = b2bRate;
+    } else if (specialPrice != null && originalPrice != null && specialPrice < originalPrice) {
+      rawPrice = specialPrice;
+    } else {
+      rawPrice = double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
+          double.tryParse(item['rate']?.toString() ?? '') ??
+          0.0;
+    }
+
     final bool isInclusive = item['is_tax_inclusive'] == true ||
         item['is_tax_inclusive'] == 1 ||
         item['is_tax_inclusive'].toString() == 'true';
@@ -3710,15 +3719,68 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
                                               Expanded(
-                                                child: Text(
-                                                  hasVariants ? 'Rs. ${price.toStringAsFixed(0)}+' : 'Rs. ${price.toStringAsFixed(0)}',
-                                                  style: TextStyle(
-                                                    color: theme.colorScheme.primary,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 14,
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
+                                                child: (() {
+                                                  final double? specialPrice = item['special_price'] != null
+                                                      ? double.tryParse(item['special_price'].toString())
+                                                      : null;
+                                                  final double? originalPrice = item['original_price'] != null
+                                                      ? double.tryParse(item['original_price'].toString())
+                                                      : null;
+                                                  final bool isInclusive = item['is_tax_inclusive'] == true ||
+                                                      item['is_tax_inclusive'] == 1 ||
+                                                      item['is_tax_inclusive'].toString() == 'true';
+                                                  final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+
+                                                  double? displaySpecial;
+                                                  double? displayOriginal;
+
+                                                  if (specialPrice != null && originalPrice != null && specialPrice < originalPrice) {
+                                                    if (isInclusive) {
+                                                      displaySpecial = double.parse((specialPrice * (1 + taxPercent / 100)).toStringAsFixed(2));
+                                                      displayOriginal = double.parse((originalPrice * (1 + taxPercent / 100)).toStringAsFixed(2));
+                                                    } else {
+                                                      displaySpecial = specialPrice;
+                                                      displayOriginal = originalPrice;
+                                                    }
+                                                  }
+
+                                                  final bool hasPromo = displaySpecial != null && displayOriginal != null && displaySpecial < displayOriginal;
+
+                                                  return Wrap(
+                                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                                    children: [
+                                                      if (hasPromo) ...[
+                                                        Text(
+                                                          'Rs. ${displayOriginal!.toStringAsFixed(0)}',
+                                                          style: const TextStyle(
+                                                            color: Colors.grey,
+                                                            decoration: TextDecoration.lineThrough,
+                                                            fontSize: 11,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          hasVariants ? 'Rs. ${displaySpecial!.toStringAsFixed(0)}+' : 'Rs. ${displaySpecial!.toStringAsFixed(0)}',
+                                                          style: TextStyle(
+                                                            color: theme.colorScheme.primary,
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 14,
+                                                          ),
+                                                        ),
+                                                      ] else ...[
+                                                        Text(
+                                                          hasVariants ? 'Rs. ${price.toStringAsFixed(0)}+' : 'Rs. ${price.toStringAsFixed(0)}',
+                                                          style: TextStyle(
+                                                            color: theme.colorScheme.primary,
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 14,
+                                                          ),
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  );
+                                                })(),
                                               ),
                                               _buildAddButton(
                                                 isOutOfStock: isDisplayOutOfStock,

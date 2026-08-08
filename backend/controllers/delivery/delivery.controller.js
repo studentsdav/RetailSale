@@ -161,6 +161,40 @@ exports.listCatalogProducts = async (req, res) => {
         const totalCount = parseInt(totalCountResult[0].count);
         const totalPages = Math.ceil(totalCount / limit);
 
+        const activeSchemes = await req.propertyDb.models.sales_schemes.findAll({
+            where: {
+                outlet_id: outletId,
+                is_active: true,
+                scheme_scope: 'ITEM',
+                discount_type: { [req.propertyDb.Sequelize.Op.in]: ['SPECIAL_PRICE', 'AMOUNT_OFF'] }
+            }
+        });
+
+        const now = new Date();
+        const serverLocalTimeStr = now.toTimeString().split(' ')[0].substring(0, 5); // "HH:MM"
+        const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const serverWeekday = weekdays[now.getDay()];
+
+        function _minutesFromHm(hm) {
+            const parts = hm.split(':');
+            if (parts.length < 2) return 0;
+            return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        }
+
+        const matchingSchemes = activeSchemes.filter(scheme => {
+            if (scheme.days_of_week) {
+                const allowedDays = scheme.days_of_week.split(',').map(d => d.trim().toLowerCase());
+                if (!allowedDays.includes(serverWeekday.toLowerCase())) return false;
+            }
+            if (scheme.start_time && scheme.end_time) {
+                const current = _minutesFromHm(serverLocalTimeStr);
+                const start = _minutesFromHm(scheme.start_time);
+                const end = _minutesFromHm(scheme.end_time);
+                if (current < start || current > end) return false;
+            }
+            return true;
+        });
+
         const hasGstin = !!(req.query.gstin);
         const processedItems = [];
         for (const item of items) {
@@ -190,6 +224,22 @@ exports.listCatalogProducts = async (req, res) => {
                 mergedItem.rate = mergedItem.b2b_rate;
                 mergedItem.retail_sale_price = mergedItem.b2b_rate;
             }
+
+            const originalPrice = mergedItem.retail_sale_price > 0 ? Number(mergedItem.retail_sale_price) : Number(mergedItem.rate);
+            const matchingScheme = matchingSchemes.find(s => Number(s.item_id) === Number(mergedItem.id));
+            if (matchingScheme) {
+                let specialPrice = originalPrice;
+                if (matchingScheme.discount_type === 'SPECIAL_PRICE') {
+                    specialPrice = Number(matchingScheme.discount_value);
+                } else if (matchingScheme.discount_type === 'AMOUNT_OFF') {
+                    specialPrice = originalPrice - Number(matchingScheme.discount_value);
+                }
+                if (specialPrice < originalPrice) {
+                    mergedItem.special_price = specialPrice;
+                    mergedItem.original_price = originalPrice;
+                }
+            }
+
             processedItems.push(mergedItem);
         }
 
@@ -1335,7 +1385,9 @@ exports.acceptOrder = async (req, res) => {
                 tax_breakup: itemBreakup,
                 net_amount: itemLineTotal,
                 is_scheme_free: item.is_scheme_free === true || item._subscription_free === true,
-                is_advance_free: item.is_advance_free === true || item._subscription_free === true
+                is_advance_free: item.is_advance_free === true || item._subscription_free === true,
+                original_rate: toAmount(item.original_rate ?? (itemRate + (lineDiscount / (itemQty || 1)))),
+                scheme_discount_per_unit: toAmount(item.scheme_discount_per_unit ?? (lineDiscount / (itemQty || 1)))
             }, { transaction: t });
 
 

@@ -18,6 +18,7 @@ class SaleItem {
   final bool isSchemeFree;
   final bool isAdvanceFree;
   final int? appliedSchemeId;
+  final int? appliedHappyHourId;
   final double lineDiscount;
   final double taxableAmount;
   final double taxAmount;
@@ -25,6 +26,9 @@ class SaleItem {
   final List<TaxBreakdown> taxBreakup;
   final String? brand;
   final bool isTaxInclusive;
+  final double? originalRate;
+  final double? schemeDiscountPerUnit;
+  final double mrp;
 
   SaleItem({
     required this.itemId,
@@ -44,6 +48,7 @@ class SaleItem {
     this.isSchemeFree = false,
     this.isAdvanceFree = false,
     this.appliedSchemeId,
+    this.appliedHappyHourId,
     this.lineDiscount = 0,
     double? taxableAmount,
     this.taxAmount = 0,
@@ -51,6 +56,9 @@ class SaleItem {
     this.taxBreakup = const [],
     this.brand,
     this.isTaxInclusive = false,
+    this.originalRate,
+    this.schemeDiscountPerUnit,
+    this.mrp = 0.0,
   })  : originalQty = originalQty ?? qty,
         referenceRate = referenceRate ?? rate,
         taxableAmount = taxableAmount ?? ((qty * rate) - lineDiscount),
@@ -73,6 +81,7 @@ class SaleItem {
     bool? isSchemeFree,
     bool? isAdvanceFree,
     int? appliedSchemeId,
+    int? appliedHappyHourId,
     double? lineDiscount,
     double? taxableAmount,
     double? taxAmount,
@@ -80,6 +89,9 @@ class SaleItem {
     List<TaxBreakdown>? taxBreakup,
     String? brand,
     bool? isTaxInclusive,
+    double? originalRate,
+    double? schemeDiscountPerUnit,
+    double? mrp,
   }) {
     return SaleItem(
       itemId: itemId,
@@ -99,6 +111,7 @@ class SaleItem {
       isSchemeFree: isSchemeFree ?? this.isSchemeFree,
       isAdvanceFree: isAdvanceFree ?? this.isAdvanceFree,
       appliedSchemeId: appliedSchemeId ?? this.appliedSchemeId,
+      appliedHappyHourId: appliedHappyHourId ?? this.appliedHappyHourId,
       lineDiscount: lineDiscount ?? this.lineDiscount,
       taxableAmount: taxableAmount ?? this.taxableAmount,
       taxAmount: taxAmount ?? this.taxAmount,
@@ -106,6 +119,9 @@ class SaleItem {
       taxBreakup: taxBreakup ?? this.taxBreakup,
       brand: brand ?? this.brand,
       isTaxInclusive: isTaxInclusive ?? this.isTaxInclusive,
+      originalRate: originalRate ?? this.originalRate,
+      schemeDiscountPerUnit: schemeDiscountPerUnit ?? this.schemeDiscountPerUnit,
+      mrp: mrp ?? this.mrp,
     );
   }
 
@@ -128,6 +144,7 @@ class SaleItem {
       'is_scheme_free': isSchemeFree,
       'is_advance_free': isAdvanceFree,
       'applied_scheme_id': appliedSchemeId,
+      'applied_happy_hour_id': appliedHappyHourId,
       'line_discount': lineDiscount,
       'taxable_amount': taxableAmount,
       'tax_amount': taxAmount,
@@ -137,6 +154,9 @@ class SaleItem {
       'net_amount': netAmount,
       'brand': brand,
       'is_tax_inclusive': isTaxInclusive,
+      'original_rate': originalRate,
+      'scheme_discount_per_unit': schemeDiscountPerUnit,
+      'mrp': mrp,
     };
   }
 
@@ -177,6 +197,7 @@ class SaleItem {
       isSchemeFree: json['is_scheme_free'] ?? false,
       isAdvanceFree: json['is_advance_free'] ?? false,
       appliedSchemeId: json['applied_scheme_id'],
+      appliedHappyHourId: json['applied_happy_hour_id'],
       lineDiscount: parseNum(json['line_discount']),
       taxableAmount: parseNum(json['taxable_amount']),
       taxAmount: parseNum(json['tax_amount']),
@@ -191,6 +212,9 @@ class SaleItem {
           (json['item'] is Map &&
               (json['item']['is_tax_inclusive'] == true ||
                   json['item']['is_tax_inclusive'] == 1)),
+      originalRate: json['original_rate'] != null ? parseNum(json['original_rate']) : null,
+      schemeDiscountPerUnit: json['scheme_discount_per_unit'] != null ? parseNum(json['scheme_discount_per_unit']) : null,
+      mrp: json['mrp'] != null ? parseNum(json['mrp']) : (json['item'] is Map ? parseNum(json['item']['mrp']) : 0.0),
     );
   }
 }

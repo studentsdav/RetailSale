@@ -206,6 +206,10 @@ propertyDb.models.commission_rules =
     require('../../models/property/commissionRule.model')(propertyDb, DataTypes);
 propertyDb.models.payment_methods =
     require('../../models/property/paymentMethod.model')(propertyDb, DataTypes);
+propertyDb.models.happy_hours =
+    require('../../models/property/happyHour.model')(propertyDb, DataTypes);
+propertyDb.models.bill_value_promos =
+    require('../../models/property/billValuePromo.model')(propertyDb, DataTypes);
 
 // BOM & ASSEMBLY
 propertyDb.models.item_boms =

@@ -133,6 +133,8 @@ class _SaleScreenState extends State<SaleScreen> {
   final Map<int, double> _itemAdvanceAppliedAmountByItem = {};
   List<Map<String, dynamic>> _customerItemAdvances = const [];
   List<Map<String, dynamic>> _customerSubscriptions = const [];
+  List<dynamic> _happyHours = [];
+  List<dynamic> _billValuePromos = [];
   bool _selectedCustomerSchemeSuppressed = false;
   final List<SaleScheme> _selectedSchemes = [];
 
@@ -236,6 +238,8 @@ class _SaleScreenState extends State<SaleScreen> {
       await _loadCashierName();
       await _loadSaleSettings();
       await _fetchSalespersons();
+      await _fetchHappyHours();
+      await _fetchBillValuePromos();
       _saleNo.text = await ctrl.getNextSaleNo();
       _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
       _applyBillingDefaults();
@@ -321,6 +325,28 @@ class _SaleScreenState extends State<SaleScreen> {
       if (res['success'] == true && res['data'] != null) {
         setState(() {
           _salespersons = List<Map<String, dynamic>>.from(res['data']);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchHappyHours() async {
+    try {
+      final res = await ApiClient.get('/api/sales/happy-hours');
+      if (res['success'] == true && res['data'] != null) {
+        setState(() {
+          _happyHours = List<dynamic>.from(res['data']);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchBillValuePromos() async {
+    try {
+      final res = await ApiClient.get('/api/sales/bill-value-promos');
+      if (res['success'] == true && res['data'] != null) {
+        setState(() {
+          _billValuePromos = List<dynamic>.from(res['data']);
         });
       }
     } catch (_) {}
@@ -940,27 +966,41 @@ class _SaleScreenState extends State<SaleScreen> {
   bool _isSchemeEligible(SaleScheme scheme) {
     if (!scheme.isActive || _items.isEmpty) return false;
 
+    // 1. Weekdays Check
+    if (scheme.daysOfWeek != null && scheme.daysOfWeek!.trim().isNotEmpty) {
+      final now = DateTime.now();
+      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      final todayStr = weekdays[now.weekday - 1];
+      final allowedDays = scheme.daysOfWeek!.split(',').map((s) => s.trim().toLowerCase()).toList();
+      if (!allowedDays.contains(todayStr.toLowerCase())) return false;
+    }
+
+    // 2. Timing Check
+    if (scheme.startTime != null && scheme.endTime != null &&
+        scheme.startTime!.trim().isNotEmpty && scheme.endTime!.trim().isNotEmpty) {
+      final now = TimeOfDay.fromDateTime(DateTime.now());
+      final current = now.hour * 60 + now.minute;
+      final start = _minutesFromHm(scheme.startTime!);
+      final end = _minutesFromHm(scheme.endTime!);
+      if (current < start || current > end) return false;
+    }
+
     double eligibleBaseAmount = 0;
     double eligibleQty = 0;
 
     if (scheme.itemId != null) {
-      final matchingItems = _items.where((item) => item.itemId == scheme.itemId && item.schemeApplicable);
+      final matchingItems = _items.where((item) => item.itemId == scheme.itemId && item.schemeApplicable && !item.isSchemeFree);
       eligibleBaseAmount = matchingItems.fold<double>(0, (sum, item) => sum + item.amount);
       eligibleQty = matchingItems.fold<double>(0, (sum, item) => sum + item.qty);
     } else {
       eligibleBaseAmount = _schemeBaseAmount;
-      eligibleQty = _items.where((item) => item.schemeApplicable).fold<double>(0, (sum, item) => sum + item.qty);
+      eligibleQty = _items.where((item) => item.schemeApplicable && !item.isSchemeFree).fold<double>(0, (sum, item) => sum + item.qty);
     }
 
     if (eligibleBaseAmount <= 0) return false;
 
     if (scheme.schemeType == 'TIME') {
-      if (scheme.startTime == null || scheme.endTime == null) return false;
-      final now = TimeOfDay.fromDateTime(DateTime.now());
-      final current = now.hour * 60 + now.minute;
-      final start = _minutesFromHm(scheme.startTime!);
-      final end = _minutesFromHm(scheme.endTime!);
-      return current >= start && current <= end;
+      return true;
     }
     if (scheme.schemeType == 'QTY') {
       return eligibleQty >= scheme.minQty;
@@ -968,7 +1008,37 @@ class _SaleScreenState extends State<SaleScreen> {
     if (scheme.schemeType == 'VALUE') {
       return eligibleBaseAmount >= scheme.minAmount;
     }
+    if (scheme.schemeType == 'CYCLE_ITEM_FREE') {
+      return eligibleQty >= scheme.minQty;
+    }
     return false;
+  }
+
+  SaleScheme? _getActivePromoForItem(Item item) {
+    if (ctrl.schemes.isEmpty) return null;
+    final now = DateTime.now();
+    final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final todayStr = weekdays[now.weekday - 1];
+    final currentMinutes = TimeOfDay.fromDateTime(now).hour * 60 + TimeOfDay.fromDateTime(now).minute;
+
+    for (final scheme in ctrl.schemes) {
+      if (scheme.itemId == item.id && scheme.schemeScope == 'ITEM' && scheme.isActive) {
+        if (scheme.daysOfWeek != null && scheme.daysOfWeek!.trim().isNotEmpty) {
+          final allowedDays = scheme.daysOfWeek!.split(',').map((s) => s.trim().toLowerCase()).toList();
+          if (!allowedDays.contains(todayStr.toLowerCase())) continue;
+        }
+        if (scheme.startTime != null && scheme.endTime != null &&
+            scheme.startTime!.trim().isNotEmpty && scheme.endTime!.trim().isNotEmpty) {
+          final start = _minutesFromHm(scheme.startTime!);
+          final end = _minutesFromHm(scheme.endTime!);
+          if (currentMinutes < start || currentMinutes > end) continue;
+        }
+        if (scheme.discountType == 'SPECIAL_PRICE' || scheme.discountType == 'AMOUNT_OFF') {
+          return scheme;
+        }
+      }
+    }
+    return null;
   }
 
   void _clearManualDiscount() {
@@ -2248,7 +2318,7 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
-  void _updateLineQty(int index, double qty) {
+  void _updateLineQty(int index, double qty, {bool isTotalQty = false}) {
     final line = _items[index];
     final isFreeLine = line.isAdvanceFree || line.isSchemeFree;
 
@@ -2263,7 +2333,7 @@ class _SaleScreenState extends State<SaleScreen> {
           )
           .fold<double>(0, (sum, row) => sum + row.qty);
       final paidQty = qty <= 0 ? 0 : qty;
-      final totalQty = paidQty + freeQtyForItem;
+      final totalQty = isTotalQty ? qty : (paidQty + freeQtyForItem);
 
       if (totalQty <= 0) {
         _removeCartItemGroupById(line.itemId);
@@ -2360,9 +2430,12 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   Future<void> _editQtyDialog(int index) async {
+    final totalQtyForItem = _items
+        .where((row) => row.itemId == _items[index].itemId)
+        .fold<double>(0, (sum, row) => sum + row.qty);
     final controller = TextEditingController(
       text:
-          _items[index].qty.toStringAsFixed(_items[index].qty % 1 == 0 ? 0 : 2),
+          totalQtyForItem.toStringAsFixed(totalQtyForItem % 1 == 0 ? 0 : 2),
     );
     final qty = await showDialog<double>(
       context: context,
@@ -2391,7 +2464,7 @@ class _SaleScreenState extends State<SaleScreen> {
       ),
     );
     controller.dispose();
-    if (qty != null) _updateLineQty(index, qty);
+    if (qty != null) _updateLineQty(index, qty, isTotalQty: true);
   }
 
   Future<void> _editTaxDialog(int index) async {
@@ -2838,157 +2911,440 @@ class _SaleScreenState extends State<SaleScreen> {
   //
   // This relies on `_itemSchemeProgress` (enrollment + progress) already loaded.
   void _rebuildItemSchemeFreeLines() {
-    final schemes = _selectedItemSchemes;
-    if (schemes.isEmpty) return;
-    if (_schemeUsageMode != 'APPLY_NOW') return;
-
-    final selectedSchemeIds = schemes.map((scheme) => scheme.id).toSet();
-    final schemeItemIds = schemes
-        .map((scheme) => scheme.itemId ?? 0)
-        .where((itemId) => itemId > 0)
-        .toSet();
-
-    // Normalize each scheme item back to one paid/base line before reapplying
-    // free split, so repeated rebuilds do not reduce qty line-by-line.
-    for (final itemId in schemeItemIds) {
-      final schemeScopedLines = _items
-          .where(
-            (it) =>
-                it.itemId == itemId &&
-                !it.isAdvanceFree &&
-                (!it.isSchemeFree ||
-                    selectedSchemeIds.contains(it.appliedSchemeId)),
-          )
-          .toList();
-      if (schemeScopedLines.isEmpty) continue;
-
-      final restoredQty = schemeScopedLines.fold<double>(
-        0,
-        (sum, it) => sum + it.qty,
-      );
-      if (restoredQty <= 0) continue;
-
-      final seed = schemeScopedLines.cast<SaleItem?>().firstWhere(
-                (it) => it != null && !it.isSchemeFree,
-                orElse: () => null,
-              ) ??
-          schemeScopedLines.first;
-      final resolvedRate =
-          seed.rate > 0 ? seed.rate : _defaultRateForItemId(itemId);
-
-      _items.removeWhere(
-        (it) =>
-            it.itemId == itemId &&
-            !it.isAdvanceFree &&
-            (!it.isSchemeFree ||
-                selectedSchemeIds.contains(it.appliedSchemeId)),
-      );
-      _items.insert(
-        0,
-        seed.copyWith(
-          qty: restoredQty,
-          originalQty: restoredQty,
+    // 1. Gather all free lines (both scheme free and happy hour free) and normalize
+    final freeLines = _items.where((it) => it.isSchemeFree).toList();
+    if (freeLines.isNotEmpty) {
+      final itemIdsToRestore = freeLines.map((it) => it.itemId).toSet();
+      for (final itemId in itemIdsToRestore) {
+        final lines = _items.where((it) => it.itemId == itemId && !it.isAdvanceFree).toList();
+        if (lines.isEmpty) continue;
+        
+        final totalQty = lines.fold<double>(0.0, (sum, it) => sum + it.qty);
+        if (totalQty <= 0) continue;
+        
+        final paidLine = lines.cast<SaleItem?>().firstWhere((it) => it != null && !it.isSchemeFree, orElse: () => null);
+        final seed = paidLine ?? lines.first;
+        final resolvedRate = seed.rate > 0 ? seed.rate : _defaultRateForItemId(itemId);
+        
+        _items.removeWhere((it) => it.itemId == itemId && !it.isAdvanceFree);
+        _items.insert(0, seed.copyWith(
+          qty: totalQty,
+          originalQty: totalQty,
           rate: resolvedRate,
           isSchemeFree: false,
           appliedSchemeId: null,
-        ),
-      );
+          appliedHappyHourId: null,
+        ));
+      }
     }
 
-    final appliedForItem = <int>{};
-    for (final scheme in schemes) {
-      final itemId = scheme.itemId;
-      if (itemId == null || itemId <= 0) continue;
-      if (appliedForItem.contains(itemId)) continue;
+    // 2. Evaluate standard schemes if selected
+    final schemes = _selectedItemSchemes;
+    if (schemes.isNotEmpty && _schemeUsageMode == 'APPLY_NOW') {
+      final appliedForItem = <int>{};
+      for (final scheme in schemes) {
+        final itemId = scheme.itemId;
+        if (itemId == null || itemId <= 0) continue;
+        if (appliedForItem.contains(itemId)) continue;
 
-      final data = _itemSchemeProgressByScheme[scheme.id] ??
-          (scheme.id == _selectedItemScheme?.id ? _itemSchemeProgress : null);
-      final enrolled = data != null && data['enrolled'] == true;
-      if (!enrolled) continue;
+        if (scheme.schemeScope == 'ITEM') {
+          final data = _itemSchemeProgressByScheme[scheme.id] ??
+              (scheme.id == _selectedItemScheme?.id ? _itemSchemeProgress : null);
+          final enrolled = data != null && data['enrolled'] == true;
+          if (!enrolled) continue;
 
-      final progress = Map<String, dynamic>.from(
-        data['progress'] ?? const <String, dynamic>{},
-      );
-      if (progress['already_granted_today'] == true) continue;
-
-      final minQty =
-          scheme.minQty > 0 ? scheme.minQty : _num(progress['min_qty']);
-      final freeQty =
-          scheme.freeQty > 0 ? scheme.freeQty : _num(progress['free_qty']);
-      final requiredQty = scheme.requiredDailyQty > 0
-          ? scheme.requiredDailyQty
-          : _num(progress['required_daily_qty']);
-      if (freeQty <= 0) continue;
-
-      final billQty = _items
-          .where((it) =>
-              it.itemId == itemId && !it.isSchemeFree && !it.isAdvanceFree)
-          .fold<double>(0, (sum, it) => sum + it.qty);
-      if (billQty <= 0) continue;
-
-      final totalBefore = _num(progress['total_qty']);
-      final totalIncludingCurrent = totalBefore + billQty;
-      if (minQty > 0 && totalIncludingCurrent + 1e-9 < minQty) continue;
-      if (requiredQty <= 0 || billQty < requiredQty) continue;
-
-      if (progress['require_no_gaps'] == true) {
-        final missing = (progress['missing_days'] as List? ?? const [])
-            .map((e) => e.toString())
-            .toList();
-        final todayKey = DateFormat('yyyy-MM-dd').format(_saleDate);
-        final effectiveMissing = billQty > 0
-            ? missing.where((d) => d != todayKey).toList()
-            : missing;
-        if (effectiveMissing.isNotEmpty) continue;
-      }
-
-      double remainingFree = freeQty.clamp(0, billQty);
-      for (int i = 0; i < _items.length && remainingFree > 0; i++) {
-        final it = _items[i];
-        if (it.itemId != itemId || it.isSchemeFree || it.isAdvanceFree) {
-          continue;
-        }
-        if (it.qty <= 0) continue;
-
-        final take = remainingFree < it.qty ? remainingFree : it.qty;
-        if (take <= 0) continue;
-
-        final freeLine = SaleItem(
-          itemId: it.itemId,
-          itemCode: it.itemCode,
-          itemName: it.itemName,
-          hsnSacCode: it.hsnSacCode,
-          barcode: it.barcode,
-          unit: it.unit,
-          qty: take,
-          originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
-          rate: 0,
-          referenceRate: it.rate,
-          taxType: it.taxType,
-          taxPercent: it.taxPercent,
-          discountApplicable: false,
-          schemeApplicable: false,
-          isSchemeFree: true,
-          appliedSchemeId: scheme.id,
-          isTaxInclusive: it.isTaxInclusive,
-          brand: it.brand,
-        );
-
-        if (take >= it.qty - 1e-9) {
-          _items[i] = freeLine;
-        } else {
-          _items[i] = it.copyWith(
-            qty: it.qty - take,
-            originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
+          final progress = Map<String, dynamic>.from(
+            data['progress'] ?? const <String, dynamic>{},
           );
-          _items.insert(i + 1, freeLine);
-          i++;
+          if (progress['already_granted_today'] == true) continue;
+
+          final minQty =
+              scheme.minQty > 0 ? scheme.minQty : _num(progress['min_qty']);
+          final freeQty =
+              scheme.freeQty > 0 ? scheme.freeQty : _num(progress['free_qty']);
+          final requiredQty = scheme.requiredDailyQty > 0
+              ? scheme.requiredDailyQty
+              : _num(progress['required_daily_qty']);
+          if (freeQty <= 0) continue;
+
+          final billQty = _items
+              .where((it) =>
+                  it.itemId == itemId && !it.isSchemeFree && !it.isAdvanceFree)
+              .fold<double>(0, (sum, it) => sum + it.qty);
+          if (billQty <= 0) continue;
+
+          final totalBefore = _num(progress['total_qty']);
+          final totalIncludingCurrent = totalBefore + billQty;
+          if (minQty > 0 && totalIncludingCurrent + 1e-9 < minQty) continue;
+          if (requiredQty <= 0 || billQty < requiredQty) continue;
+
+          if (progress['require_no_gaps'] == true) {
+            final missing = (progress['missing_days'] as List? ?? const [])
+                .map((e) => e.toString())
+                .toList();
+            final todayKey = DateFormat('yyyy-MM-dd').format(_saleDate);
+            final effectiveMissing = billQty > 0
+                ? missing.where((d) => d != todayKey).toList()
+                : missing;
+            if (effectiveMissing.isNotEmpty) continue;
+          }
+
+          double remainingFree = freeQty.clamp(0, billQty);
+          for (int i = 0; i < _items.length && remainingFree > 0; i++) {
+            final it = _items[i];
+            if (it.itemId != itemId || it.isSchemeFree || it.isAdvanceFree) {
+              continue;
+            }
+            if (it.qty <= 0) continue;
+
+            final take = remainingFree < it.qty ? remainingFree : it.qty;
+            if (take <= 0) continue;
+
+            final freeLine = SaleItem(
+              itemId: it.itemId,
+              itemCode: it.itemCode,
+              itemName: it.itemName,
+              hsnSacCode: it.hsnSacCode,
+              barcode: it.barcode,
+              unit: it.unit,
+              qty: take,
+              originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
+              rate: it.rate,
+              referenceRate: it.rate,
+              taxType: it.taxType,
+              taxPercent: it.taxPercent,
+              discountApplicable: false,
+              schemeApplicable: false,
+              isSchemeFree: true,
+              appliedSchemeId: scheme.id,
+              isTaxInclusive: it.isTaxInclusive,
+              brand: it.brand,
+              lineDiscount: take * it.rate,
+              taxableAmount: 0.0,
+              taxAmount: 0.0,
+              lineTotal: 0.0,
+              originalRate: it.rate,
+              schemeDiscountPerUnit: it.rate,
+            );
+
+            if (take >= it.qty - 1e-9) {
+              _items[i] = freeLine;
+            } else {
+              _items[i] = it.copyWith(
+                qty: it.qty - take,
+                originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
+              );
+              _items.insert(i + 1, freeLine);
+              i++;
+            }
+
+            remainingFree -= take;
+          }
+        } else {
+          final minQty = scheme.minQty > 0 ? scheme.minQty : 1.0;
+          final freeQty = scheme.freeQty > 0 ? scheme.freeQty : 0.0;
+          if (freeQty <= 0) continue;
+
+          final billQty = _items
+              .where((it) =>
+                  it.itemId == itemId && !it.isSchemeFree && !it.isAdvanceFree)
+              .fold<double>(0, (sum, it) => sum + it.qty);
+          if (billQty <= 0) continue;
+
+          final cycles = (billQty / minQty).floor();
+          if (cycles <= 0) continue;
+
+          final totalFreeQty = cycles * freeQty;
+          final targetFreeItemId = scheme.freeItemId ?? itemId;
+
+          final existingLines = _items.where((it) => it.itemId == targetFreeItemId && !it.isSchemeFree && !it.isAdvanceFree).toList();
+          final existingQty = existingLines.fold<double>(0, (sum, it) => sum + it.qty);
+          if (existingQty < totalFreeQty) {
+            final dbItem = ctrl.items.cast<Item?>().firstWhere((it) => it?.id == targetFreeItemId, orElse: () => null);
+            if (dbItem != null) {
+              final needed = totalFreeQty - existingQty;
+              final baseItem = _buildBaseSaleItem(item: dbItem, qty: needed);
+              _items.add(baseItem);
+            }
+          }
+
+          double remainingFree = totalFreeQty;
+          for (int i = 0; i < _items.length && remainingFree > 0; i++) {
+            final it = _items[i];
+            if (it.itemId != targetFreeItemId || it.isSchemeFree || it.isAdvanceFree) {
+              continue;
+            }
+            if (it.qty <= 0) continue;
+
+            final take = remainingFree < it.qty ? remainingFree : it.qty;
+            if (take <= 0) continue;
+
+            final freeLine = SaleItem(
+              itemId: it.itemId,
+              itemCode: it.itemCode,
+              itemName: it.itemName,
+              hsnSacCode: it.hsnSacCode,
+              barcode: it.barcode,
+              unit: it.unit,
+              qty: take,
+              originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
+              rate: it.rate,
+              referenceRate: it.rate,
+              taxType: it.taxType,
+              taxPercent: it.taxPercent,
+              discountApplicable: false,
+              schemeApplicable: false,
+              isSchemeFree: true,
+              appliedSchemeId: scheme.id,
+              isTaxInclusive: it.isTaxInclusive,
+              brand: it.brand,
+              lineDiscount: take * it.rate,
+              taxableAmount: 0.0,
+              taxAmount: 0.0,
+              lineTotal: 0.0,
+              originalRate: it.rate,
+              schemeDiscountPerUnit: it.rate,
+            );
+
+            if (take >= it.qty - 1e-9) {
+              _items[i] = freeLine;
+            } else {
+              _items[i] = it.copyWith(
+                qty: it.qty - take,
+                originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
+              );
+              _items.insert(i + 1, freeLine);
+              i++;
+            }
+
+            remainingFree -= take;
+          }
+        }
+        appliedForItem.add(itemId);
+      }
+    }
+
+    // 3. Evaluate Happy Hour configurations
+    _rebuildHappyHourFreeLines();
+
+    // 4. Evaluate Bill Value Promotions
+    _rebuildBillValuePromoFreeLines();
+  }
+
+  void _rebuildHappyHourFreeLines() {
+    if (_happyHours.isEmpty) return;
+
+    final now = DateTime.now();
+    final currentMinutes = now.hour * 60 + now.minute;
+    final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final todayStr = weekdays[_saleDate.weekday - 1];
+
+    for (final hh in _happyHours) {
+      if (hh['is_active'] != true) continue;
+
+      // Weekday check
+      if (hh['days_of_week'] != null && hh['days_of_week'].toString().isNotEmpty) {
+        final days = hh['days_of_week'].toString().split(',').map((s) => s.trim().toLowerCase()).toList();
+        if (!days.contains(todayStr.toLowerCase())) continue;
+      }
+
+      // Time check
+      if (hh['start_time'] != null && hh['end_time'] != null) {
+        final start = _minutesFromHm(hh['start_time']);
+        final end = _minutesFromHm(hh['end_time']);
+        if (currentMinutes < start || currentMinutes > end) continue;
+      }
+
+      final double buyQty = double.tryParse(hh['buy_qty']?.toString() ?? '2') ?? 2.0;
+      final double freeQty = double.tryParse(hh['free_qty']?.toString() ?? '1') ?? 1.0;
+      if (buyQty <= 0 || freeQty <= 0) continue;
+
+      final bool applyAll = hh['apply_to_all_happy_hour_items'] == true;
+
+      // Identify trigger items currently in the cart
+      final List<int> triggerItemIds = [];
+      if (applyAll) {
+        for (final cartItem in _items) {
+          if (cartItem.isSchemeFree || cartItem.isAdvanceFree) continue;
+          final dbItem = ctrl.items.cast<Item?>().firstWhere(
+            (it) => it?.id == cartItem.itemId,
+            orElse: () => null,
+          );
+          if (dbItem?.isHappyHour == true) {
+            triggerItemIds.add(cartItem.itemId);
+          }
+        }
+      } else {
+        final parentId = hh['parent_item_id'];
+        if (parentId != null) {
+          triggerItemIds.add(parentId);
+        }
+      }
+
+      for (final triggerItemId in triggerItemIds) {
+        final billQty = _items
+            .where((it) => it.itemId == triggerItemId && !it.isSchemeFree && !it.isAdvanceFree)
+            .fold<double>(0, (sum, it) => sum + it.qty);
+        if (billQty <= 0) continue;
+
+        final targetFreeItemId = hh['free_item_id'] ?? triggerItemId;
+        final isSameItem = targetFreeItemId == triggerItemId;
+
+        final cycles = isSameItem
+            ? (billQty / (buyQty + freeQty)).floor()
+            : (billQty / buyQty).floor();
+        if (cycles <= 0) continue;
+
+        final totalFreeQty = cycles * freeQty;
+
+        final existingLines = _items
+            .where((it) => it.itemId == targetFreeItemId && !it.isSchemeFree && !it.isAdvanceFree)
+            .toList();
+        final existingQty = existingLines.fold<double>(0, (sum, it) => sum + it.qty);
+
+        if (existingQty < totalFreeQty) {
+          final dbItem = ctrl.items.cast<Item?>().firstWhere(
+            (it) => it?.id == targetFreeItemId,
+            orElse: () => null,
+          );
+          if (dbItem != null) {
+            final needed = totalFreeQty - existingQty;
+            final baseItem = _buildBaseSaleItem(item: dbItem, qty: needed);
+            _items.add(baseItem);
+          }
         }
 
-        remainingFree -= take;
+        double remainingFree = totalFreeQty;
+        for (int i = 0; i < _items.length && remainingFree > 0; i++) {
+          final it = _items[i];
+          if (it.itemId != targetFreeItemId || it.isSchemeFree || it.isAdvanceFree) {
+            continue;
+          }
+          if (it.qty <= 0) continue;
+
+          final take = remainingFree < it.qty ? remainingFree : it.qty;
+          if (take <= 0) continue;
+
+          final freeLine = SaleItem(
+            itemId: it.itemId,
+            itemCode: it.itemCode,
+            itemName: it.itemName,
+            hsnSacCode: it.hsnSacCode,
+            barcode: it.barcode,
+            unit: it.unit,
+            qty: take,
+            originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
+            rate: it.rate,
+            referenceRate: it.rate,
+            taxType: it.taxType,
+            taxPercent: it.taxPercent,
+            discountApplicable: false,
+            schemeApplicable: false,
+            isSchemeFree: true,
+            appliedHappyHourId: hh['id'],
+            isTaxInclusive: it.isTaxInclusive,
+            brand: it.brand,
+            lineDiscount: take * it.rate,
+            taxableAmount: 0.0,
+            taxAmount: 0.0,
+            lineTotal: 0.0,
+            originalRate: it.rate,
+            schemeDiscountPerUnit: it.rate,
+          );
+
+          if (take >= it.qty - 1e-9) {
+            _items[i] = freeLine;
+          } else {
+            _items[i] = it.copyWith(
+              qty: it.qty - take,
+              originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
+            );
+            _items.insert(i + 1, freeLine);
+            i++;
+          }
+
+          remainingFree -= take;
+        }
       }
-      appliedForItem.add(itemId);
     }
+  }
+
+  void _rebuildBillValuePromoFreeLines() {
+    if (_billValuePromos.isEmpty) return;
+
+    // Calculate current subtotal of all paid items
+    final double currentSubtotal = _items
+        .where((it) => !it.isSchemeFree && !it.isAdvanceFree)
+        .fold<double>(0.0, (sum, it) => sum + it.amount);
+
+    for (final promo in _billValuePromos) {
+      if (promo['is_active'] != true) continue;
+
+      final double minBillAmount = double.tryParse(promo['min_bill_amount'].toString()) ?? 0.0;
+      final int targetItemId = int.tryParse(promo['target_item_id'].toString()) ?? 0;
+      final double discountPercent = double.tryParse(promo['discount_value'].toString()) ?? 100.0; // default 100% off (free)
+
+      if (currentSubtotal >= minBillAmount && targetItemId > 0) {
+        // Find if target item is in cart
+        final hasTarget = _items.any((it) => it.itemId == targetItemId && !it.isSchemeFree && !it.isAdvanceFree);
+        if (!hasTarget) continue;
+
+        double remainingToDiscount = 1.0; // discount 1 unit of target item
+        for (int i = 0; i < _items.length && remainingToDiscount > 0; i++) {
+          final it = _items[i];
+          if (it.itemId != targetItemId || it.isSchemeFree || it.isAdvanceFree) {
+            continue;
+          }
+          if (it.qty <= 0) continue;
+
+          final take = remainingToDiscount < it.qty ? remainingToDiscount : it.qty;
+          final double lineRate = it.rate;
+          final double discountPerUnit = lineRate * (discountPercent / 100.0);
+
+          final freeLine = SaleItem(
+            itemId: it.itemId,
+            itemCode: it.itemCode,
+            itemName: it.itemName,
+            barcode: it.barcode,
+            unit: it.unit,
+            qty: take,
+            rate: it.rate,
+            taxType: it.taxType,
+            taxPercent: it.taxPercent,
+            brand: it.brand,
+            isTaxInclusive: it.isTaxInclusive,
+            isSchemeFree: true,
+            lineDiscount: take * discountPerUnit,
+            appliedSchemeId: promo['id'],
+          );
+
+          if (take >= it.qty - 1e-9) {
+            _items[i] = freeLine;
+          } else {
+            _items[i] = it.copyWith(
+              qty: it.qty - take,
+              originalQty: it.originalQty > 0 ? it.originalQty : it.qty,
+            );
+            _items.insert(i + 1, freeLine);
+            i++;
+          }
+
+          remainingToDiscount -= take;
+        }
+      }
+    }
+  }
+
+  double _calculateTotalSavings() {
+    double mrpSavings = 0.0;
+    for (final item in _items) {
+      if (!item.isSchemeFree && !item.isAdvanceFree) {
+        if (item.mrp > item.rate) {
+          mrpSavings += (item.mrp - item.rate) * item.qty;
+        }
+      }
+    }
+    return _invoice.totalDiscount + mrpSavings;
   }
 
   Future<void> _openSalesReport() async {
@@ -5981,6 +6337,8 @@ class _SaleScreenState extends State<SaleScreen> {
     final cycleDaysCtrl = TextEditingController(text: '30');
     final freeQtyCtrl = TextEditingController(text: '1');
     final nextPurchaseDaysCtrl = TextEditingController(text: '7');
+    int? freeItemId;
+    List<String> daysOfWeek = [];
 
     try {
       await showDialog(
@@ -6142,6 +6500,10 @@ class _SaleScreenState extends State<SaleScreen> {
                                   value: 'PERCENT', child: Text('Percentage')),
                               DropdownMenuItem(
                                   value: 'AMOUNT', child: Text('Value Amount')),
+                              DropdownMenuItem(
+                                  value: 'SPECIAL_PRICE', child: Text('Special Promo Price')),
+                              DropdownMenuItem(
+                                  value: 'AMOUNT_OFF', child: Text('Flat Amount Off per unit')),
                             ],
                             onChanged: (value) {
                               setDialogState(
@@ -6222,50 +6584,110 @@ class _SaleScreenState extends State<SaleScreen> {
                             hintText: 'Example 7',
                           ),
                         ),
-                        if (schemeScope != 'ITEM' && schemeType == 'TIME') ...[
+                        const SizedBox(height: 12),
+                        const Text('Applicable Time (Happy Hour)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () async {
+                                  final time = await showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay.now(),
+                                  );
+                                  if (time != null) {
+                                    setDialogState(
+                                        () => _schemeStartTime = time);
+                                  }
+                                },
+                                child: Text(
+                                  _schemeStartTime == null
+                                      ? 'Start Time'
+                                      : _schemeStartTime!.format(context),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () async {
+                                  final time = await showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay.now(),
+                                  );
+                                  if (time != null) {
+                                    setDialogState(
+                                        () => _schemeEndTime = time);
+                                  }
+                                },
+                                child: Text(
+                                  _schemeEndTime == null
+                                      ? 'End Time'
+                                      : _schemeEndTime!.format(context),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text('Applicable Days', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) {
+                            final isSelected = daysOfWeek.contains(day);
+                            return FilterChip(
+                              label: Text(day),
+                              selected: isSelected,
+                              showCheckmark: false,
+                              selectedColor: Colors.orange.shade100,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.orange.shade900 : Colors.black87,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              onSelected: (selected) {
+                                setDialogState(() {
+                                  if (selected) {
+                                    daysOfWeek.add(day);
+                                  } else {
+                                    daysOfWeek.remove(day);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int?>(
+                          value: freeItemId,
+                          items: [
+                            const DropdownMenuItem<int?>(
+                              value: null,
+                              child: Text('No Free Item (Discount Only)'),
+                            ),
+                            ...ctrl.items.map(
+                              (it) => DropdownMenuItem<int?>(
+                                value: it.id,
+                                child: Text('${it.itemName} - ${it.brand}'),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setDialogState(() => freeItemId = value),
+                          decoration: const InputDecoration(
+                            labelText: 'Free Gifted Item (Optional)',
+                          ),
+                        ),
+                        if (schemeScope == 'ITEM' || freeItemId != null) ...[
                           const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () async {
-                                    final time = await showTimePicker(
-                                      context: context,
-                                      initialTime: TimeOfDay.now(),
-                                    );
-                                    if (time != null) {
-                                      setDialogState(
-                                          () => _schemeStartTime = time);
-                                    }
-                                  },
-                                  child: Text(
-                                    _schemeStartTime == null
-                                        ? 'Start Time'
-                                        : _schemeStartTime!.format(context),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () async {
-                                    final time = await showTimePicker(
-                                      context: context,
-                                      initialTime: TimeOfDay.now(),
-                                    );
-                                    if (time != null) {
-                                      setDialogState(
-                                          () => _schemeEndTime = time);
-                                    }
-                                  },
-                                  child: Text(
-                                    _schemeEndTime == null
-                                        ? 'End Time'
-                                        : _schemeEndTime!.format(context),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          TextField(
+                            controller: freeQtyCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Free Qty to Gift',
+                            ),
                           ),
                         ],
                         if (schemeScope != 'ITEM' && schemeType == 'QTY') ...[
@@ -6332,7 +6754,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                     requiredDailyQtyCtrl.text.trim()) ??
                                 0)
                             : 0,
-                        freeQty: schemeScope == 'ITEM'
+                        freeQty: (schemeScope == 'ITEM' || freeItemId != null)
                             ? (double.tryParse(freeQtyCtrl.text.trim()) ?? 0)
                             : 0,
                         cycleDays: schemeScope == 'ITEM'
@@ -6346,6 +6768,8 @@ class _SaleScreenState extends State<SaleScreen> {
                         nextPurchaseValidDays:
                             int.tryParse(nextPurchaseDaysCtrl.text.trim()) ?? 7,
                         isActive: isActive,
+                        freeItemId: freeItemId,
+                        daysOfWeek: daysOfWeek.isEmpty ? null : daysOfWeek.join(','),
                       );
 
                       await ctrl.createScheme(scheme);
@@ -7900,17 +8324,75 @@ class _SaleScreenState extends State<SaleScreen> {
                                           final double displayPrice = item.isTaxInclusive
                                               ? double.parse((rawPrice * (1 + item.taxPercent / 100)).toStringAsFixed(2))
                                               : rawPrice;
-                                          return Text(
-                                            item.productTemplateId != null
-                                                ? 'Rs. ${displayPrice.toStringAsFixed(2)}+'
-                                                : 'Rs. ${displayPrice.toStringAsFixed(2)}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Color(0xFFD67D25),
-                                              fontWeight: FontWeight.w900,
-                                              fontSize: 15,
-                                            ),
+
+                                          final double rawMrp = item.mrp;
+                                          final double displayMrp = rawMrp;
+
+                                          final promoScheme = _getActivePromoForItem(item);
+                                          double? promoPrice;
+                                          if (promoScheme != null) {
+                                            if (promoScheme.discountType == 'SPECIAL_PRICE') {
+                                              double basePromo = promoScheme.discountValue;
+                                              promoPrice = item.isTaxInclusive
+                                                  ? double.parse((basePromo * (1 + item.taxPercent / 100)).toStringAsFixed(2))
+                                                  : basePromo;
+                                            } else if (promoScheme.discountType == 'AMOUNT_OFF') {
+                                              double baseOff = promoScheme.discountValue;
+                                              double off = item.isTaxInclusive
+                                                  ? double.parse((baseOff * (1 + item.taxPercent / 100)).toStringAsFixed(2))
+                                                  : baseOff;
+                                              promoPrice = displayPrice - off;
+                                            }
+                                          }
+
+                                          final bool hasPromo = promoPrice != null && promoPrice < displayPrice;
+                                          final double activePrice = promoPrice ?? displayPrice;
+
+                                          final bool showMrpCrossed = displayMrp > activePrice;
+                                          final double? crossedPrice = showMrpCrossed ? displayMrp : (hasPromo ? displayPrice : null);
+
+                                          return Wrap(
+                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            children: [
+                                              if (crossedPrice != null) ...[
+                                                Text(
+                                                  'Rs. ${crossedPrice.toStringAsFixed(2)}',
+                                                  maxLines: 1,
+                                                  style: const TextStyle(
+                                                    color: Colors.grey,
+                                                    decoration: TextDecoration.lineThrough,
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  item.productTemplateId != null
+                                                      ? 'Rs. ${activePrice.toStringAsFixed(2)}+'
+                                                      : 'Rs. ${activePrice.toStringAsFixed(2)}',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    color: Color(0xFFD67D25),
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 14.5,
+                                                  ),
+                                                ),
+                                              ] else ...[
+                                                Text(
+                                                  item.productTemplateId != null
+                                                      ? 'Rs. ${displayPrice.toStringAsFixed(2)}+'
+                                                      : 'Rs. ${displayPrice.toStringAsFixed(2)}',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    color: Color(0xFFD67D25),
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 14.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
                                           );
                                         })(),
                                       ),
@@ -9671,7 +10153,8 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
-  Widget _summaryRow(String label, double value, {bool emphasized = false}) {
+  Widget _summaryRow(String label, double value,
+      {bool emphasized = false, Color? labelColor, Color? valueColor}) {
     final style = TextStyle(
       fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
       fontSize: emphasized ? 20 : 14,
@@ -9681,8 +10164,16 @@ class _SaleScreenState extends State<SaleScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: style)),
-          Text('Rs. ${value.toStringAsFixed(2)}', style: style),
+          Expanded(
+            child: Text(
+              label,
+              style: style.copyWith(color: labelColor),
+            ),
+          ),
+          Text(
+            'Rs. ${value.toStringAsFixed(2)}',
+            style: style.copyWith(color: valueColor),
+          ),
         ],
       ),
     );

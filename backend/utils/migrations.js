@@ -3757,6 +3757,58 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 92,
+    description: "Add is_happy_hour to item_master, create happy_hours table, and add applied_happy_hour_id to sales_items",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS is_happy_hour BOOLEAN DEFAULT FALSE;
+
+        CREATE TABLE IF NOT EXISTS happy_hours (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          start_time VARCHAR(10) NOT NULL,
+          end_time VARCHAR(10) NOT NULL,
+          days_of_week VARCHAR(255),
+          buy_qty DECIMAL(12, 4) NOT NULL DEFAULT 2.0000,
+          free_qty DECIMAL(12, 4) NOT NULL DEFAULT 1.0000,
+          apply_to_all_happy_hour_items BOOLEAN NOT NULL DEFAULT TRUE,
+          parent_item_id INTEGER REFERENCES item_master(id) ON DELETE CASCADE,
+          free_item_id INTEGER REFERENCES item_master(id) ON DELETE SET NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS applied_happy_hour_id INTEGER;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 93,
+    description: "Add mrp to item_master and create bill_value_promos table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS mrp DECIMAL(12, 2) DEFAULT 0.00;
+
+        CREATE TABLE IF NOT EXISTS bill_value_promos (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          min_bill_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          target_item_id INTEGER NOT NULL REFERENCES item_master(id) ON DELETE CASCADE,
+          discount_value DECIMAL(12, 2) NOT NULL DEFAULT 100.00,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        COMMIT;
+      `);
+    }
   }
 ];
 

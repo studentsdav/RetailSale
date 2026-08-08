@@ -22,6 +22,7 @@ class KotBuilderScreen extends StatefulWidget {
 class _KotBuilderScreenState extends State<KotBuilderScreen> {
   List<dynamic> allItems = [];
   List<dynamic> filteredItems = [];
+  List<dynamic> _activeSchemes = [];
   List<String> categories = ['All'];
   String selectedCategory = 'All';
   String searchQuery = '';
@@ -156,6 +157,15 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     try {
       final res = await ApiClient.get(ApiEndpoints.items);
       final List data = res['data'] ?? [];
+
+      List schemesList = [];
+      try {
+        final schemesRes = await ApiClient.get('/api/sales/schemes');
+        schemesList = schemesRes['data'] ?? [];
+      } catch (se) {
+        debugPrint('Error fetching schemes for captain: $se');
+      }
+
       final Set<String> cats = {'All'};
       for (final item in data) {
         final cat = item['category']?.toString() ?? item['item_group']?.toString();
@@ -168,12 +178,49 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         allItems = data;
         filteredItems = data;
         categories = cats.toList();
+        _activeSchemes = schemesList;
       });
     } catch (e) {
       debugPrint('Error loading items: $e');
     } finally {
       setState(() => isLoadingItems = false);
     }
+  }
+
+  int _minutesFromHm(String hm) {
+    final parts = hm.split(':');
+    if (parts.length < 2) return 0;
+    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+  }
+
+  Map<String, dynamic>? _getActivePromoForItem(Map<String, dynamic> item) {
+    if (_activeSchemes.isEmpty) return null;
+    final now = DateTime.now();
+    final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final todayStr = weekdays[now.weekday - 1];
+    final currentMinutes = TimeOfDay.fromDateTime(now).hour * 60 + TimeOfDay.fromDateTime(now).minute;
+
+    for (final scheme in _activeSchemes) {
+      final int? schemeItemId = scheme['item_id'] != null ? int.tryParse(scheme['item_id'].toString()) : null;
+      final bool isActive = scheme['is_active'] == true || scheme['is_active'] == 1 || scheme['is_active'].toString() == 'true';
+      if (schemeItemId == item['id'] && scheme['scheme_scope']?.toString().toUpperCase() == 'ITEM' && isActive) {
+        if (scheme['days_of_week'] != null && scheme['days_of_week'].toString().trim().isNotEmpty) {
+          final allowedDays = scheme['days_of_week'].toString().split(',').map((s) => s.trim().toLowerCase()).toList();
+          if (!allowedDays.contains(todayStr.toLowerCase())) continue;
+        }
+        if (scheme['start_time'] != null && scheme['end_time'] != null &&
+            scheme['start_time'].toString().trim().isNotEmpty && scheme['end_time'].toString().trim().isNotEmpty) {
+          final start = _minutesFromHm(scheme['start_time'].toString());
+          final end = _minutesFromHm(scheme['end_time'].toString());
+          if (currentMinutes < start || currentMinutes > end) continue;
+        }
+        final String discountType = scheme['discount_type']?.toString().toUpperCase() ?? '';
+        if (discountType == 'SPECIAL_PRICE' || discountType == 'AMOUNT_OFF') {
+          return Map<String, dynamic>.from(scheme);
+        }
+      }
+    }
+    return null;
   }
 
   void _applyFilter() {
@@ -609,14 +656,60 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                                 Row(
                                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
-                                                    Text(
-                                                      'Rs. ${rate.toStringAsFixed(2)}',
-                                                      style: TextStyle(
-                                                        color: colorScheme.primary,
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: 14,
-                                                      ),
-                                                    ),
+                                                    (() {
+                                                      final promoScheme = _getActivePromoForItem(item);
+                                                      double? promoPrice;
+                                                      if (promoScheme != null) {
+                                                        if (promoScheme['discount_type'] == 'SPECIAL_PRICE') {
+                                                          double basePromo = double.tryParse(promoScheme['discount_value'].toString()) ?? rawRate;
+                                                          promoPrice = isInclusive
+                                                              ? double.parse((basePromo * (1 + taxPercent / 100)).toStringAsFixed(2))
+                                                              : basePromo;
+                                                        } else if (promoScheme['discount_type'] == 'AMOUNT_OFF') {
+                                                          double baseOff = double.tryParse(promoScheme['discount_value'].toString()) ?? 0.0;
+                                                          double off = isInclusive
+                                                              ? double.parse((baseOff * (1 + taxPercent / 100)).toStringAsFixed(2))
+                                                              : baseOff;
+                                                          promoPrice = rate - off;
+                                                        }
+                                                      }
+
+                                                      final hasPromo = promoPrice != null && promoPrice < rate;
+
+                                                      return Wrap(
+                                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                                        children: [
+                                                          if (hasPromo) ...[
+                                                            Text(
+                                                              'Rs. ${rate.toStringAsFixed(2)}',
+                                                              style: const TextStyle(
+                                                                color: Colors.grey,
+                                                                decoration: TextDecoration.lineThrough,
+                                                                fontSize: 11.5,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 4),
+                                                            Text(
+                                                              'Rs. ${promoPrice!.toStringAsFixed(2)}',
+                                                              style: TextStyle(
+                                                                color: colorScheme.primary,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 14,
+                                                              ),
+                                                            ),
+                                                          ] else ...[
+                                                            Text(
+                                                              'Rs. ${rate.toStringAsFixed(2)}',
+                                                              style: TextStyle(
+                                                                color: colorScheme.primary,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 14,
+                                                              ),
+                                                            ),
+                                                          ]
+                                                        ],
+                                                      );
+                                                    })(),
                                                     
                                                     // Add / Quantity Selector Button (Blinkit style)
                                                     if (isOutOfStock)

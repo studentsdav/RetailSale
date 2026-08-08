@@ -51,6 +51,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   final _imagePath = TextEditingController();
   final _rate = TextEditingController();
   final _retailSalePrice = TextEditingController();
+  final _mrp = TextEditingController();
   final _opening = TextEditingController();
   final _packQty = TextEditingController();
   final _looseItemCode = TextEditingController();
@@ -79,6 +80,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   bool _isSaleable = true;
   bool _discountApplicable = true;
   bool _schemeApplicable = true;
+  bool _isHappyHour = false;
   bool _useInclusiveRates = false;
   String _inclusiveRateScope = 'BOTH';
   String? _pickedImagePath;
@@ -108,6 +110,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   final FocusNode _inclusiveScopeFocus = FocusNode();
   final FocusNode _rateFocus = FocusNode();
   final FocusNode _saleRateFocus = FocusNode();
+  final FocusNode _mrpFocus = FocusNode();
   final FocusNode _taxTypeFocus = FocusNode();
   final FocusNode _taxPercentFocus = FocusNode();
   final FocusNode _openingFocus = FocusNode();
@@ -115,6 +118,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   final FocusNode _maxFocus = FocusNode();
   final FocusNode _discountFocus = FocusNode();
   final FocusNode _schemeFocus = FocusNode();
+  final FocusNode _happyHourFocus = FocusNode();
   final FocusNode _stockableFocus = FocusNode();
   final FocusNode _isSaleableFocus = FocusNode();
   final FocusNode _saveBtnFocus = FocusNode();
@@ -209,6 +213,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _imagePath.dispose();
     _rate.dispose();
     _retailSalePrice.dispose();
+    _mrp.dispose();
     _opening.dispose();
     _packQty.dispose();
     _looseItemCode.dispose();
@@ -235,6 +240,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _inclusiveScopeFocus.dispose();
     _rateFocus.dispose();
     _saleRateFocus.dispose();
+    _mrpFocus.dispose();
     _taxTypeFocus.dispose();
     _taxPercentFocus.dispose();
     _openingFocus.dispose();
@@ -242,6 +248,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _maxFocus.dispose();
     _discountFocus.dispose();
     _schemeFocus.dispose();
+    _happyHourFocus.dispose();
     _stockableFocus.dispose();
     _isSaleableFocus.dispose();
     _saveBtnFocus.dispose();
@@ -328,6 +335,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _imagePath.clear();
     _rate.clear();
     _retailSalePrice.clear();
+    _mrp.clear();
     _opening.clear();
     _packQty.clear();
     _looseItemCode.clear();
@@ -346,6 +354,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _isSaleable = true;
     _discountApplicable = true;
     _schemeApplicable = true;
+    _isHappyHour = false;
     _useInclusiveRates = false;
     _inclusiveRateScope = 'BOTH';
     _pickedImagePath = null;
@@ -422,6 +431,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
       final enteredBuyRate = double.tryParse(_rate.text) ?? 0.0;
       final enteredSaleRate = double.tryParse(_retailSalePrice.text) ?? 0.0;
+      final enteredMrp = double.tryParse(_mrp.text) ?? 0.0;
       final buyRate = _useInclusiveRates &&
               (_inclusiveRateScope == 'BOTH' ||
                   _inclusiveRateScope == 'BUY_ONLY')
@@ -452,6 +462,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         imagePath: _currentImagePath ?? '',
         rate: buyRate,
         retailSalePrice: saleRate,
+        mrp: enteredMrp,
         taxType: _taxType,
         taxPercent: taxPercent,
         discountApplicable: _discountApplicable,
@@ -466,6 +477,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         stockable: _stockable,
         isSaleable: _isSaleable,
         isTaxInclusive: _useInclusiveRates,
+        isHappyHour: _isHappyHour,
       );
 
       Item savedItem;
@@ -628,6 +640,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _taxPercent.text = it.taxPercent.toString();
     _discountApplicable = it.discountApplicable;
     _schemeApplicable = it.schemeApplicable;
+    _isHappyHour = it.isHappyHour;
     _opening.text = it.openingBalance.toString();
     _min.text = it.minLevel.toString();
     _max.text = it.maxLevel.toString();
@@ -644,6 +657,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       _rate.text = it.rate.toString();
       _retailSalePrice.text = it.retailSalePrice.toString();
     }
+    _mrp.text = it.mrp > 0 ? it.mrp.toString() : '';
 
     setState(() {});
     _nameFocus.requestFocus(); // Focus to name when editing
@@ -808,10 +822,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       TextCellValue('Barcode'),
       TextCellValue('Rate'),
       TextCellValue('Sale Rate'),
+      TextCellValue('MRP'),
       TextCellValue('Tax Type'),
       TextCellValue('Tax Percent'),
       TextCellValue('Discount Applicable'),
       TextCellValue('Scheme Applicable'),
+      TextCellValue('Happy Hour'),
       TextCellValue('Opening'),
       TextCellValue('Min'),
       TextCellValue('Max'),
@@ -830,10 +846,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         TextCellValue(item.barcode),
         DoubleCellValue(item.rate),
         DoubleCellValue(item.retailSalePrice),
+        DoubleCellValue(item.mrp),
         TextCellValue(item.taxType),
         DoubleCellValue(item.taxPercent),
         TextCellValue(item.discountApplicable ? 'true' : 'false'),
         TextCellValue(item.schemeApplicable ? 'true' : 'false'),
+        TextCellValue(item.isHappyHour ? 'true' : 'false'),
         DoubleCellValue(item.openingBalance),
         IntCellValue(item.minLevel),
         IntCellValue(item.maxLevel),
@@ -931,6 +949,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                           ?.toString() ??
                       '0') ??
               0,
+          "mrp": double.tryParse(
+                  cellByHeader(row, headers, 'MRP', fallbackIndex: 20)
+                          ?.toString() ??
+                      '0') ??
+              0.0,
           "tax_type": cellByHeader(row, headers, 'Tax Type', fallbackIndex: 10)
                   ?.toString() ??
               'GST',
@@ -946,6 +969,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               cellByHeader(row, headers, 'Scheme Applicable',
                   fallbackIndex: 13),
               defaultValue: true),
+          "is_happy_hour": _toBool(
+              cellByHeader(row, headers, 'Happy Hour',
+                  fallbackIndex: 19), // Let's use fallback index 19 or standard cell by header
+              defaultValue: false),
           "opening_balance": double.tryParse(
                   cellByHeader(row, headers, 'Opening', fallbackIndex: 14)
                           ?.toString() ??
@@ -1577,7 +1604,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 isDouble: true,
                 focusNode: _saleRateFocus,
                 prevNode: _rateFocus,
-                onSubmit: () => _taxTypeFocus.requestFocus(),
+                onSubmit: () => _mrpFocus.requestFocus(),
                 helperText: _useInclusiveRates &&
                         (_inclusiveRateScope == 'BOTH' ||
                             _inclusiveRateScope == 'SALE_ONLY') &&
@@ -1590,6 +1617,14 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       )
                     : null,
               ),
+              _text(
+                _mrp,
+                'MRP (Crossed Price)',
+                isDouble: true,
+                focusNode: _mrpFocus,
+                prevNode: _saleRateFocus,
+                onSubmit: () => _taxTypeFocus.requestFocus(),
+              ),
             ],
             SizedBox(
               width: 220,
@@ -1597,7 +1632,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 onKeyEvent: (node, event) {
                   if (event is KeyDownEvent &&
                       event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                    _saleRateFocus.requestFocus();
+                    _mrpFocus.requestFocus();
                     return KeyEventResult.handled;
                   }
                   return KeyEventResult.ignored;
@@ -1717,6 +1752,41 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                   value: _schemeApplicable,
                   onChanged: (v) {
                     setState(() => _schemeApplicable = v);
+                    _happyHourFocus.requestFocus();
+                  },
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: Focus(
+                focusNode: _happyHourFocus,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      _schemeFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                      setState(() => _isHappyHour = !_isHappyHour);
+                      _stockableFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _stockableFocus.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: SwitchListTile(
+                  title: const Text('Happy Hour Item'),
+                  value: _isHappyHour,
+                  onChanged: (v) {
+                    setState(() => _isHappyHour = v);
                     _stockableFocus.requestFocus();
                   },
                 ),
@@ -1730,7 +1800,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                   if (event is KeyDownEvent) {
                     if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
                         event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      _schemeFocus.requestFocus();
+                      _happyHourFocus.requestFocus();
                       return KeyEventResult.handled;
                     }
                     if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -1866,6 +1936,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         'barcode': '',
         'rate': double.tryParse(_rate.text.trim()) ?? 0.0,
         'retail_sale_price': double.tryParse(_retailSalePrice.text.trim()) ?? 0.0,
+        'mrp': double.tryParse(_mrp.text.trim()) ?? 0.0,
         'opening_balance': double.tryParse(_opening.text.trim()) ?? 0.0,
         'min_level': int.tryParse(_min.text.trim()) ?? 0,
         'max_level': int.tryParse(_max.text.trim()) ?? 0,
@@ -2043,6 +2114,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                   DataColumn(label: Text('Barcode')),
                   DataColumn(label: Text('Buy Rate')),
                   DataColumn(label: Text('Sale Price')),
+                  DataColumn(label: Text('MRP')),
                   DataColumn(label: Text('Opening Stock')),
                   DataColumn(label: Text('Actions')),
                 ],
@@ -2101,6 +2173,17 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(isDense: true),
                             onChanged: (val) => _generatedVariants[idx]['retail_sale_price'] = double.tryParse(val) ?? 0.0,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 80,
+                          child: TextFormField(
+                            initialValue: (v['mrp'] ?? v['retail_sale_price'] ?? 0.0).toString(),
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(isDense: true),
+                            onChanged: (val) => _generatedVariants[idx]['mrp'] = double.tryParse(val) ?? 0.0,
                           ),
                         ),
                       ),
@@ -2550,10 +2633,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                         DataColumn(label: Text('Barcode')),
                         DataColumn(label: Text('Buy Rate')),
                         DataColumn(label: Text('Sale Rate')),
+                        DataColumn(label: Text('MRP')),
                         DataColumn(label: Text('Tax Type')),
                         DataColumn(label: Text('Tax %')),
                         DataColumn(label: Text('Disc')),
                         DataColumn(label: Text('Scheme')),
+                        DataColumn(label: Text('HH')),
                         DataColumn(label: Text('Opening')),
                         DataColumn(label: Text('Min')),
                         DataColumn(label: Text('Max')),
@@ -2584,11 +2669,13 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                             DataCell(Text(it.rate.toStringAsFixed(2))),
                             DataCell(
                                 Text(it.retailSalePrice.toStringAsFixed(2))),
+                            DataCell(Text(it.mrp.toStringAsFixed(2))),
                             DataCell(Text(it.taxType)),
                             DataCell(Text(it.taxPercent.toStringAsFixed(2))),
                             DataCell(
                                 Text(it.discountApplicable ? 'YES' : 'NO')),
                             DataCell(Text(it.schemeApplicable ? 'YES' : 'NO')),
+                            DataCell(Text(it.isHappyHour ? 'YES' : 'NO')),
                             DataCell(
                                 Text(it.openingBalance.toStringAsFixed(2))),
                             DataCell(Text(it.minLevel.toString())),

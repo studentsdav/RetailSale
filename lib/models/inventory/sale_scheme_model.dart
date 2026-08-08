@@ -21,6 +21,8 @@ class SaleScheme {
   final bool isActive;
   final String usageType;
   final bool customerLinked;
+  final int? freeItemId;
+  final String? daysOfWeek;
 
   SaleScheme({
     required this.id,
@@ -45,6 +47,8 @@ class SaleScheme {
     required this.isActive,
     this.usageType = 'reusable',
     this.customerLinked = false,
+    this.freeItemId,
+    this.daysOfWeek,
   });
 
   factory SaleScheme.fromJson(Map<String, dynamic> json) {
@@ -77,6 +81,8 @@ class SaleScheme {
                   : 'reusable'))
           .toString(),
       customerLinked: json['customer_linked'] == true,
+      freeItemId: json['free_item_id'],
+      daysOfWeek: json['days_of_week'],
     );
   }
 
@@ -104,6 +110,8 @@ class SaleScheme {
       'is_active': isActive,
       'usage_type': usageType,
       'customer_linked': customerLinked,
+      'free_item_id': freeItemId,
+      'days_of_week': daysOfWeek,
     };
   }
 }

@@ -22,6 +22,7 @@ module.exports = (sequelize, DataTypes) => {
         net_amount: DataTypes.DECIMAL(12, 2),
         is_scheme_free: DataTypes.BOOLEAN,
         applied_scheme_id: DataTypes.INTEGER,
+        applied_happy_hour_id: DataTypes.INTEGER,
         is_advance_free: DataTypes.BOOLEAN,
         original_rate: DataTypes.DECIMAL(12, 2),
         scheme_discount_per_unit: DataTypes.DECIMAL(12, 2)

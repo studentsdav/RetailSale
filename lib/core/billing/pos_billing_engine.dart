@@ -55,16 +55,25 @@ class PosBillingEngine {
               : (gross / schemeEligibleTotal) * schemeDiscountAmount)
           : 0.0;
 
-      final double manualShare = discountEligibleTotal > 0 && item.discountApplicable
+       final double manualShare = discountEligibleTotal > 0 && item.discountApplicable
           ? (anyInclusive
               ? (grossInclusive / discountEligibleTotal) * manualDiscountAmount
               : (gross / discountEligibleTotal) * manualDiscountAmount)
           : 0.0;
 
-      final double lineDiscountInclusive = (schemeShare + manualShare).clamp(0.0, grossInclusive);
-      final double lineDiscount = item.isTaxInclusive
-          ? lineDiscountInclusive
-          : (lineDiscountInclusive / (1 + item.taxPercent / 100));
+      double lineDiscount;
+      if (item.isSchemeFree) {
+        lineDiscount = gross;
+      } else if (item.isTaxInclusive) {
+        // For inclusive items, discount is distributed on the inclusive base.
+        // lineDiscount is stored as the inclusive discount amount.
+        final double lineDiscountInclusive = (schemeShare + manualShare).clamp(0.0, grossInclusive);
+        lineDiscount = lineDiscountInclusive;
+      } else {
+        // For exclusive items, schemeShare and manualShare are already
+        // computed on the exclusive gross, so lineDiscount is exclusive directly.
+        lineDiscount = (schemeShare + manualShare).clamp(0.0, gross);
+      }
 
       double taxableAmount;
       double taxAmount;

@@ -25,6 +25,8 @@ class Item {
   final bool stockable;
   final bool isSaleable;
   final bool isTaxInclusive;
+  final bool isHappyHour;
+  final double mrp;
   final int? productTemplateId;
   final List<AttributeValue> attributeValues;
 
@@ -53,6 +55,8 @@ class Item {
     required this.stockable,
     required this.isSaleable,
     this.isTaxInclusive = false,
+    this.isHappyHour = false,
+    this.mrp = 0.0,
     this.productTemplateId,
     this.attributeValues = const [],
   });
@@ -89,6 +93,8 @@ class Item {
       stockable: json['stockable'] ?? true,
       isSaleable: json['is_saleable'] ?? true,
       isTaxInclusive: json['is_tax_inclusive'] == true || json['is_tax_inclusive'] == 1,
+      isHappyHour: json['is_happy_hour'] == true || json['is_happy_hour'] == 1,
+      mrp: double.tryParse(json['mrp']?.toString() ?? '') ?? 0.0,
       productTemplateId: json['product_template_id'],
       attributeValues: vals,
     );
@@ -120,6 +126,8 @@ class Item {
       'stockable': stockable,
       'is_saleable': isSaleable,
       'is_tax_inclusive': isTaxInclusive,
+      'is_happy_hour': isHappyHour,
+      'mrp': mrp,
       'product_template_id': productTemplateId,
       'attribute_values': attributeValues.map((e) => e.toJson()).toList(),
     };

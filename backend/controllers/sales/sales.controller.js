@@ -109,6 +109,7 @@ function toRoundedAmount(value) {
 function isFreeBillRow(row = {}) {
     return row.is_scheme_free === true ||
         row.is_advance_free === true ||
+        !!row.applied_happy_hour_id ||
         row._subscription_free === true;
 }
 
@@ -2755,8 +2756,30 @@ async function createSaleVersion({
             }
         }
 
+        const isSchemeFree = row.is_scheme_free === true || !!row.applied_happy_hour_id;
+        if (isSchemeFree) {
+            const dbItem = itemMasterMap.get(Number(row.item_id));
+            const referenceRate = toAmount(
+                row.scheme_free_reference_rate ??
+                row.reference_rate ??
+                row.original_rate ??
+                row.rate ??
+                row._scheme_source_rate ??
+                dbItem?.retail_sale_price ??
+                dbItem?.rate ??
+                itemRateFallbackMap.get(Number(row.item_id)) ??
+                0
+            );
+            if (referenceRate > 0) {
+                rate = referenceRate;
+            }
+        }
+
         const amount = qty * rate;
         let lineDiscount = toAmount(row.line_discount);
+        if (isSchemeFree) {
+            lineDiscount = amount;
+        }
 
         let taxableAmount, taxAmount, lineTotal, itemNetAmount, rowTaxes;
 
@@ -2780,6 +2803,17 @@ async function createSaleVersion({
                 else if (tax.code === 'SGST') subscriptionTaxSgst += toAmount(tax.taxAmount);
                 else if (tax.code === 'IGST') subscriptionTaxIgst += toAmount(tax.taxAmount);
             }
+        } else if (isSchemeFree) {
+            taxableAmount = 0;
+            taxAmount = 0;
+            lineTotal = 0;
+            itemNetAmount = 0;
+            rowTaxes = [];
+            if (row._subscription_free === true) {
+                subscriptionAdjustmentAmount += qty * rate;
+            } else {
+                schemeFreeQtyAmount += qty * rate;
+            }
         } else {
             taxableAmount = toAmount(row.taxable_amount, amount - lineDiscount);
             taxAmount = toAmount(row.tax_amount);
@@ -2788,24 +2822,6 @@ async function createSaleVersion({
             rowTaxes = Array.isArray(row.tax_breakup)
                 ? row.tax_breakup.map((tax) => normalizeTaxBreakupEntry(tax))
                 : [];
-        }
-
-        if (row.is_scheme_free === true) {
-            const referenceRate = toAmount(
-                row.scheme_free_reference_rate ??
-                row.reference_rate ??
-                row.original_rate ??
-                row._scheme_source_rate ??
-                itemRateFallbackMap.get(Number(row.item_id)) ??
-                0
-            );
-            if (referenceRate > 0) {
-                if (row._subscription_free === true) {
-                    subscriptionAdjustmentAmount += qty * referenceRate;
-                } else {
-                    schemeFreeQtyAmount += qty * referenceRate;
-                }
-            }
         }
 
         totalQty += qty;
@@ -2842,6 +2858,9 @@ async function createSaleVersion({
             }
         }
 
+        const originalRate = toAmount(row.original_rate ?? (rate + (lineDiscount / (qty || 1))));
+        const schemeDiscountPerUnit = toAmount(row.scheme_discount_per_unit ?? (lineDiscount / (qty || 1)));
+
         await req.propertyDb.models.sales_items.create({
             sale_id: sale.id,
             item_id: row.item_id,
@@ -2865,7 +2884,10 @@ async function createSaleVersion({
             net_amount: itemNetAmount,
             is_scheme_free: row.is_scheme_free === true,
             applied_scheme_id: row.applied_scheme_id || null,
+            applied_happy_hour_id: row.applied_happy_hour_id || null,
             is_advance_free: row.is_advance_free === true,
+            original_rate: originalRate,
+            scheme_discount_per_unit: schemeDiscountPerUnit
         }, { transaction });
 
         if (status === 'COMPLETED' && affectStock) {
@@ -4949,7 +4971,9 @@ exports.createScheme = async (req, res) => {
             auto_select_on_customer: req.body.auto_select_on_customer ?? true,
             next_purchase_valid_days: Number(req.body.next_purchase_valid_days) || 7,
             is_active: req.body.is_active ?? true,
-            created_by
+            created_by,
+            free_item_id: req.body.free_item_id || null,
+            days_of_week: req.body.days_of_week || null
         });
 
         res.json({ success: true, data: scheme });
@@ -5000,7 +5024,9 @@ exports.updateScheme = async (req, res) => {
                 req.body.auto_select_on_customer ?? scheme.auto_select_on_customer,
             next_purchase_valid_days:
                 req.body.next_purchase_valid_days ?? scheme.next_purchase_valid_days,
-            is_active: req.body.is_active ?? scheme.is_active
+            is_active: req.body.is_active ?? scheme.is_active,
+            free_item_id: req.body.free_item_id !== undefined ? req.body.free_item_id : scheme.free_item_id,
+            days_of_week: req.body.days_of_week !== undefined ? req.body.days_of_week : scheme.days_of_week
         });
 
         res.json({ success: true, data: scheme });
