@@ -899,12 +899,20 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           'Qty',
                                           _selectedOrder!.totalQty
                                               .toStringAsFixed(2)),
-                                      _metricCard('Sub Total',
-                                          _fmtAmount(_selectedOrder!.subTotal)),
-                                      _metricCard(
-                                          'Discount',
-                                          _fmtAmount(
-                                              _selectedOrder!.totalDiscount)),
+                                      ...(() {
+                                        final bool anyInclusive = _selectedOrder!.items.any((item) => item.isTaxInclusive);
+                                        final double displaySubTotal = anyInclusive
+                                            ? _selectedOrder!.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100))))
+                                            : _selectedOrder!.subTotal;
+                                        final double displayDiscount = anyInclusive
+                                            ? _selectedOrder!.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.lineDiscount : (item.lineDiscount * (1 + item.taxPercent / 100))))
+                                            : _selectedOrder!.totalDiscount;
+
+                                        return [
+                                          _metricCard('Sub Total', _fmtAmount(displaySubTotal)),
+                                          _metricCard('Discount', _fmtAmount(displayDiscount)),
+                                        ];
+                                      })(),
                                       _metricCard('Tax',
                                           _fmtAmount(_selectedOrder!.totalTax)),
                                       _metricCard(

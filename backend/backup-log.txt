@@ -5442,3 +5442,38 @@ SyntaxError: Unexpected end of input
 2026-08-08T15:00:57.978Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-08T15:00:58.078Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-08T15:00:58.093Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T16:47:04.955Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T16:47:05.115Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T16:47:05.124Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T16:48:42.974Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-08-09T16:56:28.925Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T16:56:28.952Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T16:56:28.964Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T17:13:10.220Z [ERROR] [FATAL] Uncaught Exception: Identifier 'isTaxInclusiveRow' has already been declared
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\sales\sales.controller.js:2870
+        const isTaxInclusiveRow = row.is_tax_inclusive === true || row.is_tax_inclusive === 1;
+              ^
+
+SyntaxError: Identifier 'isTaxInclusiveRow' has already been declared
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\sales.routes.js:4:14)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-09T17:18:21.438Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T17:18:21.532Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T17:18:21.547Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T17:33:56.196Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T17:33:56.254Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T17:33:56.268Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T18:01:58.197Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T18:01:58.235Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T18:01:58.251Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T18:10:21.629Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T18:10:21.667Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-09T18:10:21.679Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

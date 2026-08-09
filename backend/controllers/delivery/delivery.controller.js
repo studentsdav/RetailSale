@@ -225,19 +225,36 @@ exports.listCatalogProducts = async (req, res) => {
                 mergedItem.retail_sale_price = mergedItem.b2b_rate;
             }
 
-            const originalPrice = mergedItem.retail_sale_price > 0 ? Number(mergedItem.retail_sale_price) : Number(mergedItem.rate);
+            const itemMrp = Number(mergedItem.mrp || 0);
+            const itemSellingPrice = Number(mergedItem.retail_sale_price || 0) > 0
+                ? Number(mergedItem.retail_sale_price)
+                : Number(mergedItem.rate || 0);
+
+            let originalPrice = itemMrp > itemSellingPrice ? itemMrp : itemSellingPrice;
+            let specialPrice = itemMrp > itemSellingPrice ? itemSellingPrice : null;
+
             const matchingScheme = matchingSchemes.find(s => Number(s.item_id) === Number(mergedItem.id));
             if (matchingScheme) {
-                let specialPrice = originalPrice;
+                let schemePrice = itemSellingPrice;
                 if (matchingScheme.discount_type === 'SPECIAL_PRICE') {
-                    specialPrice = Number(matchingScheme.discount_value);
+                    schemePrice = Number(matchingScheme.discount_value);
                 } else if (matchingScheme.discount_type === 'AMOUNT_OFF') {
-                    specialPrice = originalPrice - Number(matchingScheme.discount_value);
+                    schemePrice = itemSellingPrice - Number(matchingScheme.discount_value);
                 }
-                if (specialPrice < originalPrice) {
-                    mergedItem.special_price = specialPrice;
-                    mergedItem.original_price = originalPrice;
+                if (schemePrice < itemSellingPrice) {
+                    specialPrice = schemePrice;
+                    if (originalPrice <= schemePrice) {
+                        originalPrice = itemSellingPrice;
+                    }
                 }
+            }
+
+            if (specialPrice !== null && specialPrice < originalPrice) {
+                mergedItem.special_price = specialPrice;
+                mergedItem.original_price = originalPrice;
+            } else if (itemMrp > itemSellingPrice) {
+                mergedItem.special_price = itemSellingPrice;
+                mergedItem.original_price = itemMrp;
             }
 
             processedItems.push(mergedItem);
@@ -1165,10 +1182,10 @@ exports.acceptOrder = async (req, res) => {
             item.line_discount = lineDiscount;
         }
 
-        // Process items tax breakup
         let itemsTaxTotal = 0.0;
         let derivedSubTotal = 0.0;
         let derivedDiscount = 0.0;
+        let itemsLineTotal = 0.0;
 
         for (const item of finalItems) {
             const itemQty = toAmount(item.qty);
@@ -1180,26 +1197,33 @@ exports.acceptOrder = async (req, res) => {
             
             let itemTaxableAmount;
             let itemTaxAmount;
+            let itemLineTotal;
             
             if (isInclusive(item.item_id)) {
                 const netInclusive = Math.max(0, amount - lineDiscount);
                 itemTaxableAmount = toAmount(netInclusive / (1 + taxPercent / 100));
                 itemTaxAmount = toAmount(netInclusive - itemTaxableAmount);
-                
-                derivedSubTotal += toAmount(amount / (1 + taxPercent / 100));
-                derivedDiscount += toAmount(lineDiscount / (1 + taxPercent / 100));
+                itemLineTotal = netInclusive;
+
+                // For inclusive items: sub_total = inclusive MRP, discount = inclusive amount
+                // so that sub_total - total_discount = net_amount (e.g. 500 - 200 = 300 ✓)
+                derivedSubTotal += amount;       // inclusive MRP (e.g. 500)
+                derivedDiscount += lineDiscount; // inclusive discount (e.g. 200)
             } else {
                 itemTaxableAmount = Math.max(0, amount - lineDiscount);
                 itemTaxAmount = toAmount(itemTaxableAmount * taxPercent / 100);
-                
+                itemLineTotal = itemTaxableAmount + itemTaxAmount;
+
                 derivedSubTotal += amount;
                 derivedDiscount += lineDiscount;
             }
             
             itemsTaxTotal += itemTaxAmount;
+            itemsLineTotal += itemLineTotal;
             
             item.taxable_amount = itemTaxableAmount;
             item.tax_amount = itemTaxAmount;
+            item.line_total = itemLineTotal;
 
             const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', taxPercent, itemTaxableAmount);
             addTaxBreakup(itemBreakup);
@@ -1221,7 +1245,9 @@ exports.acceptOrder = async (req, res) => {
             .reduce((sum, tax) => sum + tax.taxAmount, 0);
 
         const finalTaxAmount = itemsTaxTotal + chargeTaxTotal;
-        const derivedNetAmount = toAmount(derivedSubTotal) + toAmount(finalTaxAmount) + toAmount(chargeSubtotal);
+        // Net = actual item line totals (net incl. for inclusive, taxable+tax for exclusive) + charges + charge tax.
+        // This is correct for all cases (inclusive, exclusive, mixed).
+        const derivedNetAmount = toAmount(itemsLineTotal) + toAmount(chargeSubtotal) + toAmount(chargeTaxTotal);
 
         let subscriptionTaxAmount = 0.0;
         let subscriptionTaxCgst = 0.0;
@@ -1325,7 +1351,7 @@ exports.acceptOrder = async (req, res) => {
             tax_percent: 0,
             total_qty: finalItems.reduce((sum, item) => sum + toAmount(item.qty), 0),
             sub_total: derivedSubTotal,
-            taxable_amount: toAmount(derivedSubTotal) + toAmount(chargeSubtotal),
+            taxable_amount: toAmount(finalItems.reduce((sum, item) => sum + (item.taxable_amount || 0), 0)) + toAmount(chargeSubtotal),
             cgst_amount: adjustedCgstAmount,
             sgst_amount: adjustedSgstAmount,
             igst_amount: adjustedIgstAmount,
@@ -1334,7 +1360,7 @@ exports.acceptOrder = async (req, res) => {
             charges: orderCharges,
             charge_total: toAmount(chargeSubtotal),
             charge_tax_total: toAmount(chargeTaxTotal),
-            total_discount: subscriptionAllocation.totalCoveredAmount - subscriptionTaxAmount + resolvedCouponDiscountAmount,
+            total_discount: derivedDiscount + (subscriptionAllocation.totalCoveredAmount - subscriptionTaxAmount),
             coupon_discount_amount: resolvedCouponDiscountAmount,
             round_off_amount: 0,
             net_amount: finalPayableNetAmount,

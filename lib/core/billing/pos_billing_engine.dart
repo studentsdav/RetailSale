@@ -92,8 +92,11 @@ class PosBillingEngine {
         taxAmount = netInclusive - taxableAmount;
         lineTotal = netInclusive;
 
-        calculatedSubTotal += gross / (1 + item.taxPercent / 100);
-        calculatedDiscount += lineDiscount / (1 + item.taxPercent / 100);
+        // For inclusive items, both sub_total and total_discount are stored as
+        // inclusive amounts so that sub_total - total_discount = net_amount.
+        // e.g. 500 (MRP incl. GST) - 200 (discount) = 300 (net payable).
+        calculatedSubTotal += gross;          // inclusive MRP = 500
+        calculatedDiscount += lineDiscount;   // inclusive discount = 200
       } else {
         taxableAmount = (gross - lineDiscount).clamp(0.0, double.infinity);
         lineTaxes = _resolveTaxes(
@@ -209,6 +212,17 @@ class PosBillingEngine {
 
     double totalDiscount = calculatedDiscount.clamp(0, subTotal);
 
+    // Compute net amount from the actual line totals of each item.
+    // This is the only formula that works correctly for all cases:
+    //   - exclusive-only carts: lineTotal = taxableAmount + taxAmount
+    //   - inclusive-only carts: lineTotal = netInclusive (tax already inside)
+    //   - mixed carts: each item contributes its own correct lineTotal
+    // We CANNOT use (subTotal - totalDiscount) + totalTax because subTotal is
+    // exclusive but totalDiscount is inclusive, making that arithmetic wrong.
+    final double itemsNetTotal =
+        computedItems.fold<double>(0, (sum, item) => sum + item.lineTotal);
+    final double netAmount = itemsNetTotal + chargeTotal + chargeTaxTotal;
+
     return InvoiceComputation(
       items: computedItems,
       charges: computedCharges,
@@ -223,7 +237,7 @@ class PosBillingEngine {
       totalTax: totalTax,
       chargeTotal: chargeTotal,
       chargeTaxTotal: chargeTaxTotal,
-      netAmount: (subTotal - totalDiscount) + chargeTotal + totalTax,
+      netAmount: netAmount,
     );
   }
 

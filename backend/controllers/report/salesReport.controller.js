@@ -188,7 +188,7 @@ exports.getSalesReport = async (req, res) => {
                     include: [{
                         model: req.propertyDb.models.item_master,
                         as: 'item',
-                        attributes: ['rate', 'retail_sale_price', 'item_group', 'sub_category', 'brand']
+                        attributes: ['rate', 'retail_sale_price', 'item_group', 'sub_category', 'brand', 'is_tax_inclusive']
                     }]
                 },
                 {
@@ -353,7 +353,17 @@ exports.getSalesReport = async (req, res) => {
                         effectiveTaxableAmount = toNumber(item.taxable_amount);
                         effectiveTaxAmount = toNumber(item.tax_amount);
                     } else {
-                        effectiveDiscount = Math.max(lineAmount + toNumber(item.tax_amount) - dbNetAmount, 0);
+                        // For tax-inclusive items the gross amount already contains the embedded
+                        // tax, so adding tax_amount again would over-count it.
+                        // Correct formula:
+                        //   exclusive: discount = gross_excl + tax - net  = lineAmount + taxAmount - netAmount
+                        //   inclusive: discount = gross_incl - net         = lineAmount - netAmount
+                        const isTaxInclusive = !!(item.item?.is_tax_inclusive);
+                        if (isTaxInclusive) {
+                            effectiveDiscount = Math.max(lineAmount - dbNetAmount, 0);
+                        } else {
+                            effectiveDiscount = Math.max(lineAmount + toNumber(item.tax_amount) - dbNetAmount, 0);
+                        }
                         effectiveNetAmount = dbNetAmount;
                         effectiveTaxableAmount = toNumber(item.taxable_amount);
                         effectiveTaxAmount = toNumber(item.tax_amount);

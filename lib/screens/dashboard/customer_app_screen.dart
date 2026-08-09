@@ -189,6 +189,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
       return double.parse((rawPrice * (1 + taxPercent / 100)).toStringAsFixed(2));
     }
+
     return rawPrice;
   }
 
@@ -3614,162 +3615,207 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                 ? (item['item_name'] ?? 'Product').toString().split(' - ').first 
                                 : (item['item_name'] ?? 'Product');
 
-                            return Card(
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: const BorderSide(color: Color(0xFFF1F5F9), width: 1.5),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              color: Colors.white,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Top Image Section
-                                  Container(
-                                    height: isMobile ? 110.0 : 130.0,
-                                    width: double.infinity,
-                                    color: const Color(0xFFF8FAFC),
-                                    child: Center(
-                                      child: (item['image_path'] ?? '').toString().trim().isNotEmpty
-                                          ? Padding(
-                                              padding: const EdgeInsets.all(8.0),
-                                              child: Image.network(
-                                                _itemImageUrl((item['image_path'] ?? '').toString()),
-                                                fit: BoxFit.contain,
-                                                errorBuilder: (_, __, ___) => const Icon(
-                                                  Icons.image_not_supported_outlined,
-                                                  size: 32,
-                                                  color: Color(0xFFCBD5E1),
+                             final double? specialPrice = item['special_price'] != null
+                                  ? double.tryParse(item['special_price'].toString())
+                                  : null;
+                              final double? originalPrice = item['original_price'] != null
+                                  ? double.tryParse(item['original_price'].toString())
+                                  : null;
+                              final double? itemMrp = item['mrp'] != null
+                                  ? double.tryParse(item['mrp'].toString())
+                                  : null;
+
+                              final double rawSellingPrice = specialPrice ?? 
+                                  (double.tryParse(item['retail_sale_price']?.toString() ?? '') ?? 
+                                   double.tryParse(item['rate']?.toString() ?? '') ?? 0.0);
+
+                              final bool isInclusive = item['is_tax_inclusive'] == true ||
+                                  item['is_tax_inclusive'] == 1 ||
+                                  item['is_tax_inclusive'].toString() == 'true';
+                              final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+
+                              final double displaySelling = isInclusive
+                                  ? double.parse((rawSellingPrice * (1 + taxPercent / 100)).toStringAsFixed(2))
+                                  : rawSellingPrice;
+
+                              final double? baseOriginalPrice = originalPrice ?? 
+                                  ((itemMrp != null && itemMrp > displaySelling) ? itemMrp : null);
+
+                              double? displayOriginal = baseOriginalPrice;
+
+                              final bool hasPromo = displayOriginal != null && displayOriginal > displaySelling;
+                              final int percentOff = hasPromo ? (((displayOriginal! - displaySelling) / displayOriginal!) * 100).round() : 0;
+
+                              return Card(
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: const BorderSide(color: Color(0xFFF1F5F9), width: 1.5),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                color: Colors.white,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Top Image Section with Discount Badge
+                                    Stack(
+                                      children: [
+                                        Container(
+                                          height: isMobile ? 110.0 : 130.0,
+                                          width: double.infinity,
+                                          color: const Color(0xFFF8FAFC),
+                                          child: Center(
+                                            child: (item['image_path'] ?? '').toString().trim().isNotEmpty
+                                                ? Padding(
+                                                    padding: const EdgeInsets.all(8.0),
+                                                    child: Image.network(
+                                                      _itemImageUrl((item['image_path'] ?? '').toString()),
+                                                      fit: BoxFit.contain,
+                                                      errorBuilder: (_, __, ___) => const Icon(
+                                                        Icons.image_not_supported_outlined,
+                                                        size: 32,
+                                                        color: Color(0xFFCBD5E1),
+                                                      ),
+                                                    ),
+                                                  )
+                                                : const Icon(
+                                                    Icons.image_not_supported_outlined,
+                                                    size: 32,
+                                                    color: Color(0xFFCBD5E1),
+                                                  ),
+                                          ),
+                                        ),
+                                        if (hasPromo && percentOff > 0)
+                                          Positioned(
+                                            top: 8,
+                                            left: 8,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                gradient: const LinearGradient(
+                                                  colors: [Color(0xFF15803D), Color(0xFF166534)],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                borderRadius: BorderRadius.circular(6),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.green.withOpacity(0.3),
+                                                    blurRadius: 4,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: Text(
+                                                '$percentOff% OFF',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 10,
+                                                  letterSpacing: 0.3,
                                                 ),
                                               ),
-                                            )
-                                          : const Icon(
-                                              Icons.image_not_supported_outlined,
-                                              size: 32,
-                                              color: Color(0xFFCBD5E1),
                                             ),
+                                          ),
+                                      ],
                                     ),
-                                  ),
-                                  
-                                  // Details Section
-                                  Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(10.0),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              if (brand.isNotEmpty) ...[
-                                                Text(
-                                                  brand.toUpperCase(),
-                                                  style: const TextStyle(
-                                                    color: Color(0xFF94A3B8),
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                    letterSpacing: 0.5,
+                                    
+                                    // Details Section
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(10.0),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                if (brand.isNotEmpty) ...[
+                                                  Text(
+                                                    brand.toUpperCase(),
+                                                    style: const TextStyle(
+                                                      color: Color(0xFF94A3B8),
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.bold,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
                                                   ),
-                                                  maxLines: 1,
+                                                  const SizedBox(height: 2),
+                                                ],
+                                                Text(
+                                                  baseName,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 13,
+                                                    color: Color(0xFF1E293B),
+                                                    height: 1.2,
+                                                  ),
+                                                  maxLines: 2,
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
-                                                const SizedBox(height: 2),
-                                              ],
-                                              Text(
-                                                baseName,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 13,
-                                                  color: Color(0xFF1E293B),
-                                                  height: 1.2,
-                                                ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                    horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: isDisplayOutOfStock
-                                                      ? Colors.red.shade50
-                                                      : Colors.green.shade50,
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  isDisplayOutOfStock
-                                                      ? 'Out of Stock'
-                                                      : (hasVariants ? 'Options' : '${currentStock.toInt()} left'),
-                                                  style: TextStyle(
+                                                const SizedBox(height: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                      horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
                                                     color: isDisplayOutOfStock
-                                                        ? Colors.red.shade700
-                                                        : Colors.green.shade700,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 10,
+                                                        ? Colors.red.shade50
+                                                        : Colors.green.shade50,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    isDisplayOutOfStock
+                                                        ? 'Out of Stock'
+                                                        : (hasVariants ? 'Options' : '${currentStock.toInt()} left'),
+                                                    style: TextStyle(
+                                                      color: isDisplayOutOfStock
+                                                          ? Colors.red.shade700
+                                                          : Colors.green.shade700,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 10,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                          
-                                          // Price and Add Button Row
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Expanded(
-                                                child: (() {
-                                                  final double? specialPrice = item['special_price'] != null
-                                                      ? double.tryParse(item['special_price'].toString())
-                                                      : null;
-                                                  final double? originalPrice = item['original_price'] != null
-                                                      ? double.tryParse(item['original_price'].toString())
-                                                      : null;
-                                                  final bool isInclusive = item['is_tax_inclusive'] == true ||
-                                                      item['is_tax_inclusive'] == 1 ||
-                                                      item['is_tax_inclusive'].toString() == 'true';
-                                                  final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-
-                                                  double? displaySpecial;
-                                                  double? displayOriginal;
-
-                                                  if (specialPrice != null && originalPrice != null && specialPrice < originalPrice) {
-                                                    if (isInclusive) {
-                                                      displaySpecial = double.parse((specialPrice * (1 + taxPercent / 100)).toStringAsFixed(2));
-                                                      displayOriginal = double.parse((originalPrice * (1 + taxPercent / 100)).toStringAsFixed(2));
-                                                    } else {
-                                                      displaySpecial = specialPrice;
-                                                      displayOriginal = originalPrice;
-                                                    }
-                                                  }
-
-                                                  final bool hasPromo = displaySpecial != null && displayOriginal != null && displaySpecial < displayOriginal;
-
-                                                  return Wrap(
+                                              ],
+                                            ),
+                                            
+                                            // Price and Add Button Row
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Wrap(
                                                     crossAxisAlignment: WrapCrossAlignment.center,
                                                     children: [
                                                       if (hasPromo) ...[
                                                         Text(
-                                                          'Rs. ${displayOriginal!.toStringAsFixed(0)}',
-                                                          style: const TextStyle(
-                                                            color: Colors.grey,
+                                                          'Rs. ${displayOriginal!.toStringAsFixed(displayOriginal % 1 == 0 ? 0 : 2)}',
+                                                          style: TextStyle(
+                                                            color: Colors.grey.shade500,
                                                             decoration: TextDecoration.lineThrough,
                                                             fontSize: 11,
+                                                            fontWeight: FontWeight.w500,
                                                           ),
                                                         ),
                                                         const SizedBox(width: 4),
                                                         Text(
-                                                          hasVariants ? 'Rs. ${displaySpecial!.toStringAsFixed(0)}+' : 'Rs. ${displaySpecial!.toStringAsFixed(0)}',
-                                                          style: TextStyle(
-                                                            color: theme.colorScheme.primary,
-                                                            fontWeight: FontWeight.bold,
+                                                          hasVariants
+                                                              ? 'Rs. ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}+'
+                                                              : 'Rs. ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}',
+                                                          style: const TextStyle(
+                                                            color: Color(0xFFD97706),
+                                                            fontWeight: FontWeight.w900,
                                                             fontSize: 14,
                                                           ),
                                                         ),
                                                       ] else ...[
                                                         Text(
-                                                          hasVariants ? 'Rs. ${price.toStringAsFixed(0)}+' : 'Rs. ${price.toStringAsFixed(0)}',
+                                                          hasVariants
+                                                              ? 'Rs. ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}+'
+                                                              : 'Rs. ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}',
                                                           style: TextStyle(
                                                             color: theme.colorScheme.primary,
                                                             fontWeight: FontWeight.bold,
@@ -3779,9 +3825,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                         ),
                                                       ],
                                                     ],
-                                                  );
-                                                })(),
-                                              ),
+                                                  ),
+                                                ),
                                               _buildAddButton(
                                                 isOutOfStock: isDisplayOutOfStock,
                                                 isInCart: hasVariants ? isDisplayInCart : isInCart,

@@ -2824,8 +2824,18 @@ async function createSaleVersion({
                 : [];
         }
 
+        const isTaxInclusiveRow = row.is_tax_inclusive === true || row.is_tax_inclusive === 1;
+
         totalQty += qty;
-        subTotal += taxableAmount + lineDiscount;
+        // For inclusive rows: sub_total = inclusive MRP (e.g. 500), total_discount = inclusive discount (e.g. 200)
+        //   → sub_total - total_discount = net_amount (500 - 200 = 300 ✓)
+        // For exclusive rows: sub_total = exclusive gross (taxableAmount + lineDiscount)
+        if (isTaxInclusiveRow) {
+            subTotal += amount; // inclusive MRP = qty * rate
+        } else {
+            const exclusiveLineDiscount = lineDiscount;
+            subTotal += taxableAmount + exclusiveLineDiscount;
+        }
         itemsTaxableTotal += taxableAmount;
         itemsTaxTotal += taxAmount;
         itemsLineTotal += lineTotal;
@@ -2858,7 +2868,9 @@ async function createSaleVersion({
             }
         }
 
-        const originalRate = toAmount(row.original_rate ?? (rate + (lineDiscount / (qty || 1))));
+        const originalRate = toAmount(row.original_rate ?? (
+            isTaxInclusiveRow ? rate : (rate + (lineDiscount / (qty || 1)))
+        ));
         const schemeDiscountPerUnit = toAmount(row.scheme_discount_per_unit ?? (lineDiscount / (qty || 1)));
 
         await req.propertyDb.models.sales_items.create({
@@ -4784,7 +4796,7 @@ exports.getSaleDetails = async (req, res) => {
                         {
                             model: req.propertyDb.models.item_master,
                             as: 'item',
-                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand']
+                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand', 'is_tax_inclusive']
                         }
                     ]
                 },
@@ -4812,7 +4824,7 @@ exports.getSaleDetails = async (req, res) => {
                             {
                                 model: req.propertyDb.models.item_master,
                                 as: 'item',
-                                attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand']
+                                attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand', 'is_tax_inclusive']
                             }
                         ]
                     },

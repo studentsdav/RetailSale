@@ -2137,6 +2137,14 @@ class PosInvoicePrinter {
   }
 
   static double _displayRate(SaleItem item) {
+    // For tax-inclusive items the `rate` stored in the DB already IS the
+    // consumer-facing inclusive price (e.g. ₹500 incl. GST).
+    // Historically, `referenceRate`/`original_rate` was saved incorrectly as
+    // rate + lineDiscount/qty (e.g. 500 + 200 = 700) for inclusive items,
+    // so we must NOT use it for inclusive items.
+    // For exclusive items, referenceRate is the pre-discount MRP, which is
+    // the intended display value.
+    if (item.isTaxInclusive) return item.rate;
     if (item.referenceRate > 0) return item.referenceRate;
     return item.rate;
   }
