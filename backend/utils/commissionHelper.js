@@ -7,6 +7,24 @@ function roundAmount(value) {
     return Number(toNumber(value).toFixed(2));
 }
 
+let _saleSourcesCache = null;
+let _saleSourcesCacheTime = 0;
+
+async function getSaleSourcesCache(db, transaction) {
+    const now = Date.now();
+    if (_saleSourcesCache && (now - _saleSourcesCacheTime) < 60000) {
+        return _saleSourcesCache;
+    }
+    const sources = await db.models.sale_sources.findAll({
+        where: { is_active: true },
+        transaction
+    });
+    const map = new Map(sources.map(s => [s.name, s]));
+    _saleSourcesCache = map;
+    _saleSourcesCacheTime = now;
+    return map;
+}
+
 async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, saleItems = [], transaction = null) {
     let platform_commission_rate = 0;
     let platform_gst_rate = 0;
@@ -14,21 +32,19 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
     let platform_tcs_rate = 0;
     let platform_id = null;
 
-    // 1. Resolve Platform
-    const sourceSettings = saleSource
-        ? await db.models.sale_sources.findOne({
-            where: { name: saleSource, is_active: true },
-            transaction
-          })
-        : null;
-
-    if (sourceSettings) {
-        platform_id = sourceSettings.id;
-        platform_commission_rate = toNumber(sourceSettings.commission_rate);
-        platform_gst_rate = toNumber(sourceSettings.gst_rate_on_commission);
-        platform_tds_rate = toNumber(sourceSettings.tds_rate);
-        platform_tcs_rate = toNumber(sourceSettings.tcs_rate);
+    // 1. Resolve Platform using in-memory cache
+    if (saleSource) {
+        const sourcesMap = await getSaleSourcesCache(db, transaction);
+        const sourceSettings = sourcesMap.get(saleSource);
+        if (sourceSettings) {
+            platform_id = sourceSettings.id;
+            platform_commission_rate = toNumber(sourceSettings.commission_rate);
+            platform_gst_rate = toNumber(sourceSettings.gst_rate_on_commission);
+            platform_tds_rate = toNumber(sourceSettings.tds_rate);
+            platform_tcs_rate = toNumber(sourceSettings.tcs_rate);
+        }
     }
+
 
     const base = baseAmount > 0 ? baseAmount : netAmount;
 
@@ -40,6 +56,16 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
 
     // 2. Run Hierarchical Rule Engine if items are provided
     if (platform_id && Array.isArray(saleItems) && saleItems.length > 0) {
+        // ⚡ Fetch rules FIRST — if there are none we skip the more expensive
+        // item_master + item_groups fetches entirely (saves 2 DB round-trips).
+        const rules = await db.models.commission_rules.findAll({
+            where: { platform_id, is_active: true },
+            transaction
+        });
+
+        if (rules.length === 0) {
+            // No rules configured for this source — skip item-level calculation
+        } else {
         // Fetch items master details
         const itemIds = saleItems.map(item => Number(item.item_id || item.product_id)).filter(Boolean);
         const itemMasters = itemIds.length > 0
@@ -56,11 +82,7 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
         });
         const groupNameToId = new Map(allGroups.map(g => [g.group_name, g.id]));
 
-        // Fetch active platform rules
-        const rules = await db.models.commission_rules.findAll({
-            where: { platform_id, is_active: true },
-            transaction
-        });
+
 
         const appliedRulesSet = new Set();
         const ruleGroups = new Map();
@@ -153,6 +175,7 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
         }
 
         appliedRulesList = Array.from(appliedRulesSet);
+        } // end else (rules.length > 0)
     } else {
         // Flat calculation fallback
         totalCommission = base * (platform_commission_rate / 100);

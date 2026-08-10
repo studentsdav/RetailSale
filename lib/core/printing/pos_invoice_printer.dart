@@ -49,6 +49,14 @@ class PosInvoicePrinter {
     );
   }
 
+  /// Returns the [PdfPageFormat] that matches [billFormat].
+  /// Thermal formats (THERMAL_58 / 72 / 76 / 80) return the correct narrow
+  /// roll width; everything else returns [PdfPageFormat.a4].
+  static PdfPageFormat pageFormatFor(String billFormat) {
+    if (_isThermalFormat(billFormat)) return _thermalSheetFor(billFormat);
+    return PdfPageFormat.a4;
+  }
+
   static Future<void> printSaleInvoice({
     required SaleOrder order,
     required PropertyInfo? property,

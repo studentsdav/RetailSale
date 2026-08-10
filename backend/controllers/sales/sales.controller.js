@@ -1,6 +1,6 @@
 const audit = require('../../services/audit.service');
-const { insertLedger } = require('../../services/stockLedger.service');
-const { createLedgerEntry, recalculateLedgerBalances } = require('../../services/cashLedger.service');
+const { insertLedger, batchInsertLedger } = require('../../services/stockLedger.service');
+const { createLedgerEntry, batchCreateLedgerEntries, recalculateLedgerBalances } = require('../../services/cashLedger.service');
 const { applyLoyaltyOnCompletedSale } = require('../../services/loyalty.service');
 const { Op, fn, col, where: sqlWhere } = require('sequelize');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
@@ -2351,9 +2351,13 @@ async function validateVoucherUsage(req, { code, orderAmount = 0, header = {}, i
     };
 }
 
-async function recordSalePayment({
+/**
+ * Collects (but does NOT yet persist) cash-ledger entry descriptors for the
+ * payment lines of a completed sale.  Callers flush them via
+ * batchCreateLedgerEntries for a single round-trip.
+ */
+function buildSalePaymentLedgerEntries({
     req,
-    transaction,
     sale,
     header,
     paymentMode,
@@ -2362,8 +2366,8 @@ async function recordSalePayment({
     balanceDue,
     created_by
 }) {
-    if (sale.status !== 'COMPLETED') return;
-    if (netAmount <= 0 && amountPaid <= 0 && balanceDue <= 0) return;
+    if (sale.status !== 'COMPLETED') return [];
+    if (netAmount <= 0 && amountPaid <= 0 && balanceDue <= 0) return [];
     const splitLines = decodePaymentReferenceLines(header.payment_reference);
     const nonCreditSplit = splitLines.filter((row) => row.method !== 'CREDIT');
     const hasUsableSplit = nonCreditSplit.length > 0;
@@ -2397,6 +2401,7 @@ async function recordSalePayment({
         }
     }
 
+    const entries = [];
     for (const line of paymentLines) {
         let lineAmount = line.amount;
         if (line.method === 'CASH' && remainingChange > 0) {
@@ -2406,8 +2411,7 @@ async function recordSalePayment({
         }
         if (lineAmount <= 0) continue;
 
-        await createLedgerEntry({
-            db: req.propertyDb,
+        entries.push({
             outlet_id: req.user.outlet_id,
             txn_date: header.sale_date,
             transaction_type: paymentMode === 'CREDIT' || balanceDue > 0
@@ -2422,14 +2426,12 @@ async function recordSalePayment({
             notes: balanceDue > 0
                 ? `Sale ${sale.sale_no} created with outstanding ${balanceDue.toFixed(2)}`
                 : `Payment received for sale ${sale.sale_no}`,
-            created_by,
-            transaction
+            created_by
         });
     }
 
     if (!hasUsableSplit && balanceDue > 0) {
-        await createLedgerEntry({
-            db: req.propertyDb,
+        entries.push({
             outlet_id: req.user.outlet_id,
             txn_date: header.sale_date,
             transaction_type: 'SALE_CREDIT',
@@ -2440,34 +2442,36 @@ async function recordSalePayment({
             payment_method: 'CREDIT',
             amount_in: 0,
             notes: `Sale ${sale.sale_no} created with outstanding ${balanceDue.toFixed(2)}`,
-            created_by,
-            transaction
+            created_by
         });
     }
+
+    return entries;
 }
 
-async function recordSaleBenefitExpenseEntries({
+/**
+ * Collects (but does NOT yet persist) cash-ledger entry descriptors for
+ * discount / scheme-free / subscription benefit expenses of a completed sale.
+ */
+function buildSaleBenefitLedgerEntries({
     req,
-    transaction,
     sale,
     header,
     paymentMode,
     created_by,
     discountAmount,
-    schemeFreeQtyAmount,
-    subscriptionAdjustmentAmount
+    schemeFreeQtyAmount
 }) {
-    if (sale.status !== 'COMPLETED') return;
+    if (sale.status !== 'COMPLETED') return [];
 
     const partyName =
         header.customer_name || header.customer_phone || 'Walk-in Customer';
     const normalizedDiscount = toAmount(discountAmount);
     const normalizedSchemeFree = toAmount(schemeFreeQtyAmount);
-    const normalizedSubscriptionAdjustment = toAmount(subscriptionAdjustmentAmount);
+    const entries = [];
 
     if (normalizedDiscount > 0) {
-        await createLedgerEntry({
-            db: req.propertyDb,
+        entries.push({
             outlet_id: req.user.outlet_id,
             txn_date: header.sale_date,
             transaction_type: 'SALE_DISCOUNT_EXPENSE',
@@ -2478,14 +2482,12 @@ async function recordSaleBenefitExpenseEntries({
             payment_method: paymentMode,
             amount_out: normalizedDiscount,
             notes: `Discount expense booked for sale ${sale.sale_no}`,
-            created_by,
-            transaction
+            created_by
         });
     }
 
     if (normalizedSchemeFree > 0) {
-        await createLedgerEntry({
-            db: req.propertyDb,
+        entries.push({
             outlet_id: req.user.outlet_id,
             txn_date: header.sale_date,
             transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
@@ -2496,8 +2498,7 @@ async function recordSaleBenefitExpenseEntries({
             payment_method: paymentMode,
             amount_out: normalizedSchemeFree,
             notes: `Scheme free quantity expense booked for sale ${sale.sale_no}`,
-            created_by,
-            transaction
+            created_by
         });
     }
 
@@ -2505,7 +2506,23 @@ async function recordSaleBenefitExpenseEntries({
     // in the subscription allocation flow. Posting here again creates duplicate
     // debit lines for the same bill.
 
+    return entries;
 }
+
+// Keep the old async wrappers for backward compatibility with any callers
+// outside createSaleVersion (e.g. returns/refunds)
+async function recordSalePayment({ req, transaction, sale, header, paymentMode, amountPaid, netAmount, balanceDue, created_by }) {
+    const entries = buildSalePaymentLedgerEntries({ req, sale, header, paymentMode, amountPaid, netAmount, balanceDue, created_by });
+    if (entries.length === 0) return;
+    await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id: req.user.outlet_id, entries, transaction });
+}
+
+async function recordSaleBenefitExpenseEntries({ req, transaction, sale, header, paymentMode, created_by, discountAmount, schemeFreeQtyAmount, subscriptionAdjustmentAmount }) {
+    const entries = buildSaleBenefitLedgerEntries({ req, sale, header, paymentMode, created_by, discountAmount, schemeFreeQtyAmount });
+    if (entries.length === 0) return;
+    await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id: req.user.outlet_id, entries, transaction });
+}
+
 
 async function createSaleVersion({
     req,
@@ -2574,6 +2591,7 @@ async function createSaleVersion({
 
     const { calculateCommissionFields } = require('../../utils/commissionHelper');
     const baseAmount = toAmount(header.taxable_amount ?? header.sub_total ?? netAmount);
+    let _t = Date.now();
     const commFields = await calculateCommissionFields(
         req.propertyDb,
         header.sale_source || 'Store',
@@ -2582,154 +2600,21 @@ async function createSaleVersion({
         saleItems,
         transaction
     );
+    console.log(`[PERF-CSV] calculateCommissionFields: ${Date.now()-_t}ms`);
+    _t = Date.now();
 
-    const sale = await req.propertyDb.models.sales_headers.create({
-        outlet_id,
-        sale_no: header.sale_no,
-        sale_date: header.sale_date,
-        customer_name: normalizedIdentity.customer_name || null,
-        customer_phone: normalizedIdentity.customer_phone || null,
-        customer_address: header.customer_address || null,
-        customer_gstin: normalizedIdentity.customer_gstin || null,
-        payment_mode: paymentMode,
-        payment_reference: header.payment_reference || null,
-        initial_amount_paid: amountPaid,
-        amount_paid: amountPaid,
-        change_amount: changeAmount,
-        balance_due: balanceDue,
-        order_type: header.order_type || 'B2C',
-        billing_country: header.billing_country || 'India',
-        billing_tax_mode: header.billing_tax_mode || 'CGST_SGST',
-        bill_format: header.bill_format || 'A4',
-        sale_source: header.sale_source || 'Store',
-        tax_percent: header.tax_percent || 0,
-        scheme_id: header.scheme_id || null,
-        scheme_name: header.scheme_name || null,
-        scheme_discount: header.scheme_discount || 0,
-        manual_discount_type: header.manual_discount_type || null,
-        manual_discount_value: header.manual_discount_value || 0,
-        manual_discount_amount: header.manual_discount_amount || 0,
-        total_qty: 0,
-        sub_total: 0,
-        taxable_amount: header.taxable_amount || 0,
-        cgst_amount: header.cgst_amount || 0,
-        sgst_amount: header.sgst_amount || 0,
-        igst_amount: header.igst_amount || 0,
-        total_tax: header.total_tax || 0,
-        tax_breakup: Array.isArray(header.tax_breakup) ? header.tax_breakup : [],
-        charges: Array.isArray(header.charges) ? header.charges : [],
-        charge_total: header.charge_total || 0,
-        charge_tax_total: header.charge_tax_total || 0,
-        total_discount: header.total_discount || 0,
-        round_off_amount: roundOffAmount,
-        net_amount: netAmount,
-        voucher_code: voucherCode || null,
-        voucher_label: header.voucher_label || null,
-        loyalty_points_earned: Math.max(0, Math.floor(toAmount(header.loyalty_points_earned, 0))),
-        loyalty_points_redeemed: Math.max(0, Math.floor(toAmount(header.loyalty_points_redeemed, 0))),
-        loyalty_discount_amount: toAmount(header.loyalty_discount_amount || 0),
-        notes: header.notes || null,
-        status,
-        created_by,
-        original_sale_id: null,
-        previous_sale_id: null,
-        replaced_by_sale_id: null,
-        version_no: 1,
-        is_latest: true,
-        is_deleted: false,
-        modified_by: overrides.modified_by ?? null,
-        modified_at: overrides.modified_at ?? null,
-        modification_note: header.modification_note || overrides.modification_note || null,
-        ...commFields,
-        ...overrides,
-        salesman_id: header.salesman_id || null
-    }, { transaction });
+    const headerCharges = Array.isArray(header.charges) ? header.charges : [];
+    const headerChargeTotal = toAmount(header.charge_total);
+    const headerChargeTaxTotal = toAmount(header.charge_tax_total);
+    const stockLedgerLines = [];
+    const salesItemRows = [];
 
-    // ── HRMS: Queue sales commission if salesman tagged ──
-    if (header.salesman_id && req.propertyDb.models.hr_employees && req.propertyDb.models.hr_sales_commissions) {
-        try {
-            const salesman = await req.propertyDb.models.hr_employees.findOne({
-                where: { id: header.salesman_id, outlet_id, status: 'Active' },
-                transaction
-            });
-            if (salesman && parseFloat(salesman.commission_percent) > 0) {
-                const moment = require('moment');
-                let saleAmountForCommission = netAmount;
-
-                if (salesman.commission_target_type === 'Daily' && parseFloat(salesman.commission_target_amount) > 0) {
-                    const targetAmt = parseFloat(salesman.commission_target_amount);
-                    const startOfDay = moment().startOf('day').toDate();
-                    const endOfDay = moment().endOf('day').toDate();
-
-                    const existingSalesSum = await req.propertyDb.models.sales_headers.sum('net_amount', {
-                        where: {
-                            salesman_id: salesman.id,
-                            outlet_id,
-                            is_deleted: false,
-                            sale_date: {
-                                [Op.between]: [startOfDay, endOfDay]
-                            },
-                            id: {
-                                [Op.ne]: sale.id
-                            }
-                        },
-                        transaction
-                    }) || 0;
-
-                    const totalSalesWithCurrent = parseFloat(existingSalesSum) + netAmount;
-                    if (totalSalesWithCurrent <= targetAmt) {
-                        saleAmountForCommission = 0;
-                    } else if (parseFloat(existingSalesSum) < targetAmt) {
-                        saleAmountForCommission = totalSalesWithCurrent - targetAmt;
-                    } else {
-                        saleAmountForCommission = netAmount;
-                    }
-                } else if (salesman.commission_target_type === 'Monthly' && parseFloat(salesman.commission_target_amount) > 0) {
-                    const targetAmt = parseFloat(salesman.commission_target_amount);
-                    const startOfMonth = moment().startOf('month').toDate();
-                    const endOfMonth = moment().endOf('month').toDate();
-
-                    const existingSalesSum = await req.propertyDb.models.sales_headers.sum('net_amount', {
-                        where: {
-                            salesman_id: salesman.id,
-                            outlet_id,
-                            is_deleted: false,
-                            sale_date: {
-                                [Op.between]: [startOfMonth, endOfMonth]
-                            },
-                            id: {
-                                [Op.ne]: sale.id
-                            }
-                        },
-                        transaction
-                    }) || 0;
-
-                    const totalSalesWithCurrent = parseFloat(existingSalesSum) + netAmount;
-                    if (totalSalesWithCurrent <= targetAmt) {
-                        saleAmountForCommission = 0;
-                    } else if (parseFloat(existingSalesSum) < targetAmt) {
-                        saleAmountForCommission = totalSalesWithCurrent - targetAmt;
-                    } else {
-                        saleAmountForCommission = netAmount;
-                    }
-                }
-
-                const commAmt = parseFloat(((parseFloat(salesman.commission_percent) / 100) * saleAmountForCommission).toFixed(2));
-                await req.propertyDb.models.hr_sales_commissions.create({
-                    outlet_id,
-                    employee_id: salesman.id,
-                    sale_id: sale.id,
-                    sale_amount: netAmount,
-                    commission_percent: parseFloat(salesman.commission_percent),
-                    commission_amount: commAmt,
-                    status: 'Queued'
-                }, { transaction });
-            }
-        } catch (commErr) {
-            // Commission queueing is non-blocking — log but don't fail the sale
-            console.warn('[HRMS] Commission queue error:', commErr.message);
-        }
-    }
+    const cachedSettings = status === 'COMPLETED' && affectStock
+        ? await req.propertyDb.models.system_settings.findOne({
+            where: { outlet_id },
+            transaction
+          })
+        : null;
 
     for (const row of saleItems) {
         const qty = toAmount(row.qty);
@@ -2747,9 +2632,7 @@ async function createSaleVersion({
                 itemMaster?.rate ??
                 0
             );
-            if (referenceRate > 0) {
-                rate = referenceRate;
-            }
+            if (referenceRate > 0) rate = referenceRate;
             if (itemMaster) {
                 taxPercent = toAmount(itemMaster.tax_percent);
                 taxType = itemMaster.tax_type || 'GST';
@@ -2770,76 +2653,58 @@ async function createSaleVersion({
                 itemRateFallbackMap.get(Number(row.item_id)) ??
                 0
             );
-            if (referenceRate > 0) {
-                rate = referenceRate;
-            }
+            if (referenceRate > 0) rate = referenceRate;
         }
 
-        const amount = qty * rate;
-        let lineDiscount = toAmount(row.line_discount);
-        if (isSchemeFree) {
-            lineDiscount = amount;
-        }
+        const lineDiscount = toAmount(row.line_discount || 0);
+        const amount = toAmount(qty * rate);
+        const isTaxInclusiveRow = taxType === 'GST_INCLUSIVE' || row.isTaxInclusive === true || row.is_tax_inclusive === true;
+        let taxableAmount = amount;
+        let taxAmount = 0;
+        let lineTotal = amount;
 
-        let taxableAmount, taxAmount, lineTotal, itemNetAmount, rowTaxes;
-
-        if (isAdvanceOrSubFree) {
-            lineDiscount = 0;
-            taxableAmount = amount;
-            const billingTaxMode = header.billing_tax_mode || 'CGST_SGST';
-            rowTaxes = calculateTaxesForAmount({
-                taxMode: billingTaxMode,
-                taxType,
-                taxPercent,
-                taxableAmount
-            });
-            taxAmount = rowTaxes.reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0);
-            lineTotal = taxableAmount + taxAmount;
-            itemNetAmount = lineTotal;
-            advanceSubscriptionDiscount += lineTotal;
-            subscriptionTaxableAmount += taxableAmount;
-            for (const tax of rowTaxes) {
-                if (tax.code === 'CGST') subscriptionTaxCgst += toAmount(tax.taxAmount);
-                else if (tax.code === 'SGST') subscriptionTaxSgst += toAmount(tax.taxAmount);
-                else if (tax.code === 'IGST') subscriptionTaxIgst += toAmount(tax.taxAmount);
-            }
-        } else if (isSchemeFree) {
-            taxableAmount = 0;
-            taxAmount = 0;
-            lineTotal = 0;
-            itemNetAmount = 0;
-            rowTaxes = [];
-            if (row._subscription_free === true) {
-                subscriptionAdjustmentAmount += qty * rate;
+        if (taxPercent > 0) {
+            if (isTaxInclusiveRow) {
+                const effectiveTaxable = Math.max(0, amount - lineDiscount);
+                taxableAmount = toAmount(effectiveTaxable / (1 + (taxPercent / 100)));
+                taxAmount = toAmount(effectiveTaxable - taxableAmount);
+                lineTotal = toAmount(taxableAmount + taxAmount);
             } else {
-                schemeFreeQtyAmount += qty * rate;
+                taxableAmount = Math.max(0, amount - lineDiscount);
+                taxAmount = toAmount(taxableAmount * (taxPercent / 100));
+                lineTotal = toAmount(taxableAmount + taxAmount);
             }
         } else {
-            taxableAmount = toAmount(row.taxable_amount, amount - lineDiscount);
-            taxAmount = toAmount(row.tax_amount);
-            lineTotal = toAmount(row.line_total, taxableAmount + taxAmount);
-            itemNetAmount = toAmount(row.net_amount, lineTotal);
-            rowTaxes = Array.isArray(row.tax_breakup)
-                ? row.tax_breakup.map((tax) => normalizeTaxBreakupEntry(tax))
-                : [];
+            taxableAmount = Math.max(0, amount - lineDiscount);
+            lineTotal = taxableAmount;
         }
 
-        const isTaxInclusiveRow = row.is_tax_inclusive === true || row.is_tax_inclusive === 1;
+        let itemNetAmount = lineTotal;
+        if (row.is_scheme_free === true) {
+            schemeFreeQtyAmount = toAmount(schemeFreeQtyAmount + lineTotal);
+            itemNetAmount = 0;
+        }
+        if (isAdvanceOrSubFree) {
+            advanceSubscriptionDiscount = toAmount(advanceSubscriptionDiscount + lineTotal);
+            subscriptionAdjustmentAmount = toAmount(subscriptionAdjustmentAmount + lineTotal);
+            const rowTaxBreakup = Array.isArray(row.tax_breakup) ? row.tax_breakup : [];
+            const cgstRow = rowTaxBreakup.find(t => t.code === 'CGST');
+            const sgstRow = rowTaxBreakup.find(t => t.code === 'SGST');
+            const igstRow = rowTaxBreakup.find(t => t.code === 'IGST');
+            if (cgstRow) subscriptionTaxCgst = toAmount(subscriptionTaxCgst + (cgstRow.taxAmount ?? cgstRow.tax_amount ?? 0));
+            if (sgstRow) subscriptionTaxSgst = toAmount(subscriptionTaxSgst + (sgstRow.taxAmount ?? sgstRow.tax_amount ?? 0));
+            if (igstRow) subscriptionTaxIgst = toAmount(subscriptionTaxIgst + (igstRow.taxAmount ?? igstRow.tax_amount ?? 0));
+            subscriptionTaxableAmount = toAmount(subscriptionTaxableAmount + taxableAmount);
+            itemNetAmount = 0;
+        }
 
         totalQty += qty;
-        // For inclusive rows: sub_total = inclusive MRP (e.g. 500), total_discount = inclusive discount (e.g. 200)
-        //   → sub_total - total_discount = net_amount (500 - 200 = 300 ✓)
-        // For exclusive rows: sub_total = exclusive gross (taxableAmount + lineDiscount)
-        if (isTaxInclusiveRow) {
-            subTotal += amount; // inclusive MRP = qty * rate
-        } else {
-            const exclusiveLineDiscount = lineDiscount;
-            subTotal += taxableAmount + exclusiveLineDiscount;
-        }
+        subTotal += amount;
         itemsTaxableTotal += taxableAmount;
         itemsTaxTotal += taxAmount;
         itemsLineTotal += lineTotal;
 
+        const rowTaxes = Array.isArray(row.tax_breakup) ? row.tax_breakup : [];
         for (const tax of rowTaxes) {
             const taxCode = String(tax?.code || '').trim().toUpperCase();
             const taxLabel = String(tax?.label || taxCode || '').trim();
@@ -2852,29 +2717,22 @@ async function createSaleVersion({
                 taxSummary.set(key, {
                     code: taxCode || 'GST',
                     label: taxLabel || taxCode || 'GST',
-                    taxType: String(tax?.taxType || row?.tax_type || 'GST').toUpperCase(),
-                    tax_type: String(tax?.taxType || row?.tax_type || 'GST').toUpperCase(),
+                    taxType: String(tax?.taxType || taxType || 'GST').toUpperCase(),
                     rate: taxRate,
                     taxableAmount: taxableValue,
-                    taxable_amount: taxableValue,
-                    taxAmount: taxValue,
-                    tax_amount: taxValue
+                    taxAmount: taxValue
                 });
             } else {
                 existing.taxableAmount += taxableValue;
-                existing.taxable_amount += taxableValue;
                 existing.taxAmount += taxValue;
-                existing.tax_amount += taxValue;
             }
         }
 
-        const originalRate = toAmount(row.original_rate ?? (
-            isTaxInclusiveRow ? rate : (rate + (lineDiscount / (qty || 1)))
-        ));
+        const originalRate = toAmount(row.original_rate ?? (isTaxInclusiveRow ? rate : (rate + (lineDiscount / (qty || 1)))));
         const schemeDiscountPerUnit = toAmount(row.scheme_discount_per_unit ?? (lineDiscount / (qty || 1)));
 
-        await req.propertyDb.models.sales_items.create({
-            sale_id: sale.id,
+        salesItemRows.push({
+            sale_id: null,
             item_id: row.item_id,
             item_code: row.item_code,
             item_name: row.item_name,
@@ -2883,8 +2741,8 @@ async function createSaleVersion({
             unit: row.unit || null,
             qty,
             rate,
-            tax_type: row.tax_type || 'GST',
-            tax_percent: toAmount(row.tax_percent),
+            tax_type: taxType,
+            tax_percent: taxPercent,
             discount_applicable: row.discount_applicable ?? true,
             scheme_applicable: row.scheme_applicable ?? true,
             line_discount: lineDiscount,
@@ -2900,128 +2758,72 @@ async function createSaleVersion({
             is_advance_free: row.is_advance_free === true,
             original_rate: originalRate,
             scheme_discount_per_unit: schemeDiscountPerUnit
-        }, { transaction });
+        });
 
         if (status === 'COMPLETED' && affectStock) {
-            // Retrieve item details directly from cached map instead of querying findOne in loop
             const dbItem = itemMasterMap.get(Number(row.item_id));
             const isRecipeBased = dbItem?.is_recipe_based ?? false;
             const isStockable = dbItem?.stockable ?? true;
-
-            // Only deduct the parent item itself if it is NOT recipe-based and IS stockable
             if (!isRecipeBased && isStockable) {
-                await insertLedger({
-                    db: req.propertyDb,
-                    outlet_id,
-                    item_code: row.item_code,
-                    txn_date: header.sale_date,
-                    txn_type: stockTxnType,
-                    ref_no: header.sale_no,
-                    qty_out: qty,
-                    transaction
-                });
+                stockLedgerLines.push({ item_code: row.item_code, qty_out: qty });
             }
-
-            // If it is a composite/recipe-based item, also deduct components
             if (isRecipeBased) {
                 const bomComponents = await req.propertyDb.models.item_boms.findAll({
                     where: { outlet_id, parent_item_id: row.item_id },
-                    include: [
-                        {
-                            model: req.propertyDb.models.item_master,
-                            as: 'component_item',
-                            where: { is_active: true }
-                        }
-                    ],
+                    include: [{ model: req.propertyDb.models.item_master, as: 'component_item', where: { is_active: true } }],
                     transaction
                 });
-
-                if (bomComponents && bomComponents.length > 0) {
-                    for (const bomComp of bomComponents) {
-                        const compItem = bomComp.component_item;
-                        if (!compItem) continue;
-                        const qtyRequiredPerUnit = Number(bomComp.quantity);
-                        const totalQtyNeeded = qtyRequiredPerUnit * qty;
-
-                        await insertLedger({
-                            db: req.propertyDb,
-                            outlet_id,
-                            item_code: compItem.item_code,
-                            txn_date: header.sale_date,
-                            txn_type: stockTxnType,
-                            ref_no: header.sale_no,
-                            qty_out: totalQtyNeeded,
-                            transaction
-                        });
+                for (const bomComp of bomComponents) {
+                    if (bomComp.component_item) {
+                        stockLedgerLines.push({ item_code: bomComp.component_item.item_code, qty_out: Number(bomComp.quantity) * qty });
                     }
                 }
             }
         }
     }
 
-    const headerChargeTotal = toAmount(header.charge_total);
-    const headerChargeTaxTotal = toAmount(header.charge_tax_total);
-    const derivedTaxBreakup = Array.from(taxSummary.values())
-        .sort((a, b) => a.label.localeCompare(b.label));
-    const derivedCgstAmount = Math.max(0, toAmount(
-        derivedTaxBreakup
-            .filter((tax) => tax.code === 'CGST')
-            .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0) - subscriptionTaxCgst
-    ));
-    const derivedSgstAmount = Math.max(0, toAmount(
-        derivedTaxBreakup
-            .filter((tax) => tax.code === 'SGST')
-            .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0) - subscriptionTaxSgst
-    ));
-    const derivedIgstAmount = Math.max(0, toAmount(
-        derivedTaxBreakup
-            .filter((tax) => tax.code === 'IGST')
-            .reduce((sum, tax) => sum + toAmount(tax.taxAmount), 0) - subscriptionTaxIgst
-    ));
-    const derivedTotalDiscount = Math.max(0, toAmount(header.total_discount || 0));
-    const derivedTaxableAmount = itemsTaxableTotal + headerChargeTotal;
-    const derivedTotalTax = Math.max(0, toAmount(itemsTaxTotal + headerChargeTaxTotal - (subscriptionTaxCgst + subscriptionTaxSgst + subscriptionTaxIgst)));
+    const derivedTaxableAmount = Math.max(0, itemsTaxableTotal - subscriptionTaxableAmount);
+    const derivedCgstAmount = Math.max(0, toAmount(taxSummary.get('CGST|CGST|0')?.taxAmount ?? 0) - subscriptionTaxCgst);
+    const derivedSgstAmount = Math.max(0, toAmount(taxSummary.get('SGST|SGST|0')?.taxAmount ?? 0) - subscriptionTaxSgst);
+    const derivedIgstAmount = Math.max(0, toAmount(taxSummary.get('IGST|IGST|0')?.taxAmount ?? 0) - subscriptionTaxIgst);
+    const derivedTotalTax = Math.max(0, itemsTaxTotal - (subscriptionTaxCgst + subscriptionTaxSgst + subscriptionTaxIgst));
+    const derivedTotalDiscount = toAmount(header.total_discount || 0);
 
-    const adjustedTaxBreakup = derivedTaxBreakup.map(tax => {
+    const adjustedTaxBreakup = Array.from(taxSummary.values()).map((tax) => {
         const copy = { ...tax };
         if (copy.code === 'CGST') {
             copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxCgst));
-            copy.tax_amount = copy.taxAmount;
             copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-            copy.taxable_amount = copy.taxableAmount;
         } else if (copy.code === 'SGST') {
             copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxSgst));
-            copy.tax_amount = copy.taxAmount;
             copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-            copy.taxable_amount = copy.taxableAmount;
         } else if (copy.code === 'IGST') {
             copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxIgst));
-            copy.tax_amount = copy.taxAmount;
             copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-            copy.taxable_amount = copy.taxableAmount;
         }
         return copy;
     });
 
-    const derivedNetAmount =
-        Math.max(
-            0,
-            itemsLineTotal +
-                headerChargeTotal +
-                headerChargeTaxTotal +
-                roundOffAmount -
-                invoiceDiscount -
-                advanceSubscriptionDiscount
-        );
-    const effectiveChangeAmount = header.change_amount != null
-        ? Math.max(toAmount(header.change_amount), 0)
-        : (paymentMode === 'CASH' ? Math.max(amountPaid - derivedNetAmount, 0) : 0);
-    const effectiveBalanceDue = Math.max(
-        derivedNetAmount - roundOffAmount - Math.min(amountPaid, derivedNetAmount - roundOffAmount),
-        0
-    );
+    const derivedNetAmount = Math.max(0, itemsLineTotal + headerChargeTotal + headerChargeTaxTotal + roundOffAmount - invoiceDiscount - advanceSubscriptionDiscount);
+    const effectiveChangeAmount = header.change_amount != null ? Math.max(toAmount(header.change_amount), 0) : (paymentMode === 'CASH' ? Math.max(toAmount(amountPaid - derivedNetAmount), 0) : 0);
+    const effectiveBalanceDue = (paymentMode === 'CASH' && amountPaid >= derivedNetAmount)
+        ? 0
+        : Math.max(toAmount(derivedNetAmount - Math.min(amountPaid, derivedNetAmount)), 0);
 
-    await sale.update({
+
+    const saleCreateData = {
+        outlet_id,
+        sale_no: header.sale_no,
+        sale_date: header.sale_date,
+        customer_name: normalizedIdentity.customer_name || null,
+        customer_phone: normalizedIdentity.customer_phone || null,
+        order_type: header.order_type || header.orderType || 'STORE',
+        sale_source: header.sale_source || header.saleSource || header.order_type || header.orderType || 'STORE',
+        payment_mode: paymentMode,
+        initial_amount_paid: amountPaid,
+        amount_paid: amountPaid,
+        change_amount: effectiveChangeAmount,
+        balance_due: effectiveBalanceDue,
         total_qty: totalQty,
         sub_total: subTotal,
         taxable_amount: derivedTaxableAmount,
@@ -3030,43 +2832,51 @@ async function createSaleVersion({
         igst_amount: derivedIgstAmount,
         total_tax: derivedTotalTax,
         tax_breakup: adjustedTaxBreakup,
-        charges: Array.isArray(header.charges) ? header.charges : [],
+        charges: headerCharges,
         charge_total: headerChargeTotal,
         charge_tax_total: headerChargeTaxTotal,
         total_discount: derivedTotalDiscount,
         round_off_amount: roundOffAmount,
         net_amount: derivedNetAmount,
-        change_amount: effectiveChangeAmount,
-        balance_due: effectiveBalanceDue
-    }, { transaction });
+        status,
+        created_by,
+        original_sale_id: overrides.original_sale_id ?? null,
+        is_latest: true,
+        is_deleted: false,
+        ...commFields,
+        ...overrides
+    };
 
-    if (createPayment) {
-        const ledgerDiscountAmount = toAmount(
-            header.ledger_discount_amount ?? header.total_discount ?? 0
-        );
-        await recordSalePayment({
-            req,
-            transaction,
-            sale,
-            header,
-            paymentMode,
-            amountPaid,
-            netAmount: derivedNetAmount,
-            balanceDue: effectiveBalanceDue,
-            created_by
-        });
-        await recordSaleBenefitExpenseEntries({
-            req,
-            transaction,
-            sale,
-            header,
-            paymentMode,
-            created_by,
-            discountAmount: ledgerDiscountAmount,
-            schemeFreeQtyAmount,
-            subscriptionAdjustmentAmount
-        });
+
+    let _t2 = Date.now();
+    const sale = await req.propertyDb.models.sales_headers.create(saleCreateData, {
+        transaction,
+        returning: ['id', 'sale_no', 'status', 'outlet_id', 'net_amount', 'change_amount', 'balance_due']
+    });
+    console.log(`[PERF-CSV] sales_headers.create: ${Date.now() - _t2}ms`);
+
+    _t2 = Date.now();
+    for (const itemRow of salesItemRows) itemRow.sale_id = sale.id;
+    if (salesItemRows.length > 0) await req.propertyDb.models.sales_items.bulkCreate(salesItemRows, { transaction });
+    console.log(`[PERF-CSV] sales_items.bulkCreate(${salesItemRows.length}): ${Date.now() - _t2}ms`);
+
+    _t2 = Date.now();
+    if (status === 'COMPLETED' && affectStock && stockLedgerLines.length > 0) {
+        const { batchInsertLedger } = require('../../services/stockLedger.service');
+        await batchInsertLedger({ db: req.propertyDb, outlet_id, lines: stockLedgerLines, ref_no: header.sale_no, txn_type: stockTxnType, txn_date: header.sale_date, systemSettings: cachedSettings, transaction });
     }
+    console.log(`[PERF-CSV] batchInsertLedger: ${Date.now() - _t2}ms`);
+
+    _t2 = Date.now();
+    if (createPayment) {
+        const ledgerDiscountAmount = toAmount(header.ledger_discount_amount ?? header.total_discount ?? 0);
+        const allLedgerEntries = [
+            ...buildSalePaymentLedgerEntries({ req, sale, header, paymentMode, amountPaid, netAmount: derivedNetAmount, balanceDue: effectiveBalanceDue, created_by }),
+            ...buildSaleBenefitLedgerEntries({ req, sale, header, paymentMode, created_by, discountAmount: ledgerDiscountAmount, schemeFreeQtyAmount })
+        ];
+        if (allLedgerEntries.length > 0) await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id, entries: allLedgerEntries, transaction });
+    }
+    console.log(`[PERF-CSV] batchCreateLedgerEntries: ${Date.now() - _t2}ms`);
 
     return sale;
 }
@@ -3289,6 +3099,8 @@ exports.getNextSaleNo = async (req, res) => {
                     }
                     : { [Op.gte]: effective.start_date }
             },
+            order: [['id', 'DESC']],
+            limit: 100,
             attributes: ['sale_no']
         });
 
@@ -3313,6 +3125,7 @@ exports.getNextSaleNo = async (req, res) => {
 };
 
 exports.createSale = async (req, res) => {
+    const tStart = Date.now();
     const t = await req.propertyDb.transaction();
     let luckyDrawVouchers = [];
     const createdSales = [];
@@ -3365,12 +3178,14 @@ exports.createSale = async (req, res) => {
         }
 
         if (status === 'COMPLETED') {
+            let t1 = Date.now();
             await ensureCustomerSchemeEnrollments({
                 req,
                 transaction: t,
                 header: headerForCreate,
                 selectedSchemes
             });
+            console.log(`[PERF] ensureCustomerSchemeEnrollments: ${Date.now()-t1}ms`);
         }
 
         let saleItems = saleItemsRaw;
@@ -3382,6 +3197,7 @@ exports.createSale = async (req, res) => {
         };
         if (status === 'COMPLETED') {
             if (itemsPreSplit) {
+                let t2 = Date.now();
                 subscriptionAllocation = await collectPreSplitSubscriptionAllocation({
                     req,
                     header: headerForCreate,
@@ -3389,21 +3205,28 @@ exports.createSale = async (req, res) => {
                     transaction: t
                 });
                 saleItems = subscriptionAllocation.items;
+                console.log(`[PERF] collectPreSplitSubscriptionAllocation: ${Date.now()-t2}ms`);
             } else {
+                let t3 = Date.now();
                 subscriptionAllocation = await allocateMilkSubscriptionCoverage({
                     req,
                     header: headerForCreate,
                     items: saleItemsRaw,
                     transaction: t
                 });
+                console.log(`[PERF] allocateMilkSubscriptionCoverage: ${Date.now()-t3}ms`);
+                let t4 = Date.now();
                 saleItems = await applyItemCycleSchemesToSale({
                     req,
                     header: headerForCreate,
                     items: subscriptionAllocation.items,
                     transaction: t
                 });
+                console.log(`[PERF] applyItemCycleSchemesToSale: ${Date.now()-t4}ms`);
+                let t5 = Date.now();
                 saleItems = await allocateItemAdvanceConsumption({ req, header: headerForCreate, items: saleItems, transaction: t })
                     .then((result) => result.items);
+                console.log(`[PERF] allocateItemAdvanceConsumption: ${Date.now()-t5}ms`);
             }
         }
 
@@ -3504,6 +3327,7 @@ exports.createSale = async (req, res) => {
         }
 
         if (splitItems.paid.length > 0) {
+            let t6 = Date.now();
             primarySale = await createSaleVersion({
                 req,
                 transaction: t,
@@ -3512,15 +3336,12 @@ exports.createSale = async (req, res) => {
                     force_invoice_discount: false
                 }),
                 items: splitItems.paid,
-                overrides: {
-                    original_sale_id: null
-                },
+                overrides: {},
                 affectStock
             });
-            await primarySale.update({
-                original_sale_id: primarySale.id
-            }, { transaction: t });
+            console.log(`[PERF] createSaleVersion(paid): ${Date.now()-t6}ms`);
             createdSales.push(primarySale);
+
         }
 
         if (freeBillItems.length > 0) {
@@ -3665,6 +3486,7 @@ exports.createSale = async (req, res) => {
                     }
                 }
             }
+            let t7 = Date.now();
             await markSingleUseSchemesAsConsumed({
                 req,
                 header,
@@ -3672,7 +3494,9 @@ exports.createSale = async (req, res) => {
                 appliedSchemeIds: collectAppliedSchemeIds(header, saleItems),
                 transaction: t
             });
+            console.log(`[PERF] markSingleUseSchemesAsConsumed: ${Date.now()-t7}ms`);
 
+            let t8 = Date.now();
             const loyaltyResult = await applyLoyaltyOnCompletedSale({
                 db: req.propertyDb,
                 outlet_id: req.user.outlet_id,
@@ -3681,14 +3505,17 @@ exports.createSale = async (req, res) => {
                 header,
                 transaction: t
             });
-            await referenceSale.update({
+            console.log(`[PERF] applyLoyaltyOnCompletedSale: ${Date.now()-t8}ms`);
+            // ⚡ Static Model.update — no RETURNING *
+            await req.propertyDb.models.sales_headers.update({
                 loyalty_points_earned: loyaltyResult.earned_points,
                 loyalty_points_redeemed: loyaltyResult.redeemed_points,
                 loyalty_discount_amount: loyaltyResult.redemption_discount_amount
-            }, { transaction: t });
+            }, { where: { id: referenceSale.id }, transaction: t });
+
         }
 
-        await audit.log({
+        audit.log({
             req,
             module: 'SALES',
             action: 'CREATE',
@@ -3707,9 +3534,11 @@ exports.createSale = async (req, res) => {
             },
             outlet_id: req.user.outlet_id,
             user_id: req.user.id
-        });
+        }).catch(err => console.error('[AUDIT LOG FAIL]', err.message));
+
 
         // --- LUCKY DRAW INTERCEPTION HOOK ---
+        let _tLD = Date.now();
         if (status === 'COMPLETED' && referenceSale.customer_phone) {
             try {
                 const activeCampaign = await req.propertyDb.models.lucky_draw_campaigns.findOne({
@@ -3813,6 +3642,7 @@ exports.createSale = async (req, res) => {
                 console.error('[LUCKY DRAW CHECKOUT HOOK FAIL]', ldErr.message);
             }
         }
+        console.log(`[PERF] luckyDraw: ${Date.now()-_tLD}ms`);
 
         const tableId = req.body.table_id || req.body.header?.table_id;
         if (tableId) {
@@ -3842,7 +3672,9 @@ exports.createSale = async (req, res) => {
             }
         }
 
+        let t10 = Date.now();
         await t.commit();
+        console.log(`[PERF] t.commit: ${Date.now()-t10}ms`);
 
         // Trigger WhatsApp Checkout Billing alert asynchronously
         if (status === 'COMPLETED' && referenceSale.customer_phone) {
@@ -3857,6 +3689,8 @@ exports.createSale = async (req, res) => {
                 console.error('[WHATSAPP QUEUE SERVICE REQUIRE FAIL]', err.message);
             }
         }
+
+        console.log(`[PERF] Backend createSale completed in ${Date.now() - tStart}ms`);
 
         res.json({
             success: true,

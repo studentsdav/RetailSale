@@ -3762,10 +3762,8 @@ COMMIT;
     version: 92,
     description: "Add is_happy_hour to item_master, create happy_hours table, and add applied_happy_hour_id to sales_items",
     up: async (db) => {
+      await db.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS is_happy_hour BOOLEAN DEFAULT FALSE`);
       await db.query(`
-        BEGIN;
-        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS is_happy_hour BOOLEAN DEFAULT FALSE;
-
         CREATE TABLE IF NOT EXISTS happy_hours (
           id SERIAL PRIMARY KEY,
           outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
@@ -3780,11 +3778,9 @@ COMMIT;
           is_active BOOLEAN NOT NULL DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS applied_happy_hour_id INTEGER;
-        COMMIT;
+        )
       `);
+      await db.query(`ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS applied_happy_hour_id INTEGER`);
     }
   },
   {
@@ -3807,6 +3803,16 @@ COMMIT;
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         COMMIT;
+      `);
+    }
+  },
+  {
+    version: 94,
+    description: "Add performance index on cash_ledger(outlet_id, txn_date, id) for O(1) running balance lookup",
+    up: async (db) => {
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_cash_ledger_outlet_date_id
+          ON cash_ledger (outlet_id, txn_date DESC, id DESC)
       `);
     }
   }

@@ -265,9 +265,8 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         _cart[itemId]!['qty'] = currentQty + 1;
       } else {
         final double rawRate = double.tryParse((item['retail_sale_price'] ?? item['rate'] ?? 0.0).toString()) ?? 0.0;
-        final bool isInclusive = item['is_tax_inclusive'] == true || item['is_tax_inclusive'] == 1 || item['is_tax_inclusive'].toString() == 'true';
-        final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0.0') ?? 0.0;
-        final double cartRate = isInclusive ? double.parse((rawRate * (1 + taxPercent / 100)).toStringAsFixed(2)) : rawRate;
+        // When is_tax_inclusive=true, retail_sale_price already contains GST. Do NOT add tax again.
+        final double cartRate = rawRate;
 
         _cart[itemId] = {
           'item_id': itemId,
@@ -561,7 +560,8 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                     final double rawRate = double.tryParse((item['retail_sale_price'] ?? item['rate'] ?? 0.0).toString()) ?? 0.0;
                                     final bool isInclusive = item['is_tax_inclusive'] == true || item['is_tax_inclusive'] == 1 || item['is_tax_inclusive'].toString() == 'true';
                                     final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0.0') ?? 0.0;
-                                    final double rate = isInclusive ? double.parse((rawRate * (1 + taxPercent / 100)).toStringAsFixed(2)) : rawRate;
+                                    // When is_tax_inclusive=true, retail_sale_price already contains GST. Do NOT add tax again.
+                                    final double rate = rawRate;
                                     final cartQty = _cart[item['id']]?['qty'] ?? 0.0;
 
                                     return Card(
@@ -661,16 +661,12 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                                       double? promoPrice;
                                                       if (promoScheme != null) {
                                                         if (promoScheme['discount_type'] == 'SPECIAL_PRICE') {
+                                                          // When is_tax_inclusive=true, prices already include GST. Do NOT add tax again.
                                                           double basePromo = double.tryParse(promoScheme['discount_value'].toString()) ?? rawRate;
-                                                          promoPrice = isInclusive
-                                                              ? double.parse((basePromo * (1 + taxPercent / 100)).toStringAsFixed(2))
-                                                              : basePromo;
+                                                          promoPrice = basePromo;
                                                         } else if (promoScheme['discount_type'] == 'AMOUNT_OFF') {
                                                           double baseOff = double.tryParse(promoScheme['discount_value'].toString()) ?? 0.0;
-                                                          double off = isInclusive
-                                                              ? double.parse((baseOff * (1 + taxPercent / 100)).toStringAsFixed(2))
-                                                              : baseOff;
-                                                          promoPrice = rate - off;
+                                                          promoPrice = rate - baseOff;
                                                         }
                                                       }
 

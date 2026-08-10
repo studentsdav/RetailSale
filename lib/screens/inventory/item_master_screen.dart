@@ -429,25 +429,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         return;
       }
 
-      final enteredBuyRate = double.tryParse(_rate.text) ?? 0.0;
-      final enteredSaleRate = double.tryParse(_retailSalePrice.text) ?? 0.0;
+      final buyRate = double.tryParse(_rate.text) ?? 0.0;
+      final saleRate = double.tryParse(_retailSalePrice.text) ?? 0.0;
       final enteredMrp = double.tryParse(_mrp.text) ?? 0.0;
-      final buyRate = _useInclusiveRates &&
-              (_inclusiveRateScope == 'BOTH' ||
-                  _inclusiveRateScope == 'BUY_ONLY')
-          ? InclusiveRateHelper.exclusiveFromInclusive(
-              enteredBuyRate,
-              taxPercent,
-            )
-          : enteredBuyRate;
-      final saleRate = _useInclusiveRates &&
-              (_inclusiveRateScope == 'BOTH' ||
-                  _inclusiveRateScope == 'SALE_ONLY')
-          ? InclusiveRateHelper.exclusiveFromInclusive(
-              enteredSaleRate,
-              taxPercent,
-            )
-          : enteredSaleRate;
 
       final model = Item(
         id: _editIndex == null ? 0 : _items[_editIndex!].id,
@@ -649,14 +633,8 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _useInclusiveRates = it.isTaxInclusive;
     _inclusiveRateScope = 'BOTH';
 
-    if (it.isTaxInclusive) {
-      final double taxFactor = 1 + (it.taxPercent / 100);
-      _rate.text = (it.rate * taxFactor).toStringAsFixed(2);
-      _retailSalePrice.text = (it.retailSalePrice * taxFactor).toStringAsFixed(2);
-    } else {
-      _rate.text = it.rate.toString();
-      _retailSalePrice.text = it.retailSalePrice.toString();
-    }
+    _rate.text = it.rate > 0 ? it.rate.toString() : '';
+    _retailSalePrice.text = it.retailSalePrice > 0 ? it.retailSalePrice.toString() : '';
     _mrp.text = it.mrp > 0 ? it.mrp.toString() : '';
 
     setState(() {});

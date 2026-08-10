@@ -182,14 +182,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           0.0;
     }
 
-    final bool isInclusive = item['is_tax_inclusive'] == true ||
-        item['is_tax_inclusive'] == 1 ||
-        item['is_tax_inclusive'].toString() == 'true';
-    if (isInclusive) {
-      final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
-      return double.parse((rawPrice * (1 + taxPercent / 100)).toStringAsFixed(2));
-    }
-
+    // When is_tax_inclusive=true the stored retail_sale_price already contains GST.
+    // Do NOT add tax again — just return the raw price as the display price.
     return rawPrice;
   }
 
@@ -3634,9 +3628,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                   item['is_tax_inclusive'].toString() == 'true';
                               final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
 
-                              final double displaySelling = isInclusive
-                                  ? double.parse((rawSellingPrice * (1 + taxPercent / 100)).toStringAsFixed(2))
-                                  : rawSellingPrice;
+                              // When is_tax_inclusive=true the stored retail_sale_price already includes GST.
+                              // Do NOT add tax again — display the price as stored.
+                              final double displaySelling = rawSellingPrice;
 
                               final double? baseOriginalPrice = originalPrice ?? 
                                   ((itemMrp != null && itemMrp > displaySelling) ? itemMrp : null);

@@ -35,6 +35,9 @@ try {
             dialect: "postgres",
             logging: false,
             timezone: localTimezone,
+            dialectOptions: {
+                options: '-c synchronous_commit=off'
+            },
             pool: {
                 max: 10,
                 min: 0,

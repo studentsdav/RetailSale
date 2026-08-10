@@ -10,6 +10,7 @@ import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/auth/permission_service.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../inventory/salescreen.dart';
+import '../../core/printing/pdf_preview_dialog.dart';
 
 class SalesReprintModifyScreen extends StatefulWidget {
   const SalesReprintModifyScreen({super.key});
@@ -155,7 +156,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   }
 
   Future<void> _printSelected() async {
-    if (_selectedOrder == null || _selectedDetails == null) return;
+    if (_selectedOrder == null || _selectedDetails == null || !mounted) return;
     final paymentInfo = _paymentInfoText();
 
     // Always use the CURRENT system bill_format setting for reprints,
@@ -179,19 +180,32 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     }
     final reprintOrder = SaleOrder.fromJson(reprintJson);
 
-    await PosInvoicePrinter.printSaleInvoice(
-      order: reprintOrder,
-      property: propertyCtrl.data,
-      termsAndConditions: paymentInfo,
+    await showPdfPreviewDialog(
+      context: context,
+      name: reprintOrder.saleNo,
+      pageFormat: PosInvoicePrinter.pageFormatFor(reprintOrder.billFormat),
+      buildPdf: (_) async => await PosInvoicePrinter.buildSaleInvoicePdf(
+        order: reprintOrder,
+        property: propertyCtrl.data,
+        termsAndConditions: paymentInfo,
+      ),
     );
   }
 
   Future<void> _printCreditNote(Map<String, dynamic> creditNote) async {
+    if (!mounted) return;
     try {
       setState(() => _loading = true);
-      await PosInvoicePrinter.printCreditNote(
+      final pdfBytes = await PosInvoicePrinter.buildCreditNotePdf(
         creditNote: creditNote,
         property: propertyCtrl.data,
+      );
+      if (!mounted) return;
+      await showPdfPreviewDialog(
+        context: context,
+        name: creditNote['credit_note_no']?.toString() ?? 'CreditNote',
+        prebuiltBytes: pdfBytes,
+        buildPdf: (_) async => pdfBytes,
       );
     } catch (e) {
       if (!mounted) return;
@@ -810,7 +824,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                         children: [
                                           Text('${sale['sale_no'] ?? 'Bill'}'),
                                           const SizedBox(width: 8),
-                                          _buildSourceTag(sale['sale_source']),
+                                          _buildSourceTag(sale['sale_source'], orderType: sale['order_type']),
                                         ],
                                       ),
                                       subtitle: Text(
@@ -857,7 +871,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                       .textTheme
                                                       .titleLarge,
                                                 ),
-                                                _buildSourceTag(_selectedOrder!.saleSource),
+                                                _buildSourceTag(_selectedOrder!.saleSource, orderType: _selectedOrder!.orderType),
                                               ],
                                             ),
                                             Text(
@@ -1132,11 +1146,11 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     );
   }
 
-  Widget _buildSourceTag(String? source) {
-    if (source == null || source.trim().isEmpty) {
-      return const SizedBox.shrink();
-    }
-    final cleanSource = source.trim().toLowerCase();
+  Widget _buildSourceTag(String? source, {String? orderType}) {
+    final effectiveSource = (source != null && source.trim().isNotEmpty)
+        ? source.trim()
+        : ((orderType != null && orderType.trim().isNotEmpty) ? orderType.trim() : 'STORE');
+    final cleanSource = effectiveSource.toLowerCase();
     Color bgColor;
     Color textColor;
 
@@ -1154,6 +1168,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         textColor = Colors.orange.shade700;
         break;
       case 'store':
+      case 'b2c':
         bgColor = Colors.grey.shade100;
         textColor = Colors.grey.shade700;
         break;
@@ -1170,7 +1185,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         border: Border.all(color: textColor.withOpacity(0.3), width: 0.5),
       ),
       child: Text(
-        source.toUpperCase(),
+        effectiveSource.toUpperCase(),
         style: TextStyle(
           color: textColor,
           fontSize: 10,

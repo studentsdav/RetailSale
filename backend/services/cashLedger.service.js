@@ -286,6 +286,23 @@ async function upsertOpeningBalance({
 
 
 
+/**
+ * Create a new cash ledger entry with an incrementally computed running balance.
+ *
+ * ⚡ Performance note:
+ *   The old implementation called `recalculateLedgerBalances` after every insert,
+ *   which fetched ALL entries for today and issued one UPDATE per row — O(N) DB
+ *   operations per sale where N = number of prior transactions today.
+ *   On a busy day (50+ sales) this caused 20+ second processing times.
+ *
+ *   The new approach is O(1): look up the last entry's stored balance, add the
+ *   delta of this entry, and write the new balance in the same INSERT. No
+ *   subsequent updates are needed for the normal (current-date) case.
+ *
+ *   `recalculateLedgerBalances` is still available and is called from
+ *   `updateLedgerEntry` for backdated-correction scenarios where the sequential
+ *   balances genuinely need to be recomputed.
+ */
 async function createLedgerEntry({
     db,
     outlet_id,
@@ -304,6 +321,35 @@ async function createLedgerEntry({
     transaction = undefined
 }) {
     const normalizedTxnDate = dateKey(txn_date);
+
+    // ── O(1) running balance ──────────────────────────────────────────────
+    // Find the very last ledger entry (by date then id) to get the current
+    // running balance, then apply this entry's delta.
+    const lastEntry = await db.models.cash_ledger.findOne({
+        where: { outlet_id },
+        order: [['txn_date', 'DESC'], ['id', 'DESC']],
+        attributes: ['balance', 'txn_date'],
+        transaction
+    });
+
+    let runningBalance;
+    if (lastEntry) {
+        runningBalance = roundAmount(lastEntry.balance);
+    } else {
+        // No prior entries at all — use the latest manual opening balance.
+        const opening = await getLatestManualOpeningBefore({
+            db,
+            outlet_id,
+            beforeDate: normalizedTxnDate,
+            transaction
+        });
+        runningBalance = roundAmount(opening?.opening_balance ?? 0);
+    }
+
+    const delta = roundAmount(amount_in) - roundAmount(amount_out) + roundAmount(adjustment_amount);
+    const newBalance = roundAmount(runningBalance + delta);
+    // ─────────────────────────────────────────────────────────────────────
+
     const entry = await db.models.cash_ledger.create({
         outlet_id,
         txn_date: normalizedTxnDate,
@@ -316,23 +362,98 @@ async function createLedgerEntry({
         amount_in: roundAmount(amount_in),
         amount_out: roundAmount(amount_out),
         adjustment_amount: roundAmount(adjustment_amount),
-        balance: 0,
+        balance: newBalance,
         notes,
         created_by
     }, { transaction });
 
-    await recalculateLedgerBalances({
-        db,
-        outlet_id,
-        fromDate: normalizedTxnDate,
+    return entry;
+}
+
+/**
+ * ⚡ Batch-create multiple cash ledger entries in a single DB round-trip.
+ *
+ * Instead of calling createLedgerEntry() N times (each doing a findOne + create),
+ * this function:
+ *   1. Queries the last balance ONCE
+ *   2. Computes running balances in memory
+ *   3. Issues a single bulkCreate
+ *
+ * This reduces N×(findOne + INSERT) → 1 findOne + 1 bulkCreate, eliminating
+ * the major bottleneck when a sale generates 3–6 ledger entries (payment,
+ * discount expense, scheme expense, subscription adjustment, etc.).
+ *
+ * @param {object} params
+ * @param {object} params.db           - Sequelize db instance with models
+ * @param {number} params.outlet_id    - outlet id for all entries
+ * @param {Array}  params.entries      - array of entry objects (same fields as createLedgerEntry)
+ * @param {object} params.transaction  - Sequelize transaction
+ */
+async function batchCreateLedgerEntries({ db, outlet_id, entries, transaction }) {
+    if (!Array.isArray(entries) || entries.length === 0) return [];
+
+    let _tL = Date.now();
+    // 1 — Get the current running balance (ONE query)
+    const lastEntry = await db.models.cash_ledger.findOne({
+        where: { outlet_id },
+        order: [['txn_date', 'DESC'], ['id', 'DESC']],
+        attributes: ['balance', 'txn_date'],
         transaction
     });
+    console.log(`[PERF-CL] cash_ledger.findOne: ${Date.now() - _tL}ms`);
+    _tL = Date.now();
 
-    return entry.reload({ transaction });
+    let runningBalance;
+    if (lastEntry) {
+        runningBalance = roundAmount(lastEntry.balance);
+    } else {
+        // No prior entries — look up earliest date in our batch for opening balance
+        const firstDate = entries[0].txn_date ?? new Date();
+        const opening = await getLatestManualOpeningBefore({
+            db,
+            outlet_id,
+            beforeDate: dateKey(firstDate),
+            transaction
+        });
+        runningBalance = roundAmount(opening?.opening_balance ?? 0);
+    }
+
+    // 2 — Compute running balances in memory
+    const rows = entries.map(e => {
+        const normalizedTxnDate = dateKey(e.txn_date ?? new Date());
+        const delta = roundAmount(e.amount_in ?? 0) - roundAmount(e.amount_out ?? 0) + roundAmount(e.adjustment_amount ?? 0);
+        runningBalance = roundAmount(runningBalance + delta);
+        return {
+            outlet_id,
+            txn_date: normalizedTxnDate,
+            transaction_type: e.transaction_type,
+            reference_type: e.reference_type ?? null,
+            reference_id: e.reference_id ?? null,
+            reference_no: e.reference_no ?? null,
+            party_name: e.party_name ?? null,
+            payment_method: e.payment_method ?? null,
+            amount_in: roundAmount(e.amount_in ?? 0),
+            amount_out: roundAmount(e.amount_out ?? 0),
+            adjustment_amount: roundAmount(e.adjustment_amount ?? 0),
+            balance: runningBalance,
+            notes: e.notes ?? null,
+            created_by: e.created_by ?? null
+        };
+    });
+
+    // 3 — ONE bulkCreate for all entries
+    const created = await db.models.cash_ledger.bulkCreate(rows, {
+        transaction,
+        returning: false
+    });
+    console.log(`[PERF-CL] cash_ledger.bulkCreate(${rows.length}): ${Date.now() - _tL}ms`);
+
+    return created;
 }
 
 module.exports = {
     createLedgerEntry,
+    batchCreateLedgerEntries,
     updateLedgerEntry,
     recalculateLedgerBalances,
     getOpeningBalanceForDate,

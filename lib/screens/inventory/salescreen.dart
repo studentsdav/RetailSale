@@ -25,6 +25,7 @@ import '../../core/billing/pos_billing_engine.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../core/printing/pdf_preview_dialog.dart';
 import '../../utils/branding_storage.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../models/inventory/item_model.dart';
@@ -161,6 +162,9 @@ class _SaleScreenState extends State<SaleScreen> {
   int? _editingSaleId;
   bool _affectStockOnEdit = true;
   bool _schemeManuallyRemoved = false;
+  // Billing processing lock — prevents double-press and shows loading overlay.
+  bool _isBillProcessing = false;
+  final Stopwatch _processingStopwatch = Stopwatch();
   // Subscription delivery counters for sidebar badges
   int _subscriptionDraftCount = 0;
   int _totalDraftCount = 0;
@@ -1779,11 +1783,7 @@ class _SaleScreenState extends State<SaleScreen> {
           orElse: () => null,
         );
     if (item == null) return 0;
-    final double rawPrice = item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
-    if (item.isTaxInclusive) {
-      return double.parse((rawPrice * (1 + item.taxPercent / 100)).toStringAsFixed(2));
-    }
-    return rawPrice;
+    return item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
   }
 
   void _syncCartRatesWithLatestCatalog() {
@@ -1809,9 +1809,6 @@ class _SaleScreenState extends State<SaleScreen> {
   }) {
     double defaultRate =
         item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
-    if (item.isTaxInclusive) {
-      defaultRate = double.parse((defaultRate * (1 + item.taxPercent / 100)).toStringAsFixed(2));
-    }
     return SaleItem(
       itemId: item.id,
       itemCode: seed?.itemCode ?? item.itemCode,
@@ -5532,6 +5529,39 @@ class _SaleScreenState extends State<SaleScreen> {
     required String status,
     required bool printAfterSave,
   }) async {
+    // Prevent double-press: if already saving/printing, ignore.
+    if (_isBillProcessing) return;
+    setState(() {
+      _isBillProcessing = true;
+      _processingStopwatch
+        ..reset()
+        ..start();
+    });
+    // Refresh the overlay timer every second so the user sees elapsed time.
+    void Function()? stopTimer;
+    {
+      bool active = true;
+      stopTimer = () => active = false;
+      Future.doWhile(() async {
+        await Future.delayed(const Duration(seconds: 1));
+        if (!active || !mounted) return false;
+        if (_isBillProcessing) setState(() {}); // redraw to update counter
+        return _isBillProcessing;
+      });
+    }
+    try {
+      await _persistSaleInternal(status: status, printAfterSave: printAfterSave);
+    } finally {
+      stopTimer?.call();
+      _processingStopwatch.stop();
+      if (mounted) setState(() => _isBillProcessing = false);
+    }
+  }
+
+  Future<void> _persistSaleInternal({
+    required String status,
+    required bool printAfterSave,
+  }) async {
     final cartSnapshot =
         _items.where((line) => line.qty > 0).toList(growable: false);
     if (printAfterSave && status != 'COMPLETED') {
@@ -5736,6 +5766,25 @@ class _SaleScreenState extends State<SaleScreen> {
       salesmanId: _selectedSalesperson?['id'],
       tableId: _preloadedTableId,
     );
+    // Pre-build the PDF bytes concurrently while the API save is in-flight.
+    // This eliminates the 3–5 second PDF generation delay that previously
+    // occurred *after* the save completed, making the print dialog open instantly.
+    final printMode = settingsCtrl.settings?.printMode ?? 'PRINT_DIALOG';
+    final willNeedPdf = status == 'COMPLETED' &&
+        (printAfterSave || (settingsCtrl.settings?.autoPrintOnSave ?? false)) &&
+        printMode != 'ASK_BEFORE_PRINT'; // for ASK mode we don't know yet
+    Future<Uint8List>? preBuildPdfFuture;
+    if (willNeedPdf) {
+      preBuildPdfFuture = PosInvoicePrinter.buildSaleInvoicePdf(
+        order: order,
+        property: propertyCtrl.data,
+        cashierName: _cashierName,
+        termsAndConditions:
+            'Goods once sold will not be taken back. Subject to local jurisdiction.',
+        thankYouMessage: 'Thank you for shopping with us. Please visit again.',
+        authorizedSignatureLabel: 'Authorized Signature',
+      );
+    }
     Map<String, dynamic>? saveResponse;
     Map<String, dynamic>? modifyResponse;
     if (isWorkingDraft) {
@@ -5823,28 +5872,14 @@ class _SaleScreenState extends State<SaleScreen> {
         debugPrint('Error creating advance: $e');
       });
     }
-    final shouldPrint = status == 'COMPLETED' &&
-        (printAfterSave || (settingsCtrl.settings?.autoPrintOnSave ?? false));
-    if (shouldPrint) {
-      final idsToPrint = savedSaleIds.isNotEmpty ? savedSaleIds : [savedSaleId];
-      final List<String> savedSaleNos = (saveResponse?['sale_nos'] as List?)?.map((e) => e.toString()).toList() ?? [];
-      for (int i = 0; i < idsToPrint.length; i++) {
-        final saleId = idsToPrint[i];
-        if (saleId <= 0) continue;
-        
-        String finalSaleNo = order.saleNo;
-        if (savedSaleNos.length > i) {
-          finalSaleNo = savedSaleNos[i];
-        }
-        
-        final printOrder = order.copyWith(
-          saleNo: finalSaleNo,
-          hasBillNo: finalSaleNo.isNotEmpty,
-          orderId: saleId,
-        );
-        await _handlePrintAfterSave(printOrder);
-      }
+    // ── HIDE OVERLAY IMMEDIATELY ──────────────────────────────────────────
+    // The backend save API has succeeded! Hide the loading overlay immediately
+    // so the retailer sees the bill saved in ~1 second instead of waiting for
+    // the OS printing dialog/spooler to complete.
+    if (mounted) {
+      setState(() => _isBillProcessing = false);
     }
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -5865,6 +5900,7 @@ class _SaleScreenState extends State<SaleScreen> {
         ),
       ),
     );
+
     if (status == 'COMPLETED') {
       _activeDraftId = null;
       _pendingPreviousAdjustment = 0;
@@ -5882,16 +5918,45 @@ class _SaleScreenState extends State<SaleScreen> {
           }
         }
       }
-      try {
-        _saleNo.text = await ctrl.getNextSaleNo();
-      } catch (_) {}
-    }
     if (isEditing) {
       Navigator.pop(context, true);
-      return;
+    } else {
+      await _resetSaleForm();
     }
-    await _resetSaleForm();
-  }
+
+    // ── NON-BLOCKING PRINTING ────────────────────────────────────────────
+    // Now trigger printing using the snapshot `order`. Because the overlay is
+    // already hidden and the cart is reset, the retailer can immediately start
+    // the next bill while printing happens smoothly.
+    final shouldPrint = status == 'COMPLETED' &&
+        (printAfterSave || (settingsCtrl.settings?.autoPrintOnSave ?? false));
+    if (shouldPrint) {
+      final idsToPrint = savedSaleIds.isNotEmpty ? savedSaleIds : [savedSaleId];
+      final List<String> savedSaleNos = (saveResponse?['sale_nos'] as List?)?.map((e) => e.toString()).toList() ?? [];
+      for (int i = 0; i < idsToPrint.length; i++) {
+        final saleId = idsToPrint[i];
+        if (saleId <= 0) continue;
+        
+        String finalSaleNo = order.saleNo;
+        if (savedSaleNos.length > i) {
+          finalSaleNo = savedSaleNos[i];
+        }
+        
+        final printOrder = order.copyWith(
+          saleNo: finalSaleNo,
+          hasBillNo: finalSaleNo.isNotEmpty,
+          orderId: saleId,
+        );
+        _handlePrintAfterSave(
+          printOrder,
+          preBuildPdfFuture: i == 0 ? preBuildPdfFuture : null,
+        ).catchError((e) {
+          debugPrint('Printing error: $e');
+        });
+        preBuildPdfFuture = null;
+      }
+    }
+    }}
 
   List<int>? _normalizeSaleIds(dynamic value) {
     if (value is List) {
@@ -7354,19 +7419,45 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
-  Future<void> _printInvoice(SaleOrder order) async {
-    await PosInvoicePrinter.printSaleInvoice(
-      order: order,
-      property: propertyCtrl.data,
-      cashierName: _cashierName,
-      termsAndConditions:
-          'Goods once sold will not be taken back. Subject to local jurisdiction.',
-      thankYouMessage: 'Thank you for shopping with us. Please visit again.',
-      authorizedSignatureLabel: 'Authorized Signature',
+  /// Prints the invoice using a pre-built PDF bytes future if available,
+  /// otherwise builds the PDF on demand. Passing [preBuildPdfFuture] allows
+  /// the caller to overlap PDF generation with the backend save API call,
+  /// eliminating the 3–5 second delay before the print dialog opens.
+  Future<void> _printInvoice(SaleOrder order,
+      {Future<Uint8List>? preBuildPdfFuture}) async {
+    if (!mounted) return;
+    // Use the in-app PDF preview dialog so it always appears in front of the
+    // Flutter window on Windows (avoids the OS print dialog going to background).
+    Uint8List? prebuilt;
+    if (preBuildPdfFuture != null) {
+      // Pre-built bytes were computed concurrently with the API save call —
+      // just await them (should be near-instant).
+      prebuilt = await preBuildPdfFuture;
+    }
+    if (!mounted) return;
+    // ignore: use_build_context_synchronously
+    await showPdfPreviewDialog(
+      context: context,
+      name: order.saleNo,
+      pageFormat: PosInvoicePrinter.pageFormatFor(order.billFormat),
+      prebuiltBytes: prebuilt,
+      buildPdf: (_) async {
+        return await PosInvoicePrinter.buildSaleInvoicePdf(
+          order: order,
+          property: propertyCtrl.data,
+          cashierName: _cashierName,
+          termsAndConditions:
+              'Goods once sold will not be taken back. Subject to local jurisdiction.',
+          thankYouMessage:
+              'Thank you for shopping with us. Please visit again.',
+          authorizedSignatureLabel: 'Authorized Signature',
+        );
+      },
     );
   }
 
   Future<Printer?> _resolveDefaultPrinter() async {
+    if (_defaultPrinter != null) return _defaultPrinter;
     final settings = settingsCtrl.settings;
     if (settings == null ||
         (settings.defaultPrinterUrl.trim().isEmpty &&
@@ -7375,7 +7466,7 @@ class _SaleScreenState extends State<SaleScreen> {
     }
     try {
       final printers = await Printing.listPrinters();
-      return printers.cast<Printer?>().firstWhere(
+      final printer = printers.cast<Printer?>().firstWhere(
             (printer) =>
                 (settings.defaultPrinterUrl.trim().isNotEmpty &&
                     printer?.url == settings.defaultPrinterUrl) ||
@@ -7383,12 +7474,17 @@ class _SaleScreenState extends State<SaleScreen> {
                     printer?.name == settings.defaultPrinterName),
             orElse: () => null,
           );
+      if (printer != null) {
+        _defaultPrinter = printer;
+      }
+      return printer;
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> _handlePrintAfterSave(SaleOrder order) async {
+  Future<void> _handlePrintAfterSave(SaleOrder order,
+      {Future<Uint8List>? preBuildPdfFuture}) async {
     final settings = settingsCtrl.settings;
     final printMode = settings?.printMode ?? 'PRINT_DIALOG';
 
@@ -7411,28 +7507,35 @@ class _SaleScreenState extends State<SaleScreen> {
         ),
       );
       if (shouldPrint != true) return;
+      // For ASK mode, pre-build was not started (unknown answer), so no future here.
     }
 
     if (printMode == 'DIRECT_DEFAULT') {
       final printer = _defaultPrinter ?? await _resolveDefaultPrinter();
       if (printer != null) {
-        await PosInvoicePrinter.printSaleInvoice(
-          order: order,
-          property: propertyCtrl.data,
+        // For direct print, resolve the pre-built bytes (or build now) then send directly.
+        final pdfBytes = preBuildPdfFuture != null
+            ? await preBuildPdfFuture
+            : await PosInvoicePrinter.buildSaleInvoicePdf(
+                order: order,
+                property: propertyCtrl.data,
+                cashierName: _cashierName,
+                termsAndConditions:
+                    'Goods once sold will not be taken back. Subject to local jurisdiction.',
+                thankYouMessage:
+                    'Thank you for shopping with us. Please visit again.',
+                authorizedSignatureLabel: 'Authorized Signature',
+              );
+        await Printing.directPrintPdf(
           printer: printer,
-          directPrint: true,
-          cashierName: _cashierName,
-          termsAndConditions:
-              'Goods once sold will not be taken back. Subject to local jurisdiction.',
-          thankYouMessage:
-              'Thank you for shopping with us. Please visit again.',
-          authorizedSignatureLabel: 'Authorized Signature',
+          name: order.saleNo,
+          onLayout: (_) async => pdfBytes,
         );
         return;
       }
     }
 
-    await _printInvoice(order);
+    await _printInvoice(order, preBuildPdfFuture: preBuildPdfFuture);
   }
 
   Future<void> _openItemMaster() async {
@@ -7517,7 +7620,9 @@ class _SaleScreenState extends State<SaleScreen> {
       //     ),
       //   ],
       // ),
-      body: AnimatedBuilder(
+      body: Stack(
+        children: [
+          AnimatedBuilder(
         animation: Listenable.merge([ctrl, settingsCtrl]),
         builder: (_, __) {
           if (ctrl.loading ||
@@ -7574,6 +7679,77 @@ class _SaleScreenState extends State<SaleScreen> {
             },
           );
         },
+      ),
+          // ── Full-screen processing overlay ──────────────────────────────
+          // Shown when a save/print is in progress. Blocks all input, displays
+          // a spinner and live elapsed-seconds counter so the user knows
+          // the system is busy and shouldn't press any button again.
+          if (_isBillProcessing)
+            Positioned.fill(
+              child: AbsorbPointer(
+                absorbing: true,
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.52),
+                  alignment: Alignment.center,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 36, vertical: 32),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x33000000),
+                          blurRadius: 30,
+                          offset: Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 52,
+                          height: 52,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 4,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF6750A4)),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Processing Bill…',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1A2E),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Please wait  •  ${_processingStopwatch.elapsed.inSeconds}s',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF666680),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Do not press any button',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFAA3333),
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     ),
   ),
@@ -8321,9 +8497,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                       Expanded(
                                         child: (() {
                                           final double rawPrice = item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
-                                          final double displayPrice = item.isTaxInclusive
-                                              ? double.parse((rawPrice * (1 + item.taxPercent / 100)).toStringAsFixed(2))
-                                              : rawPrice;
+                                          final double displayPrice = rawPrice;
 
                                           final double rawMrp = item.mrp;
                                           final double displayMrp = rawMrp;
@@ -8332,16 +8506,9 @@ class _SaleScreenState extends State<SaleScreen> {
                                           double? promoPrice;
                                           if (promoScheme != null) {
                                             if (promoScheme.discountType == 'SPECIAL_PRICE') {
-                                              double basePromo = promoScheme.discountValue;
-                                              promoPrice = item.isTaxInclusive
-                                                  ? double.parse((basePromo * (1 + item.taxPercent / 100)).toStringAsFixed(2))
-                                                  : basePromo;
+                                              promoPrice = promoScheme.discountValue;
                                             } else if (promoScheme.discountType == 'AMOUNT_OFF') {
-                                              double baseOff = promoScheme.discountValue;
-                                              double off = item.isTaxInclusive
-                                                  ? double.parse((baseOff * (1 + item.taxPercent / 100)).toStringAsFixed(2))
-                                                  : baseOff;
-                                              promoPrice = displayPrice - off;
+                                              promoPrice = displayPrice - promoScheme.discountValue;
                                             }
                                           }
 
@@ -9086,7 +9253,7 @@ class _SaleScreenState extends State<SaleScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _persistSale(
+                  onPressed: _isBillProcessing ? null : () => _persistSale(
                     status: _editingSaleId != null ? 'COMPLETED' : 'DRAFT',
                     printAfterSave: false,
                   ),
@@ -9098,7 +9265,7 @@ class _SaleScreenState extends State<SaleScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _openPaymentSheet(printAfterSave: true),
+                  onPressed: _isBillProcessing ? null : () => _openPaymentSheet(printAfterSave: true),
                   child: const Text('Print'),
                 ),
               ),
@@ -9276,7 +9443,7 @@ class _SaleScreenState extends State<SaleScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _persistSale(
+                    onPressed: _isBillProcessing ? null : () => _persistSale(
                       status: _editingSaleId != null ? 'COMPLETED' : 'DRAFT',
                       printAfterSave: false,
                     ),
@@ -9289,7 +9456,7 @@ class _SaleScreenState extends State<SaleScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: () => _openPaymentSheet(printAfterSave: false),
+                    onPressed: _isBillProcessing ? null : () => _openPaymentSheet(printAfterSave: false),
                     icon: const Icon(Icons.check_circle_outline),
                     label: Text(
                       _editingSaleId != null ? 'Update Bill' : 'Save Bill',
@@ -9300,7 +9467,7 @@ class _SaleScreenState extends State<SaleScreen> {
             ),
             const SizedBox(height: 10),
             FilledButton.icon(
-              onPressed: () => _openPaymentSheet(printAfterSave: true),
+              onPressed: _isBillProcessing ? null : () => _openPaymentSheet(printAfterSave: true),
               icon: const Icon(Icons.print_outlined),
               label: Text(
                 _editingSaleId != null ? 'Update & Print' : 'Save & Print',
@@ -9480,7 +9647,7 @@ class _SaleScreenState extends State<SaleScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _persistSale(
+                    onPressed: _isBillProcessing ? null : () => _persistSale(
                       status: _editingSaleId != null ? 'COMPLETED' : 'DRAFT',
                       printAfterSave: false,
                     ),
@@ -9493,13 +9660,24 @@ class _SaleScreenState extends State<SaleScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: () =>
+                    onPressed: _isBillProcessing ? null : () =>
                         _persistSale(status: 'COMPLETED', printAfterSave: true),
-                    icon: const Icon(Icons.print_outlined),
+                    icon: _isBillProcessing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.print_outlined),
                     label: Text(
-                      _editingSaleId != null
-                          ? 'Update & Print'
-                          : 'Save & Print',
+                      _isBillProcessing
+                          ? 'Processing… ${_processingStopwatch.elapsed.inSeconds}s'
+                          : _editingSaleId != null
+                              ? 'Update & Print'
+                              : 'Save & Print',
                     ),
                   ),
                 ),
@@ -11902,7 +12080,7 @@ class _SaleScreenState extends State<SaleScreen> {
           Row(
             children: [
               OutlinedButton.icon(
-                onPressed: () => _persistSale(
+                onPressed: _isBillProcessing ? null : () => _persistSale(
                   status: _editingSaleId != null ? 'COMPLETED' : 'DRAFT',
                   printAfterSave: false,
                 ),
@@ -11913,7 +12091,7 @@ class _SaleScreenState extends State<SaleScreen> {
               ),
               const SizedBox(width: 10),
               FilledButton.icon(
-                onPressed: () =>
+                onPressed: _isBillProcessing ? null : () =>
                     _persistSale(status: 'COMPLETED', printAfterSave: false),
                 icon: const Icon(Icons.save),
                 label: Text(
@@ -11922,15 +12100,23 @@ class _SaleScreenState extends State<SaleScreen> {
               ),
               const SizedBox(width: 10),
               FilledButton.icon(
-                onPressed: () =>
+                onPressed: _isBillProcessing ? null : () =>
                     _persistSale(status: 'COMPLETED', printAfterSave: true),
-                icon: const Icon(Icons.print_outlined),
+                icon: _isBillProcessing
+                    ? const SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.print_outlined),
                 label: Text(
-                  _editingSaleId != null
-                      ? 'Update & Print'
-                      : _isThermalBillFormat
-                          ? 'Save & Print $_billFormatLabel'
-                          : 'Save & Print A4 Bill',
+                  _isBillProcessing
+                      ? 'Processing… ${_processingStopwatch.elapsed.inSeconds}s'
+                      : _editingSaleId != null
+                          ? 'Update & Print'
+                          : _isThermalBillFormat
+                              ? 'Save & Print $_billFormatLabel'
+                              : 'Save & Print A4 Bill',
                 ),
               ),
               const SizedBox(width: 10),

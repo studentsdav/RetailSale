@@ -250,25 +250,8 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
     }
 
     final taxPercent = double.tryParse(_tax.text.trim()) ?? 0;
-    final enteredBuyRate = double.tryParse(_rate.text.trim()) ?? 0;
-    final enteredSaleRate = double.tryParse(_saleRate.text.trim()) ?? 0;
-
-    final buyRate = _useInclusiveRates &&
-            (_inclusiveRateScope == 'BOTH' || _inclusiveRateScope == 'BUY_ONLY')
-        ? InclusiveRateHelper.exclusiveFromInclusive(
-            enteredBuyRate,
-            taxPercent,
-          )
-        : enteredBuyRate;
-
-    final saleRate = _useInclusiveRates &&
-            (_inclusiveRateScope == 'BOTH' ||
-                _inclusiveRateScope == 'SALE_ONLY')
-        ? InclusiveRateHelper.exclusiveFromInclusive(
-            enteredSaleRate,
-            taxPercent,
-          )
-        : enteredSaleRate;
+    final buyRate = double.tryParse(_rate.text.trim()) ?? 0;
+    final saleRate = double.tryParse(_saleRate.text.trim()) ?? 0;
 
     final item = ReceiveItem(
       code: _code.text,
