@@ -2170,11 +2170,12 @@ exports.getDeliveryReport = async (req, res) => {
                 bill_no: sale.sale_no,
                 customer_name: getCustomerLabel(sale),
                 customer_phone: sale.customer_phone || '',
-                amount: toAmount(sale.net_amount) - toAmount(sale.round_off_amount),
+                // net_amount already includes round_off_amount - do not subtract again
+                amount: toAmount(sale.net_amount),
                 paid_amount: toAmount(sale.amount_paid),
                 outstanding: toAmount(sale.balance_due),
                 payment_mode: String(sale.payment_mode || '').trim().toUpperCase(),
-                payment_status: resolvePaymentStatus(sale.amount_paid, toAmount(sale.net_amount) - toAmount(sale.round_off_amount), sale.payment_mode)
+                payment_status: resolvePaymentStatus(sale.amount_paid, toAmount(sale.net_amount), sale.payment_mode)
             }))
             .filter((row) => !req.query.status || row.payment_status === String(req.query.status).toUpperCase());
 

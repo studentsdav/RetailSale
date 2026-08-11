@@ -182,7 +182,8 @@ exports.createItem = async (req, res) => {
             max_level,
             stockable,
             is_saleable,
-            is_tax_inclusive
+            is_tax_inclusive,
+            is_happy_hour
         } = req.body;
 
         const outlet_id = req.user.outlet_id;
@@ -233,6 +234,7 @@ exports.createItem = async (req, res) => {
             stockable,
             is_saleable: is_saleable ?? true,
             is_tax_inclusive: is_tax_inclusive ?? false,
+            is_happy_hour: is_happy_hour ?? false,
             is_active: true
         });
 
@@ -382,6 +384,8 @@ exports.bulkImportItems = async (req, res) => {
                 max_level: parseInt(row.max_level) || 0,
                 stockable: row.stockable === true || row.stockable === 'YES',
                 is_saleable: row.is_saleable !== false && row.is_saleable !== 'NO',
+                is_tax_inclusive: row.is_tax_inclusive === true || row.is_tax_inclusive === 'YES' || row.is_tax_inclusive === 'true' || row.is_tax_inclusive === 1,
+                is_happy_hour: row.is_happy_hour === true || row.is_happy_hour === 'YES' || row.is_happy_hour === 'true' || row.is_happy_hour === 1,
                 is_active: true
             };
 

@@ -5554,3 +5554,31 @@ SyntaxError: Identifier 'isTaxInclusiveRow' has already been declared
 2026-08-10T17:11:44.493Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-10T17:11:44.577Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-10T17:11:44.594Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-10T17:26:30.138Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-10T17:26:30.210Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-10T17:26:30.219Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-10T17:30:00.048Z [INFO] Hourly backup job started.
+2026-08-10T17:30:00.150Z [INFO] Hourly backup job started.
+2026-08-10T17:30:00.170Z [INFO] Hourly backup job started.
+2026-08-10T17:30:00.796Z [INFO] Backup created. File size: 0.06 MB
+2026-08-10T17:30:00.798Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-10T17:30:00.811Z [INFO] Backup created. File size: 0.06 MB
+2026-08-10T17:30:00.812Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-10T17:30:00.828Z [INFO] Backup created. File size: 0.06 MB
+2026-08-10T17:30:00.830Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-10T17:30:00.922Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-10T17:30:00.924Z [INFO] Hourly backup job execution finished.
+2026-08-10T17:30:00.935Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-10T17:30:00.937Z [INFO] Hourly backup job execution finished.
+2026-08-10T17:30:00.947Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-10T17:30:07.085Z [INFO] Cloud upload sequence completed successfully.
+2026-08-10T17:30:07.088Z [INFO] Hourly backup job execution finished.
+2026-08-10T17:30:34.306Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-10T17:30:34.378Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-10T17:30:34.389Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-11T15:00:40.099Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-11T15:00:40.231Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-11T15:00:40.240Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-11T15:15:36.409Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-11T15:15:36.479Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-11T15:15:36.493Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

@@ -803,6 +803,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       TextCellValue('MRP'),
       TextCellValue('Tax Type'),
       TextCellValue('Tax Percent'),
+      TextCellValue('Tax Inclusive'),
       TextCellValue('Discount Applicable'),
       TextCellValue('Scheme Applicable'),
       TextCellValue('Happy Hour'),
@@ -827,6 +828,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         DoubleCellValue(item.mrp),
         TextCellValue(item.taxType),
         DoubleCellValue(item.taxPercent),
+        TextCellValue(item.isTaxInclusive ? 'true' : 'false'),
         TextCellValue(item.discountApplicable ? 'true' : 'false'),
         TextCellValue(item.schemeApplicable ? 'true' : 'false'),
         TextCellValue(item.isHappyHour ? 'true' : 'false'),
@@ -928,49 +930,51 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       '0') ??
               0,
           "mrp": double.tryParse(
-                  cellByHeader(row, headers, 'MRP', fallbackIndex: 20)
+                  cellByHeader(row, headers, 'MRP', fallbackIndex: 10)
                           ?.toString() ??
                       '0') ??
               0.0,
-          "tax_type": cellByHeader(row, headers, 'Tax Type', fallbackIndex: 10)
+          "tax_type": cellByHeader(row, headers, 'Tax Type', fallbackIndex: 11)
                   ?.toString() ??
               'GST',
           "tax_percent": double.tryParse(
-                  cellByHeader(row, headers, 'Tax Percent', fallbackIndex: 11)
+                  cellByHeader(row, headers, 'Tax Percent', fallbackIndex: 12)
                           ?.toString() ??
                       '0') ??
               0,
+          "is_tax_inclusive": _toBool(
+              cellByHeader(row, headers, 'Tax Inclusive', fallbackIndex: 13),
+              defaultValue: false),
           "discount_applicable":
               _toBool(cellByHeader(row, headers, 'Discount Applicable',
-                  fallbackIndex: 12), defaultValue: true),
+                  fallbackIndex: 14), defaultValue: true),
           "scheme_applicable": _toBool(
               cellByHeader(row, headers, 'Scheme Applicable',
-                  fallbackIndex: 13),
+                  fallbackIndex: 15),
               defaultValue: true),
           "is_happy_hour": _toBool(
-              cellByHeader(row, headers, 'Happy Hour',
-                  fallbackIndex: 19), // Let's use fallback index 19 or standard cell by header
+              cellByHeader(row, headers, 'Happy Hour', fallbackIndex: 16),
               defaultValue: false),
           "opening_balance": double.tryParse(
-                  cellByHeader(row, headers, 'Opening', fallbackIndex: 14)
+                  cellByHeader(row, headers, 'Opening', fallbackIndex: 17)
                           ?.toString() ??
                       '0') ??
               0,
           "min_level": int.tryParse(
-                  cellByHeader(row, headers, 'Min', fallbackIndex: 15)
+                  cellByHeader(row, headers, 'Min', fallbackIndex: 18)
                           ?.toString() ??
                       '0') ??
               0,
           "max_level": int.tryParse(
-                  cellByHeader(row, headers, 'Max', fallbackIndex: 16)
+                  cellByHeader(row, headers, 'Max', fallbackIndex: 19)
                           ?.toString() ??
                       '0') ??
               0,
           "stockable": _toBool(
-              cellByHeader(row, headers, 'Stockable', fallbackIndex: 17),
+              cellByHeader(row, headers, 'Stockable', fallbackIndex: 20),
               defaultValue: true),
           "is_saleable": _toBool(
-              cellByHeader(row, headers, 'Saleable', fallbackIndex: 18),
+              cellByHeader(row, headers, 'Saleable', fallbackIndex: 21),
               defaultValue: true),
         });
       }

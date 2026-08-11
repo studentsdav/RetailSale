@@ -2316,30 +2316,37 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   void _updateLineQty(int index, double qty, {bool isTotalQty = false}) {
+    if (index < 0 || index >= _items.length) return;
     final line = _items[index];
     final isFreeLine = line.isAdvanceFree || line.isSchemeFree;
 
-    // For split rows (paid + free), qty edits on the paid row should preserve
-    // already-generated free quantity and only change payable quantity.
     if (!isFreeLine) {
-      final freeQtyForItem = _items
+      final currentTotalQty = _items
           .where(
             (row) =>
-                row.itemId == line.itemId &&
-                (row.isAdvanceFree || row.isSchemeFree),
+                row.itemId == line.itemId && !row.isAdvanceFree,
           )
           .fold<double>(0, (sum, row) => sum + row.qty);
-      final paidQty = qty <= 0 ? 0 : qty;
-      final totalQty = isTotalQty ? qty : (paidQty + freeQtyForItem);
+
+      final double totalQty;
+      if (isTotalQty) {
+        totalQty = qty <= 0 ? 0 : qty;
+      } else {
+        final delta = qty - line.qty;
+        final newQty = currentTotalQty + delta;
+        totalQty = newQty <= 0 ? 0 : newQty;
+      }
 
       if (totalQty <= 0) {
         _removeCartItemGroupById(line.itemId);
         return;
       }
 
-      // Preserve the original position of the item in the cart
       final originalIndex = _items.indexWhere(
-        (row) => row.itemId == line.itemId && !row.isAdvanceFree && !row.isSchemeFree,
+        (row) =>
+            row.itemId == line.itemId &&
+            !row.isAdvanceFree &&
+            !row.isSchemeFree,
       );
       final insertAt = originalIndex < 0 ? 0 : originalIndex;
 
@@ -2348,7 +2355,9 @@ class _SaleScreenState extends State<SaleScreen> {
         _pendingPreviousAdjustment = 0;
         _pendingAdvanceApplied = 0;
         _pendingAdvanceCreated = 0;
-        _items.removeWhere((row) => row.itemId == line.itemId);
+        _items.removeWhere(
+          (row) => row.itemId == line.itemId && !row.isAdvanceFree,
+        );
         _items.insert(
           insertAt,
           line.copyWith(
@@ -2357,6 +2366,7 @@ class _SaleScreenState extends State<SaleScreen> {
             isAdvanceFree: false,
             isSchemeFree: false,
             appliedSchemeId: null,
+            appliedHappyHourId: null,
           ),
         );
         _syncSelectedSchemePointers();
