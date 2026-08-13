@@ -36,6 +36,14 @@ module.exports = (sequelize, DataTypes) => {
         remarks: {
             type: DataTypes.TEXT,
             allowNull: true
+        },
+        address: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        gstin: {
+            type: DataTypes.STRING(20),
+            allowNull: true
         }
     }, {
         tableName: 'table_reservations',

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/auth/permission_service.dart';
@@ -23,6 +24,7 @@ class SalesReprintModifyScreen extends StatefulWidget {
 class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   final ctrl = SalesController();
   final propertyCtrl = PropertyInfoController();
+  final settingsCtrl = SystemSettingsController();
   final _searchCtrl = TextEditingController();
 
   DateTime _fromDate = DateTime.now().subtract(const Duration(days: 7));
@@ -68,6 +70,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
 
   Future<void> _loadInitial() async {
     await propertyCtrl.load();
+    await settingsCtrl.load();
     try {
       final methods = await ctrl.listPaymentMethods();
       final activeMethods = methods
@@ -187,6 +190,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
       buildPdf: (_) async => await PosInvoicePrinter.buildSaleInvoicePdf(
         order: reprintOrder,
         property: propertyCtrl.data,
+        copyCount: settingsCtrl.settings?.billCopiesCount ?? 1,
         termsAndConditions: paymentInfo,
       ),
     );

@@ -1,5 +1,14 @@
 const { Op } = require('sequelize');
 
+function formatDisplayName(item_name, brand, item_code) {
+    const rawName = String(item_name || '').trim() || String(item_code || '').trim();
+    const rawBrand = String(brand || '').trim();
+    if (rawBrand && !rawName.toLowerCase().includes(rawBrand.toLowerCase())) {
+        return `${rawName} (${rawBrand})`;
+    }
+    return rawName;
+}
+
 /**
  * Insert a stock ledger entry for a single outlet item.
  * For inserting multiple items in one sale, prefer `batchInsertLedger`
@@ -17,20 +26,34 @@ const { Op } = require('sequelize');
  * @param {object}  [options.transaction]    - Sequelize transaction
  * @param {boolean} [options.allow_negative=false]
  * @param {object}  [options.cachedSettings] - Pre-fetched system_settings row.
+ * @param {string}  [options.item_name]
+ * @param {string}  [options.brand]
+ * @param {boolean} [options.is_bom_component]
+ * @param {string}  [options.parent_item_code]
+ * @param {string}  [options.parent_item_name]
+ * @param {string}  [options.parent_brand]
  */
-exports.insertLedger = async ({
-    db,
-    outlet_id,
-    item_code,
-    txn_date,
-    txn_type,
-    ref_no,
-    qty_in = 0,
-    qty_out = 0,
-    transaction,
-    allow_negative = false,
-    cachedSettings = null
-}) => {
+exports.insertLedger = async (options) => {
+    const {
+        db,
+        outlet_id,
+        item_code,
+        txn_date,
+        txn_type,
+        ref_no,
+        qty_in = 0,
+        qty_out = 0,
+        transaction,
+        allow_negative = false,
+        cachedSettings = null,
+        item_name = null,
+        brand = null,
+        is_bom_component = false,
+        parent_item_code = null,
+        parent_item_name = null,
+        parent_brand = null
+    } = options;
+
     // 1️⃣ Get last balance
     const last = await db.models.stock_ledger.findOne({
         where: { outlet_id, item_code },
@@ -65,14 +88,34 @@ exports.insertLedger = async ({
     });
 
     if (!allow_negative && !settings?.allow_negative_stock && newBalance < 0) {
-        const itemForError = await db.models.item_master.findOne({
-            where: { outlet_id, item_code },
-            attributes: ['item_name'],
-            transaction
-        });
+        let nameToDisplay = item_name;
+        let brandToDisplay = brand;
+        if (!nameToDisplay) {
+            const itemForError = await db.models.item_master.findOne({
+                where: { outlet_id, item_code },
+                attributes: ['item_name', 'brand'],
+                transaction
+            });
+            nameToDisplay = itemForError?.item_name || item_code;
+            if (!brandToDisplay) brandToDisplay = itemForError?.brand;
+        }
+
+        const formattedName = formatDisplayName(nameToDisplay, brandToDisplay, item_code);
+        const isBom = is_bom_component || Boolean(parent_item_name || parent_item_code);
+        let msg = '';
+        if (isBom) {
+            const formattedParentName = formatDisplayName(parent_item_name, parent_brand, parent_item_code);
+            const parentStr = parent_item_name 
+                ? `"${formattedParentName}"${parent_item_code ? ` (${parent_item_code})` : ''}`
+                : `(${parent_item_code || 'unknown'})`;
+            msg = `Insufficient stock for BOM Component "${formattedName}" (${item_code}) linked to parent item ${parentStr}. Required: ${outQty}, Available: ${lastBalance}`;
+        } else {
+            msg = `Insufficient stock for item "${formattedName}" (${item_code}). Required: ${outQty}, Available: ${lastBalance}`;
+        }
+
         throw {
             status: 400,
-            message: `Insufficient stock for item ${itemForError?.item_name ?? item_code}. Available: ${lastBalance}`
+            message: msg
         };
     }
 
@@ -103,12 +146,6 @@ exports.insertLedger = async ({
 /**
  * ⚡ Batch-insert stock ledger entries for multiple items in a single sale.
  *
- * Instead of N × (findOne + create + findOne) = 3N sequential queries, this
- * function uses 3 total queries regardless of item count:
- *   1. One `findAll` to get the latest balance for every item_code at once.
- *   2. One `bulkCreate` to insert all ledger rows.
- *   3. One `findAll` on item_master to check min_level for notifications.
- *
  * @param {object}  options
  * @param {object}  options.db
  * @param {number}  options.outlet_id
@@ -117,7 +154,7 @@ exports.insertLedger = async ({
  * @param {string}  options.ref_no
  * @param {object}  [options.transaction]
  * @param {object}  [options.cachedSettings] - Pre-fetched system_settings row.
- * @param {Array}   options.lines            - Array of { item_code, qty_in?, qty_out? }
+ * @param {Array}   options.lines            - Array of { item_code, item_name?, brand?, qty_in?, qty_out?, is_bom_component?, parent_item_code?, parent_item_name?, parent_brand? }
  */
 exports.batchInsertLedger = async ({
     db,
@@ -133,9 +170,7 @@ exports.batchInsertLedger = async ({
 
     const itemCodes = [...new Set(lines.map(l => l.item_code))];
 
-    // ── Step 1: Get last balance for each item_code in one query ─────────
-    // Use a raw subquery via Sequelize to fetch the latest ledger row per item.
-    // We fetch all recent rows and pick the max-id per item_code in JS.
+    // ── Step 1: Get last balance & item_name + brand for each item_code ──
     const recentRows = await db.models.stock_ledger.findAll({
         where: { outlet_id, item_code: { [Op.in]: itemCodes } },
         order: [['id', 'DESC']],
@@ -143,7 +178,6 @@ exports.batchInsertLedger = async ({
         transaction
     });
 
-    // Build last-balance map (only the first/highest-id row per item_code)
     const lastBalanceMap = new Map();
     for (const row of recentRows) {
         if (!lastBalanceMap.has(row.item_code)) {
@@ -151,21 +185,22 @@ exports.batchInsertLedger = async ({
         }
     }
 
-    // For items with no prior ledger entry, fall back to opening_balance
-    const missingCodes = itemCodes.filter(c => !lastBalanceMap.has(c));
-    if (missingCodes.length > 0) {
-        const itemMasters = await db.models.item_master.findAll({
-            where: { outlet_id, item_code: { [Op.in]: missingCodes } },
-            attributes: ['item_code', 'opening_balance'],
-            transaction
-        });
-        for (const im of itemMasters) {
+    const itemMasterMap = new Map();
+    const allItemMasters = await db.models.item_master.findAll({
+        where: { outlet_id, item_code: { [Op.in]: itemCodes } },
+        attributes: ['item_code', 'item_name', 'brand', 'opening_balance'],
+        transaction
+    });
+    for (const im of allItemMasters) {
+        itemMasterMap.set(im.item_code, im);
+        if (!lastBalanceMap.has(im.item_code)) {
             lastBalanceMap.set(im.item_code, im.opening_balance ? Number(im.opening_balance) : 0);
         }
-        // Any code still missing: default 0
-        for (const code of missingCodes) {
-            if (!lastBalanceMap.has(code)) lastBalanceMap.set(code, 0);
-        }
+    }
+
+    // Any code still missing: default 0
+    for (const code of itemCodes) {
+        if (!lastBalanceMap.has(code)) lastBalanceMap.set(code, 0);
     }
 
     // ── Step 2: Calculate new balances & check negative stock ────────────
@@ -179,7 +214,18 @@ exports.batchInsertLedger = async ({
 
     // Process lines preserving order so multi-line same item accumulates correctly
     for (const line of lines) {
-        const { item_code, qty_in = 0, qty_out = 0, allow_negative = false } = line;
+        const {
+            item_code,
+            qty_in = 0,
+            qty_out = 0,
+            allow_negative = false,
+            item_name = null,
+            brand = null,
+            is_bom_component = false,
+            parent_item_code = null,
+            parent_item_name = null,
+            parent_brand = null
+        } = line;
         const inQty = Number(qty_in) || 0;
         const outQty = Number(qty_out) || 0;
         const lastBalance = newBalanceMap.has(item_code)
@@ -188,9 +234,25 @@ exports.batchInsertLedger = async ({
         const newBalance = lastBalance + inQty - outQty;
 
         if (!allow_negative && !settings?.allow_negative_stock && newBalance < 0) {
+            const dbItem = itemMasterMap.get(item_code);
+            const nameToDisplay = item_name || dbItem?.item_name || item_code;
+            const brandToDisplay = brand || dbItem?.brand;
+            const formattedName = formatDisplayName(nameToDisplay, brandToDisplay, item_code);
+
+            const isBom = is_bom_component || Boolean(parent_item_name || parent_item_code);
+            let msg = '';
+            if (isBom) {
+                const formattedParentName = formatDisplayName(parent_item_name, parent_brand, parent_item_code);
+                const parentStr = parent_item_name 
+                    ? `"${formattedParentName}"${parent_item_code ? ` (${parent_item_code})` : ''}`
+                    : `(${parent_item_code || 'unknown'})`;
+                msg = `Insufficient stock for BOM Component "${formattedName}" (${item_code}) linked to parent item ${parentStr}. Required: ${outQty}, Available: ${lastBalance}`;
+            } else {
+                msg = `Insufficient stock for item "${formattedName}" (${item_code}). Required: ${outQty}, Available: ${lastBalance}`;
+            }
             throw {
                 status: 400,
-                message: `Insufficient stock for item ${item_code}. Available: ${lastBalance}`
+                message: msg
             };
         }
 

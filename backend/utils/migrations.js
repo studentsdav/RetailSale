@@ -3815,6 +3815,45 @@ COMMIT;
           ON cash_ledger (outlet_id, txn_date DESC, id DESC)
       `);
     }
+  },
+  {
+    version: 95,
+    description: "Add location column to item_master table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE item_master ADD COLUMN IF NOT EXISTS location VARCHAR(100) DEFAULT 'Kitchen';
+      `);
+    }
+  },
+  {
+    version: 96,
+    description: "Add address and gstin to table_reservations table",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE table_reservations ADD COLUMN IF NOT EXISTS address TEXT;
+        ALTER TABLE table_reservations ADD COLUMN IF NOT EXISTS gstin VARCHAR(20);
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 97,
+    description: "Add cancel_reason to kot_items table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE kot_items ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+      `);
+    }
+  },
+  {
+    version: 98,
+    description: "Add kds_dismissed column to kot_headers table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE kot_headers ADD COLUMN IF NOT EXISTS kds_dismissed BOOLEAN DEFAULT FALSE;
+      `);
+    }
   }
 ];
 

@@ -165,7 +165,8 @@ exports.getSettings = async (req, res) => {
                     sub_delivery_charge_type: 'FLAT',
                     sub_delivery_charge_gst_percent: 0.0,
                     sub_delivery_free_above: 0.0,
-                    enable_salesperson_tagging: false
+                    enable_salesperson_tagging: false,
+                    bill_copies_count: 1
                 }
             });
         }
@@ -225,7 +226,8 @@ exports.saveSettings = async (req, res) => {
             sub_delivery_charge_type: req.body.sub_delivery_charge_type || 'FLAT',
             sub_delivery_charge_gst_percent: req.body.sub_delivery_charge_gst_percent ?? 0.0,
             sub_delivery_free_above: req.body.sub_delivery_free_above ?? 0.0,
-            enable_salesperson_tagging: req.body.enable_salesperson_tagging ?? false
+            enable_salesperson_tagging: req.body.enable_salesperson_tagging ?? false,
+            bill_copies_count: req.body.bill_copies_count ?? 1
         };
 
         let record;

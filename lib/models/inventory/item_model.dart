@@ -11,6 +11,7 @@ class Item {
   final String unit;
   final String barcode;
   final String imagePath;
+  final String location;
   final double rate;
   final double retailSalePrice;
   final String taxType;
@@ -41,6 +42,7 @@ class Item {
     required this.unit,
     required this.barcode,
     this.imagePath = '',
+    this.location = 'Kitchen',
     required this.rate,
     required this.retailSalePrice,
     required this.taxType,
@@ -78,6 +80,9 @@ class Item {
       unit: json['unit'] ?? '',
       barcode: json['barcode'] ?? '',
       imagePath: json['image_path'] ?? '',
+      location: (json['location'] ?? json['kitchen_location'] ?? 'Kitchen').toString().isEmpty
+          ? 'Kitchen'
+          : (json['location'] ?? json['kitchen_location'] ?? 'Kitchen').toString(),
       rate: double.tryParse(json['rate'].toString()) ?? 0.0,
       retailSalePrice:
           double.tryParse(json['retail_sale_price'].toString()) ?? 0.0,
@@ -112,6 +117,7 @@ class Item {
       'unit': unit,
       'barcode': barcode,
       'image_path': imagePath,
+      'location': location,
       'rate': rate,
       'retail_sale_price': retailSalePrice,
       'tax_type': taxType,

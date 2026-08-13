@@ -51,3 +51,20 @@ class BrandModel {
     );
   }
 }
+
+class LocationModel {
+  final int id;
+  final String locationName;
+
+  LocationModel({
+    required this.id,
+    required this.locationName,
+  });
+
+  factory LocationModel.fromJson(Map<String, dynamic> json) {
+    return LocationModel(
+      id: json['id'] is int ? json['id'] : (int.tryParse(json['id']?.toString() ?? '0') ?? 0),
+      locationName: (json['location_name'] ?? json['name'] ?? json['station_name'] ?? '').toString(),
+    );
+  }
+}

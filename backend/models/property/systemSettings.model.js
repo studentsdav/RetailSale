@@ -130,6 +130,10 @@ module.exports = (sequelize, DataTypes) => {
         enable_salesperson_tagging: {
             type: DataTypes.BOOLEAN,
             defaultValue: false
+        },
+        bill_copies_count: {
+            type: DataTypes.INTEGER,
+            defaultValue: 1
         }
     }, {
         tableName: 'system_settings',

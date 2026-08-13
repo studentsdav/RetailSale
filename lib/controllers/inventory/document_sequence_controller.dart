@@ -76,4 +76,21 @@ class DocumentSequenceController extends ChangeNotifier {
       return "0";
     }
   }
+
+  Future<String> getNextKotNo(DateTime date) async {
+    try {
+      if (list.isEmpty) {
+        await load();
+      }
+      final seq = getByModule('KOT');
+      if (seq != null) {
+        final String prefix = seq.prefix;
+        final String postfix = seq.postfix;
+        final int num = seq.startNo;
+        return '$prefix$num$postfix';
+      }
+    } catch (_) {}
+
+    return 'KOT-1';
+  }
 }

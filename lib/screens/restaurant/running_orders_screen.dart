@@ -34,14 +34,63 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
     super.dispose();
   }
 
+  List<dynamic> _filterActiveRunningKots(List rawKots) {
+    final List<dynamic> result = [];
+    for (final kot in rawKots) {
+      final bool isDismissed = kot['kds_dismissed'] == true || kot['kds_dismissed'] == 1;
+      if (isDismissed) {
+        continue;
+      }
+
+      final String status = (kot['status'] ?? '').toString().toUpperCase().trim();
+      // Exclude Billed, Completed, Settled, NC Cleared KOTs (retain CANCELLED KOT headers)
+      if (status == 'BILLED' ||
+          status == 'COMPLETED' ||
+          status == 'SETTLED' ||
+          status == 'NC CLEARED' ||
+          status == 'NC_CLEARED' ||
+          status == 'CLOSED') {
+        continue;
+      }
+
+      final List items = kot['items'] as List? ?? [];
+      final List validItems = items.where((it) {
+        final String itemStatus = (it['status'] ?? '').toString().toUpperCase().trim();
+        return itemStatus != 'BILLED' && itemStatus != 'COMPLETED';
+      }).toList();
+
+      if (validItems.isNotEmpty) {
+        final Map<String, dynamic> cleanKot = Map<String, dynamic>.from(kot);
+        cleanKot['items'] = validItems;
+        result.add(cleanKot);
+      }
+    }
+    return result;
+  }
+
   Future<void> _fetchTableKots() async {
     setState(() => isLoading = true);
     try {
       final res = await ApiClient.get('/api/restaurant/kots?table_id=${widget.tableId}&active_only=true');
       if (res['success'] == true) {
+        final List raw = res['data'] ?? [];
+        final filtered = _filterActiveRunningKots(raw);
         setState(() {
-          activeKotsList = res['data'] ?? [];
+          activeKotsList = filtered;
         });
+
+        // IF ALL ORDERS FOR THE TABLE ARE CANCELLED / BILLED:
+        // Automatically clear table status to Available and reset guest count to 0
+        if (filtered.isEmpty && widget.tableId > 0) {
+          try {
+            await ApiClient.put('/api/restaurant/tables/${widget.tableId}/status', {
+              'status': 'Available',
+              'guest_count': 0,
+            });
+          } catch (e) {
+            debugPrint('Error auto-clearing table status when all KOTs cancelled: $e');
+          }
+        }
       }
     } catch (e) {
       debugPrint('Error loading table active orders: $e');
@@ -96,6 +145,27 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
       },
     );
     return result ?? false;
+  }
+
+  Future<void> _reprintKot(Map<String, dynamic> kot) async {
+    final String kotNo = (kot['kot_number'] ?? kot['kot_no'] ?? kot['id']).toString();
+    try {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reprinting KOT Ticket #$kotNo...'),
+            backgroundColor: Colors.teal.shade700,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      await ApiClient.post('/api/restaurant/kots/${kot['id']}/reprint', {
+        'is_reprint': true,
+        'reprinted_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('Error triggering KOT reprint: $e');
+    }
   }
 
   Future<void> _cancelKotItem(int itemId, String itemName) async {
@@ -199,6 +269,33 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
         title: Text('Running Orders - Table ${widget.tableName}'),
         elevation: 0,
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0, top: 8, bottom: 8),
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7A1A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              icon: const Icon(Icons.add_shopping_cart, size: 16),
+              label: const Text('Add Fresh Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => KotBuilderScreen(
+                      table: {
+                        'id': widget.tableId,
+                        'table_name': widget.tableName,
+                      },
+                      isFreshOrder: true,
+                    ),
+                  ),
+                ).then((_) => _fetchTableKots());
+              },
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchTableKots,
@@ -225,6 +322,31 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                       Text(
                         'No running orders on Table ${widget.tableName}',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.outline),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF7A1A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.add_shopping_cart),
+                        label: const Text('Add Fresh Order / Items', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => KotBuilderScreen(
+                                table: {
+                                  'id': widget.tableId,
+                                  'table_name': widget.tableName,
+                                },
+                                isFreshOrder: true,
+                              ),
+                            ),
+                          ).then((_) => _fetchTableKots());
+                        },
                       ),
                     ],
                   ),
@@ -267,7 +389,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
+                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('KOT: ${kot['kot_no']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
@@ -276,6 +398,13 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                           'Waiter: ${kot['waiter']?['employee_name'] ?? 'N/A'} | ordered $minutesElapsed min ago',
                           style: TextStyle(fontSize: 12, color: scheme.outline),
                         ),
+                        if (kot['status'] == 'Cancelled') ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'REJECTED: ${kot['remarks'] ?? 'No reason provided'}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red),
+                          ),
+                        ],
                       ],
                     ),
                     Row(
@@ -291,6 +420,11 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                         ),
                         const SizedBox(width: 8),
                         if (kot['status'] != 'Cancelled') ...[
+                          IconButton(
+                            icon: const Icon(Icons.print_outlined, color: Colors.teal, size: 20),
+                            tooltip: 'Reprint KOT Ticket',
+                            onPressed: () => _reprintKot(kot),
+                          ),
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, color: Colors.blueAccent, size: 20),
                             tooltip: 'Edit Order Items',
@@ -347,12 +481,17 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                         color: isCancelled ? Colors.grey : scheme.onSurface,
                       ),
                     ),
-                    subtitle: hasRemark
+                    subtitle: isCancelled && item['cancel_reason'] != null && item['cancel_reason'].toString().trim().isNotEmpty
                         ? Text(
-                            'Remark: ${item['item_remark']}',
-                            style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                            'Cancelled: ${item['cancel_reason']}',
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
                           )
-                        : null,
+                        : (hasRemark
+                            ? Text(
+                                'Remark: ${item['item_remark']}',
+                                style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                              )
+                            : null),
                     leading: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(

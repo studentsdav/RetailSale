@@ -7,6 +7,7 @@ import 'package:excel/excel.dart' as exc;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:retailpos/core/api/endpoints.dart';
 import 'package:retailpos/screens/inventory/goods_receiving_screen.dart';
 import 'package:retailpos/screens/modify/sales_reprint_modify_screen.dart';
 import 'package:open_file/open_file.dart';
@@ -45,12 +46,14 @@ class SaleScreen extends StatefulWidget {
   final int? editSaleId;
   final int? preloadedTableId;
   final List<Map<String, dynamic>>? preloadedItems;
+  final List<int>? preloadedKotIds;
 
   const SaleScreen({
     super.key,
     this.editSaleId,
     this.preloadedTableId,
     this.preloadedItems,
+    this.preloadedKotIds,
   });
   @override
   State<SaleScreen> createState() => _SaleScreenState();
@@ -62,6 +65,7 @@ class _SaleScreenState extends State<SaleScreen> {
   final settingsCtrl = SystemSettingsController();
   Printer? _defaultPrinter;
   int? _preloadedTableId;
+  List<int>? _preloadedKotIds;
 
   List<Map<String, dynamic>> _salespersons = [];
   Map<String, dynamic>? _selectedSalesperson;
@@ -143,6 +147,7 @@ class _SaleScreenState extends State<SaleScreen> {
   List<BillingCharge> _charges = const [];
   List<_VoucherDefinition> _voucherCatalog = const [];
   List<_PaymentLine> _paymentEntries = const [];
+  List<Map<String, dynamic>> _splitCustomerReceipts = [];
   List<Map<String, dynamic>> _previousCreditBills = const [];
   List<Map<String, dynamic>> _availableAdvanceEntries = const [];
   double _previousOutstandingAmount = 0;
@@ -228,6 +233,7 @@ class _SaleScreenState extends State<SaleScreen> {
   Future<void> _init() async {
     try {
       _preloadedTableId = widget.preloadedTableId;
+      _preloadedKotIds = widget.preloadedKotIds;
       await ctrl.loadInitialData();
       await propertyCtrl.load();
       // Pre-warm the PDF logo cache in the background so printing is instant
@@ -2110,6 +2116,15 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   void _addOrUpdateItemDirect(Item item, {required double qty}) {
+    if (_preloadedTableId != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Table order items and quantities are locked to KOTs. Modify items via KOT screen.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     if (qty <= 0) return;
     final existingLines =
         _items.where((line) => line.itemId == item.id).toList();
@@ -2316,6 +2331,15 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   void _updateLineQty(int index, double qty, {bool isTotalQty = false}) {
+    if (_preloadedTableId != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Table order quantities are locked to KOTs. Modify order via KOT screen.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     if (index < 0 || index >= _items.length) return;
     final line = _items[index];
     final isFreeLine = line.isAdvanceFree || line.isSchemeFree;
@@ -2405,6 +2429,15 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   void _removeCartItemGroupById(int itemId) {
+    if (_preloadedTableId != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Table order items are locked to KOTs. Modify order via KOT screen.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     setState(() {
       _paymentEntries = const [];
       _pendingPreviousAdjustment = 0;
@@ -5183,6 +5216,127 @@ class _SaleScreenState extends State<SaleScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
+                      // QUICK SPLIT PRESETS (US / INDIA RESTAURANT STANDARDS)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.call_split, size: 15, color: Color(0xFFFF7A1A)),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Split Bill Presets (50% / Equal / Items):',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                ActionChip(
+                                  avatar: const Icon(Icons.pie_chart_outline, size: 14, color: Color(0xFFFF7A1A)),
+                                  label: const Text('Split 50% / 50%', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFFFF7A1A))),
+                                  onPressed: () {
+                                    final double half = double.parse((_payableInvoiceTotal / 2.0).toStringAsFixed(2));
+                                    final double rem = double.parse((_payableInvoiceTotal - half).toStringAsFixed(2));
+                                    setDialogState(() {
+                                      for (final l in lines) {
+                                        l.amountCtrl.dispose();
+                                      }
+                                      lines.clear();
+                                      lines.add(_EditablePaymentLine(
+                                        method: 'CASH',
+                                        amountCtrl: TextEditingController(text: half.toStringAsFixed(2)),
+                                      ));
+                                      lines.add(_EditablePaymentLine(
+                                        method: _availablePaymentMethods.contains('UPI') ? 'UPI' : (_availablePaymentMethods.contains('CARD') ? 'CARD' : 'CASH'),
+                                        amountCtrl: TextEditingController(text: rem.toStringAsFixed(2)),
+                                      ));
+                                    });
+                                  },
+                                ),
+                                ActionChip(
+                                  avatar: const Icon(Icons.nature_people_outlined, size: 14, color: Color(0xFF2563EB)),
+                                  label: const Text('3-Way Split (33%)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF2563EB))),
+                                  onPressed: () {
+                                    final double share = double.parse((_payableInvoiceTotal / 3.0).toStringAsFixed(2));
+                                    final double rem = double.parse((_payableInvoiceTotal - (share * 2)).toStringAsFixed(2));
+                                    setDialogState(() {
+                                      for (final l in lines) {
+                                        l.amountCtrl.dispose();
+                                      }
+                                      lines.clear();
+                                      lines.add(_EditablePaymentLine(
+                                        method: 'CASH',
+                                        amountCtrl: TextEditingController(text: share.toStringAsFixed(2)),
+                                      ));
+                                      lines.add(_EditablePaymentLine(
+                                        method: _availablePaymentMethods.contains('UPI') ? 'UPI' : 'CASH',
+                                        amountCtrl: TextEditingController(text: share.toStringAsFixed(2)),
+                                      ));
+                                      lines.add(_EditablePaymentLine(
+                                        method: _availablePaymentMethods.contains('CARD') ? 'CARD' : 'CASH',
+                                        amountCtrl: TextEditingController(text: rem.toStringAsFixed(2)),
+                                      ));
+                                    });
+                                  },
+                                ),
+                                ActionChip(
+                                  avatar: const Icon(Icons.groups_outlined, size: 14, color: Color(0xFF16A34A)),
+                                  label: const Text('4-Way Split (25%)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF16A34A))),
+                                  onPressed: () {
+                                    final double share = double.parse((_payableInvoiceTotal / 4.0).toStringAsFixed(2));
+                                    final double rem = double.parse((_payableInvoiceTotal - (share * 3)).toStringAsFixed(2));
+                                    setDialogState(() {
+                                      for (final l in lines) {
+                                        l.amountCtrl.dispose();
+                                      }
+                                      lines.clear();
+                                      for (int i = 0; i < 3; i++) {
+                                        final m = i == 0 ? 'CASH' : (i == 1 && _availablePaymentMethods.contains('UPI') ? 'UPI' : 'CARD');
+                                        lines.add(_EditablePaymentLine(
+                                          method: m,
+                                          amountCtrl: TextEditingController(text: share.toStringAsFixed(2)),
+                                        ));
+                                      }
+                                      lines.add(_EditablePaymentLine(
+                                        method: _availablePaymentMethods.contains('CARD') ? 'CARD' : 'CASH',
+                                        amountCtrl: TextEditingController(text: rem.toStringAsFixed(2)),
+                                      ));
+                                    });
+                                  },
+                                ),
+                                ActionChip(
+                                  avatar: const Icon(Icons.restaurant_menu, size: 14, color: Color(0xFF9333EA)),
+                                  label: const Text('Split by Items...', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF9333EA))),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _showSplitBillDialog();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
                       ...List.generate(lines.length, (index) {
                         final line = lines[index];
                         return Padding(
@@ -5211,7 +5365,9 @@ class _SaleScreenState extends State<SaleScreen> {
                                       if (line.method == 'CASH ON DELIVERY') {
                                         line.amountCtrl.text = '';
                                       }
-                                      autoBalanceCash();
+                                      if (readLineAmount(line) <= 0) {
+                                        autoBalanceCash();
+                                      }
                                     });
                                   },
                                   decoration:
@@ -5414,8 +5570,511 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
+  void _showSplitBillDialog() {
+    if (_items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cart is empty. Add items to split bill.')),
+      );
+      return;
+    }
+
+    final double totalAmount = _payableInvoiceTotal;
+    int guestCount = 2;
+    String activeTab = 'amount'; // 'amount' or 'items'
+    String primaryPaymentMode = 'CASH';
+    String secondaryPaymentMode = 'UPI';
+    // Itemized split state: itemId -> guestIndex (1, 2, 3...)
+    final Map<int, int> itemGuestMap = {
+      for (final item in _items) item.itemId: 1
+    };
+    // Corporate customer controllers: guestIndex -> controllers
+    final Map<int, TextEditingController> corpNameCtrls = {
+      for (int i = 1; i <= 8; i++) i: TextEditingController(text: 'Customer / Company $i')
+    };
+    final Map<int, TextEditingController> corpGstinCtrls = {
+      for (int i = 1; i <= 8; i++) i: TextEditingController()
+    };
+    final Map<int, String> corpModes = {
+      for (int i = 1; i <= 8; i++) i: i == 1 ? 'CASH' : (i == 2 ? 'UPI' : 'CARD')
+    };
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final double perPersonAmount = totalAmount / guestCount;
+
+            // Calculate itemized totals per guest
+            final Map<int, double> guestTotals = {};
+            for (int g = 1; g <= guestCount; g++) {
+              guestTotals[g] = 0.0;
+            }
+            for (final line in _items) {
+              final assignedGuest = itemGuestMap[line.itemId] ?? 1;
+              final double lineTotal = line.lineTotal;
+              guestTotals[assignedGuest] = (guestTotals[assignedGuest] ?? 0.0) + lineTotal;
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.call_split, color: Color(0xFFFF7A1A), size: 24),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Split Settlement ${_preloadedTableId != null ? "(Table #$_preloadedTableId)" : ""}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const Text(
+                          'Split 1 bill with multi-payments OR generate N separate tax invoices for companies.',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 630,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Mode Selector (Amount vs Items vs Corporate Separate Invoices)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Center(child: Text('1 Bill (Amount)', style: TextStyle(fontSize: 11.5))),
+                              selected: activeTab == 'amount',
+                              selectedColor: const Color(0xFFFF7A1A),
+                              labelStyle: TextStyle(
+                                color: activeTab == 'amount' ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              onSelected: (_) => setDialogState(() => activeTab = 'amount'),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Center(child: Text('1 Bill (Items)', style: TextStyle(fontSize: 11.5))),
+                              selected: activeTab == 'items',
+                              selectedColor: const Color(0xFFFF7A1A),
+                              labelStyle: TextStyle(
+                                color: activeTab == 'items' ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              onSelected: (_) => setDialogState(() => activeTab = 'items'),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Center(child: Text('N Separate Bills', style: TextStyle(fontSize: 11.5))),
+                              selected: activeTab == 'corporate',
+                              selectedColor: const Color(0xFF2563EB),
+                              labelStyle: TextStyle(
+                                color: activeTab == 'corporate' ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              onSelected: (_) => setDialogState(() => activeTab = 'corporate'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Number of Guests / Customers Selector
+                      Row(
+                        children: [
+                          Text(
+                            activeTab == 'corporate' ? 'Number of Separate Bills / Companies: ' : 'Number of Guests: ',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: guestCount <= 2
+                                ? null
+                                : () => setDialogState(() {
+                                      guestCount--;
+                                      itemGuestMap.updateAll((key, val) => val > guestCount ? 1 : val);
+                                    }),
+                          ),
+                          Text('$guestCount Customers', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: guestCount >= 8
+                                ? null
+                                : () => setDialogState(() => guestCount++),
+                          ),
+                        ],
+                      ),
+                      const Divider(),
+
+                      if (activeTab == 'corporate') ...[
+                        // N SEPARATE CORPORATE BILLS UI
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.business, size: 16, color: Color(0xFF1D4ED8)),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Corporate / Multi-Customer Separate Bills:',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Color(0xFF1E3A8A)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Generates $guestCount separate tax invoices in database (Rs. ${perPersonAmount.toStringAsFixed(2)} each) with custom Company Name, GSTIN, and Payment Receipt.',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF3B82F6)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 240),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: guestCount,
+                            itemBuilder: (context, idx) {
+                              final int gNum = idx + 1;
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('Bill #$gNum Share:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
+                                          Text('Rs. ${perPersonAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF16A34A))),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 4,
+                                            child: TextField(
+                                              controller: corpNameCtrls[gNum],
+                                              style: const TextStyle(fontSize: 12),
+                                              decoration: const InputDecoration(
+                                                labelText: 'Customer / Company Name',
+                                                isDense: true,
+                                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                                border: OutlineInputBorder(),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            flex: 3,
+                                            child: TextField(
+                                              controller: corpGstinCtrls[gNum],
+                                              style: const TextStyle(fontSize: 12),
+                                              decoration: const InputDecoration(
+                                                labelText: 'GSTIN (Optional)',
+                                                isDense: true,
+                                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                                border: OutlineInputBorder(),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          SizedBox(
+                                            width: 100,
+                                            child: DropdownButtonFormField<String>(
+                                              value: corpModes[gNum] ?? 'CASH',
+                                              isDense: true,
+                                              decoration: const InputDecoration(
+                                                labelText: 'Mode',
+                                                isDense: true,
+                                                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                                                border: OutlineInputBorder(),
+                                              ),
+                                              items: _availablePaymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 11.5)))).toList(),
+                                              onChanged: (val) {
+                                                if (val != null) {
+                                                  setDialogState(() {
+                                                    corpModes[gNum] = val;
+                                                  });
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ] else if (activeTab == 'amount') ...[
+                        // SPLIT BY AMOUNT UI
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFD),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Total Bill Amount:', style: TextStyle(fontWeight: FontWeight.w600)),
+                                  Text('Rs. ${totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFFD67D25))),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Split Per Person ($guestCount Guests):', style: const TextStyle(color: Colors.grey)),
+                                  Text('Rs. ${perPersonAmount.toStringAsFixed(2)} each', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ...List.generate(guestCount, (idx) {
+                          final int gNum = idx + 1;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Text('Guest $gNum:', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text('Rs. ${perPersonAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                ),
+                                const SizedBox(width: 12),
+                                SizedBox(
+                                  width: 120,
+                                  child: DropdownButtonFormField<String>(
+                                    value: idx == 0 ? primaryPaymentMode : secondaryPaymentMode,
+                                    isDense: true,
+                                    decoration: const InputDecoration(labelText: 'Mode', border: OutlineInputBorder()),
+                                    items: _availablePaymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setDialogState(() {
+                                          if (idx == 0) primaryPaymentMode = val;
+                                          else secondaryPaymentMode = val;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ] else ...[
+                        // SPLIT BY ITEMS UI
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Assign Items to Guests:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: _items.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, idx) {
+                              final item = _items[idx];
+                              final currentGuest = itemGuestMap[item.itemId] ?? 1;
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} x ${item.itemName}',
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Text('Rs. ${item.lineTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    const SizedBox(width: 10),
+                                    DropdownButton<int>(
+                                      value: currentGuest > guestCount ? 1 : currentGuest,
+                                      isDense: true,
+                                      underline: const SizedBox(),
+                                      items: List.generate(guestCount, (g) => DropdownMenuItem(value: g + 1, child: Text('Guest ${g + 1}'))),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setDialogState(() {
+                                            itemGuestMap[item.itemId] = val;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFD),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Guest Itemized Totals:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              ...List.generate(guestCount, (gIdx) {
+                                final int gNum = gIdx + 1;
+                                final double amt = guestTotals[gNum] ?? 0.0;
+                                return Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('Guest $gNum:', style: const TextStyle(fontSize: 12)),
+                                    Text('Rs. ${amt.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFD67D25))),
+                                  ],
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: activeTab == 'corporate' ? const Color(0xFF2563EB) : const Color(0xFFFF7A1A),
+                  ),
+                  icon: Icon(
+                    activeTab == 'corporate' ? Icons.receipt_long : Icons.check_circle_outline,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  label: Text(
+                    activeTab == 'corporate'
+                        ? 'Generate & Save $guestCount Separate Bills'
+                        : 'Apply Split Payment to Bill',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    if (activeTab == 'corporate') {
+                      _customerName.text = corpNameCtrls[1]?.text.trim() ?? '';
+                      _customerGstin.text = corpGstinCtrls[1]?.text.trim() ?? '';
+
+                      _splitCustomerReceipts = List.generate(guestCount, (idx) {
+                        final gNum = idx + 1;
+                        final cName = corpNameCtrls[gNum]?.text.trim() ?? '';
+                        final cGstin = corpGstinCtrls[gNum]?.text.trim() ?? '';
+                        return {
+                          'customer_name': cName.isNotEmpty ? cName : 'Customer / Company $gNum',
+                          'customer_gstin': cGstin,
+                          'amount': perPersonAmount,
+                          'payment_mode': corpModes[gNum] ?? 'CASH',
+                          'split_index': gNum,
+                          'total_splits': guestCount,
+                        };
+                      });
+
+                      final List<_PaymentLine> newEntries = [];
+                      for (int g = 1; g <= guestCount; g++) {
+                        final mode = corpModes[g] ?? 'CASH';
+                        newEntries.add(_PaymentLine(method: mode, amount: perPersonAmount));
+                      }
+
+                      setState(() {
+                        _paymentEntries = newEntries;
+                        _paymentMode = newEntries.first.method;
+                        _amountPaid.text = totalAmount.toStringAsFixed(2);
+                      });
+
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Separate Corporate Split applied for $guestCount customers! Ready for bill generation.'),
+                          backgroundColor: Colors.blue.shade700,
+                        ),
+                      );
+                    } else {
+                      final List<_PaymentLine> newEntries = [];
+                      if (activeTab == 'amount') {
+                        for (int idx = 0; idx < guestCount; idx++) {
+                          final mode = idx == 0 ? primaryPaymentMode : secondaryPaymentMode;
+                          newEntries.add(_PaymentLine(method: mode, amount: perPersonAmount));
+                        }
+                      } else {
+                        for (int g = 1; g <= guestCount; g++) {
+                          final amt = guestTotals[g] ?? 0.0;
+                          if (amt > 0) {
+                            final mode = g == 1 ? primaryPaymentMode : secondaryPaymentMode;
+                            newEntries.add(_PaymentLine(method: mode, amount: amt));
+                          }
+                        }
+                      }
+
+                      setState(() {
+                        _paymentEntries = newEntries;
+                        _paymentMode = newEntries.first.method;
+                        _amountPaid.text = totalAmount.toStringAsFixed(2);
+                      });
+
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Split payment of ${newEntries.length} entries applied to bill!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<bool?> _confirmEditStockEffect() async {
-    if (_editingSaleId == null) return true;
 
     return showDialog<bool>(
       context: context,
@@ -5775,6 +6434,7 @@ class _SaleScreenState extends State<SaleScreen> {
       items: orderItems,
       salesmanId: _selectedSalesperson?['id'],
       tableId: _preloadedTableId,
+      kotIds: _preloadedKotIds,
     );
     // Pre-build the PDF bytes concurrently while the API save is in-flight.
     // This eliminates the 3–5 second PDF generation delay that previously
@@ -5789,6 +6449,7 @@ class _SaleScreenState extends State<SaleScreen> {
         order: order,
         property: propertyCtrl.data,
         cashierName: _cashierName,
+        copyCount: settingsCtrl.settings?.billCopiesCount ?? 1,
         termsAndConditions:
             'Goods once sold will not be taken back. Subject to local jurisdiction.',
         thankYouMessage: 'Thank you for shopping with us. Please visit again.',
@@ -5916,6 +6577,16 @@ class _SaleScreenState extends State<SaleScreen> {
       _pendingPreviousAdjustment = 0;
       _pendingAdvanceApplied = 0;
       _pendingAdvanceCreated = 0;
+      if (_preloadedTableId != null) {
+        try {
+          ApiClient.put('${ApiEndpoints.restaurantTables}/$_preloadedTableId/status', {
+            'status': 'Dirty',
+            'guest_count': 0,
+          });
+        } catch (e) {
+          debugPrint('Error updating table status to Dirty after billing: $e');
+        }
+      }
       final customerId = _selectedCustomer?.id;
       for (final scheme in _selectedSchemes) {
         final isOneTime = scheme.repeatMode.toUpperCase() == 'ONCE' ||
@@ -5996,6 +6667,7 @@ class _SaleScreenState extends State<SaleScreen> {
       _editingSaleId = null;
       _saleNo.clear();
       _items.clear();
+      _splitCustomerReceipts = [];
       if (!preserveCustomer) {
         _selectedCustomer = null;
       }
@@ -7436,16 +8108,52 @@ class _SaleScreenState extends State<SaleScreen> {
   Future<void> _printInvoice(SaleOrder order,
       {Future<Uint8List>? preBuildPdfFuture}) async {
     if (!mounted) return;
-    // Use the in-app PDF preview dialog so it always appears in front of the
-    // Flutter window on Windows (avoids the OS print dialog going to background).
+
+    final int printCopies = settingsCtrl.settings?.billCopiesCount ?? 1;
+
+    if (_splitCustomerReceipts.isNotEmpty && _splitCustomerReceipts.length > 1) {
+      for (int i = 0; i < _splitCustomerReceipts.length; i++) {
+        final slip = _splitCustomerReceipts[i];
+        final String cName = (slip['customer_name'] ?? '').toString().trim();
+        final String cGstin = (slip['customer_gstin'] ?? '').toString().trim();
+        final double splitAmt = double.tryParse((slip['amount'] ?? 0).toString()) ?? order.netAmount;
+        final String splitMode = (slip['payment_mode'] ?? order.paymentMode).toString();
+
+        final splitOrder = order.copyWith(
+          customerName: cName.isNotEmpty ? cName : 'Customer ${i + 1}',
+          customerGstin: cGstin.isNotEmpty ? cGstin : null,
+          netAmount: splitAmt,
+          amountPaid: splitAmt,
+          paymentMode: splitMode,
+          notes: 'Customer Split Receipt (${i + 1} of ${_splitCustomerReceipts.length})',
+        );
+
+        if (!mounted) return;
+        await showPdfPreviewDialog(
+          context: context,
+          name: '${order.saleNo} - Customer ${i + 1}',
+          pageFormat: PosInvoicePrinter.pageFormatFor(order.billFormat),
+          buildPdf: (_) async {
+            return await PosInvoicePrinter.buildSaleInvoicePdf(
+              order: splitOrder,
+              property: propertyCtrl.data,
+              cashierName: _cashierName,
+              copyCount: printCopies,
+              termsAndConditions: 'Goods once sold will not be taken back.',
+              thankYouMessage: 'Thank you for visiting!',
+              authorizedSignatureLabel: 'Authorized Signature',
+            );
+          },
+        );
+      }
+      return;
+    }
+
     Uint8List? prebuilt;
     if (preBuildPdfFuture != null) {
-      // Pre-built bytes were computed concurrently with the API save call —
-      // just await them (should be near-instant).
       prebuilt = await preBuildPdfFuture;
     }
     if (!mounted) return;
-    // ignore: use_build_context_synchronously
     await showPdfPreviewDialog(
       context: context,
       name: order.saleNo,
@@ -7456,6 +8164,7 @@ class _SaleScreenState extends State<SaleScreen> {
           order: order,
           property: propertyCtrl.data,
           cashierName: _cashierName,
+          copyCount: printCopies,
           termsAndConditions:
               'Goods once sold will not be taken back. Subject to local jurisdiction.',
           thankYouMessage:
@@ -7523,6 +8232,7 @@ class _SaleScreenState extends State<SaleScreen> {
     if (printMode == 'DIRECT_DEFAULT') {
       final printer = _defaultPrinter ?? await _resolveDefaultPrinter();
       if (printer != null) {
+        final int printCopies = settingsCtrl.settings?.billCopiesCount ?? 1;
         // For direct print, resolve the pre-built bytes (or build now) then send directly.
         final pdfBytes = preBuildPdfFuture != null
             ? await preBuildPdfFuture
@@ -7530,6 +8240,7 @@ class _SaleScreenState extends State<SaleScreen> {
                 order: order,
                 property: propertyCtrl.data,
                 cashierName: _cashierName,
+                copyCount: printCopies,
                 termsAndConditions:
                     'Goods once sold will not be taken back. Subject to local jurisdiction.',
                 thankYouMessage:
@@ -8436,6 +9147,11 @@ class _SaleScreenState extends State<SaleScreen> {
                     final cartQty = _cartQtyForItem(item);
                     final isSelected = cartQty > 0;
 
+                    final bool isStockable = item.stockable;
+                    final double stock = item.openingBalance;
+                    final bool isOutOfStock = isStockable && stock <= 0;
+                    final bool allowNegativeStock = settingsCtrl.settings?.allowNegativeStock ?? false;
+
                     return Card(
                       margin: EdgeInsets.zero,
                       elevation: 0,
@@ -8451,18 +9167,53 @@ class _SaleScreenState extends State<SaleScreen> {
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          if (item.productTemplateId != null) {
-                            _showVariantSelectorDialog(item);
-                          } else {
-                            _addOrUpdateItem(item, qty: _entryQtyValue());
-                          }
-                        },
+                        onTap: (isOutOfStock && !allowNegativeStock)
+                            ? null
+                            : () {
+                                if (item.productTemplateId != null) {
+                                  _showVariantSelectorDialog(item);
+                                } else {
+                                  _addOrUpdateItem(item, qty: _entryQtyValue());
+                                }
+                              },
                         child: Stack(
                           children: [
+                            // Stock Badge (Top Left)
+                            if (isOutOfStock)
+                              Positioned(
+                                top: 8,
+                                left: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade700,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'OUT OF STOCK',
+                                    style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              )
+                            else if (isStockable)
+                              Positioned(
+                                top: 8,
+                                left: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade800,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Stock: ${item.openingBalance.toInt()}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
                             // --- TEXT CONTENT ---
                             Padding(
-                              padding: const EdgeInsets.all(12.0),
+                              padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -8573,6 +9324,14 @@ class _SaleScreenState extends State<SaleScreen> {
                                           );
                                         })(),
                                       ),
+                                      if (isOutOfStock && !allowNegativeStock)
+                                        const Padding(
+                                          padding: EdgeInsets.only(left: 4.0),
+                                          child: Text(
+                                            'Unavailable',
+                                            style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ],
@@ -9416,18 +10175,36 @@ class _SaleScreenState extends State<SaleScreen> {
                       'Refund Rs. ${paymentState.refundAmount.toStringAsFixed(2)}',
                     ),
                   const SizedBox(height: 10),
-                  FilledButton.tonalIcon(
-                    onPressed: () => _showPaymentDialog().then((result) {
-                      if (result == null || !mounted) return;
-                      setState(() {
-                        _paymentEntries = result.entries;
-                        _paymentMode = result.summary.primaryMode;
-                        _amountPaid.text =
-                            result.summary.collectedAmount.toStringAsFixed(2);
-                      });
-                    }),
-                    icon: const Icon(Icons.point_of_sale_outlined),
-                    label: const Text('Open Payment'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed: () => _showPaymentDialog().then((result) {
+                            if (result == null || !mounted) return;
+                            setState(() {
+                              _paymentEntries = result.entries;
+                              _paymentMode = result.summary.primaryMode;
+                              _amountPaid.text =
+                                  result.summary.collectedAmount.toStringAsFixed(2);
+                            });
+                          }),
+                          icon: const Icon(Icons.point_of_sale_outlined, size: 16),
+                          label: const Text('Open Payment'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7A1A),
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: _showSplitBillDialog,
+                          icon: const Icon(Icons.call_split, size: 16),
+                          label: const Text('Split Bill', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -15,6 +15,7 @@ class DocumentSequenceScreen extends StatefulWidget {
 class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
   final DocumentSequenceController ctrl = DocumentSequenceController();
   final List<MapEntry<String, String>> _moduleDefs = const [
+    MapEntry('KOT / Restaurant Order No', 'KOT'),
     MapEntry('Purchase Order No', 'PO'),
     MapEntry('Receiving No', 'RECEIVING'),
     MapEntry('Indent No', 'INDENT'),
@@ -24,6 +25,7 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
   ];
 
   final Map<String, List<_NumberingRowState>> _rowsByModule = {
+    'KOT': [],
     'PO': [],
     'RECEIVING': [],
     'INDENT': [],
@@ -288,13 +290,32 @@ class _NumberingRowState {
   }
 
   factory _NumberingRowState.empty(String module) {
+    String defaultPrefix = '';
+    if (module == 'KOT') {
+      defaultPrefix = 'KOT-';
+    } else if (module == 'PO') {
+      defaultPrefix = 'PO-';
+    } else if (module == 'SALES') {
+      defaultPrefix = 'SAL-';
+    } else if (module == 'REQUEST') {
+      defaultPrefix = 'REQ-';
+    } else if (module == 'DAMAGE') {
+      defaultPrefix = 'DMG-';
+    } else if (module == 'RECEIVING') {
+      defaultPrefix = 'REC-';
+    } else if (module == 'INDENT') {
+      defaultPrefix = 'IND-';
+    }
+
+    final String defaultPostfix = '-${DateTime.now().year.toString().substring(2)}';
+
     return _NumberingRowState(
       id: null,
       module: module,
       startDate: DateTime.now(),
       startNo: TextEditingController(text: '1'),
-      prefix: TextEditingController(),
-      postfix: TextEditingController(),
+      prefix: TextEditingController(text: defaultPrefix),
+      postfix: TextEditingController(text: defaultPostfix),
     );
   }
 

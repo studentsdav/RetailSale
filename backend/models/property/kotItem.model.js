@@ -40,6 +40,10 @@ module.exports = (sequelize, DataTypes) => {
         kitchen_station_id: {
             type: DataTypes.INTEGER,
             allowNull: true
+        },
+        cancel_reason: {
+            type: DataTypes.TEXT,
+            allowNull: true
         }
     }, {
         tableName: 'kot_items',

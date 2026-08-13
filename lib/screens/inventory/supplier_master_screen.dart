@@ -25,6 +25,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
   final _name = TextEditingController();
   final _address = TextEditingController();
   final _phone = TextEditingController();
+  final _email = TextEditingController();
   final _state = TextEditingController();
   final _gstin = TextEditingController();
   final _search = TextEditingController();
@@ -89,6 +90,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     _name.dispose();
     _address.dispose();
     _phone.dispose();
+    _email.dispose();
     _state.dispose();
     _gstin.dispose();
     _search.dispose();
@@ -142,6 +144,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       supplierName: _name.text.trim(),
       address: _address.text.trim(),
       phone: _phone.text.trim(),
+      email: _email.text.trim().isEmpty ? null : _email.text.trim(),
       state: _state.text.trim().isEmpty ? null : _state.text.trim(),
       gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim(),
       taxCountryCode: _taxCountryCode.text.trim().isEmpty
@@ -168,6 +171,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     _name.text = s.supplierName;
     _address.text = s.address;
     _phone.text = s.phone;
+    _email.text = s.email ?? '';
     _state.text = s.state ?? '';
     _gstin.text = s.gstin ?? '';
     _taxCountryCode.text = s.taxCountryCode ?? '';
@@ -183,6 +187,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     _name.clear();
     _address.clear();
     _phone.clear();
+    _email.clear();
     _editIndex = null;
     _state.clear();
     _gstin.clear();
@@ -349,6 +354,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
             _field(_name, 'Vendor Name'),
             _field(_address, 'Address', width: 360),
             _field(_phone, 'Phone', isNumber: true, required: false),
+            _field(_email, 'Email Address', required: false, width: 260),
 
             // Replaced the basic _field with our searchable DropdownMenu
             _stateDropdown(),
@@ -456,6 +462,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                   DataColumn(label: Text('Code')),
                   DataColumn(label: Text('Name')),
                   DataColumn(label: Text('Phone')),
+                  DataColumn(label: Text('Email')),
                   DataColumn(label: Text('Address')),
                   DataColumn(label: Text('State')),
                   DataColumn(label: Text('GSTIN')),
@@ -470,6 +477,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                       DataCell(Text(s.supplierCode)),
                       DataCell(Text(s.supplierName)),
                       DataCell(Text(s.phone ?? '')),
+                      DataCell(Text(s.email ?? '')),
                       DataCell(Text(s.address ?? '')),
                       DataCell(Text(s.state ?? '')),
                       DataCell(Text(s.gstin ?? '')),

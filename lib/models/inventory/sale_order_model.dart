@@ -74,6 +74,7 @@ class SaleOrder {
   final List<dynamic>? luckyDrawVouchers;
   final int? salesmanId;
   final int? tableId;
+  final List<int>? kotIds;
 
   SaleOrder({
     required this.saleNo,
@@ -144,6 +145,7 @@ class SaleOrder {
     this.luckyDrawVouchers,
     this.salesmanId,
     this.tableId,
+    this.kotIds,
   });
 
   SaleOrder copyWith({
@@ -215,6 +217,7 @@ class SaleOrder {
     List<dynamic>? luckyDrawVouchers,
     int? salesmanId,
     int? tableId,
+    List<int>? kotIds,
   }) {
     return SaleOrder(
       saleNo: saleNo ?? this.saleNo,
@@ -285,6 +288,7 @@ class SaleOrder {
       luckyDrawVouchers: luckyDrawVouchers ?? this.luckyDrawVouchers,
       salesmanId: salesmanId ?? this.salesmanId,
       tableId: tableId ?? this.tableId,
+      kotIds: kotIds ?? this.kotIds,
     );
   }
 
@@ -356,6 +360,7 @@ class SaleOrder {
         'salesman_id': salesmanId,
       },
       'items': items.map((e) => e.toJson()).toList(),
+      if (kotIds != null) 'kot_ids': kotIds,
     };
   }
 

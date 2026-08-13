@@ -1075,6 +1075,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       _settingRow(
+                        title: 'Number of Bill Print Copies',
+                        description: 'Default copies printed for each bill checkout (1, 2, 3...)',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<int>(
+                            value: s.billCopiesCount,
+                            items: List.generate(5, (i) => i + 1)
+                                .map((val) => DropdownMenuItem(
+                                      value: val,
+                                      child: Text('$val Cop${val > 1 ? "ies" : "y"}'),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => s.billCopiesCount = value);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
                         title: 'Default Printer Device',
                         description: 'Target printer for system defaults or silent printing',
                         isLast: true,

@@ -416,7 +416,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           initialValue: role,
                           decoration: const InputDecoration(
                               labelText: 'Role', border: OutlineInputBorder()),
-                          items: ['ADMIN', 'STORE', 'RETAIL', 'ACCOUNTS', 'HR']
+                          items: ['ADMIN', 'STORE', 'RETAIL', 'ACCOUNTS', 'HR', 'WAITER', 'CAPTAIN']
                               .map((e) =>
                                   DropdownMenuItem(value: e, child: Text(e)))
                               .toList(),
@@ -788,7 +788,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           initialValue: role,
                           decoration: const InputDecoration(
                               labelText: 'Role', border: OutlineInputBorder()),
-                          items: ['ADMIN', 'STORE', 'RETAIL', 'ACCOUNTS', 'HR']
+                          items: ['ADMIN', 'STORE', 'RETAIL', 'ACCOUNTS', 'HR', 'WAITER', 'CAPTAIN']
                               .map((e) =>
                                   DropdownMenuItem(value: e, child: Text(e)))
                               .toList(),

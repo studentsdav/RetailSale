@@ -62,6 +62,11 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: true
             },
 
+            location: {
+                type: DataTypes.STRING(100),
+                defaultValue: 'Kitchen'
+            },
+
             rate: {
                 type: DataTypes.DECIMAL(12, 2),
                 defaultValue: 0

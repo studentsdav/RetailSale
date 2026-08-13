@@ -68,6 +68,10 @@ module.exports = (sequelize, DataTypes) => {
         sales_header_id: {
             type: DataTypes.INTEGER,
             allowNull: true
+        },
+        kds_dismissed: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         }
     }, {
         tableName: 'kot_headers',

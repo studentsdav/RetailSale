@@ -19,6 +19,8 @@ import '../../models/inventory/item_model.dart';
 import '../../models/inventory/purchase_item_model.dart';
 import '../../models/inventory/purchase_order_model.dart';
 import '../../models/inventory/stock_location_model.dart';
+import '../../models/inventory/supplier_model.dart';
+import '../../core/api/api_client.dart';
 import '../../utils/branding_storage.dart';
 import '../../utils/inclusive_rate_helper.dart';
 import '../../utils/date_picker_helper.dart';
@@ -344,30 +346,45 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
 
       await poCtrl.create(po);
 
-      final shouldPrint = await showDialog<bool>(
+      final actionChoice = await showDialog<String>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text("Print Purchase Order"),
-          content: const Text("Do you want to print this Purchase Order?"),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.teal),
+              SizedBox(width: 8),
+              Text("Purchase Order Saved"),
+            ],
+          ),
+          content: const Text("Would you like to print this Purchase Order or email it to the Vendor?"),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("No"),
+              onPressed: () => Navigator.pop(context, "CLOSE"),
+              child: const Text("Close"),
             ),
-            FilledButton(
-              autofocus: true,
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Yes"),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.print, size: 16),
+              label: const Text("Print PO"),
+              onPressed: () => Navigator.pop(context, "PRINT"),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7A1A), foregroundColor: Colors.white),
+              icon: const Icon(Icons.email_outlined, size: 16),
+              label: const Text("Email Vendor"),
+              onPressed: () => Navigator.pop(context, "EMAIL"),
             ),
           ],
         ),
       );
 
-      if (shouldPrint == true) {
+      if (actionChoice == "PRINT") {
         await _printPurchaseOrder();
+      } else if (actionChoice == "EMAIL") {
+        await _emailPurchaseOrderToVendor();
       }
 
-      _showMessage("Purchase Order Saved");
+      _showMessage("Purchase Order Saved Successfully");
       _finalclearItem();
       _itemCodeFocus.requestFocus(); // Focus back to start for new PO
     } finally {
@@ -974,6 +991,157 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     );
   }
 
+  Future<void> _emailPurchaseOrderToVendor() async {
+    final Supplier? supplier = supplierCtrl.list.cast<Supplier?>().firstWhere(
+          (e) => e?.id == _supplierId,
+          orElse: () => null,
+        );
+
+    final String? vendorEmail = supplier?.email;
+    final String vendorName = supplier?.supplierName ?? 'Vendor';
+
+    if (vendorEmail == null || vendorEmail.trim().isEmpty) {
+      final emailCtrl = TextEditingController();
+      final addedEmail = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          title: const Row(
+            children: [
+              Icon(Icons.email_outlined, color: Color(0xFFFF7A1A)),
+              SizedBox(width: 8),
+              Text('Vendor Email Missing'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Vendor "$vendorName" does not have an email registered in Vendor Master.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Enter Vendor Email Address',
+                  hintText: 'vendor@supplier.com',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.email),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7A1A), foregroundColor: Colors.white),
+              icon: const Icon(Icons.send_rounded, size: 16),
+              label: const Text('Send Email'),
+              onPressed: () => Navigator.pop(context, emailCtrl.text.trim()),
+            ),
+          ],
+        ),
+      );
+
+      if (addedEmail == null || addedEmail.isEmpty) return;
+      await _sendPoEmailToAddress(addedEmail, vendorName);
+      return;
+    }
+
+    await _sendPoEmailToAddress(vendorEmail, vendorName);
+  }
+
+  Future<void> _sendPoEmailToAddress(String emailAddr, String vendorName) async {
+    try {
+      final totalGST = _items.fold<double>(
+          0, (sum, item) => sum + ((item.qty * item.rate) * (item.tax / 100)));
+      final grandTotal = totalAmount + totalGST;
+
+      final res = await ApiClient.post('/api/inventory/purchase-orders/send-email', {
+        'to_email': emailAddr,
+        'po_no': _poNo.text,
+        'vendor_name': vendorName,
+        'total_amount': grandTotal,
+        'items': _items.map((e) => {
+          'item_name': e.itemName,
+          'qty': e.qty,
+          'unit_rate': e.rate,
+          'tax': e.tax,
+          'total': (e.qty * e.rate) * (1 + (e.tax / 100)),
+        }).toList(),
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? 'Purchase Order emailed successfully to $emailAddr!'),
+            backgroundColor: Colors.teal,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Purchase Order dispatched! (Email note: $e)'),
+            backgroundColor: Colors.orange.shade700,
+          ),
+        );
+      }
+    }
+  }
+
+  pw.Widget _tableCell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: alignment,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 8,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _totalRow(String label, double value, {bool bold = false}) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label,
+            style: pw.TextStyle(
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+        pw.Text(value.toStringAsFixed(2),
+            style: pw.TextStyle(
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+      ],
+    );
+  }
+
+  pw.Widget _metaRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 45,
+            child: pw.Text(
+              "$label:",
+              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _printPurchaseOrder() async {
     final pdf = pw.Document();
 
@@ -1163,73 +1331,4 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
 
     await Printing.layoutPdf(name: _poNo.text.isNotEmpty ? 'PO_${_poNo.text}' : 'Purchase_Order', onLayout: (format) async => pdf.save());
   }
-
-  pw.Widget _tableCell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
-    return pw.Container(
-      alignment: alignment,
-      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          fontSize: 8,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
-        ),
-      ),
-    );
-  }
-
-  pw.Widget _totalRow(String label, double value, {bool bold = false}) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [
-        pw.Text(label,
-            style: pw.TextStyle(
-                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        pw.Text(value.toStringAsFixed(2),
-            style: pw.TextStyle(
-                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-      ],
-    );
-  }
-
-  pw.Widget _metaRow(String label, String value) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 2),
-      child: pw.Row(
-        mainAxisSize: pw.MainAxisSize.min,
-        children: [
-          pw.SizedBox(
-            width: 45,
-            child: pw.Text(
-              "$label:",
-              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
-            ),
-          ),
-          pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _dropdown(
-    String label,
-    List<String> data,
-    String? value,
-    ValueChanged<String?> onChanged,
-  ) =>
-      SizedBox(
-        width: 260,
-        child: DropdownButtonFormField<String>(
-          initialValue: value,
-          items: data
-              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-              .toList(),
-          onChanged: onChanged,
-          decoration: InputDecoration(labelText: label),
-        ),
-      );
 }

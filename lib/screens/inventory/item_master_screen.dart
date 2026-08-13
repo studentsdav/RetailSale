@@ -49,6 +49,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   final _hsnSac = TextEditingController();
   final _barcode = TextEditingController();
   final _imagePath = TextEditingController();
+  final _location = TextEditingController(text: 'Kitchen');
   final _rate = TextEditingController();
   final _retailSalePrice = TextEditingController();
   final _mrp = TextEditingController();
@@ -91,6 +92,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   List<GroupModel> _groups = [];
   List<BrandModel> _brands = [];
   List<SubCategoryModel> _subCategories = [];
+  List<LocationModel> _locations = [];
 
   // NEW: Double-submit prevention shield
   bool _isSaving = false;
@@ -179,17 +181,19 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     final groupsRes = await ApiClient.get('/api/inventory/groups');
     final subRes = await ApiClient.get('/api/inventory/subcategories');
     final brandRes = await ApiClient.get('/api/inventory/brands');
+    final locs = await masterCtrl.getLocations();
     await _attributeCtrl.load();
 
-    _groups = List<Map<String, dynamic>>.from(groupsRes['data'])
+    _groups = List<Map<String, dynamic>>.from(groupsRes['data'] ?? [])
         .map((e) => GroupModel.fromJson(e))
         .toList();
-    _subCategories = List<Map<String, dynamic>>.from(subRes['data'])
+    _subCategories = List<Map<String, dynamic>>.from(subRes['data'] ?? [])
         .map((e) => SubCategoryModel.fromJson(e))
         .toList();
-    _brands = List<Map<String, dynamic>>.from(brandRes['data'])
+    _brands = List<Map<String, dynamic>>.from(brandRes['data'] ?? [])
         .map((e) => BrandModel.fromJson(e))
         .toList();
+    _locations = locs;
     setState(() {});
   }
 
@@ -333,6 +337,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _hsnSac.clear();
     _barcode.clear();
     _imagePath.clear();
+    _location.text = 'Kitchen';
     _rate.clear();
     _retailSalePrice.clear();
     _mrp.clear();
@@ -444,6 +449,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         unit: _unit!,
         barcode: _barcode.text.trim(),
         imagePath: _currentImagePath ?? '',
+        location: _location.text.trim().isEmpty ? 'Kitchen' : _location.text.trim(),
         rate: buyRate,
         retailSalePrice: saleRate,
         mrp: enteredMrp,
@@ -599,6 +605,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _name.text = it.itemName;
     _hsnSac.text = it.hsnSacCode;
     _barcode.text = it.barcode;
+    _location.text = it.location.isEmpty ? 'Kitchen' : it.location;
     _imagePath.text =
         it.imagePath.isNotEmpty ? it.imagePath.split('/').last : '';
     _currentImagePath = it.imagePath.isNotEmpty ? it.imagePath : null;
@@ -792,6 +799,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     sheet.appendRow([
       TextCellValue('Item Code'),
       TextCellValue('Item Name'),
+      TextCellValue('Location'),
       TextCellValue('HSN/SAC'),
       TextCellValue('Group'),
       TextCellValue('Sub Category'),
@@ -817,6 +825,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       sheet.appendRow([
         TextCellValue(item.itemCode),
         TextCellValue(item.itemName),
+        TextCellValue(item.location),
         TextCellValue(item.hsnSacCode),
         TextCellValue(item.itemGroup),
         TextCellValue(item.subCategory),
@@ -907,6 +916,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               ?.toString(),
           "item_name": cellByHeader(row, headers, 'Item Name', fallbackIndex: 1)
               ?.toString(),
+          "location": cellByHeader(row, headers, 'Location')?.toString() ??
+              cellByHeader(row, headers, 'Kitchen Location')?.toString() ??
+              'Kitchen',
           "hsn_sac_code":
               cellByHeader(row, headers, 'HSN/SAC', fallbackIndex: 2)?.toString(),
           "item_group":
@@ -1141,6 +1153,56 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 onSubmit: () => _hasVariants
                     ? _groupFocus.requestFocus()
                     : _barcodeFocus.requestFocus()),
+            (() {
+              final Set<String> locOptions = {};
+              for (final l in _locations) {
+                if (l.locationName.trim().isNotEmpty) locOptions.add(l.locationName.trim());
+              }
+              for (final it in _items) {
+                if (it.location.trim().isNotEmpty) locOptions.add(it.location.trim());
+              }
+              if (_location.text.trim().isNotEmpty) {
+                locOptions.add(_location.text.trim());
+              }
+              final List<String> dbLocations = locOptions.toList();
+              if (dbLocations.isEmpty) dbLocations.add('Kitchen');
+
+              final String selectedVal = dbLocations.contains(_location.text.trim())
+                  ? _location.text.trim()
+                  : dbLocations.first;
+
+              return SizedBox(
+                width: 250,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: selectedVal,
+                        decoration: const InputDecoration(
+                          labelText: 'Location / Station',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        ),
+                        items: dbLocations.map((locStr) {
+                          return DropdownMenuItem<String>(
+                            value: locStr,
+                            child: Text(locStr, overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setState(() => _location.text = val);
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline, color: Colors.blue),
+                      tooltip: 'Add Location to Database',
+                      onPressed: _showAddLocationDialog,
+                    ),
+                  ],
+                ),
+              );
+            })(),
             if (_editIndex == null)
               SizedBox(
                 width: 220,
@@ -2369,6 +2431,77 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     );
   }
 
+  void _showAddLocationDialog() {
+    final TextEditingController nameCtrl = TextEditingController();
+    bool isLoading = false;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text("Add New Kitchen / Station Location"),
+              content: SizedBox(
+                width: 320,
+                child: TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: "Location Name",
+                    hintText: "e.g. Bar, Bakery, Main Kitchen",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          if (nameCtrl.text.trim().isEmpty) return;
+                          setStateDialog(() => isLoading = true);
+                          try {
+                            await masterCtrl.createLocation(
+                              nameCtrl.text.trim(),
+                            );
+                            await _loadMasters();
+                            setState(() {
+                              _location.text = nameCtrl.text.trim();
+                            });
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Location Added to Database")),
+                              );
+                            }
+                          } catch (e) {
+                            setStateDialog(() => isLoading = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text("Error saving location: $e")),
+                              );
+                            }
+                          }
+                        },
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text("Save Location"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showAddGroupDialog() {
     final TextEditingController nameCtrl = TextEditingController();
     bool isLoading = false;
@@ -2607,6 +2740,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       columns: const [
                         DataColumn(label: Text('Code')),
                         DataColumn(label: Text('Name')),
+                        DataColumn(label: Text('Location')),
                         DataColumn(label: Text('HSN/SAC')),
                         DataColumn(label: Text('Group')),
                         DataColumn(label: Text('Sub Category')),
@@ -2642,6 +2776,20 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                           cells: [
                             DataCell(Text(it.itemCode)),
                             DataCell(Text(it.itemName)),
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Colors.blue.shade200, width: 0.5),
+                                ),
+                                child: Text(
+                                  it.location.isEmpty ? 'Kitchen' : it.location,
+                                  style: TextStyle(color: Colors.blue.shade800, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
                             DataCell(Text(it.hsnSacCode)),
                             DataCell(Text(it.itemGroup)),
                             DataCell(Text(it.subCategory)),

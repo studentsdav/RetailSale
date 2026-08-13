@@ -152,6 +152,17 @@ class LocalPreferences {
   }
 
   static const _favoriteDrawerItemsKey = 'favorite_drawer_items';
+  static const _billCopiesCountKey = 'bill_copies_count';
+
+  static Future<int?> getBillCopiesCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_billCopiesCountKey);
+  }
+
+  static Future<void> setBillCopiesCount(int count) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_billCopiesCountKey, count);
+  }
 
   static Future<List<String>> getFavoriteDrawerItems() async {
     final prefs = await SharedPreferences.getInstance();

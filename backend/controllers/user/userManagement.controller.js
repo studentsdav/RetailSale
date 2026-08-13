@@ -26,6 +26,12 @@ const ROLE_PERMISSIONS = {
     ],
     HR: [
         'HR_EMPLOYEES', 'HR_ATTENDANCE', 'HR_PAYROLL', 'HR_MASTERS'
+    ],
+    WAITER: [
+        'RETAIL_SALES'
+    ],
+    CAPTAIN: [
+        'RETAIL_SALES'
     ]
 };
 

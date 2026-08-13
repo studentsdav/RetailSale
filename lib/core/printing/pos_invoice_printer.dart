@@ -127,6 +127,7 @@ class PosInvoicePrinter {
         'Goods once sold will not be taken back or exchanged.',
     String thankYouMessage = 'Thank you for your business.',
     String authorizedSignatureLabel = 'Authorized Signatory',
+    int copyCount = 1,
   }) async {
     final document = pw.Document();
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
@@ -152,28 +153,31 @@ class PosInvoicePrinter {
       authorizedSignatureLabel: authorizedSignatureLabel,
     );
 
-    if (_isThermalFormat(order.billFormat)) {
-      document.addPage(
-        pw.MultiPage(
-          pageFormat: _thermalSheetFor(order.billFormat),
-          build: (_) => [_buildThermalReceipt(invoiceData, logo)],
-        ),
-      );
-    } else {
-      document.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.fromLTRB(24, 24, 24, 30),
-          footer: (_) => pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Text(
-              'Generated on ${_dateTime.format(DateTime.now())}',
-              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-            ),
+    final int numCopies = copyCount > 1 ? copyCount : 1;
+    for (int c = 0; c < numCopies; c++) {
+      if (_isThermalFormat(order.billFormat)) {
+        document.addPage(
+          pw.MultiPage(
+            pageFormat: _thermalSheetFor(order.billFormat),
+            build: (_) => [_buildThermalReceipt(invoiceData, logo)],
           ),
-          build: (_) => [_buildA4Invoice(invoiceData, logo)],
-        ),
-      );
+        );
+      } else {
+        document.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.fromLTRB(24, 24, 24, 30),
+            footer: (_) => pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Text(
+                'Generated on ${_dateTime.format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+              ),
+            ),
+            build: (_) => [_buildA4Invoice(invoiceData, logo)],
+          ),
+        );
+      }
     }
 
     return document.save();
@@ -499,6 +503,34 @@ class PosInvoicePrinter {
           pw.SizedBox(height: 5),
           ...(() {
             final pmts = _calculateActualPayments(order, data.amountReceived);
+            final splits = _parseSplitPayments(order);
+            if (splits.length > 1) {
+              return [
+                _thermalMetaRow(
+                  'Payment Mode',
+                  'SPLIT PAYMENT (${splits.length} Modes)',
+                  _isRefundedOrder(order)
+                      ? 'Refund'
+                      : (pmts['refund']! > 0 ? 'Refund (CASH)' : 'Refund'),
+                  _money(pmts['refund']!),
+                ),
+                pw.SizedBox(height: 3),
+                pw.Text('--- PAYMENT BREAKDOWN (SPLIT BILL) ---', style: emphasisStyle.copyWith(fontSize: 8.5), textAlign: pw.TextAlign.center),
+                pw.SizedBox(height: 2),
+                ...splits.map((s) => _thermalMetaRow(
+                  '${s['method']}',
+                  _money(s['amount']),
+                  '',
+                  '',
+                )),
+                if (pmts['advanceCreated']! > 0.009)
+                  _thermalMetaRow('Add to Advance', _money(pmts['advanceCreated']!), '', ''),
+                if (_refundTimestamp(order).isNotEmpty)
+                  _thermalMetaRow('Refunded On', _refundTimestamp(order), '', ''),
+                if (pmts['received']! > 0)
+                  _thermalMetaRow('Total Received', _money(pmts['received']!), '', ''),
+              ];
+            }
             return [
               _thermalMetaRow(
                 'Payment',
@@ -1290,9 +1322,56 @@ class PosInvoicePrinter {
     return 'Order No';
   }
 
+  static List<Map<String, dynamic>> _parseSplitPayments(SaleOrder order) {
+    final List<Map<String, dynamic>> result = [];
+    final ref = (order.paymentReference ?? '').trim();
+
+    if (ref.startsWith('[') && ref.endsWith(']')) {
+      try {
+        final List decoded = jsonDecode(ref);
+        for (final item in decoded) {
+          if (item is Map) {
+            final String method = (item['method'] ?? item['mode'] ?? 'CASH').toString().toUpperCase().trim();
+            final double amt = double.tryParse((item['amount'] ?? 0).toString()) ?? 0.0;
+            if (amt > 0) {
+              result.add({'method': method, 'amount': amt});
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (result.isEmpty && (order.notes ?? '').contains('Payment:')) {
+      try {
+        final notesStr = order.notes!;
+        final pIdx = notesStr.indexOf('Payment:');
+        if (pIdx != -1) {
+          final pSub = notesStr.substring(pIdx + 8).split('\n').first;
+          final parts = pSub.split('|');
+          for (final part in parts) {
+            final tokens = part.trim().split(' ');
+            if (tokens.length >= 2) {
+              final String mode = tokens.first.toUpperCase().trim();
+              final double amt = double.tryParse(tokens.last.replaceAll(',', '')) ?? 0.0;
+              if (amt > 0) {
+                result.add({'method': mode, 'amount': amt});
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return result;
+  }
+
   static String _displayPaymentMode(SaleOrder order) {
     if (_isExchangeOrder(order)) {
       return 'EXCHANGE';
+    }
+    final splits = _parseSplitPayments(order);
+    if (splits.length > 1) {
+      return 'SPLIT PAYMENT (${splits.length} Modes)';
     }
     return order.paymentMode.trim().isEmpty ? 'CASH' : order.paymentMode.trim();
   }

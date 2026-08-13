@@ -921,7 +921,7 @@ exports.createRepayment = async (req, res) => {
 
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id, transaction: t });
         const initialPaid = toAmount(sale.initial_amount_paid ?? sale.amount_paid);
-        const available = Math.max(0, toAmount(sale.net_amount) - toAmount(sale.round_off_amount) - initialPaid - repaymentTotal);
+        const available = Math.max(0, toAmount(sale.net_amount) - initialPaid - repaymentTotal);
 
         // Always auto-adjust excess payment against other outstanding bills first, then advance
         const adjustExtra = true;
@@ -1177,7 +1177,7 @@ exports.updateRepayment = async (req, res) => {
         await ensureRepaymentDuplicateFree({ req, sale_id: repayment.sale_id, payment_date, amount, payment_mode, reference_no, excludeId: repayment.id, transaction: t });
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id: repayment.sale_id, exclude_repayment_id: repayment.id, transaction: t });
         const initialPaid = toAmount(sale.initial_amount_paid ?? sale.amount_paid);
-        const available = Math.max(0, toAmount(sale.net_amount) - toAmount(sale.round_off_amount) - initialPaid - repaymentTotal);
+        const available = Math.max(0, toAmount(sale.net_amount) - initialPaid - repaymentTotal);
         if (amount > available + 0.009) throw new Error(`Repayment exceeds outstanding balance. Available amount is ${available.toFixed(2)}`);
 
         await repayment.update({ payment_date, amount, payment_mode, reference_no, note, updated_by: req.user.id }, { transaction: t });
@@ -2036,7 +2036,7 @@ exports.getCreditReport = async (req, res) => {
             const initialPaid = toAmount(sale.initial_amount_paid ?? sale.amount_paid);
             const repaymentTotal = (sale.repayments || []).reduce((sum, payment) => sum + toAmount(payment.amount), 0);
             const totalPaid = toAmount(initialPaid + repaymentTotal);
-            const balanceDue = Math.max(0, toAmount(sale.net_amount) - toAmount(sale.round_off_amount) - totalPaid);
+            const balanceDue = Math.max(0, toAmount(sale.net_amount) - totalPaid);
             const isCreditBill = balanceDue > 0.009;
             if (!isCreditBill) continue;
 
@@ -2070,12 +2070,12 @@ exports.getCreditReport = async (req, res) => {
                 sale_id: sale.id,
                 bill_no: sale.sale_no,
                 bill_date: sale.sale_date,
-                amount: toAmount(sale.net_amount) - toAmount(sale.round_off_amount),
+                amount: toAmount(sale.net_amount),
                 initial_paid: initialPaid,
                 repayment_total: repaymentTotal,
                 total_paid: totalPaid,
                 outstanding: balanceDue,
-                payment_status: resolvePaymentStatus(totalPaid, toAmount(sale.net_amount) - toAmount(sale.round_off_amount), sale.payment_mode),
+                payment_status: resolvePaymentStatus(totalPaid, toAmount(sale.net_amount), sale.payment_mode),
                 payments: (sale.repayments || []).map((payment) => ({
                     id: payment.id,
                     payment_date: payment.payment_date,

@@ -28,22 +28,29 @@ exports.getNextKotNo = async (req, res) => {
 exports.listKots = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-        const { status, table_id, active_only } = req.query;
+        const { status, table_id, active_only, from_date, to_date } = req.query;
 
         const whereClause = { outlet_id };
         if (status) whereClause.status = status;
         if (table_id) whereClause.table_id = table_id;
         if (active_only === 'true') {
             whereClause.status = { [Op.ne]: 'Closed' };
+            whereClause.kds_dismissed = { [Op.ne]: true };
+        }
+        if (from_date && to_date) {
+            whereClause.created_time = {
+                [Op.between]: [new Date(from_date), new Date(to_date)]
+            };
         }
 
         const kots = await req.propertyDb.models.kot_headers.findAll({
             where: whereClause,
             logging: console.log,
             include: [
-                { model: req.propertyDb.models.restaurant_tables, as: 'table', attributes: ['table_name'], required: false },
+                { model: req.propertyDb.models.restaurant_tables, as: 'table', attributes: ['table_name', 'status'], required: false },
                 { model: req.propertyDb.models.hr_employees, as: 'waiter', attributes: [['full_name', 'employee_name']], required: false },
                 { model: req.propertyDb.models.hr_employees, as: 'captain', attributes: [['full_name', 'employee_name']], required: false },
+                { model: req.propertyDb.models.kot_revisions, as: 'revisions', required: false },
                 {
                     model: req.propertyDb.models.kot_items,
                     as: 'items',
@@ -56,7 +63,20 @@ exports.listKots = async (req, res) => {
             order: [['created_time', 'DESC']]
         });
 
-        res.json({ success: true, data: kots });
+        let resultData = kots;
+        if (active_only === 'true') {
+            resultData = kots.filter(kot => {
+                if (kot.table) {
+                    const tableStatus = (kot.table.status || '').toLowerCase();
+                    if (tableStatus === 'billed' || tableStatus === 'available' || tableStatus === 'dirty' || tableStatus === 'cleaning' || tableStatus === 'needs cleaning') {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+
+        res.json({ success: true, data: resultData });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -94,7 +114,6 @@ exports.createKot = async (req, res) => {
 
         if (!items || items.length === 0) throw new Error('Cannot create KOT without items');
 
-        // Verify table status
         let table = null;
         if (table_id) {
             table = await req.propertyDb.models.restaurant_tables.findOne({
@@ -103,6 +122,31 @@ exports.createKot = async (req, res) => {
             });
             if (!table) throw new Error('Table not found');
             await table.update({ status: 'Occupied' }, { transaction: t });
+
+            // Auto-seat reservation
+            try {
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+                const todayEnd = new Date();
+                todayEnd.setHours(23, 59, 59, 999);
+
+                await req.propertyDb.models.table_reservations.update(
+                    { status: 'Seated' },
+                    {
+                        where: {
+                            table_id,
+                            outlet_id,
+                            status: { [Op.in]: ['Pending', 'Confirmed', 'Reserved'] },
+                            reservation_time: {
+                                [Op.between]: [todayStart, todayEnd]
+                            }
+                        },
+                        transaction: t
+                    }
+                );
+            } catch (resvErr) {
+                console.error('[AUTO SEAT RESERVATION FAIL]', resvErr.message);
+            }
         }
 
         // Generate KOT number
@@ -151,7 +195,7 @@ exports.createKot = async (req, res) => {
             created_time: new Date()
         }, { transaction: t });
 
-        // Save Items and assign stations automatically based on item_master
+        // Save Items and assign stations automatically based on item_master location
         const itemsToCreate = [];
         for (const element of items) {
             const itemDef = await req.propertyDb.models.item_master.findOne({
@@ -160,6 +204,19 @@ exports.createKot = async (req, res) => {
             });
 
             if (!itemDef) throw new Error(`Item ${element.item_name} not found`);
+
+            let stationId = itemDef.kitchen_station_id;
+            if (!stationId) {
+                const itemLoc = (itemDef.location || element.location || 'Kitchen').trim();
+                const stationMatch = await req.propertyDb.models.kitchen_stations.findOne({
+                    where: {
+                        outlet_id,
+                        station_name: { [Op.iLike]: itemLoc }
+                    },
+                    transaction: t
+                });
+                if (stationMatch) stationId = stationMatch.id;
+            }
 
             itemsToCreate.push({
                 outlet_id,
@@ -170,7 +227,7 @@ exports.createKot = async (req, res) => {
                 status: 'New',
                 item_remark: element.item_remark || '',
                 modifier_details: element.modifier_details || [],
-                kitchen_station_id: itemDef.kitchen_station_id
+                kitchen_station_id: stationId
             });
         }
 
@@ -199,18 +256,59 @@ exports.updateKotStatus = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
         const { id } = req.params;
-        const { status } = req.body;
+        const { status, kds_dismissed, remarks } = req.body;
 
         const kot = await req.propertyDb.models.kot_headers.findOne({ where: { id, outlet_id } });
         if (!kot) return res.status(404).json({ success: false, message: 'KOT not found' });
 
         const updateData = { status };
+        if (kds_dismissed !== undefined) {
+            updateData.kds_dismissed = kds_dismissed;
+        }
+        if (remarks !== undefined) {
+            updateData.remarks = remarks;
+        }
         const now = new Date();
         if (status === 'Accepted') updateData.accepted_time = now;
-        else if (status === 'Preparing') updateData.cooking_start = now;
-        else if (status === 'Ready') updateData.ready_time = now;
-        else if (status === 'Served') updateData.served_time = now;
-        else if (status === 'Closed') updateData.closed_time = now;
+        else if (status === 'Preparing') {
+            updateData.cooking_start = now;
+            await req.propertyDb.models.kot_items.update(
+                { status: 'Preparing' },
+                { where: { kot_header_id: id, status: 'New', outlet_id } }
+            );
+        }
+        else if (status === 'Ready') {
+            updateData.ready_time = now;
+            await req.propertyDb.models.kot_items.update(
+                { status: 'Ready' },
+                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'Preparing'] }, outlet_id } }
+            );
+        }
+        else if (status === 'Served') {
+            updateData.served_time = now;
+            updateData.kds_dismissed = true;
+            await req.propertyDb.models.kot_items.update(
+                { status: 'Served' },
+                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'Preparing', 'Ready'] }, outlet_id } }
+            );
+        }
+        else if (status === 'Closed') {
+            updateData.closed_time = now;
+            updateData.kds_dismissed = true;
+            await req.propertyDb.models.kot_items.update(
+                { status: 'Served' },
+                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'Preparing', 'Ready', 'Served'] }, outlet_id } }
+            );
+        }
+        else if (status === 'Cancelled') {
+            await req.propertyDb.models.kot_items.update(
+                { 
+                    status: 'Cancelled',
+                    cancel_reason: remarks || 'KOT Cancelled'
+                },
+                { where: { kot_header_id: id, outlet_id } }
+            );
+        }
 
         await kot.update(updateData);
         res.json({ success: true, data: kot });
@@ -224,7 +322,7 @@ exports.updateKotItemStatus = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
         const { itemId } = req.params;
-        const { status, cancel_reason } = req.body;
+        const { status, cancel_reason, qty } = req.body;
 
         const item = await req.propertyDb.models.kot_items.findOne({
             where: { id: itemId, outlet_id },
@@ -234,20 +332,39 @@ exports.updateKotItemStatus = async (req, res) => {
 
         if (!item) return res.status(404).json({ success: false, message: 'KOT item not found' });
 
-        if (status === 'Cancelled' && !cancel_reason) {
-            throw new Error('Cancellation reason is required');
+        const updateData = {};
+        if (status !== undefined) {
+            updateData.status = status;
+        }
+        if (qty !== undefined) {
+            updateData.qty = Number(qty);
+            if (Number(qty) <= 0) {
+                updateData.status = 'Cancelled';
+            }
         }
 
-        const updateData = { status };
+        if (updateData.status === 'Cancelled') {
+            if (!cancel_reason) {
+                throw new Error('Cancellation reason is required');
+            }
+            updateData.cancel_reason = cancel_reason;
+        }
+
+        const oldQty = item.qty;
         await item.update(updateData, { transaction: t });
 
-        // If cancelled, write audit log
-        if (status === 'Cancelled') {
+        // If cancelled or reduced, write audit log
+        if (updateData.status === 'Cancelled' || qty !== undefined) {
+            const isFullyCancelled = updateData.status === 'Cancelled';
+            const desc = isFullyCancelled
+                ? `Cancelled item "${item.item_name}" from KOT ${item.header.kot_no}. Reason: ${cancel_reason || 'No reason'}`
+                : `Reduced item "${item.item_name}" qty from ${oldQty} to ${qty} in KOT ${item.header.kot_no}. Reason: ${cancel_reason || 'No reason'}`;
+
             await req.propertyDb.models.restaurant_audit_trail.create({
                 outlet_id,
                 user_id: req.user.id,
-                action_type: 'ITEM_CANCEL',
-                description: `Cancelled item "${item.item_name}" from KOT ${item.header.kot_no}. Reason: ${cancel_reason}`
+                action_type: isFullyCancelled ? 'ITEM_CANCEL' : 'ITEM_QTY_REDUCE',
+                description: desc
             }, { transaction: t });
         }
 
@@ -286,24 +403,46 @@ exports.modifyKot = async (req, res) => {
         for (const oldItem of oldItems) {
             const match = items.find(i => i.item_id === oldItem.item_id);
             if (!match) {
-                // Item removed
-                changes.removed.push({ item_id: oldItem.item_id, item_name: oldItem.item_name, qty: oldItem.qty });
-                await oldItem.destroy({ transaction: t });
-            } else if (Number(match.qty) !== Number(oldItem.qty) || match.item_remark !== oldItem.item_remark) {
-                // Item qty/remark updated
-                changes.updated.push({
-                    item_id: oldItem.item_id,
-                    item_name: oldItem.item_name,
-                    old_qty: oldItem.qty,
-                    new_qty: match.qty,
-                    old_remark: oldItem.item_remark,
-                    new_remark: match.item_remark
-                });
-                await oldItem.update({
-                    qty: Number(match.qty),
-                    item_remark: match.item_remark || '',
-                    modifier_details: match.modifier_details || []
-                }, { transaction: t });
+                // Item removed: mark as Cancelled
+                if (oldItem.status !== 'Cancelled') {
+                    changes.removed.push({ item_id: oldItem.item_id, item_name: oldItem.item_name, qty: oldItem.qty });
+                    await oldItem.update({ 
+                        status: 'Cancelled',
+                        cancel_reason: modification_reason || 'Removed by staff during modification'
+                    }, { transaction: t });
+                }
+            } else {
+                // Reactivate if it was previously Cancelled
+                if (oldItem.status === 'Cancelled') {
+                    changes.added.push({ item_id: oldItem.item_id, item_name: oldItem.item_name, qty: match.qty });
+                    await oldItem.update({
+                        status: 'New',
+                        qty: Number(match.qty),
+                        item_remark: match.item_remark || '',
+                        modifier_details: match.modifier_details || []
+                    }, { transaction: t });
+                } else if (Number(match.qty) !== Number(oldItem.qty) || match.item_remark !== oldItem.item_remark) {
+                    // Item qty/remark updated
+                    changes.updated.push({
+                        item_id: oldItem.item_id,
+                        item_name: oldItem.item_name,
+                        old_qty: oldItem.qty,
+                        new_qty: match.qty,
+                        old_remark: oldItem.item_remark,
+                        new_remark: match.item_remark
+                    });
+                    
+                    const oldQty = Number(oldItem.qty);
+                    const newQty = Number(match.qty);
+                    const isQtyIncreased = newQty > oldQty;
+
+                    await oldItem.update({
+                        qty: newQty,
+                        status: isQtyIncreased ? 'New' : oldItem.status,
+                        item_remark: match.item_remark || '',
+                        modifier_details: match.modifier_details || []
+                    }, { transaction: t });
+                }
             }
         }
 
@@ -346,7 +485,7 @@ exports.modifyKot = async (req, res) => {
         await kot.update({ revision_no: nextRevision, status: 'New' }, { transaction: t });
 
         await t.commit();
-        res.json({ success: true, message: 'KOT modified successfully', revision: nextRevision, changes });
+        res.json({ success: true, message: 'KOT modified successfully', revision: nextRevision, changes, kot_no: kot.kot_no });
     } catch (err) {
         await t.rollback();
         res.status(400).json({ success: false, error: err.message });

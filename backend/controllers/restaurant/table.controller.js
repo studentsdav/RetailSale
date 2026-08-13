@@ -216,8 +216,74 @@ exports.listTables = async (req, res) => {
             ],
             order: [['table_name', 'ASC']]
         });
+
+        const todayStart = new Date();
+        todayStart.setHours(0,0,0,0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23,59,59,999);
+
+        const todayReservations = await req.propertyDb.models.table_reservations.findAll({
+            where: {
+                outlet_id,
+                status: { [Op.in]: ['Pending', 'Confirmed', 'Reserved'] },
+                reservation_time: {
+                    [Op.between]: [todayStart, todayEnd]
+                }
+            }
+        });
+
+        function isReservationTimeActive(reservationTimeStr) {
+            const now = new Date();
+            const resvDate = new Date(reservationTimeStr);
+            
+            if (resvDate.getFullYear() !== now.getFullYear() ||
+                resvDate.getMonth() !== now.getMonth() ||
+                resvDate.getDate() !== now.getDate()) {
+                return false;
+            }
+            
+            const resvHours = resvDate.getHours();
+            const resvMins = resvDate.getMinutes();
+            const resvTotalMins = resvHours * 60 + resvMins;
+            
+            const nowHours = now.getHours();
+            const nowMins = now.getMinutes();
+            const nowTotalMins = nowHours * 60 + nowMins;
+            
+            let slotDuration = 60; 
+            
+            if (resvTotalMins === 1350) { 
+                slotDuration = 30; 
+            } else if (resvTotalMins === 660) { 
+                slotDuration = 60;
+            } else if (resvTotalMins === 960) { 
+                slotDuration = 120;
+            } else if (resvTotalMins === 1380) { 
+                slotDuration = 120;
+            } else {
+                slotDuration = 60;
+            }
+            
+            return nowTotalMins >= resvTotalMins && nowTotalMins < (resvTotalMins + slotDuration);
+        }
+
+        const activeTableIds = new Set();
+        for (const resv of todayReservations) {
+            if (isReservationTimeActive(resv.reservation_time)) {
+                activeTableIds.add(resv.table_id);
+            }
+        }
+
+        const data = tables.map(t => {
+            const plain = t.get({ plain: true });
+            if (plain.status === 'Reserved' || plain.status === 'Available') {
+                plain.status = activeTableIds.has(plain.id) ? 'Reserved' : 'Available';
+            }
+            return plain;
+        });
+
         console.log(`✔ [API listTables] Returning ${tables.length} tables successfully.`);
-        res.json({ success: true, data: tables });
+        res.json({ success: true, data });
     } catch (err) {
         console.error("❌ [API listTables] Error loading tables:", err);
         res.status(500).json({ success: false, error: err.message });
@@ -295,6 +361,33 @@ exports.updateTableStatus = async (req, res) => {
         if (active_sale_id !== undefined) updateData.active_sale_id = active_sale_id;
 
         await table.update(updateData);
+
+        if (status === 'Occupied') {
+            try {
+                const { Op } = require('sequelize');
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+                const todayEnd = new Date();
+                todayEnd.setHours(23, 59, 59, 999);
+
+                await req.propertyDb.models.table_reservations.update(
+                    { status: 'Seated' },
+                    {
+                        where: {
+                            table_id: id,
+                            outlet_id,
+                            status: { [Op.in]: ['Pending', 'Confirmed', 'Reserved'] },
+                            reservation_time: {
+                                [Op.between]: [todayStart, todayEnd]
+                            }
+                        }
+                    }
+                );
+            } catch (resvErr) {
+                console.error('[AUTO SEAT RESERVATION FAIL]', resvErr.message);
+            }
+        }
+
         res.json({ success: true, data: table });
     } catch (err) {
         res.status(400).json({ success: false, error: err.message });
@@ -446,7 +539,8 @@ exports.createReservation = async (req, res) => {
     const t = await req.propertyDb.transaction();
     try {
         const outlet_id = req.user.outlet_id;
-        const { table_id, customer_name, customer_phone, reservation_time, guest_count, remarks } = req.body;
+        const { table_id, customer_name, customer_phone, reservation_time, guest_count, remarks, address, gstin } = req.body;
+        const phone = (customer_phone || req.body.phone || '').toString().trim();
 
         const table = await req.propertyDb.models.restaurant_tables.findOne({
             where: { id: table_id, outlet_id },
@@ -458,11 +552,13 @@ exports.createReservation = async (req, res) => {
             outlet_id,
             table_id,
             customer_name,
-            customer_phone,
+            customer_phone: phone,
             reservation_time,
             guest_count: guest_count || 1,
             status: 'Pending',
-            remarks
+            remarks,
+            address,
+            gstin
         }, { transaction: t });
 
         // Update table status to Reserved

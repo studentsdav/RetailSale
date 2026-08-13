@@ -183,7 +183,9 @@ exports.createItem = async (req, res) => {
             stockable,
             is_saleable,
             is_tax_inclusive,
-            is_happy_hour
+            is_happy_hour,
+            location,
+            kitchen_location
         } = req.body;
 
         const outlet_id = req.user.outlet_id;
@@ -219,6 +221,7 @@ exports.createItem = async (req, res) => {
             unit,
             barcode: barcode || null,
             image_path: image_path || null,
+            location: (location || kitchen_location || 'Kitchen').trim() || 'Kitchen',
             rate,
             retail_sale_price: retail_sale_price || 0,
             mrp: mrp || 0,
@@ -370,6 +373,7 @@ exports.bulkImportItems = async (req, res) => {
                 unit: String(row.unit || '').trim(),
                 barcode: row.barcode || null,
                 image_path: row.image_path || null,
+                location: String(row.location || row.kitchen_location || 'Kitchen').trim() || 'Kitchen',
                 rate: parseFloat(row.rate) || 0,
                 retail_sale_price: parseFloat(row.retail_sale_price) || 0,
                 mrp: parseFloat(row.mrp) || 0,

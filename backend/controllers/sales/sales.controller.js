@@ -2765,7 +2765,13 @@ async function createSaleVersion({
             const isRecipeBased = dbItem?.is_recipe_based ?? false;
             const isStockable = dbItem?.stockable ?? true;
             if (!isRecipeBased && isStockable) {
-                stockLedgerLines.push({ item_code: row.item_code, qty_out: qty });
+                stockLedgerLines.push({
+                    item_code: row.item_code,
+                    item_name: row.item_name,
+                    brand: row.brand || dbItem?.brand,
+                    qty_out: qty,
+                    is_bom_component: false
+                });
             }
             if (isRecipeBased) {
                 const bomComponents = await req.propertyDb.models.item_boms.findAll({
@@ -2775,7 +2781,16 @@ async function createSaleVersion({
                 });
                 for (const bomComp of bomComponents) {
                     if (bomComp.component_item) {
-                        stockLedgerLines.push({ item_code: bomComp.component_item.item_code, qty_out: Number(bomComp.quantity) * qty });
+                        stockLedgerLines.push({
+                            item_code: bomComp.component_item.item_code,
+                            item_name: bomComp.component_item.item_name,
+                            brand: bomComp.component_item.brand,
+                            qty_out: Number(bomComp.quantity) * qty,
+                            is_bom_component: true,
+                            parent_item_code: row.item_code,
+                            parent_item_name: row.item_name,
+                            parent_brand: row.brand || dbItem?.brand
+                        });
                     }
                 }
             }
@@ -3667,6 +3682,18 @@ exports.createSale = async (req, res) => {
                     where: { table_id: tableId, status: { [Op.ne]: 'Closed' }, outlet_id },
                     transaction: t
                 });
+
+                // Also close explicitly passed kot_ids (useful for takeaway/packing orders)
+                const kotIds = req.body.kot_ids || (req.body.kot_id ? [req.body.kot_id] : null);
+                if (Array.isArray(kotIds) && kotIds.length > 0) {
+                    await req.propertyDb.models.kot_headers.update({
+                        status: 'Closed',
+                        sales_header_id: referenceSale.id
+                    }, {
+                        where: { id: { [Op.in]: kotIds }, status: { [Op.ne]: 'Closed' }, outlet_id },
+                        transaction: t
+                    });
+                }
             } catch (tblErr) {
                 console.error('[TABLE CHECKOUT HOOK FAIL]', tblErr.message);
             }

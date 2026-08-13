@@ -93,6 +93,7 @@ import '../settings/property_info_screen.dart';
 import '../settings/stock_location_screen.dart';
 import '../settings/loyalty_master_config_screen.dart';
 import '../settings/whatsapp_dashboard_screen.dart';
+import '../settings/smtp_settings_screen.dart';
 import 'notification_screen.dart';
 
 class MainDashboardScreen extends StatefulWidget {
@@ -2283,6 +2284,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'permission': 'WHATSAPP_INTEGRATION',
         'isBeta': true,
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WhatsAppDashboardScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.email_outlined,
+        'label': 'SMTP Email Setup',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmtpSettingsScreen())),
       },
 
       // HR & Payroll

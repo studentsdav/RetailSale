@@ -4,6 +4,7 @@ class Supplier {
   final String supplierName;
   final String address;
   final String phone;
+  final String? email;
   final String? state;
   final String? gstin;
   final String? taxIdNumber;
@@ -15,6 +16,7 @@ class Supplier {
     required this.supplierName,
     required this.address,
     required this.phone,
+    this.email,
     this.state,
     this.gstin,
     this.taxIdNumber,
@@ -29,6 +31,7 @@ class Supplier {
       supplierName: json['supplier_name'] ?? '',
       address: json['address'] ?? '',
       phone: json['phone'] ?? '',
+      email: json['email'],
       state: json['state'],
       gstin: json['gstin'] ?? json['tax_id_number'],
       taxIdNumber: json['tax_id_number'] ?? json['gstin'],
@@ -43,6 +46,7 @@ class Supplier {
       'supplier_name': supplierName,
       'address': address,
       'phone': phone,
+      'email': email,
       'state': state,
       'gstin': gstin,
       'tax_id_number': taxIdNumber ?? gstin,
