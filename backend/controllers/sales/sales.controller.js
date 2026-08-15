@@ -3678,7 +3678,8 @@ exports.createSale = async (req, res) => {
                 // 2. Mark unbilled KOTs for this table as billed and link to this sale ID
                 await req.propertyDb.models.kot_headers.update({
                     status: 'billed',
-                    sales_header_id: referenceSale.id
+                    sales_header_id: referenceSale.id,
+                    kds_dismissed: true
                 }, {
                     where: { 
                         table_id: Number(tableId), 
@@ -3699,7 +3700,8 @@ exports.createSale = async (req, res) => {
                 try {
                     await req.propertyDb.models.kot_headers.update({
                         status: 'billed',
-                        sales_header_id: referenceSale.id
+                        sales_header_id: referenceSale.id,
+                        kds_dismissed: true
                     }, {
                         where: { id: { [Op.in]: parsedKotIds } },
                         transaction: t

@@ -344,7 +344,7 @@ class _KdsScreenState extends State<KdsScreen> {
                                                 Icon(statusIcon, size: 20, color: isKotCancelled ? Colors.red.shade900 : colorScheme.onSurfaceVariant),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  'Table: ${kot['table']?['table_name'] ?? 'Takeaway'} ${isKotCancelled ? "(CANCELLED/REJECTED)" : ""}',
+                                                  '${(kot['kottype'] == 'nc' || (kot['service_type'] ?? '').toString().toLowerCase().contains('nc') || (kot['remarks'] ?? '').toString().toLowerCase().contains('nc')) ? "NC Order (No Charge)" : (kot['table'] != null ? "Table: ${kot['table']['table_name']}" : "Takeaway")} ${isKotCancelled ? "(CANCELLED/REJECTED)" : ""}',
                                                   style: TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 16,

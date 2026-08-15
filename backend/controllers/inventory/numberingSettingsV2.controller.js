@@ -64,6 +64,10 @@ async function getExistingNumbersForModule({ req, module, outlet_id }) {
             Model = req.propertyDb.models.purchase_orders;
             numberField = 'po_no';
             break;
+        case 'KOT':
+            Model = req.propertyDb.models.kot_headers;
+            numberField = 'kot_no';
+            break;
         case 'RECEIVING':
             Model = req.propertyDb.models.goods_receipts;
             numberField = 'grn_no';

@@ -11,6 +11,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'dart:typed_data';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'kots_history_screen.dart';
 
 class CaptainDashboardScreen extends StatefulWidget {
@@ -36,6 +37,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _loadSavedViewPreference();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctrl = Provider.of<RestaurantController>(context, listen: false);
       ctrl.loadFloors();
@@ -58,6 +60,32 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
         }
       }
     });
+  }
+
+  Future<void> _loadSavedViewPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey('captain_is_visual_canvas_view')) {
+        final savedVal = prefs.getBool('captain_is_visual_canvas_view');
+        if (savedVal != null && mounted) {
+          setState(() {
+            isVisualCanvasView = savedVal;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading view preference: $e');
+    }
+  }
+
+  void _updateViewPreference(bool val) async {
+    setState(() => isVisualCanvasView = val);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('captain_is_visual_canvas_view', val);
+    } catch (e) {
+      debugPrint('Error saving view preference: $e');
+    }
   }
 
   @override
@@ -102,16 +130,18 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
 
           final String serviceType = (kot['service_type'] ?? '').toString().toLowerCase();
           final String kottype = (kot['kottype'] ?? '').toString().toLowerCase();
-          final String remarks = (kot['remarks'] ?? '').toString().toLowerCase();
+          final String kottypeLower = (kot['kottype'] ?? '').toString().toLowerCase().trim();
+          final String serviceTypeLower = (kot['service_type'] ?? '').toString().toLowerCase().trim();
+          final String remarksLower = (kot['remarks'] ?? '').toString().toLowerCase().trim();
 
-          final bool isNc = kottype == 'nc' || serviceType.contains('nc') || remarks.contains('nc');
+          final bool isNc = kottypeLower == 'nc' || serviceTypeLower.contains('nc') || remarksLower.contains('nc');
           if (isNc) {
             ncList.add(kot);
             continue;
           }
 
           final tableId = kot['table_id'];
-          if (tableId == null || kottype == 'packing' || serviceType.contains('packing') || serviceType.contains('takeaway')) {
+          if ((tableId == null && !isNc) || kottypeLower == 'packing' || serviceTypeLower.contains('packing') || serviceTypeLower.contains('takeaway')) {
             takeawayList.add(kot);
             continue;
           }
@@ -307,7 +337,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
             child: Row(
               children: [
                 InkWell(
-                  onTap: () => setState(() => isVisualCanvasView = true),
+                  onTap: () => _updateViewPreference(true),
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
                     padding:
@@ -341,7 +371,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                   ),
                 ),
                 InkWell(
-                  onTap: () => setState(() => isVisualCanvasView = false),
+                  onTap: () => _updateViewPreference(false),
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
                     padding:
@@ -2296,7 +2326,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
       MaterialPageRoute(
           builder: (context) =>
               KotBuilderScreen(table: table, isFreshOrder: isFreshOrder)),
-    );
+    ).then((_) => _refreshData());
   }
 
   void _showNcOrderDialog(BuildContext context, {Map<String, dynamic>? table}) {
@@ -2838,7 +2868,13 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
   Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items) async {
     final pdf = pw.Document();
     
-    const String tableName = 'Takeaway';
+    final String kottypeLower = (kot['kottype'] ?? '').toString().toLowerCase();
+    final String serviceTypeLower = (kot['service_type'] ?? '').toString().toLowerCase();
+    final String remarksLower = (kot['remarks'] ?? '').toString().toLowerCase();
+    final bool isNc = kottypeLower == 'nc' || serviceTypeLower.contains('nc') || remarksLower.contains('nc');
+
+    final String tableName = isNc ? 'NC Order' : (kot['table']?['table_name'] ?? 'Takeaway');
+    final String subHeader = isNc ? '*** NC ORDER (NO CHARGE) ***' : '*** TAKEAWAY K O T ***';
     final String nowStr = DateTime.now().toString().substring(0, 16);
     final String kotNo = kot['kot_number'] ?? '#KOT-${kot['id']}';
     
@@ -2862,7 +2898,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
               ),
               pw.Center(
                 child: pw.Text(
-                  '*** TAKEAWAY K O T ***',
+                  subHeader,
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
                 ),
               ),
@@ -3193,8 +3229,14 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade700),
-            child: const Text('Confirm Clear Order'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text(
+              'Confirm Clear Order',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),

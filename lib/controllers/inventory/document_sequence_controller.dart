@@ -79,17 +79,15 @@ class DocumentSequenceController extends ChangeNotifier {
 
   Future<String> getNextKotNo(DateTime date) async {
     try {
-      if (list.isEmpty) {
-        await load();
+      final res = await ApiClient.get(
+        '${ApiEndpoints.documentSequence}/next?module=KOT&date=${date.toIso8601String()}',
+      );
+      if (res['success'] == true && res['data'] != null && res['data']['number'] != null) {
+        return res['data']['number'].toString();
       }
-      final seq = getByModule('KOT');
-      if (seq != null) {
-        final String prefix = seq.prefix;
-        final String postfix = seq.postfix;
-        final int num = seq.startNo;
-        return '$prefix$num$postfix';
-      }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error fetching next KOT number: $e');
+    }
 
     return 'KOT-1';
   }

@@ -136,6 +136,39 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
     _loadHistoryKots();
   }
 
+  String _formatDisplayStatus(String? rawStatus) {
+    final s = (rawStatus ?? '').toString().trim();
+    final lower = s.toLowerCase();
+    if (lower == 'p' || lower == 'pending' || lower.isEmpty) return 'PENDING';
+    if (lower == 'billed') return 'BILLED';
+    if (lower == 'nc cleared' || lower == 'nc_cleared') return 'NC CLEARED';
+    if (lower == 'closed') return 'CLOSED';
+    if (lower == 'cancelled') return 'CANCELLED';
+    if (lower == 'rejected') return 'REJECTED';
+    return s.toUpperCase();
+  }
+
+  String _getDisplayTableName(Map<String, dynamic> kot) {
+    final String kottypeLower = (kot['kottype'] ?? '').toString().toLowerCase().trim();
+    final String serviceTypeLower = (kot['service_type'] ?? '').toString().toLowerCase().trim();
+    final String remarksLower = (kot['remarks'] ?? '').toString().toLowerCase().trim();
+
+    final bool isNc = kottypeLower == 'nc' || serviceTypeLower.contains('nc') || remarksLower.contains('nc');
+    if (isNc) {
+      return 'NC Order';
+    }
+
+    if (kot['table'] != null && kot['table']['table_name'] != null && kot['table']['table_name'].toString().trim().isNotEmpty) {
+      return kot['table']['table_name'].toString();
+    }
+
+    if (kottypeLower == 'packing' || serviceTypeLower.contains('packing') || serviceTypeLower.contains('takeaway')) {
+      return 'Takeaway';
+    }
+
+    return 'Takeaway';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -223,9 +256,10 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                                 final kot = filtered[idx];
                                 final isSelected = _selectedKot?['id'] == kot['id'];
                                 final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}';
-                                final String table = kot['table']?['table_name'] ?? 'Takeaway';
+                                final String table = _getDisplayTableName(kot);
                                 final String serviceType = kot['service_type'] ?? 'Dine In';
-                                final String status = kot['status'] ?? 'Pending';
+                                final String rawStatus = kot['status'] ?? 'Pending';
+                                final String displayStatus = _formatDisplayStatus(rawStatus);
                                 final String dateStr = kot['created_time'] != null
                                     ? DateFormat('dd MMM, hh:mm a').format(DateTime.parse(kot['created_time']))
                                     : '';
@@ -237,13 +271,13 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(kotNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
-                                      Text(status.toUpperCase(),
+                                      Text(displayStatus,
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                             color: (status.toLowerCase() == 'cancelled' || status.toLowerCase() == 'rejected')
+                                             color: (rawStatus.toLowerCase() == 'cancelled' || rawStatus.toLowerCase() == 'rejected')
                                                  ? Colors.red
-                                                 : (status.toLowerCase() == 'closed' ? Colors.grey : Colors.green.shade700),
+                                                 : (rawStatus.toLowerCase() == 'closed' ? Colors.grey : Colors.green.shade700),
                                           )),
                                     ],
                                   ),
@@ -279,7 +313,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
     final kot = _selectedKot!;
     final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}';
     final String status = kot['status'] ?? 'Pending';
-    final String table = kot['table']?['table_name'] ?? 'Takeaway';
+    final String table = _getDisplayTableName(kot);
     final String waiter = kot['waiter']?['employee_name'] ?? 'N/A';
     final String rawCaptain = kot['captain']?['employee_name'] ?? '';
     final String captain = (rawCaptain.isEmpty || rawCaptain.toLowerCase().contains('dummy')) ? 'N/A' : rawCaptain;

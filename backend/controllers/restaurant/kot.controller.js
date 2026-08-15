@@ -1,24 +1,41 @@
 const { Op } = require('sequelize');
 const audit = require('../../services/audit.service');
 const { insertLedger } = require('../../services/stockLedger.service');
+const numberingHelper = require('../inventory/numberingSettingsV2.controller');
 
 exports.getNextKotNo = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-        const today = new Date();
-        const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+        let nextNo;
 
-        const count = await req.propertyDb.models.kot_headers.count({
-            where: {
-                outlet_id,
-                created_at: {
-                    [Op.gte]: new Date(today.setHours(0, 0, 0, 0))
-                }
+        try {
+            const resolved = await numberingHelper.resolveNextNumber({
+                req,
+                module: 'KOT',
+                date: new Date(),
+                outlet_id
+            });
+            if (resolved && resolved.number) {
+                nextNo = resolved.number;
             }
-        });
+        } catch (numErr) {
+            console.error('[NEXT KOT NO HELPER ERR]', numErr.message);
+        }
 
-        const seq = String(count + 1).padStart(4, '0');
-        const nextNo = `KOT-${dateStr}-${seq}`;
+        if (!nextNo) {
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+            const count = await req.propertyDb.models.kot_headers.count({
+                where: {
+                    outlet_id,
+                    created_at: {
+                        [Op.gte]: new Date(today.setHours(0, 0, 0, 0))
+                    }
+                }
+            });
+            const seq = String(count + 1).padStart(4, '0');
+            nextNo = `KOT-${dateStr}-${seq}`;
+        }
 
         res.json({ success: true, data: nextNo });
     } catch (err) {
@@ -38,7 +55,7 @@ exports.listKots = async (req, res) => {
         if (table_id) whereClause.table_id = table_id;
         if (active_only === 'true') {
             whereClause.sales_header_id = null;
-            whereClause.status = { [Op.notIn]: ['Closed', 'closed', 'billed', 'BILLED', 'cancelled', 'Cancelled'] };
+            whereClause.status = { [Op.notIn]: ['Closed', 'closed', 'billed', 'Billed', 'BILLED', 'NC Cleared', 'nc_cleared', 'NC_CLEARED', 'cancelled', 'Cancelled', 'Rejected'] };
             whereClause.kds_dismissed = { [Op.ne]: true };
         }
         if (from_date && to_date) {
@@ -186,18 +203,35 @@ exports.createKot = async (req, res) => {
             }
         }
 
-        // Generate KOT number
-        const today = new Date();
-        const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-        const count = await req.propertyDb.models.kot_headers.count({
-            where: {
-                outlet_id,
-                created_at: { [Op.gte]: new Date(today.setHours(0, 0, 0, 0)) }
-            },
-            transaction: t
-        });
-        const seq = String(count + 1).padStart(4, '0');
-        const kot_no = `KOT-${dateStr}-${seq}`;
+        // Generate KOT number using Document Sequence Settings
+        let kot_no;
+        try {
+            const resolved = await numberingHelper.resolveNextNumber({
+                req,
+                module: 'KOT',
+                date: new Date(),
+                outlet_id
+            });
+            if (resolved && resolved.number) {
+                kot_no = resolved.number;
+            }
+        } catch (numErr) {
+            console.error('[CREATE KOT NUMBERING HELPER ERR]', numErr.message);
+        }
+
+        if (!kot_no) {
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+            const count = await req.propertyDb.models.kot_headers.count({
+                where: {
+                    outlet_id,
+                    created_at: { [Op.gte]: new Date(today.setHours(0, 0, 0, 0)) }
+                },
+                transaction: t
+            });
+            const seq = String(count + 1).padStart(4, '0');
+            kot_no = `KOT-${dateStr}-${seq}`;
+        }
 
         // Validate waiter and captain exist
         let validWaiterId = null;
@@ -347,7 +381,7 @@ exports.updateKotStatus = async (req, res) => {
                 { where: { kot_header_id: id, outlet_id } }
             );
         }
-        else if (status === 'billed' || status === 'Billed' || status === 'Closed') {
+        else if (status === 'billed' || status === 'Billed' || status === 'Closed' || status === 'NC Cleared' || status === 'nc_cleared' || status === 'NC_CLEARED') {
             updateData.closed_time = now;
             updateData.kds_dismissed = true;
         }

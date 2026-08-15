@@ -34,6 +34,8 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     'DAMAGE': [],
   };
 
+  bool _isSaving = false;
+
   @override
   void initState() {
     super.initState();
@@ -81,44 +83,71 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
   }
 
   Future<void> _applySettings() async {
+    setState(() => _isSaving = true);
     final settings = <DocumentSequence>[];
 
-    for (final entry in _rowsByModule.entries) {
-      for (final row in entry.value) {
-        final prefix = row.prefix.text.trim();
-        final postfix = row.postfix.text.trim();
-        if (prefix.isEmpty || postfix.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Prefix and Postfix are required for module ${entry.key}.',
+    try {
+      for (final entry in _rowsByModule.entries) {
+        for (final row in entry.value) {
+          final prefix = row.prefix.text.trim();
+          final postfix = row.postfix.text.trim();
+          if (prefix.isEmpty || postfix.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                backgroundColor: Colors.red.shade700,
+                content: Text(
+                  'Prefix and Postfix are required for module ${entry.key}.',
+                ),
               ),
+            );
+            return;
+          }
+
+          settings.add(
+            DocumentSequence(
+              id: row.id,
+              module: entry.key,
+              startDate: row.startDate,
+              startNo:
+                  (int.tryParse(row.startNo.text.trim()) ?? 1).clamp(1, 999999999),
+              prefix: prefix,
+              postfix: postfix,
             ),
           );
-          return;
         }
+      }
 
-        settings.add(
-          DocumentSequence(
-            id: row.id,
-            module: entry.key,
-            startDate: row.startDate,
-            startNo:
-                (int.tryParse(row.startNo.text.trim()) ?? 1).clamp(1, 999999999),
-            prefix: prefix,
-            postfix: postfix,
+      await ctrl.save(settings);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF008060), // Shopify Emerald
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Document sequence settings successfully applied!',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+      );
+      await _loadSettings();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red.shade700,
+            content: Text('Failed to save settings: $e'),
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
-
-    await ctrl.save(settings);
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Document sequence settings applied')),
-    );
-    await _loadSettings();
   }
 
   @override
@@ -135,98 +164,268 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
   Widget build(BuildContext context) {
     _ensureModuleRows();
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7F9),
-      appBar: AppBar(title: const Text('Document Sequence Settings')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ListView(
+      backgroundColor: const Color(0xFFF1F5F9), // Shopify Polaris Gray
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+        iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Document Sequence Settings',
+              style: TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              'Configure custom prefixes, postfixes, and numbering series',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF008060), // Shopify Emerald
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check_circle_outline, size: 18),
+              label: Text(_isSaving ? 'Saving...' : 'Save Changes'),
+              onPressed: _isSaving ? null : _applySettings,
+            ),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
           children: [
             ..._moduleDefs.map(
-              (def) => _moduleSection(def.key, def.value),
+              (def) => _buildPolarisModuleSection(def.key, def.value),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
-                icon: const Icon(Icons.save),
-                label: const Text('Apply Settings'),
-                onPressed: _applySettings,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF008060),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(Icons.save, size: 18),
+                label: const Text(
+                  'Apply Settings',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                onPressed: _isSaving ? null : _applySettings,
               ),
             ),
+            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  Widget _moduleSection(String title, String module) {
+  Widget _buildPolarisModuleSection(String title, String module) {
     final rows = _rowsByModule[module]!;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Shopify Header Strip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+            ),
+            child: Row(
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    module,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
                   ),
                 ),
                 OutlinedButton.icon(
                   onPressed: () => _addRow(module),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Row'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF008060),
+                    side: const BorderSide(color: Color(0xFF008060)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text(
+                    'Add Row',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            const Text(
+          ),
+          // Subtitle instruction
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Text(
               'Create multiple date-based series. Example: one row from 01-Jan and another row from 01-Apr starting again from 1.',
-              style: TextStyle(color: Color(0xFF64748B)),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
-            const Divider(),
-            ...List.generate(
-              rows.length,
-              (index) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    _dateField(rows[index].startDate, (picked) {
-                      setState(() => rows[index].startDate = picked);
-                    }),
-                    _field(rows[index].startNo, 'Start No From'),
-                    _field(rows[index].prefix, 'Prefix'),
-                    _field(rows[index].postfix, 'Postfix'),
-                    IconButton(
-                      onPressed: () => _removeRow(module, index),
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
+          ),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          // Rows List
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: List.generate(
+                rows.length,
+                (index) => Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _dateField(rows[index].startDate, (picked) {
+                        setState(() => rows[index].startDate = picked);
+                      }),
+                      _polarisField(rows[index].startNo, 'Start No From', isNumber: true),
+                      _polarisField(rows[index].prefix, 'Prefix'),
+                      _polarisField(rows[index].postfix, 'Postfix'),
+                      Container(
+                        margin: const EdgeInsets.only(top: 14),
+                        child: IconButton(
+                          onPressed: () => _removeRow(module, index),
+                          tooltip: 'Delete Sequence Row',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.red.shade50,
+                            foregroundColor: Colors.red.shade700,
+                          ),
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _field(TextEditingController c, String label) {
+  Widget _polarisField(TextEditingController c, String label, {bool isNumber = false}) {
     return SizedBox(
-      width: 180,
-      child: TextField(
-        controller: c,
-        decoration: InputDecoration(labelText: label),
+      width: 175,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: c,
+            keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFF008060), width: 1.5),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -237,25 +436,55 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     );
 
     return SizedBox(
-      width: 180,
-      child: TextField(
-        controller: controller,
-        readOnly: true,
-        decoration: const InputDecoration(
-          labelText: 'Start Date',
-          suffixIcon: Icon(Icons.calendar_today),
-        ),
-        onTap: () async {
-          final picked = await showDatePicker(
-            context: context,
-            initialDate: d,
-            firstDate: DateTime(2000),
-            lastDate: DateTime(2100),
-          );
-          if (picked != null) {
-            onChanged(picked);
-          }
-        },
+      width: 175,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Start Date',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: controller,
+            readOnly: true,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              filled: true,
+              fillColor: Colors.white,
+              suffixIcon: const Icon(Icons.calendar_month, size: 18, color: Color(0xFF008060)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFF008060), width: 1.5),
+              ),
+            ),
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: d,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+              );
+              if (picked != null) {
+                onChanged(picked);
+              }
+            },
+          ),
+        ],
       ),
     );
   }

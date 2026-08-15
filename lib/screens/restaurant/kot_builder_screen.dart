@@ -1029,15 +1029,11 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         );
 
         if (res['success'] == true && mounted) {
-          if (res['split_routed'] == true) {
-            final createdKots = res['created_kots'] as List? ?? [];
-            for (final kot in createdKots) {
-              await _directPrintKot(kot, kitchenStations, printers);
-            }
-          } else {
-            final kot = res['data'] ?? res;
-            await _directPrintKot(kot, kitchenStations, printers);
-          }
+          final kot = res['data'] ?? res;
+          try {
+            context.read<RestaurantController>().loadTables();
+          } catch (_) {}
+          await _directPrintKot(kot, kitchenStations, printers);
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('KOT successfully sent to kitchen!')),
@@ -2143,45 +2139,60 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     final items = kot['items'] as List? ?? [];
     if (items.isEmpty) return;
 
-    final firstItem = items.first;
-    final String locationName = (kot['target_location'] ?? firstItem['location'] ?? firstItem['station_name'] ?? 'Kitchen').toString();
-
-    final station = kitchenStations.firstWhere(
-      (s) => (s['station_name'] ?? '').toString().toLowerCase() == locationName.toLowerCase(),
-      orElse: () => null,
-    );
-    if (station == null || station['printer_id'] == null) return;
-
-    final int printerId = station['printer_id'];
-    final printerConfig = printers.firstWhere(
-      (p) => p['id'] == printerId,
-      orElse: () => null,
-    );
-    if (printerConfig == null) return;
-
-    final String printerName = printerConfig['printer_name'] ?? '';
-    if (printerName.isEmpty) return;
-
-    final pdfBytes = await _generateKotPdfForPrint(kot, items);
+    // Group items by station location for runtime printer routing
+    final Map<String, List<dynamic>> locationGroups = {};
+    for (final item in items) {
+      final String loc = (item['location'] ?? item['station_name'] ?? item['station']?['station_name'] ?? item['kitchen_location'] ?? 'Kitchen')
+          .toString()
+          .trim();
+      final String key = loc.isEmpty ? 'Kitchen' : loc;
+      locationGroups.putIfAbsent(key, () => []).add(item);
+    }
 
     try {
       final systemPrinters = await Printing.listPrinters();
-      Printer? targetPrinter;
-      try {
-        targetPrinter = systemPrinters.firstWhere(
-          (p) => p.name.toLowerCase() == printerName.toLowerCase(),
+
+      for (final entry in locationGroups.entries) {
+        final String locationName = entry.key;
+        final List<dynamic> stationItems = entry.value;
+
+        final station = kitchenStations.firstWhere(
+          (s) => (s['station_name'] ?? '').toString().toLowerCase() == locationName.toLowerCase(),
+          orElse: () => null,
         );
-      } catch (_) {
-        targetPrinter = null;
-      }
-      if (targetPrinter != null) {
-        await Printing.directPrintPdf(
-          printer: targetPrinter,
-          name: kot['kot_no'] ?? 'KOT_${kot['id']}',
-          onLayout: (_) async => pdfBytes,
+        if (station == null || station['printer_id'] == null) continue;
+
+        final int printerId = station['printer_id'];
+        final printerConfig = printers.firstWhere(
+          (p) => p['id'] == printerId,
+          orElse: () => null,
         );
-      } else {
-        debugPrint('Direct print printer "$printerName" not found in system printers list');
+        if (printerConfig == null) continue;
+
+        final String printerName = printerConfig['printer_name'] ?? '';
+        if (printerName.isEmpty) continue;
+
+        final pdfBytes = await _generateKotPdfForPrint(kot, stationItems);
+
+        try {
+          Printer? targetPrinter;
+          try {
+            targetPrinter = systemPrinters.firstWhere(
+              (p) => p.name.toLowerCase() == printerName.toLowerCase(),
+            );
+          } catch (_) {
+            targetPrinter = null;
+          }
+          if (targetPrinter != null) {
+            await Printing.directPrintPdf(
+              printer: targetPrinter,
+              name: kot['kot_no'] ?? 'KOT_${kot['id']}',
+              onLayout: (_) async => pdfBytes,
+            );
+          }
+        } catch (pErr) {
+          debugPrint('Direct print printer error for station "$locationName": $pErr');
+        }
       }
     } catch (e) {
       debugPrint('Error direct printing KOT: $e');

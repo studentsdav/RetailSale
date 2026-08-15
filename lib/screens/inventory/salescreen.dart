@@ -9134,7 +9134,7 @@ class _SaleScreenState extends State<SaleScreen> {
                 final double cellWidth = (width - (crossAxisCount - 1) * spacing) / crossAxisCount;
 
                 // Enforce a strict target height to prevent vertical text/image overflow
-                final double targetHeight = _showItemImages ? 142.0 : 110.0;
+                final double targetHeight = _showItemImages ? 148.0 : 118.0;
                 final double childAspectRatio = cellWidth / targetHeight;
 
                 return GridView.builder(
@@ -9216,7 +9216,7 @@ class _SaleScreenState extends State<SaleScreen> {
                               ),
                             // --- TEXT CONTENT ---
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
+                              padding: const EdgeInsets.fromLTRB(10, 24, 10, 8),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [

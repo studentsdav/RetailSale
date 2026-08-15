@@ -439,6 +439,18 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
     );
   }
 
+  String _formatKotStatus(String? rawStatus) {
+    final s = (rawStatus ?? '').toString().trim();
+    final lower = s.toLowerCase();
+    if (lower == 'p' || lower == 'pending' || lower.isEmpty) return 'Pending';
+    if (lower == 'billed') return 'Billed';
+    if (lower == 'nc cleared' || lower == 'nc_cleared') return 'NC Cleared';
+    if (lower == 'closed') return 'Closed';
+    if (lower == 'cancelled') return 'Cancelled';
+    if (lower == 'rejected') return 'Rejected';
+    return s;
+  }
+
   Widget _buildKotWiseTab(ColorScheme scheme) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -488,7 +500,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                     Row(
                       children: [
                         Text(
-                          kot['status'] ?? 'New',
+                          _formatKotStatus(kot['status']),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: kot['status'] == 'Preparing'
