@@ -471,10 +471,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _settingRow(
                         title: 'Enable Salesperson Tagging',
                         description: 'Show salesperson selector and calculate commission on sale',
-                        isLast: true,
                         control: Switch.adaptive(
                           value: s.enableSalespersonTagging,
                           onChanged: (v) => setState(() => s.enableSalespersonTagging = v),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Show Brand Name in Print / Bills',
+                        description: 'Display and print the product brand name on KOTs, receipts, and invoices',
+                        isLast: true,
+                        control: Switch.adaptive(
+                          value: s.showBrandName,
+                          onChanged: (v) => setState(() => s.showBrandName = v),
                         ),
                       ),
                     ],

@@ -130,15 +130,28 @@ exports.listCatalogProducts = async (req, res) => {
             replacements.category = category;
         }
 
-        // Fetch paginated items with latest stock from stock_ledger
+        // Fetch paginated items with latest available stock (stock_ledger minus active KOT held stock)
         const items = await req.propertyDb.query(`
             SELECT 
                 im.*,
-                COALESCE(
-                    (SELECT sl.balance FROM stock_ledger sl 
-                     WHERE sl.outlet_id = im.outlet_id AND sl.item_code = im.item_code 
-                     ORDER BY sl.id DESC LIMIT 1),
-                    im.opening_balance
+                GREATEST(0,
+                    COALESCE(
+                        (SELECT sl.balance FROM stock_ledger sl 
+                         WHERE sl.outlet_id = im.outlet_id AND sl.item_code = im.item_code 
+                         ORDER BY sl.id DESC LIMIT 1),
+                        im.opening_balance,
+                        0
+                    ) - COALESCE(
+                        (SELECT SUM(ki.qty)
+                         FROM kot_items ki
+                         INNER JOIN kot_headers kh ON ki.kot_header_id = kh.id
+                         WHERE ki.item_id = im.id
+                           AND ki.status NOT IN ('Cancelled', 'Rejected')
+                           AND kh.sales_header_id IS NULL
+                           AND kh.status NOT IN ('Closed', 'closed', 'billed', 'Billed', 'BILLED', 'Cancelled', 'cancelled', 'Rejected')
+                           AND kh.outlet_id = im.outlet_id),
+                        0
+                    )
                 ) AS current_stock
             FROM item_master im
             WHERE ${queryConditions}

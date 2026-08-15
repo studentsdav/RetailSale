@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
+import '../inventory/salescreen.dart';
 import 'kot_builder_screen.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 
 class RunningOrdersScreen extends StatefulWidget {
   final int tableId;
@@ -20,10 +22,14 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
   late TabController _tabController;
   List<dynamic> activeKotsList = [];
   bool isLoading = false;
+  final settingsCtrl = SystemSettingsController();
 
   @override
   void initState() {
     super.initState();
+    settingsCtrl.load().then((_) {
+      if (mounted) setState(() {});
+    });
     _tabController = TabController(length: 2, vsync: this);
     _fetchTableKots();
   }
@@ -34,6 +40,20 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
     super.dispose();
   }
 
+  String _displayName(Map<String, dynamic> item) {
+    final String name = item['item_name'] ?? '';
+    final bool showBrand = settingsCtrl.settings?.showBrandName ?? true;
+    if (!showBrand) return name;
+
+    if (item['item'] != null && item['item']['brand'] != null) {
+      final String brand = item['item']['brand'].toString().trim();
+      if (brand.isNotEmpty) {
+        return '$brand - $name';
+      }
+    }
+    return name;
+  }
+
   List<dynamic> _filterActiveRunningKots(List rawKots) {
     final List<dynamic> result = [];
     for (final kot in rawKots) {
@@ -42,8 +62,13 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
         continue;
       }
 
+      // If already linked to a sales header bill, ignore!
+      if (kot['sales_header_id'] != null) {
+        continue;
+      }
+
       final String status = (kot['status'] ?? '').toString().toUpperCase().trim();
-      // Exclude Billed, Completed, Settled, NC Cleared KOTs (retain CANCELLED KOT headers)
+      // Exclude Billed, Completed, Settled, NC Cleared KOTs
       if (status == 'BILLED' ||
           status == 'COMPLETED' ||
           status == 'SETTLED' ||
@@ -269,6 +294,59 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
         title: Text('Running Orders - Table ${widget.tableName}'),
         elevation: 0,
         actions: [
+          if (activeKotsList.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 4.0, top: 8, bottom: 8),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.point_of_sale, size: 16),
+                label: const Text('Generate Bill / Checkout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                onPressed: () {
+                  final List<int> kotIds = activeKotsList.map<int>((k) => int.parse(k['id'].toString())).toList();
+                  final Map<int, Map<String, dynamic>> grouped = {};
+                  for (final kot in activeKotsList) {
+                    final items = kot['items'] as List? ?? [];
+                    for (final item in items) {
+                      final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
+                      if (itemStatus == 'CANCELLED') continue;
+
+                      final int itemId = item['item_id'];
+                      final double qty = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '1') ?? 1.0;
+                      final double rate = double.tryParse(item['rate']?.toString() ?? '') ??
+                          double.tryParse(item['item_rate']?.toString() ?? '') ??
+                          0.0;
+
+                      if (grouped.containsKey(itemId)) {
+                        grouped[itemId]!['qty'] = grouped[itemId]!['qty'] + qty;
+                      } else {
+                        grouped[itemId] = {
+                          'item_id': itemId,
+                          'item_name': item['item_name'],
+                          'qty': qty,
+                          'rate': rate,
+                        };
+                      }
+                    }
+                  }
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SaleScreen(
+                        preloadedTableId: widget.tableId,
+                        preloadedItems: grouped.values.toList(),
+                        preloadedKotIds: kotIds,
+                      ),
+                    ),
+                  ).then((_) => _fetchTableKots());
+                },
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 8.0, top: 8, bottom: 8),
             child: ElevatedButton.icon(
@@ -398,10 +476,10 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                           'Waiter: ${kot['waiter']?['employee_name'] ?? 'N/A'} | ordered $minutesElapsed min ago',
                           style: TextStyle(fontSize: 12, color: scheme.outline),
                         ),
-                        if (kot['status'] == 'Cancelled') ...[
+                        if (kot['status'] == 'Cancelled' || kot['status'] == 'Rejected') ...[
                           const SizedBox(height: 4),
                           Text(
-                            'REJECTED: ${kot['remarks'] ?? 'No reason provided'}',
+                            '${kot['status'] == 'Rejected' ? 'REJECTED' : 'CANCELLED'}: ${kot['remarks'] ?? 'No reason provided'}',
                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red),
                           ),
                         ],
@@ -419,7 +497,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                           ),
                         ),
                         const SizedBox(width: 8),
-                        if (kot['status'] != 'Cancelled') ...[
+                        if (kot['status'] != 'Cancelled' && kot['status'] != 'Rejected') ...[
                           IconButton(
                             icon: const Icon(Icons.print_outlined, color: Colors.teal, size: 20),
                             tooltip: 'Reprint KOT Ticket',
@@ -464,7 +542,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                 separatorBuilder: (_, __) => Divider(height: 1, color: scheme.outlineVariant),
                 itemBuilder: (context, idx) {
                   final item = items[idx];
-                  final isCancelled = item['status'] == 'Cancelled';
+                  final isCancelled = item['status'] == 'Cancelled' || item['status'] == 'Rejected';
                   final hasRemark = item['item_remark'] != null && item['item_remark'].toString().trim().isNotEmpty;
 
                   final double q = double.tryParse(item['qty'].toString()) ?? 0.0;
@@ -473,7 +551,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                   return ListTile(
                     dense: true,
                     title: Text(
-                      item['item_name'] ?? '',
+                      _displayName(item),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -483,7 +561,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                     ),
                     subtitle: isCancelled && item['cancel_reason'] != null && item['cancel_reason'].toString().trim().isNotEmpty
                         ? Text(
-                            'Cancelled: ${item['cancel_reason']}',
+                            '${item['status'] == 'Rejected' ? 'Rejected' : 'Cancelled'}: ${item['cancel_reason']}',
                             style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
                           )
                         : (hasRemark
@@ -546,8 +624,8 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
     for (final kot in activeKotsList) {
       final items = kot['items'] as List? ?? [];
       for (final item in items) {
-        final name = item['item_name'] ?? 'Unknown Item';
-        final isCancelled = item['status'] == 'Cancelled';
+        final name = _displayName(item);
+        final isCancelled = item['status'] == 'Cancelled' || item['status'] == 'Rejected';
         final double q = double.tryParse(item['qty'].toString()) ?? 0.0;
 
         if (!summary.containsKey(name)) {

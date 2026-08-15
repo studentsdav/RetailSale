@@ -134,6 +134,10 @@ module.exports = (sequelize, DataTypes) => {
         bill_copies_count: {
             type: DataTypes.INTEGER,
             defaultValue: 1
+        },
+        show_brand_name: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
         }
     }, {
         tableName: 'system_settings',

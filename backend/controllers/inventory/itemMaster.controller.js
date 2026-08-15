@@ -471,7 +471,58 @@ exports.getItems = async (req, res) => {
             order: [['item_name', 'ASC']]
         });
 
-        res.json({ success: true, data: items });
+        // Get the latest balances from stock_ledger for all items in this outlet
+        const [ledgerStockRows] = await req.propertyDb.query(`
+            SELECT sl.item_code, sl.balance
+            FROM stock_ledger sl
+            INNER JOIN (
+                SELECT item_code, MAX(id) AS max_id
+                FROM stock_ledger
+                WHERE outlet_id = :outlet_id
+                GROUP BY item_code
+            ) latest ON sl.id = latest.max_id
+        `, {
+            replacements: { outlet_id }
+        });
+
+        const ledgerStockMap = {};
+        for (const row of ledgerStockRows || []) {
+            ledgerStockMap[row.item_code] = Number(row.balance);
+        }
+
+        // Calculate dynamic held stock from active KOTs (KOT headers not billed/Closed/Cancelled/Rejected, and KOT items not Cancelled/Rejected)
+        const [heldStockRows] = await req.propertyDb.query(`
+            SELECT ki.item_id, COALESCE(SUM(ki.qty), 0) AS held_qty
+            FROM kot_items ki
+            INNER JOIN kot_headers kh ON ki.kot_header_id = kh.id
+            WHERE ki.status NOT IN ('Cancelled', 'Rejected')
+              AND kh.sales_header_id IS NULL
+              AND kh.status NOT IN ('Closed', 'closed', 'billed', 'Billed', 'BILLED', 'Cancelled', 'cancelled', 'Rejected')
+              AND kh.outlet_id = :outlet_id
+            GROUP BY ki.item_id
+        `, {
+            replacements: { outlet_id }
+        });
+
+        const heldStockMap = {};
+        for (const row of heldStockRows || []) {
+            heldStockMap[row.item_id] = Number(row.held_qty);
+        }
+
+        const itemsWithAvailableStock = items.map(item => {
+            const itemJson = item.toJSON();
+            const heldQty = heldStockMap[item.id] || 0;
+            // Get the current stock from ledger, fallback to item.opening_balance
+            const currentStock = ledgerStockMap[item.item_code] !== undefined 
+                ? ledgerStockMap[item.item_code] 
+                : Number(item.opening_balance || 0);
+
+            // Subtract held qty from currentStock to get available stock
+            itemJson.opening_balance = Math.max(0, currentStock - heldQty);
+            return itemJson;
+        });
+
+        res.json({ success: true, data: itemsWithAvailableStock });
 
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });

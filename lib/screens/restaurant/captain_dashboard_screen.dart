@@ -29,7 +29,9 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
   Timer? _liveKdsTickerTimer;
   bool isVisualCanvasView = true;
   bool showPackingOrders = false;
+  int selectedSidebarTab = 0; // 0: Dine-In Tables, 1: Packing Orders, 2: NC Orders (No Charge)
   List<dynamic> _activeTakeawayKots = [];
+  List<dynamic> _activeNcKots = [];
 
   @override
   void initState() {
@@ -78,6 +80,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
         final List kots = res['data'] ?? [];
         final Map<int, List<dynamic>> tempMap = {};
         final List<dynamic> takeawayList = [];
+        final List<dynamic> ncList = [];
 
         for (final kot in kots) {
           final bool isDismissed = kot['kds_dismissed'] == true || kot['kds_dismissed'] == 1;
@@ -92,13 +95,23 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
               kotStatus == 'SETTLED' ||
               kotStatus == 'NC CLEARED' ||
               kotStatus == 'NC_CLEARED' ||
-              kotStatus == 'CLOSED') {
+              kotStatus == 'CLOSED' ||
+              kotStatus == 'CANCELLED') {
+            continue;
+          }
+
+          final String serviceType = (kot['service_type'] ?? '').toString().toLowerCase();
+          final String kottype = (kot['kottype'] ?? '').toString().toLowerCase();
+          final String remarks = (kot['remarks'] ?? '').toString().toLowerCase();
+
+          final bool isNc = kottype == 'nc' || serviceType.contains('nc') || remarks.contains('nc');
+          if (isNc) {
+            ncList.add(kot);
             continue;
           }
 
           final tableId = kot['table_id'];
-          // Takeaway/packing orders have null table_id
-          if (tableId == null) {
+          if (tableId == null || kottype == 'packing' || serviceType.contains('packing') || serviceType.contains('takeaway')) {
             takeawayList.add(kot);
             continue;
           }
@@ -131,6 +144,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
           setState(() {
             activeKotItemsByTable = tempMap;
             _activeTakeawayKots = takeawayList;
+            _activeNcKots = ncList;
           });
 
           // AUTO-CLEAR TABLES WITH ALL ORDERS CANCELLED
@@ -740,11 +754,13 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                         
                         final Color badgeColor = kStatus == 'Rejected'
                             ? Colors.red.shade600
-                            : (kStatus == 'Ready'
-                                ? Colors.green.shade600
-                                : (kStatus == 'Preparing'
-                                    ? Colors.blue.shade600
-                                    : (kStatus == 'Served' ? Colors.teal.shade600 : Colors.orange.shade700)));
+                            : (kStatus == 'Cancelled'
+                                ? Colors.grey.shade600
+                                : (kStatus == 'Ready'
+                                    ? Colors.green.shade600
+                                    : (kStatus == 'Preparing'
+                                        ? Colors.blue.shade600
+                                        : (kStatus == 'Served' ? Colors.teal.shade600 : Colors.orange.shade700))));
                                     
                         return Container(
                           margin: const EdgeInsets.only(top: 4, bottom: 2),
@@ -869,11 +885,17 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
   String _getKitchenStatusForTable(int tableId, List<dynamic> runningItems) {
     if (runningItems.isEmpty) return '';
     
-    // Check if there is any cancelled (rejected by chef) item/KOT
+    // Check if there is any chef-rejected item/KOT
     final hasRejected = runningItems.any((item) => 
-      item['kot_status'] == 'Cancelled' || item['status'] == 'Cancelled'
+      item['kot_status'] == 'Rejected' || item['status'] == 'Rejected'
     );
     if (hasRejected) return 'Rejected';
+
+    // Check if there is any staff-cancelled item/KOT
+    final hasCancelled = runningItems.any((item) => 
+      item['kot_status'] == 'Cancelled' || item['status'] == 'Cancelled'
+    );
+    if (hasCancelled) return 'Cancelled';
 
     // Check if any is ready
     final hasReady = runningItems.any((item) => 
@@ -1356,14 +1378,29 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                       _buildSidebarTile(
                         title: 'Dine-In Tables',
                         icon: Icons.table_restaurant,
-                        isSelected: !showPackingOrders,
-                        onTap: () => setState(() => showPackingOrders = false),
+                        isSelected: selectedSidebarTab == 0,
+                        onTap: () => setState(() {
+                          selectedSidebarTab = 0;
+                          showPackingOrders = false;
+                        }),
                       ),
                       _buildSidebarTile(
                         title: 'Packing Orders',
                         icon: Icons.backpack,
-                        isSelected: showPackingOrders,
-                        onTap: () => setState(() => showPackingOrders = true),
+                        isSelected: selectedSidebarTab == 1,
+                        onTap: () => setState(() {
+                          selectedSidebarTab = 1;
+                          showPackingOrders = true;
+                        }),
+                      ),
+                      _buildSidebarTile(
+                        title: 'NC Orders (No Charge)',
+                        icon: Icons.card_giftcard,
+                        isSelected: selectedSidebarTab == 2,
+                        onTap: () => setState(() {
+                          selectedSidebarTab = 2;
+                          showPackingOrders = false;
+                        }),
                       ),
                       _buildSidebarTile(
                         title: 'KOT History list',
@@ -1386,10 +1423,10 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
           Expanded(
             child: Column(
               children: [
-                if (!showPackingOrders) ...[
+                if (selectedSidebarTab == 0) ...[
                   // Top Status Legend & Info Header Bar
                   _buildStatusLegendHeader(context, ctrl),
-                ] else ...[
+                ] else if (selectedSidebarTab == 1) ...[
                   // Packing Orders Header Bar
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1425,16 +1462,43 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                     ),
                   ),
                   const Divider(height: 1),
+                ] else ...[
+                  // NC Orders Header Bar
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    color: Colors.white,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Active NC (No Charge) Orders',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () => _showNcOrderDialog(context),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('New NC Order', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple.shade700,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
                 ],
 
-                // Table Area vs Packing Orders
+                // Table Area vs Packing Orders vs NC Orders
                 Expanded(
-                  child: showPackingOrders
+                  child: selectedSidebarTab == 1
                       ? _buildPackingOrdersView(ctrl)
-                      : ctrl.tables.isEmpty
-                          ? const Center(
-                              child: Text(
-                                  'No tables configured. Please add tables in setup.'))
+                      : selectedSidebarTab == 2
+                          ? _buildNcOrdersView(ctrl)
+                          : ctrl.tables.isEmpty
+                              ? const Center(
+                                  child: Text(
+                                      'No tables configured. Please add tables in setup.'))
                           : isVisualCanvasView
                               ? _buildVisualFloorCanvas(filteredTables, ctrl)
                               : LayoutBuilder(
@@ -2197,6 +2261,11 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
 
         final consolidatedItems = grouped.values.toList();
 
+        final List<int> kotIds = kots
+            .where((k) => (k['status'] ?? '').toString().toUpperCase().trim() != 'CANCELLED' && (k['status'] ?? '').toString().toUpperCase().trim() != 'REJECTED')
+            .map<int>((k) => int.parse(k['id'].toString()))
+            .toList();
+
         // Redirect to main Retail POS checkout screen
         Navigator.push(
           context,
@@ -2204,6 +2273,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
             builder: (context) => SaleScreen(
               preloadedTableId: table['id'],
               preloadedItems: consolidatedItems,
+              preloadedKotIds: kotIds,
             ),
           ),
         ).then((_) {
@@ -2345,7 +2415,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
 
                     final targetTable = table ??
                         {
-                          'id': 0,
+                          'id': null,
                           'table_name': 'NC Counter',
                           'current_guest_count': 1,
                         };
@@ -2397,9 +2467,9 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
           itemBuilder: (context, index) {
             final kot = _activeTakeawayKots[index];
             final int kotId = kot['id'];
-            final String kotNo = kot['kot_number'] ?? '#KOT-$kotId';
-            final String status = kot['status'] ?? 'Pending';
-            final String waiter = kot['waiter']?['employee_name'] ?? 'Self';
+            final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-$kotId';
+            final String status = kot['status'] ?? 'p';
+            final String captainName = _getCaptainName(kot['captain'] ?? kot['waiter']);
             final items = kot['items'] as List? ?? [];
             final String timeStr = kot['created_time'] != null
                 ? DateTime.parse(kot['created_time'].toString()).toString().substring(11, 16)
@@ -2419,21 +2489,65 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                         topRight: Radius.circular(10),
                       ),
                     ),
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          kotNo,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                        Expanded(
+                          child: Text(
+                            kotNo,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Text(
                           timeStr,
                           style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert, color: Colors.white, size: 18),
+                          onSelected: (val) {
+                            if (val == 'modify') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => KotBuilderScreen(
+                                    editKotId: kotId,
+                                    isTakeaway: true,
+                                    table: const {'id': null, 'table_name': 'Takeaway'},
+                                  ),
+                                ),
+                              ).then((_) => _fetchActiveKots());
+                            } else if (val == 'cancel') {
+                              _cancelPackingKot(kotId, kotNo);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'modify',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit, size: 16, color: Colors.blue),
+                                  SizedBox(width: 8),
+                                  Text('Modify / Add Item'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'cancel',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.cancel, size: 16, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text('Cancel Entire KOT'),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2444,21 +2558,21 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Staff: $waiter',
+                          'Capt/Staff: $captainName',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: status == 'Ready' ? Colors.green.shade100 : Colors.amber.shade100,
+                            color: (status == 'Ready' || status == 'ready') ? Colors.green.shade100 : Colors.amber.shade100,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            status,
+                            status == 'p' ? 'Pending' : status,
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: status == 'Ready' ? Colors.green.shade800 : Colors.amber.shade800,
+                              color: (status == 'Ready' || status == 'ready') ? Colors.green.shade800 : Colors.amber.shade800,
                             ),
                           ),
                         ),
@@ -2472,9 +2586,13 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                       itemCount: items.length,
                       itemBuilder: (context, iIdx) {
                         final item = items[iIdx];
-                        final isCancelled = item['status'] == 'Cancelled';
+                        final String itemStat = (item['status'] ?? '').toString().toLowerCase();
+                        final isCancelled = itemStat == 'cancelled';
                         final double quantity = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '1') ?? 1.0;
                         final String qtyStr = (quantity % 1 == 0) ? quantity.toInt().toString() : quantity.toStringAsFixed(1);
+                        final int itemId = item['id'] ?? 0;
+                        final String itemName = item['item_name'] ?? '';
+
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 2),
                           child: Row(
@@ -2490,7 +2608,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                               ),
                               Expanded(
                                 child: Text(
-                                  item['item_name'] ?? '',
+                                  itemName,
                                   style: TextStyle(
                                     fontSize: 12,
                                     decoration: isCancelled ? TextDecoration.lineThrough : null,
@@ -2498,6 +2616,14 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                                   ),
                                 ),
                               ),
+                              if (!isCancelled && itemId > 0)
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, size: 16, color: Colors.redAccent),
+                                  tooltip: 'Cancel item',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _cancelPackingItem(itemId, itemName, kotId),
+                                ),
                             ],
                           ),
                         );
@@ -2509,6 +2635,23 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                     padding: const EdgeInsets.all(6),
                     child: Row(
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_note, size: 18, color: Colors.blue),
+                          tooltip: 'Modify / Add Items',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => KotBuilderScreen(
+                                  editKotId: kotId,
+                                  prefilledItems: (kot['items'] is List) ? List<Map<String, dynamic>>.from((kot['items'] as List).map((x) => Map<String, dynamic>.from(x is Map ? x : {}))) : null,
+                                  isTakeaway: true,
+                                  table: const {'id': null, 'table_name': 'Takeaway'},
+                                ),
+                              ),
+                            ).then((_) => _fetchActiveKots());
+                          },
+                        ),
                         Expanded(
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
@@ -2541,6 +2684,99 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
         );
       },
     );
+  }
+
+  String _getCaptainName(dynamic emp) {
+    if (emp == null) return 'N/A';
+    final String name = (emp is Map ? (emp['employee_name'] ?? emp['name'] ?? '') : emp.toString()).trim();
+    if (name.isEmpty || name.toLowerCase().contains('dummy')) return 'N/A';
+    return name;
+  }
+
+  Future<void> _cancelPackingKot(int kotId, String kotNo) async {
+    String reason = 'Cancelled by Staff';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Cancel Packing KOT $kotNo?'),
+        content: TextField(
+          decoration: const InputDecoration(
+            labelText: 'Cancellation Reason',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (val) => reason = val,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Go Back')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Confirm Cancel'),
+          )
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final res = await ApiClient.put('/api/restaurant/kots/$kotId/status', {
+          'status': 'cancelled',
+          'remarks': reason,
+        });
+        if (res['success'] == true && mounted) {
+          setState(() {
+            _activeTakeawayKots.removeWhere((k) => k['id'] == kotId);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Cancelled Packing KOT $kotNo successfully.')),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _cancelPackingItem(int itemId, String itemName, int kotId) async {
+    String reason = 'Removed from Packing KOT';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Cancel "$itemName"?'),
+        content: TextField(
+          decoration: const InputDecoration(
+            labelText: 'Cancellation Reason',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (val) => reason = val,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Go Back')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Confirm Cancel'),
+          )
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final res = await ApiClient.put('/api/restaurant/kots/items/$itemId/status', {
+          'status': 'cancelled',
+          'cancel_reason': reason,
+        });
+        if (res['success'] == true && mounted) {
+          _fetchActiveKots();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Cancelled "$itemName" successfully.')),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 
   void _settlePackingOrder(Map<String, dynamic> kot) {
@@ -2702,5 +2938,286 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
       ),
     );
     return pdf.save();
+  }
+
+  Widget _buildNcOrdersView(RestaurantController ctrl) {
+    if (_activeNcKots.isEmpty) {
+      return const Center(
+        child: Text(
+          'No pending NC (No Charge) orders.',
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = (constraints.maxWidth / 300).floor().clamp(1, 4);
+        return GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.72,
+          ),
+          itemCount: _activeNcKots.length,
+          itemBuilder: (context, index) {
+            final kot = _activeNcKots[index];
+            final int kotId = kot['id'];
+            final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#NC-$kotId';
+            final String captainName = _getCaptainName(kot['captain'] ?? kot['waiter']);
+            final String remarks = (kot['remarks'] ?? '').toString().trim();
+            final items = kot['items'] as List? ?? [];
+            final String timeStr = kot['created_time'] != null
+                ? DateTime.parse(kot['created_time'].toString()).toString().substring(11, 16)
+                : '';
+
+            return Card(
+              elevation: 3,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade800,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(10),
+                        topRight: Radius.circular(10),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            kotNo,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade400,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'NC Order',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          timeStr,
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert, color: Colors.white, size: 18),
+                          onSelected: (val) {
+                            if (val == 'cancel_kot') {
+                              _cancelPackingKot(kotId, kotNo);
+                            } else if (val == 'print') {
+                              _printKotById(kot);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'cancel_kot',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.cancel, size: 16, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text('Cancel Entire NC Order'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'print',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.print, size: 16, color: Colors.blue),
+                                  SizedBox(width: 8),
+                                  Text('Print NC Ticket'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    color: Colors.purple.shade50,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Staff/Capt: $captainName',
+                          style: TextStyle(fontSize: 11, color: Colors.purple.shade900, fontWeight: FontWeight.bold),
+                        ),
+                        if (remarks.isNotEmpty)
+                          Text(
+                            'NC Info: $remarks',
+                            style: TextStyle(fontSize: 10, color: Colors.purple.shade700, fontStyle: FontStyle.italic),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: items.length,
+                      itemBuilder: (context, iIdx) {
+                        final item = items[iIdx];
+                        final String itemStat = (item['status'] ?? '').toString().toLowerCase();
+                        final isCancelled = itemStat == 'cancelled';
+                        final double quantity = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '1') ?? 1.0;
+                        final String qtyStr = (quantity % 1 == 0) ? quantity.toInt().toString() : quantity.toStringAsFixed(1);
+                        final int itemId = item['id'] ?? 0;
+                        final String itemName = item['item_name'] ?? '';
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Text(
+                                '$qtyStr x ',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  decoration: isCancelled ? TextDecoration.lineThrough : null,
+                                  color: isCancelled ? Colors.red : null,
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  itemName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    decoration: isCancelled ? TextDecoration.lineThrough : null,
+                                    color: isCancelled ? Colors.red : null,
+                                  ),
+                                ),
+                              ),
+                              if (!isCancelled && itemId > 0)
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, size: 16, color: Colors.redAccent),
+                                  tooltip: 'Cancel item',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _cancelPackingItem(itemId, itemName, kotId),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_note, size: 18, color: Colors.purple),
+                          tooltip: 'Modify / Add Items',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => KotBuilderScreen(
+                                  editKotId: kotId,
+                                  prefilledItems: (kot['items'] is List) ? List<Map<String, dynamic>>.from((kot['items'] as List).map((x) => Map<String, dynamic>.from(x is Map ? x : {}))) : null,
+                                  isNcOrder: true,
+                                  table: const {'id': null, 'table_name': 'NC Order'},
+                                ),
+                              ),
+                            ).then((_) => _fetchActiveKots());
+                          },
+                        ),
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              side: BorderSide(color: Colors.purple.shade700),
+                            ),
+                            onPressed: () => _printKotById(kot),
+                            child: const Text('Print', style: TextStyle(fontSize: 11)),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                            onPressed: () => _clearNcOrder(kotId, kotNo),
+                            child: const Text('Clear Order', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _clearNcOrder(int kotId, String kotNo) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Clear NC Order $kotNo?'),
+        content: const Text('This will mark the NC Order as Cleared/Closed without creating a sale bill.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Go Back'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade700),
+            child: const Text('Confirm Clear Order'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final res = await ApiClient.put('/api/restaurant/kots/$kotId/status', {
+          'status': 'NC Cleared',
+          'remarks': 'NC Order Cleared by Staff',
+        });
+        if (res['success'] == true && mounted) {
+          setState(() {
+            _activeNcKots.removeWhere((k) => k['id'] == kotId);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('NC Order $kotNo cleared successfully.')),
+          );
+          _refreshData();
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 }

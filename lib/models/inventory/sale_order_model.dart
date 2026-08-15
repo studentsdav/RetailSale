@@ -360,6 +360,7 @@ class SaleOrder {
         'salesman_id': salesmanId,
       },
       'items': items.map((e) => e.toJson()).toList(),
+      if (tableId != null) 'table_id': tableId,
       if (kotIds != null) 'kot_ids': kotIds,
     };
   }

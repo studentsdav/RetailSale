@@ -14,6 +14,7 @@ import '../../models/inventory/sale_order_model.dart';
 import '../../models/inventory/tax_breakdown_model.dart';
 import '../config/app_brand.dart';
 import '../../utils/branding_storage.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 
 class PosInvoicePrinter {
   PosInvoicePrinter._();
@@ -129,6 +130,10 @@ class PosInvoicePrinter {
     String authorizedSignatureLabel = 'Authorized Signatory',
     int copyCount = 1,
   }) async {
+    final settingsCtrl = SystemSettingsController();
+    await settingsCtrl.load();
+    final bool showBrandName = settingsCtrl.settings?.showBrandName ?? true;
+
     final document = pw.Document();
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
     final invoiceData = _InvoiceContext(
@@ -151,6 +156,7 @@ class PosInvoicePrinter {
       termsAndConditions: termsAndConditions,
       thankYouMessage: thankYouMessage,
       authorizedSignatureLabel: authorizedSignatureLabel,
+      showBrandName: showBrandName,
     );
 
     final int numCopies = copyCount > 1 ? copyCount : 1;
@@ -384,7 +390,7 @@ class PosInvoicePrinter {
             ],
           ),
           pw.SizedBox(height: 3),
-          ...order.items.map((item) => _thermalItemRow(item, order)),
+          ...order.items.map((item) => _thermalItemRow(item, order, data.showBrandName)),
           _dashedDivider(),
           _thermalAmountRow('Total Items', totalItems.toDouble()),
           _thermalAmountRow('Total Qty', order.totalQty),
@@ -865,7 +871,7 @@ class PosInvoicePrinter {
           ),
         ),
         pw.SizedBox(height: 12),
-        _buildA4ItemsTable(order),
+        _buildA4ItemsTable(order, data.showBrandName),
         pw.SizedBox(height: 10),
         // Amount in Words
         pw.Padding(
@@ -1051,7 +1057,7 @@ class PosInvoicePrinter {
     );
   }
 
-  static pw.Widget _buildA4ItemsTable(SaleOrder order) {
+  static pw.Widget _buildA4ItemsTable(SaleOrder order, bool showBrand) {
     final hasTaxData = _hasTaxData(order);
     final headers = hasTaxData
         ? [
@@ -1098,7 +1104,7 @@ class PosInvoicePrinter {
       }
       final suffix = isReturned ? ' (REFUNDED)' : (isExchanged ? ' (EXCHANGED)' : '');
 
-      final brandStr = item.brand != null && item.brand!.trim().isNotEmpty
+      final brandStr = showBrand && item.brand != null && item.brand!.trim().isNotEmpty
           ? '${item.brand!.trim()} - '
           : '';
       final name =
@@ -1523,7 +1529,7 @@ class PosInvoicePrinter {
     );
   }
 
-  static pw.Widget _thermalItemRow(SaleItem item, SaleOrder order) {
+  static pw.Widget _thermalItemRow(SaleItem item, SaleOrder order, bool showBrand) {
     final font = pw.Font.helvetica();
     final bold = pw.Font.helveticaBold();
 
@@ -1591,8 +1597,8 @@ class PosInvoicePrinter {
               pw.Expanded(
                 child: pw.Text(
                   (item.isSchemeFree || item.isAdvanceFree)
-                      ? '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)${suffix}'
-                      : '${item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}${suffix}',
+                      ? '${showBrand && item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)${suffix}'
+                      : '${showBrand && item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}${suffix}',
                   style: pw.TextStyle(
                     font: bold,
                     fontSize: 8.7,
@@ -3646,6 +3652,7 @@ class _InvoiceContext {
   final String termsAndConditions;
   final String thankYouMessage;
   final String authorizedSignatureLabel;
+  final bool showBrandName;
 
   const _InvoiceContext({
     required this.order,
@@ -3664,5 +3671,6 @@ class _InvoiceContext {
     required this.termsAndConditions,
     required this.thankYouMessage,
     required this.authorizedSignatureLabel,
+    required this.showBrandName,
   });
 }

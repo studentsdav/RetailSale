@@ -596,6 +596,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                             subDeliveryFreeAbove: 0,
                             enableSalespersonTagging: false,
                             billCopiesCount: 1,
+                            showBrandName: true,
                           );
                           systemSettings.billCopiesCount = val;
                           settingsCtrl.save(systemSettings);

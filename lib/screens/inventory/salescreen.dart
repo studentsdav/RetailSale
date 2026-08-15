@@ -6745,6 +6745,9 @@ class _SaleScreenState extends State<SaleScreen> {
       ctrl.refreshSchemes().catchError((_) => null);
       ctrl.searchCustomers('').catchError((_) => null);
     }
+    ctrl.loadInitialData().then((_) {
+      if (mounted) setState(() {});
+    }).catchError((_) => null);
     ctrl.getNextSaleNo().then((nextNo) {
       if (mounted) {
         setState(() {
@@ -9148,7 +9151,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     final isSelected = cartQty > 0;
 
                     final bool isStockable = item.stockable;
-                    final double stock = item.openingBalance;
+                    final double stock = item.openingBalance - cartQty;
                     final bool isOutOfStock = isStockable && stock <= 0;
                     final bool allowNegativeStock = settingsCtrl.settings?.allowNegativeStock ?? false;
 
@@ -9206,7 +9209,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
-                                    'Stock: ${item.openingBalance.toInt()}',
+                                    'Stock: ${stock.toInt()}',
                                     style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                                   ),
                                 ),

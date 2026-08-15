@@ -21,9 +21,13 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             defaultValue: 'Dine In'
         },
+        kottype: {
+            type: DataTypes.STRING(30),
+            defaultValue: 'g'
+        },
         status: {
             type: DataTypes.STRING(30),
-            defaultValue: 'New'
+            defaultValue: 'p'
         },
         waiter_id: {
             type: DataTypes.INTEGER,

@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
 import '../../controllers/restaurant/restaurant_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 
 class KotsHistoryScreen extends StatefulWidget {
   const KotsHistoryScreen({super.key});
@@ -25,16 +26,34 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
   bool _loading = false;
   List<dynamic> _kots = [];
   Map<String, dynamic>? _selectedKot;
+  final settingsCtrl = SystemSettingsController();
 
   final TextEditingController _searchCtrl = TextEditingController();
 
-  final List<String> _statuses = ['All', 'Closed', 'Completed', 'Billed', 'Cancelled', 'Preparing', 'Ready', 'Served'];
+  final List<String> _statuses = ['All', 'Closed', 'Completed', 'Billed', 'Cancelled', 'Rejected', 'Preparing', 'Ready', 'Served'];
   final List<String> _types = ['All', 'Dine In', 'Takeaway', 'NC Order'];
 
   @override
   void initState() {
     super.initState();
+    settingsCtrl.load().then((_) {
+      if (mounted) setState(() {});
+    });
     _loadHistoryKots();
+  }
+
+  String _displayName(Map<String, dynamic> item) {
+    final String name = item['item_name'] ?? '';
+    final bool showBrand = settingsCtrl.settings?.showBrandName ?? true;
+    if (!showBrand) return name;
+
+    if (item['item'] != null && item['item']['brand'] != null) {
+      final String brand = item['item']['brand'].toString().trim();
+      if (brand.isNotEmpty) {
+        return '$brand - $name';
+      }
+    }
+    return name;
   }
 
   @override
@@ -222,9 +241,9 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: status.toLowerCase() == 'cancelled'
-                                                ? Colors.red
-                                                : (status.toLowerCase() == 'closed' ? Colors.grey : Colors.green.shade700),
+                                             color: (status.toLowerCase() == 'cancelled' || status.toLowerCase() == 'rejected')
+                                                 ? Colors.red
+                                                 : (status.toLowerCase() == 'closed' ? Colors.grey : Colors.green.shade700),
                                           )),
                                     ],
                                   ),
@@ -261,8 +280,9 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
     final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}';
     final String status = kot['status'] ?? 'Pending';
     final String table = kot['table']?['table_name'] ?? 'Takeaway';
-    final String waiter = kot['waiter']?['employee_name'] ?? 'Self';
-    final String captain = kot['captain']?['employee_name'] ?? 'Self';
+    final String waiter = kot['waiter']?['employee_name'] ?? 'N/A';
+    final String rawCaptain = kot['captain']?['employee_name'] ?? '';
+    final String captain = (rawCaptain.isEmpty || rawCaptain.toLowerCase().contains('dummy')) ? 'N/A' : rawCaptain;
     final String remarks = kot['remarks'] ?? '';
     final String created = kot['created_time'] != null
         ? DateFormat('dd-MMM-yyyy, hh:mm a').format(DateTime.parse(kot['created_time']))
@@ -318,7 +338,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          if (status.toUpperCase() == 'CANCELLED') ...[
+          if (status.toUpperCase() == 'CANCELLED' || status.toUpperCase() == 'REJECTED') ...[
             Container(
               padding: const EdgeInsets.all(10),
               margin: const EdgeInsets.only(bottom: 12),
@@ -328,7 +348,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                 border: Border.all(color: Colors.red.shade200),
               ),
               child: Text(
-                'REJECTED: ${remarks.isEmpty ? "No reason provided" : remarks}',
+                '${status.toUpperCase()}: ${remarks.isEmpty ? "No reason provided" : remarks}',
                 style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900, fontSize: 13),
               ),
             ),
@@ -348,7 +368,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                 separatorBuilder: (_, __) => const Divider(),
                 itemBuilder: (context, idx) {
                   final item = items[idx];
-                  final isCancelled = item['status'] == 'Cancelled';
+                   final isCancelled = item['status'] == 'Cancelled' || item['status'] == 'Rejected';
                   final double quantity = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '1') ?? 1.0;
                   final String qtyStr = (quantity % 1 == 0) ? quantity.toInt().toString() : quantity.toStringAsFixed(1);
                   final String itemLoc = (item['location'] ?? item['station_name'] ?? 'Kitchen').toString();
@@ -375,7 +395,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              item['item_name'] ?? '',
+                              _displayName(item),
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13,
@@ -385,8 +405,11 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                             ),
                             if (item['item_remark'] != null && item['item_remark'].toString().isNotEmpty)
                               Text('Note: ${item['item_remark']}', style: const TextStyle(fontSize: 11, color: Colors.orange, fontStyle: FontStyle.italic)),
-                            if (isCancelled && item['cancel_reason'] != null && item['cancel_reason'].toString().isNotEmpty)
-                              Text('Cancelled Reason: ${item['cancel_reason']}', style: const TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                             if (isCancelled && item['cancel_reason'] != null && item['cancel_reason'].toString().isNotEmpty)
+                               Text(
+                                 '${item['status'] == 'Rejected' ? 'Rejection' : 'Cancellation'} Reason: ${item['cancel_reason']}',
+                                 style: const TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
+                               ),
                           ],
                         ),
                       ),
@@ -555,7 +578,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
               ...items.map((item) {
                 final double q = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '0') ?? 0.0;
                 final String qtyStr = (q % 1 == 0) ? q.toInt().toString() : q.toStringAsFixed(1);
-                final String displayName = item['item_name'] ?? '';
+                final String displayName = _displayName(item);
                 final String remark = (item['item_remark'] ?? item['notes'] ?? '').toString();
                 
                 return pw.Padding(

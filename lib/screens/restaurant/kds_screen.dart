@@ -80,10 +80,10 @@ class _KdsScreenState extends State<KdsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Cancel "$itemName"?'),
+        title: Text('Reject "$itemName"?'),
         content: TextField(
           decoration: const InputDecoration(
-            labelText: 'Cancellation Reason',
+            labelText: 'Reason for Rejection',
             border: OutlineInputBorder(),
           ),
           onChanged: (val) => reason = val,
@@ -94,14 +94,14 @@ class _KdsScreenState extends State<KdsScreen> {
             onPressed: () {
               if (reason.trim().isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please enter a cancellation reason.')),
+                  const SnackBar(content: Text('Please enter a rejection reason.')),
                 );
                 return;
               }
               Navigator.pop(context, true);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Cancel Item'),
+            child: const Text('Reject Item'),
           )
         ],
       ),
@@ -110,12 +110,12 @@ class _KdsScreenState extends State<KdsScreen> {
     if (confirmed == true) {
       try {
         final res = await ApiClient.put('/api/restaurant/kots/items/$itemId/status', {
-          'status': 'Cancelled',
+          'status': 'Rejected',
           'cancel_reason': reason,
         });
         if (res['success'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Cancelled "$itemName" successfully.')),
+            SnackBar(content: Text('Rejected "$itemName" successfully.')),
           );
           _fetchKots();
         }
@@ -160,7 +160,7 @@ class _KdsScreenState extends State<KdsScreen> {
     if (confirmed == true) {
       try {
         final res = await ApiClient.put('/api/restaurant/kots/$kotId/status', {
-          'status': 'Cancelled',
+          'status': 'Rejected',
           'remarks': reason,
         });
         if (res['success'] == true) {
@@ -288,7 +288,7 @@ class _KdsScreenState extends State<KdsScreen> {
                               final durationDiff = DateTime.now().difference(dateCreated);
                               final minutesElapsed = durationDiff.inMinutes;
 
-                              final bool isKotCancelled = kot['status'] == 'Cancelled';
+                              final bool isKotCancelled = kot['status'] == 'Cancelled' || kot['status'] == 'Rejected';
 
                               Color headerColor = colorScheme.surfaceContainerHighest;
                               Color borderColor = colorScheme.outlineVariant;
@@ -344,7 +344,7 @@ class _KdsScreenState extends State<KdsScreen> {
                                                 Icon(statusIcon, size: 20, color: isKotCancelled ? Colors.red.shade900 : colorScheme.onSurfaceVariant),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  'Table: ${kot['table']?['table_name'] ?? 'Takeaway'} ${isKotCancelled ? "(CANCELLED)" : ""}',
+                                                  'Table: ${kot['table']?['table_name'] ?? 'Takeaway'} ${isKotCancelled ? "(CANCELLED/REJECTED)" : ""}',
                                                   style: TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 16,
@@ -394,7 +394,7 @@ class _KdsScreenState extends State<KdsScreen> {
                                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                                         itemBuilder: (context, iIdx) {
                                           final item = displayItems[iIdx];
-                                          final isCancelled = item['status'] == 'Cancelled';
+                                          final isCancelled = item['status'] == 'Cancelled' || item['status'] == 'Rejected';
                                           final isNewItem = item['status'] == 'New';
                                           final String itemLoc = (item['location'] ?? item['station_name'] ?? 'Kitchen').toString();
 
@@ -482,7 +482,7 @@ class _KdsScreenState extends State<KdsScreen> {
                                                               color: Colors.red.shade600,
                                                               borderRadius: BorderRadius.circular(4),
                                                             ),
-                                                            child: const Text('DELETED', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                                                            child: const Text('REJECTED', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
                                                           ),
                                                       ],
                                                     ),
@@ -566,9 +566,9 @@ class _KdsScreenState extends State<KdsScreen> {
                                                   backgroundColor: Colors.grey.shade700,
                                                   foregroundColor: Colors.white,
                                                 ),
-                                                onPressed: () => _updateKotStatus(kot['id'], 'Cancelled', kdsDismissed: true),
+                                                onPressed: () => _updateKotStatus(kot['id'], kot['status'], kdsDismissed: true),
                                                 icon: const Icon(Icons.clear_all, size: 16),
-                                                label: const Text('Dismiss Cancelled'),
+                                                label: Text(kot['status'] == 'Rejected' ? 'Dismiss Rejected' : 'Dismiss Cancelled'),
                                               ),
                                             ),
                                           if (kot['status'] == 'Ready' && (kot['service_type'] ?? '').toString().toUpperCase().contains('NC'))

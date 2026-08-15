@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const audit = require('../../services/audit.service');
+const { insertLedger } = require('../../services/stockLedger.service');
 
 exports.getNextKotNo = async (req, res) => {
     try {
@@ -31,10 +32,13 @@ exports.listKots = async (req, res) => {
         const { status, table_id, active_only, from_date, to_date } = req.query;
 
         const whereClause = { outlet_id };
-        if (status) whereClause.status = status;
+        if (status) {
+            whereClause.status = status;
+        }
         if (table_id) whereClause.table_id = table_id;
         if (active_only === 'true') {
-            whereClause.status = { [Op.ne]: 'Closed' };
+            whereClause.sales_header_id = null;
+            whereClause.status = { [Op.notIn]: ['Closed', 'closed', 'billed', 'BILLED', 'cancelled', 'Cancelled'] };
             whereClause.kds_dismissed = { [Op.ne]: true };
         }
         if (from_date && to_date) {
@@ -56,16 +60,28 @@ exports.listKots = async (req, res) => {
                     as: 'items',
                     required: false,
                     include: [
-                        { model: req.propertyDb.models.kitchen_stations, as: 'station', attributes: ['station_name'], required: false }
+                        { model: req.propertyDb.models.kitchen_stations, as: 'station', attributes: ['station_name'], required: false },
+                        { model: req.propertyDb.models.item_master, as: 'item', attributes: ['brand'], required: false }
                     ]
                 }
             ],
             order: [['created_time', 'DESC']]
         });
 
-        let resultData = kots;
+        let resultData = kots.map(kot => {
+            const plain = kot.get({ plain: true });
+            // Format captain name to 'N/A' if null/empty/dummy
+            if (!plain.captain || !plain.captain.employee_name || plain.captain.employee_name.toString().toLowerCase().includes('dummy')) {
+                plain.captain = { employee_name: 'N/A' };
+            }
+            return plain;
+        });
+
         if (active_only === 'true') {
-            resultData = kots.filter(kot => {
+            resultData = resultData.filter(kot => {
+                if (kot.sales_header_id != null) return false;
+                const s = (kot.status || '').toLowerCase();
+                if (s === 'billed' || s === 'closed' || s === 'cancelled') return false;
                 if (kot.table) {
                     const tableStatus = (kot.table.status || '').toLowerCase();
                     if (tableStatus === 'billed' || tableStatus === 'available' || tableStatus === 'dirty' || tableStatus === 'cleaning' || tableStatus === 'needs cleaning') {
@@ -93,7 +109,15 @@ exports.getKotDetails = async (req, res) => {
                 { model: req.propertyDb.models.restaurant_tables, as: 'table', attributes: ['table_name'], required: false },
                 { model: req.propertyDb.models.hr_employees, as: 'waiter', attributes: [['full_name', 'employee_name']], required: false },
                 { model: req.propertyDb.models.hr_employees, as: 'captain', attributes: [['full_name', 'employee_name']], required: false },
-                { model: req.propertyDb.models.kot_items, as: 'items' },
+                {
+                    model: req.propertyDb.models.kot_items,
+                    as: 'items',
+                    required: false,
+                    include: [
+                        { model: req.propertyDb.models.kitchen_stations, as: 'station', attributes: ['station_name'], required: false },
+                        { model: req.propertyDb.models.item_master, as: 'item', attributes: ['brand'], required: false }
+                    ]
+                },
                 { model: req.propertyDb.models.kot_revisions, as: 'revisions' }
             ]
         });
@@ -110,14 +134,27 @@ exports.createKot = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
         const user_id = req.user.user_id || req.user.id;
-        const { table_id, service_type, waiter_id, captain_id, remarks, items } = req.body;
+        const { table_id: rawTableId, service_type, kottype, waiter_id, captain_id, remarks, items } = req.body;
 
         if (!items || items.length === 0) throw new Error('Cannot create KOT without items');
 
+        let validTableId = null;
+        if (rawTableId !== null && rawTableId !== undefined && rawTableId !== 'null' && rawTableId !== 'undefined' && Number(rawTableId) > 0) {
+            validTableId = Number(rawTableId);
+        }
+
+        let determinedKotType = kottype;
+        if (!determinedKotType) {
+            const st = (service_type || '').toLowerCase();
+            if (st.includes('nc')) determinedKotType = 'nc';
+            else if (st.includes('pack') || st.includes('takeaway')) determinedKotType = 'packing';
+            else determinedKotType = 'g';
+        }
+
         let table = null;
-        if (table_id) {
+        if (validTableId) {
             table = await req.propertyDb.models.restaurant_tables.findOne({
-                where: { id: table_id, outlet_id },
+                where: { id: validTableId, outlet_id },
                 transaction: t
             });
             if (!table) throw new Error('Table not found');
@@ -181,13 +218,14 @@ exports.createKot = async (req, res) => {
             if (captainExists) validCaptainId = captain_id;
         }
 
-        // Create KOT Header
+        // Create KOT Header with status = 'p' (pending) and kottype ('g', 'nc', 'packing')
         const header = await req.propertyDb.models.kot_headers.create({
             outlet_id,
             kot_no,
-            table_id,
+            table_id: validTableId,
             service_type: service_type || 'Dine In',
-            status: 'New',
+            kottype: determinedKotType,
+            status: req.body.status || 'p',
             waiter_id: validWaiterId,
             captain_id: validCaptainId,
             remarks,
@@ -300,14 +338,64 @@ exports.updateKotStatus = async (req, res) => {
                 { where: { kot_header_id: id, status: { [Op.in]: ['New', 'Preparing', 'Ready', 'Served'] }, outlet_id } }
             );
         }
-        else if (status === 'Cancelled') {
+        else if (status === 'Cancelled' || status === 'cancelled' || status === 'Rejected') {
             await req.propertyDb.models.kot_items.update(
                 { 
-                    status: 'Cancelled',
-                    cancel_reason: remarks || 'KOT Cancelled'
+                    status: 'cancelled',
+                    cancel_reason: remarks || `KOT ${status}`
                 },
                 { where: { kot_header_id: id, outlet_id } }
             );
+        }
+        else if (status === 'billed' || status === 'Billed' || status === 'Closed') {
+            updateData.closed_time = now;
+            updateData.kds_dismissed = true;
+        }
+
+        // Handle House KOT stock deduction upon clearance (status becomes Served or Closed)
+        if ((status === 'Served' || status === 'Closed') && kot.service_type === 'House KOT') {
+            // Check if stock ledger entry already exists for this KOT to prevent double deduction
+            const alreadyDeducted = await req.propertyDb.models.stock_ledger.findOne({
+                where: {
+                    outlet_id,
+                    ref_no: kot.kot_no,
+                    txn_type: 'KOT Consumption'
+                }
+            });
+
+            if (!alreadyDeducted) {
+                const kotItems = await req.propertyDb.models.kot_items.findAll({
+                    where: {
+                        kot_header_id: id,
+                        status: { [Op.notIn]: ['Cancelled', 'Rejected'] },
+                        outlet_id
+                    },
+                    include: [
+                        {
+                            model: req.propertyDb.models.item_master,
+                            as: 'item'
+                        }
+                    ]
+                });
+
+                for (const item of kotItems) {
+                    if (item.item) {
+                        await insertLedger({
+                            db: req.propertyDb,
+                            outlet_id,
+                            item_code: item.item.item_code,
+                            txn_date: now.toISOString(),
+                            txn_type: 'KOT Consumption',
+                            ref_no: kot.kot_no,
+                            qty_in: 0,
+                            qty_out: Number(item.qty),
+                            allow_negative: false,
+                            item_name: item.item.item_name,
+                            brand: item.item.brand
+                        });
+                    }
+                }
+            }
         }
 
         await kot.update(updateData);
@@ -343,9 +431,9 @@ exports.updateKotItemStatus = async (req, res) => {
             }
         }
 
-        if (updateData.status === 'Cancelled') {
+        if (updateData.status === 'Cancelled' || updateData.status === 'Rejected') {
             if (!cancel_reason) {
-                throw new Error('Cancellation reason is required');
+                throw new Error('Cancellation/Rejection reason is required');
             }
             updateData.cancel_reason = cancel_reason;
         }
@@ -353,11 +441,11 @@ exports.updateKotItemStatus = async (req, res) => {
         const oldQty = item.qty;
         await item.update(updateData, { transaction: t });
 
-        // If cancelled or reduced, write audit log
-        if (updateData.status === 'Cancelled' || qty !== undefined) {
-            const isFullyCancelled = updateData.status === 'Cancelled';
+        // If cancelled/rejected or reduced, write audit log
+        if (updateData.status === 'Cancelled' || updateData.status === 'Rejected' || qty !== undefined) {
+            const isFullyCancelled = updateData.status === 'Cancelled' || updateData.status === 'Rejected';
             const desc = isFullyCancelled
-                ? `Cancelled item "${item.item_name}" from KOT ${item.header.kot_no}. Reason: ${cancel_reason || 'No reason'}`
+                ? `Cancelled/Rejected item "${item.item_name}" from KOT ${item.header.kot_no}. Reason: ${cancel_reason || 'No reason'}`
                 : `Reduced item "${item.item_name}" qty from ${oldQty} to ${qty} in KOT ${item.header.kot_no}. Reason: ${cancel_reason || 'No reason'}`;
 
             await req.propertyDb.models.restaurant_audit_trail.create({

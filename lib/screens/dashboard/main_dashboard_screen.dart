@@ -2606,15 +2606,250 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     final isSearching = _drawerSearchQuery.trim().isNotEmpty;
     final searchQuery = _drawerSearchQuery.trim().toLowerCase();
 
+    final List<Map<String, dynamic>> deepSearchRegistry = [
+      // Settings / System
+      {
+        'category': 'System',
+        'icon': Icons.delete_forever_outlined,
+        'label': 'Clear Transaction Data',
+        'subLabel': 'Settings ➜ Clear Transaction Data',
+        'permission': 'SETTINGS',
+        'keywords': ['clear transaction data', 'delete data', 'wipe data', 'reset data', 'reset database', 'clear transactional data', 'transaction clear', 'database wipe'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+      },
+      {
+        'category': 'System',
+        'icon': Icons.branding_watermark_outlined,
+        'label': 'Show Brand Name in Print',
+        'subLabel': 'Settings ➜ Show Brand Name in Print / Bills',
+        'permission': 'SETTINGS',
+        'keywords': ['show brand name', 'brand name in print', 'brand display', 'print brand name', 'toggle brand'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+      },
+      {
+        'category': 'System',
+        'icon': Icons.remove_shopping_cart_outlined,
+        'label': 'Allow Negative Stock',
+        'subLabel': 'Settings ➜ Allow Negative Stock Toggle',
+        'permission': 'SETTINGS',
+        'keywords': ['allow negative stock', 'negative inventory', 'out of stock billing', 'negative stock', 'stock setup'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+      },
+      {
+        'category': 'System',
+        'icon': Icons.email_outlined,
+        'label': 'SMTP Email Setup',
+        'subLabel': 'SMTP Email Setup ➜ outgoing mail server configurations',
+        'permission': 'SETTINGS',
+        'keywords': ['smtp email setup', 'mail server', 'email settings', 'smtp setup', 'outgoing mail server'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmtpSettingsScreen())),
+      },
+
+      // Restaurant Module
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.event_seat_outlined,
+        'label': 'Table Bookings & Reservations',
+        'subLabel': 'Restaurant Setup ➜ Reservations (Expected Arrivals)',
+        'permission': 'RESTAURANT_SETUP',
+        'keywords': ['table bookings', 'reservations', 'booking setup', 'expected arrivals', 'seated bookings', 'arrivals', 'book table'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RestaurantSetupScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.soup_kitchen_outlined,
+        'label': 'Kitchen Order Preparation (KDS)',
+        'subLabel': 'Kitchen KDS Queue ➜ Preparing, Ready, Served, Rejected status tracking',
+        'permission': 'RESTAURANT_KDS',
+        'keywords': ['kitchen queue', 'kds', 'kot queue', 'cooking status', 'chef console', 'order preparation', 'ready orders', 'serve orders'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const KdsScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.table_bar_outlined,
+        'label': 'Billing, Settle & Consolidation',
+        'subLabel': 'Captain Console ➜ Table selection, checkout billing dialog',
+        'permission': 'RESTAURANT_CONSOLE',
+        'keywords': ['consolidated billing', 'settle bill', 'print bill', 'table billing', 'pos checkout', 'cashier dialog', 'billing checkout'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CaptainDashboardScreen())),
+      },
+
+      // Operations & Sales
+      {
+        'category': 'Operations',
+        'icon': Icons.point_of_sale_outlined,
+        'label': 'Customer Database & Lists',
+        'subLabel': 'Retail Sales ➜ Search customer, phone number registration',
+        'permission': 'RETAIL_SALES',
+        'keywords': ['customer data', 'customer phone', 'customer list', 'customer name', 'customer profile', 'loyalty points', 'customer database'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SaleScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.shopping_cart_checkout,
+        'label': 'Create Purchase Order (PO)',
+        'subLabel': 'Purchase Order ➜ create/modify supplier purchase orders',
+        'permission': 'PURCHASE_ORDER',
+        'keywords': ['purchase order', 'create po', 'vendor po', 'buy from supplier', 'purchase items'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseOrderScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.download,
+        'label': 'Receive Goods from Vendor (GRN)',
+        'subLabel': 'Receive from Vendor ➜ inbound inventory receiving logs',
+        'permission': 'STOCK_IN',
+        'keywords': ['grn', 'goods receiving', 'receive vendor stock', 'goods receipt note', 'stock in', 'vendor invoice'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GoodsReceivingScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.upload,
+        'label': 'Stock Dispatch (Stock Out)',
+        'subLabel': 'Stock Dispatch ➜ outbound department issue orders',
+        'permission': 'STOCK_OUT',
+        'keywords': ['stock dispatch', 'issue stock', 'department issue', 'stock out', 'issue items'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockIssueScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.swap_horiz,
+        'label': 'Stock Transfer Orders',
+        'subLabel': 'Stock Transfer ➜ move inventory between warehouse locations',
+        'permission': 'STOCK_TRANSFER',
+        'keywords': ['stock transfer', 'warehouse transfer', 'location transfer', 'move stock'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockTransferScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.warning_amber,
+        'label': 'Broken & Damaged Items Log',
+        'subLabel': 'Damage Items ➜ record spoilage, broken, or expired stock',
+        'permission': 'DAMAGE',
+        'keywords': ['damage entry', 'broken items', 'expired stock', 'waste inventory', 'spoilage'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamageItemScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.build,
+        'label': 'Product Assembly (BOM)',
+        'subLabel': 'Product Assembly ➜ Bill of Materials manufacturing items',
+        'permission': 'PRODUCT_ASSEMBLY',
+        'keywords': ['product assembly', 'bom', 'bill of materials', 'manufacture item', 'raw materials', 'assembling'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AssemblyScreen())),
+      },
+
+      // Masters Setup
+      {
+        'category': 'Masters',
+        'icon': Icons.settings_suggest_outlined,
+        'label': 'Document Number Sequences',
+        'subLabel': 'Document Sequence Settings ➜ prefixes for invoices, GRNs, KOTs',
+        'permission': 'NUMBERING_SETTINGS',
+        'keywords': ['numbering settings', 'document sequences', 'kot numbering prefix', 'invoice prefix', 'grn prefix sequence'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentSequenceScreen())),
+      },
+      {
+        'category': 'Masters',
+        'icon': Icons.supervised_user_circle,
+        'label': 'User Management & Roles',
+        'subLabel': 'User Management ➜ create user, reset passwords, set permissions',
+        'permission': 'USER_MANAGEMENT',
+        'keywords': ['user management', 'create user', 'reset password', 'permission setup', 'staff roles', 'access control'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UserManagementScreen())),
+      },
+      {
+        'category': 'Masters',
+        'icon': Icons.stars_outlined,
+        'label': 'Loyalty Rewards Program',
+        'subLabel': 'Loyalty Program ➜ configurations, cashback & rewards configuration',
+        'permission': 'LOYALTY_PROGRAM',
+        'keywords': ['loyalty program', 'loyalty points system', 'points configuration', 'cashback rewards', 'member points'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoyaltyMasterConfigScreen())),
+      },
+      {
+        'category': 'Masters',
+        'icon': Icons.chat_bubble_outline,
+        'label': 'WhatsApp API Settings',
+        'subLabel': 'WhatsApp Integration ➜ automatic alerts and template setup',
+        'permission': 'WHATSAPP_INTEGRATION',
+        'keywords': ['whatsapp integration', 'message templates', 'whatsapp api key', 'broadcast', 'automatic invoice alerts'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WhatsAppDashboardScreen())),
+      },
+
+      // HR & Payroll
+      {
+        'category': 'HR & Payroll',
+        'icon': Icons.people_outline,
+        'label': 'Staff & Employee Profiles',
+        'subLabel': 'Employee Management ➜ add staff, edit salary structures',
+        'permission': 'HR_EMPLOYEES',
+        'keywords': ['employee management', 'staff profiles', 'salary details', 'hr profile', 'create employee'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EmployeeScreen())),
+      },
+      {
+        'category': 'HR & Payroll',
+        'icon': Icons.access_time,
+        'label': 'Staff Attendance & Leaves',
+        'subLabel': 'Attendance & Leaves ➜ mark attendance, submit leaves',
+        'permission': 'HR_ATTENDANCE',
+        'keywords': ['attendance log', 'leave application', 'mark leave', 'staff checkin', 'shift times'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendanceScreen())),
+      },
+      {
+        'category': 'HR & Payroll',
+        'icon': Icons.account_balance_wallet_outlined,
+        'label': 'Payroll Payouts & Payslips',
+        'subLabel': 'Payroll ➜ run monthly payrolls, view staff payslips',
+        'permission': 'HR_PAYROLL',
+        'keywords': ['payroll generation', 'monthly salary slip', 'generate payroll', 'payslip', 'salary payout'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayrollScreen())),
+      },
+
+      // Financials & Schemes
+      {
+        'category': 'Reports',
+        'icon': Icons.account_balance,
+        'label': 'Cash Book & Finance Ledger',
+        'subLabel': 'Finance & Reports ➜ account entries, cash ledgers',
+        'permission': 'CASH_LEDGER',
+        'keywords': ['cash ledger', 'cash book', 'bank account ledger', 'finance summary', 'journal entry'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashLedgerScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.local_offer_outlined,
+        'label': 'Discount Schemes Summary',
+        'subLabel': 'Scheme Report ➜ promotional coupons and customer offers',
+        'permission': 'SCHEME_REPORT',
+        'keywords': ['scheme report', 'discount list', 'promotions summary', 'active coupons', 'special rates list'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SchemeReportScreen())),
+      },
+    ];
+
     final matchingItems = !isSearching
         ? <Map<String, dynamic>>[]
-        : allDrawerItems.where((item) {
-            final label = (item['label'] as String).toLowerCase();
-            final category = (item['category'] as String).toLowerCase();
-            final perm = item['permission'] as String?;
-            if (perm != null && !PermissionService.can(perm)) return false;
-            return label.contains(searchQuery) || category.contains(searchQuery);
-          }).toList();
+        : [
+            ...allDrawerItems.where((item) {
+              final label = (item['label'] as String).toLowerCase();
+              final category = (item['category'] as String).toLowerCase();
+              final perm = item['permission'] as String?;
+              if (perm != null && !PermissionService.can(perm)) return false;
+              return label.contains(searchQuery) || category.contains(searchQuery);
+            }),
+            ...deepSearchRegistry.where((item) {
+              final label = (item['label'] as String).toLowerCase();
+              final subLabel = (item['subLabel'] as String).toLowerCase();
+              final category = (item['category'] as String).toLowerCase();
+              final List<String> keywords = List<String>.from(item['keywords'] ?? []);
+              final perm = item['permission'] as String?;
+              if (perm != null && !PermissionService.can(perm)) return false;
+              return label.contains(searchQuery) ||
+                  subLabel.contains(searchQuery) ||
+                  category.contains(searchQuery) ||
+                  keywords.any((kw) => kw.contains(searchQuery));
+            }),
+          ];
 
     Widget buildHeader() {
       return Container(
@@ -2964,6 +3199,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                         onTap: item['onTap'] as VoidCallback?,
                         isSubItem: false,
                         categoryName: item['category'] as String?,
+                        subLabel: item['subLabel'] as String?,
                       );
                     }),
                 ] else ...[
@@ -3139,6 +3375,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     bool isSubItem = false,
     bool isFavoriteSectionItem = false,
     String? categoryName,
+    String? subLabel,
   }) {
     if (permission != null && !PermissionService.can(permission)) {
       return const SizedBox();
@@ -3195,27 +3432,44 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Flexible(
-                        child: Text(
-                          label,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: (isSubItem && !isFavoriteSectionItem) ? 12.5 : 13,
-                            fontWeight: (isSubItem && !isFavoriteSectionItem) ? FontWeight.w500 : FontWeight.w600,
-                            color: textPrimaryColor,
-                            letterSpacing: -0.1,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              label,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: (isSubItem && !isFavoriteSectionItem) ? 12.5 : 13,
+                                fontWeight: (isSubItem && !isFavoriteSectionItem) ? FontWeight.w500 : FontWeight.w600,
+                                color: textPrimaryColor,
+                                letterSpacing: -0.1,
+                              ),
+                            ),
                           ),
-                        ),
+                          if (isFavoriteSectionItem && categoryName != null) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '($categoryName)',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: textSecondaryColor.withOpacity(0.7),
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      if (isFavoriteSectionItem && categoryName != null) ...[
-                        const SizedBox(width: 6),
+                      if (subLabel != null) ...[
+                        const SizedBox(height: 2.5),
                         Text(
-                          '($categoryName)',
+                          subLabel,
                           style: TextStyle(
-                            fontSize: 10,
-                            color: textSecondaryColor.withOpacity(0.7),
+                            fontSize: 10.5,
+                            color: textSecondaryColor,
                             fontWeight: FontWeight.w400,
                           ),
                         ),
@@ -3227,24 +3481,25 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   const SizedBox(width: 6),
                   badgeWidget,
                 ],
-                // Star Toggle Button for Favorites
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => _toggleFavorite(label),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: Icon(
-                        isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
-                        size: 17,
-                        color: isFavorited
-                            ? const Color(0xFFFFB800)
-                            : textSecondaryColor.withOpacity(0.35),
+                // Star Toggle Button for Favorites (hide for deep sub-features)
+                if (subLabel == null)
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => _toggleFavorite(label),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Icon(
+                          isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
+                          size: 17,
+                          color: isFavorited
+                              ? const Color(0xFFFFB800)
+                              : textSecondaryColor.withOpacity(0.35),
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

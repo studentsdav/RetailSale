@@ -3854,6 +3854,24 @@ COMMIT;
         ALTER TABLE kot_headers ADD COLUMN IF NOT EXISTS kds_dismissed BOOLEAN DEFAULT FALSE;
       `);
     }
+  },
+  {
+    version: 99,
+    description: "Add show_brand_name column to system_settings table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS show_brand_name BOOLEAN DEFAULT TRUE;
+      `);
+    }
+  },
+  {
+    version: 100,
+    description: "Add kottype column to kot_headers table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE kot_headers ADD COLUMN IF NOT EXISTS kottype VARCHAR(30) DEFAULT 'g';
+      `);
+    }
   }
 ];
 

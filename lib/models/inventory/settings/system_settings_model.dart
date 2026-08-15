@@ -32,6 +32,7 @@ class SystemSettings {
   double subDeliveryFreeAbove;
   bool enableSalespersonTagging;
   int billCopiesCount;
+  bool showBrandName;
 
   SystemSettings({
     required this.autoReorder,
@@ -62,6 +63,7 @@ class SystemSettings {
     required this.subDeliveryFreeAbove,
     required this.enableSalespersonTagging,
     this.billCopiesCount = 1,
+    required this.showBrandName,
   });
 
   factory SystemSettings.fromJson(Map<String, dynamic> json) {
@@ -80,6 +82,7 @@ class SystemSettings {
       billingTaxMode: json['billing_tax_mode'] ?? 'CGST_SGST',
       billFormat: json['bill_format'] ?? 'A4',
       billCopiesCount: json['bill_copies_count'] ?? 1,
+      showBrandName: json['show_brand_name'] ?? true,
       isCloudEnabled: json['is_cloud_enabled'] ?? false,
       enableAppSubscription: json['enable_app_subscription'] ?? false,
       enablePaymentGateway: json['enable_payment_gateway'] ?? false,
@@ -167,6 +170,7 @@ class SystemSettings {
       'sub_delivery_free_above': subDeliveryFreeAbove,
       'enable_salesperson_tagging': enableSalespersonTagging,
       'bill_copies_count': billCopiesCount,
+      'show_brand_name': showBrandName,
     };
   }
 }

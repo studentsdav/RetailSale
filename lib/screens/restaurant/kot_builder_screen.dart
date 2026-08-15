@@ -59,15 +59,8 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   String _kotNumber = 'Fetching...';
   Timer? _clockTimer;
   DateTime _currentDateTime = DateTime.now();
-  String _selectedCaptain = 'Captain / Waiter 1';
-  final List<String> _captainList = [
-    'Captain / Waiter 1',
-    'Captain / Waiter 2',
-    'Captain Raj',
-    'Captain Amit',
-    'Captain Neha',
-    'Default Staff',
-  ];
+  String _selectedCaptain = 'N/A';
+  final List<String> _captainList = ['N/A'];
 
   // Cart: Map of ItemID -> Map of Cart Item details
   final Map<int, Map<String, dynamic>> _cart = {};
@@ -94,7 +87,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
 
     if (widget.prefilledItems != null) {
       _prefillCartIfAny();
-    } else if (!widget.isFreshOrder) {
+    } else if (widget.editKotId != null || !widget.isFreshOrder) {
       _fetchActiveKotItems();
     }
   }
@@ -149,17 +142,19 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
       }
     } catch (_) {}
 
-    if (mounted && finalStaff.isNotEmpty) {
+    if (mounted) {
       setState(() {
         _captainList.clear();
-        _captainList.addAll(finalStaff);
+        _captainList.add('N/A');
+        if (finalStaff.isNotEmpty) {
+          _captainList.addAll(finalStaff);
+        }
         
         // Auto-select logged-in user if present in staff list AND they are a waiter
         if (isWaiterLoggedIn && loggedInName != null && loggedInName.isNotEmpty && _captainList.contains(loggedInName)) {
           _selectedCaptain = loggedInName;
         } else {
-          // If non-waiter logged in (e.g. admin, cashier), default to first waiter/captain
-          _selectedCaptain = _captainList.first;
+          _selectedCaptain = _captainList.length > 1 ? _captainList[1] : 'N/A';
         }
       });
     }
@@ -263,14 +258,23 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
 
   String _getItemDisplayName(dynamic item) {
     if (item == null) return '';
-    String brand = '';
     String name = '';
     if (item is Map) {
-      brand = (item['brand'] ?? item['brand_name'] ?? item['brandName'] ?? '').toString().trim();
       name = (item['item_name'] ?? item['name'] ?? '').toString().trim();
     } else {
-      brand = (item.brand ?? '').toString().trim();
       name = (item.itemName ?? item.name ?? '').toString().trim();
+    }
+
+    final bool showBrand = settingsCtrl.settings?.showBrandName ?? true;
+    if (!showBrand) {
+      return name;
+    }
+
+    String brand = '';
+    if (item is Map) {
+      brand = (item['brand'] ?? item['brand_name'] ?? item['brandName'] ?? '').toString().trim();
+    } else {
+      brand = (item.brand ?? '').toString().trim();
     }
     if (brand.isNotEmpty) {
       return '$brand - $name';
@@ -436,18 +440,31 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   void _prefillCartIfAny() {
     if (widget.prefilledItems != null) {
       for (final item in widget.prefilledItems!) {
-        if (item['status'] == 'Cancelled') continue;
-        final int itemId = item['item_id'];
-        final double qty = double.tryParse(item['qty']?.toString() ?? '0') ?? 0.0;
-        final double rate = double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
+        final String itemStat = (item['status'] ?? '').toString().toLowerCase();
+        if (itemStat == 'cancelled' || itemStat == 'rejected') continue;
+        final int itemId = item['item_id'] ?? 0;
+        if (itemId <= 0) continue;
+        final double qty = double.tryParse(item['qty']?.toString() ?? item['quantity']?.toString() ?? '0') ?? 0.0;
+        final double rate = double.tryParse(item['rate']?.toString() ?? item['item_rate']?.toString() ?? '0') ?? 0.0;
+        final int kotItemId = item['id'] ?? 0;
+
         _cart[itemId] = {
           'item_id': itemId,
-          'item_name': item['item_name'],
+          'item_name': item['item_name'] ?? '',
           'qty': qty,
+          'original_qty': qty,
           'item_remark': item['item_remark'] ?? '',
           'modifier_details': List<String>.from(item['modifier_details'] ?? []),
           'rate': rate,
           'location': item['location'] ?? item['station']?['station_name'] ?? 'Kitchen',
+          'brand': item['brand'] ?? item['item']?['brand'] ?? '',
+          'kot_item_ids': kotItemId > 0 ? <int>[kotItemId] : <int>[],
+        };
+        _initialActiveItems[itemId] = {
+          'item_id': itemId,
+          'item_name': item['item_name'] ?? '',
+          'qty': qty,
+          'kot_item_ids': kotItemId > 0 ? <int>[kotItemId] : <int>[],
         };
       }
     }
@@ -459,49 +476,56 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
 
   Future<void> _fetchActiveKotItems() async {
     try {
-      final res = await ApiClient.get('/api/restaurant/kots?table_id=${widget.table['id']}&active_only=true');
+      final res = await ApiClient.get('/api/restaurant/kots?active_only=true');
       if (res['success'] == true) {
-        final List kots = res['data'] ?? [];
+        final List rawKots = res['data'] ?? [];
+        final List kots = (widget.editKotId != null)
+            ? rawKots.where((k) => k['id'] == widget.editKotId).toList()
+            : (widget.table['id'] != null
+                ? rawKots.where((k) => k['table_id'] == widget.table['id']).toList()
+                : rawKots);
+
         setState(() {
           _initialActiveItems.clear();
           for (final kot in kots) {
             final List items = kot['items'] ?? [];
             for (final item in items) {
               final int itemId = item['item_id'];
-              final double qty = double.tryParse(item['qty'].toString()) ?? 0.0;
+              final double qty = double.tryParse(item['qty']?.toString() ?? '0') ?? 0.0;
               final double rate = double.tryParse(item['rate']?.toString() ?? '') ?? 0.0;
-              final int kotItemId = item['id'];
-              final isCancelled = item['status'] == 'Cancelled';
+              final int kotItemId = item['id'] ?? 0;
+              final String itemStat = (item['status'] ?? '').toString().toLowerCase();
 
-              if (isCancelled) continue; // Skip already cancelled items
+              if (itemStat == 'cancelled' || itemStat == 'rejected') continue;
 
               if (_initialActiveItems.containsKey(itemId)) {
                 _initialActiveItems[itemId]!['qty'] = _initialActiveItems[itemId]!['qty'] + qty;
-                (_initialActiveItems[itemId]!['kot_item_ids'] as List<int>).add(kotItemId);
+                if (kotItemId > 0) (_initialActiveItems[itemId]!['kot_item_ids'] as List<int>).add(kotItemId);
               } else {
                 _initialActiveItems[itemId] = {
                   'item_id': itemId,
                   'item_name': item['item_name'],
                   'qty': qty,
-                  'kot_item_ids': <int>[kotItemId],
+                  'kot_item_ids': kotItemId > 0 ? <int>[kotItemId] : <int>[],
                 };
               }
 
               if (_cart.containsKey(itemId)) {
                 _cart[itemId]!['qty'] = _cart[itemId]!['qty'] + qty;
                 _cart[itemId]!['original_qty'] = _cart[itemId]!['original_qty'] + qty;
-                (_cart[itemId]!['kot_item_ids'] as List<int>).add(kotItemId);
+                if (kotItemId > 0) (_cart[itemId]!['kot_item_ids'] as List<int>).add(kotItemId);
               } else {
                 _cart[itemId] = {
                   'item_id': itemId,
                   'item_name': item['item_name'],
                   'qty': qty,
                   'original_qty': qty,
-                  'kot_item_ids': <int>[kotItemId],
+                  'kot_item_ids': kotItemId > 0 ? <int>[kotItemId] : <int>[],
                   'item_remark': item['item_remark'] ?? '',
                   'modifier_details': List<String>.from(item['modifier_details'] ?? []),
                   'rate': rate,
                   'location': item['location'] ?? item['station']?['station_name'] ?? 'Kitchen',
+                  'brand': item['item']?['brand'] ?? '',
                 };
               }
             }
@@ -509,7 +533,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error preloading table KOTs: $e');
+      debugPrint('Error fetching active KOT items: $e');
     }
   }
 
@@ -687,6 +711,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
           'modifier_details': <String>[],
           'rate': cartRate,
           'location': item['location'] ?? 'Kitchen',
+          'brand': item['brand'] ?? item['brand_name'] ?? '',
         };
       }
     });
@@ -786,36 +811,6 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     setState(() => isLoadingItems = true);
 
     try {
-      if (widget.isNcOrder) {
-        final ncData = {
-          'table_id': (widget.table['id'] != null && widget.table['id'] > 0) ? widget.table['id'] : null,
-          'service_type': 'NC Order',
-          'waiter_id': widget.table['waiter_id'] ?? 1,
-          'captain_id': widget.table['captain_id'] ?? 1,
-          'remarks': 'NC Order - Dept: ${widget.ncDepartment ?? "General"} | Guest: ${widget.ncGuestName ?? ""}',
-          'items': _cart.values.map((it) {
-            final itemMap = Map<String, dynamic>.from(it);
-            itemMap['rate'] = 0.0;
-            itemMap['status'] = 'NC Cleared';
-            return itemMap;
-          }).toList(),
-          'status': 'NC Cleared',
-        };
-        final res = await ApiClient.post(ApiEndpoints.restaurantKots, ncData);
-        if (res['success'] == true && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('NC Order (Non-Chargeable) successfully dispatched & cleared!'),
-              backgroundColor: Colors.purple,
-            ),
-          );
-          Navigator.pop(context);
-        } else {
-          throw Exception(res['message'] ?? 'Server rejected NC order');
-        }
-        return;
-      }
-
       if (widget.editKotId != null) {
         final modifyData = {
           'items': _cart.values.toList(),
@@ -878,7 +873,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
               }
 
               if (printItems.isNotEmpty) {
-                final restCtrl = Provider.of<RestaurantController>(context, listen: false);
+                final restCtrl = context.read<RestaurantController>();
                 final kitchenStations = restCtrl.kitchenStations;
                 final printers = restCtrl.printers;
 
@@ -891,62 +886,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                   'kot_number': addonKotNo,
                   'items': printItems,
                 };
-
-                final Map<String, List<dynamic>> locationGroups = {};
-                for (final item in printItems) {
-                  final String loc = (item['location'] ?? item['station_name'] ?? 'Kitchen').toString().trim();
-                  final String key = loc.isEmpty ? 'Kitchen' : loc;
-                  locationGroups.putIfAbsent(key, () => []).add(item);
-                }
-
-                for (final locationName in locationGroups.keys) {
-                  final stationItems = locationGroups[locationName]!;
-                  final station = kitchenStations.firstWhere(
-                    (s) => (s['station_name'] ?? '').toString().toLowerCase() == locationName.toLowerCase(),
-                    orElse: () => null,
-                  );
-
-                  String printerName = '';
-                  if (station != null && station['printer_id'] != null) {
-                    final pConfig = printers.firstWhere(
-                      (p) => p['id'] == station['printer_id'],
-                      orElse: () => null,
-                    );
-                    if (pConfig != null) {
-                      printerName = pConfig['printer_name'] ?? '';
-                    }
-                  }
-
-                  final Map<String, dynamic> locationKot = Map<String, dynamic>.from(addonKot);
-                  locationKot['target_location'] = locationName;
-
-                  final pdfBytes = await _generateKotPdfForPrint(locationKot, stationItems);
-
-                  if (printerName.isNotEmpty) {
-                    final systemPrinters = await Printing.listPrinters();
-                    Printer? targetPrinter;
-                    try {
-                      targetPrinter = systemPrinters.firstWhere(
-                        (p) => p.name.toLowerCase() == printerName.toLowerCase(),
-                      );
-                    } catch (_) {
-                      targetPrinter = null;
-                    }
-                    if (targetPrinter != null) {
-                      await Printing.directPrintPdf(
-                        printer: targetPrinter,
-                        name: 'ADDON_${widget.editKotId}',
-                        onLayout: (_) async => pdfBytes,
-                      );
-                      continue;
-                    }
-                  }
-
-                  await Printing.layoutPdf(
-                    name: 'ADDON_${widget.editKotId}',
-                    onLayout: (_) async => pdfBytes,
-                  );
-                }
+                await _directPrintKot(addonKot, kitchenStations, printers);
               }
             }
           } catch (e) {
@@ -1070,6 +1010,8 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         final kotData = {
           'table_id': widget.isTakeaway ? null : widget.table['id'],
           'service_type': widget.isTakeaway ? 'Takeaway' : 'Dine In',
+          'kottype': widget.isNcOrder ? 'nc' : (widget.isTakeaway ? 'packing' : 'g'),
+          'status': 'p',
           'waiter_id': widget.table['waiter_id'] ?? 1,
           'captain_id': widget.table['captain_id'] ?? 1,
           'remarks': widget.isTakeaway ? 'Takeaway Order' : 'App Order',
@@ -1473,13 +1415,13 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                     final bool isStockable = item['stockable'] == true ||
                                         item['stockable'] == 1 ||
                                         item['stockable'].toString() == 'true';
-                                    final double stock = double.tryParse(item['opening_balance']?.toString() ?? '0') ?? 0.0;
+                                    final cartQty = _cart[item['id']]?['qty'] ?? 0.0;
+                                    final double stock = (double.tryParse(item['opening_balance']?.toString() ?? '0') ?? 0.0) - cartQty;
                                     final bool isOutOfStock = isStockable && stock <= 0;
                                     final bool allowNegativeStock = settingsCtrl.settings?.allowNegativeStock ?? false;
 
                                     final double rawRate = double.tryParse((item['retail_sale_price'] ?? item['rate'] ?? 0.0).toString()) ?? 0.0;
                                     final double rate = rawRate;
-                                    final cartQty = _cart[item['id']]?['qty'] ?? 0.0;
                                     final isSelected = cartQty > 0;
 
                                     final promoScheme = _getActivePromoForItem(item);
@@ -2087,7 +2029,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                           ),
                           icon: Icon(widget.isNcOrder ? Icons.check_circle_outline : Icons.soup_kitchen, size: 18),
                           label: Text(
-                            widget.isNcOrder ? 'Clear & Dispatch NC KOT' : 'Send to Kitchen (KOT)',
+                            widget.isNcOrder ? 'Dispatch NC KOT (Send to Kitchen)' : 'Send to Kitchen (KOT)',
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                           ),
                           onPressed: _cart.isEmpty ? null : _dispatchKot,

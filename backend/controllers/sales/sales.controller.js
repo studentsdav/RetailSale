@@ -3659,7 +3659,8 @@ exports.createSale = async (req, res) => {
         }
         console.log(`[PERF] luckyDraw: ${Date.now()-_tLD}ms`);
 
-        const tableId = req.body.table_id || req.body.header?.table_id;
+        const outlet_id = req.user?.outlet_id || req.body.header?.outlet_id || req.body.outlet_id || 1;
+        const tableId = req.body.table_id || req.body.header?.table_id || req.body.tableId || req.body.header?.tableId;
         if (tableId) {
             try {
                 // 1. Mark table as Available
@@ -3670,32 +3671,42 @@ exports.createSale = async (req, res) => {
                     current_captain_id: null,
                     active_sale_id: null
                 }, {
-                    where: { id: tableId, outlet_id },
+                    where: { id: Number(tableId) },
                     transaction: t
                 });
 
-                // 2. Mark active KOTs as Closed and link to this sale ID
+                // 2. Mark unbilled KOTs for this table as billed and link to this sale ID
                 await req.propertyDb.models.kot_headers.update({
-                    status: 'Closed',
+                    status: 'billed',
                     sales_header_id: referenceSale.id
                 }, {
-                    where: { table_id: tableId, status: { [Op.ne]: 'Closed' }, outlet_id },
+                    where: { 
+                        table_id: Number(tableId), 
+                        sales_header_id: null
+                    },
                     transaction: t
                 });
-
-                // Also close explicitly passed kot_ids (useful for takeaway/packing orders)
-                const kotIds = req.body.kot_ids || (req.body.kot_id ? [req.body.kot_id] : null);
-                if (Array.isArray(kotIds) && kotIds.length > 0) {
-                    await req.propertyDb.models.kot_headers.update({
-                        status: 'Closed',
-                        sales_header_id: referenceSale.id
-                    }, {
-                        where: { id: { [Op.in]: kotIds }, status: { [Op.ne]: 'Closed' }, outlet_id },
-                        transaction: t
-                    });
-                }
             } catch (tblErr) {
                 console.error('[TABLE CHECKOUT HOOK FAIL]', tblErr.message);
+            }
+        }
+
+        // Also close explicitly passed kot_ids (useful for takeaway/packing orders)
+        const rawKotIds = req.body.kot_ids || req.body.kotIds || req.body.header?.kot_ids || req.body.header?.kotIds || (req.body.kot_id ? [req.body.kot_id] : null);
+        if (Array.isArray(rawKotIds) && rawKotIds.length > 0) {
+            const parsedKotIds = rawKotIds.map(id => Number(id)).filter(id => id > 0);
+            if (parsedKotIds.length > 0) {
+                try {
+                    await req.propertyDb.models.kot_headers.update({
+                        status: 'billed',
+                        sales_header_id: referenceSale.id
+                    }, {
+                        where: { id: { [Op.in]: parsedKotIds } },
+                        transaction: t
+                    });
+                } catch (kotErr) {
+                    console.error('[KOT CHECKOUT HOOK FAIL]', kotErr.message);
+                }
             }
         }
 
@@ -3989,6 +4000,60 @@ exports.modifySale = async (req, res) => {
                 }
 
                 await customerOrder.save({ transaction: t });
+            }
+        }
+
+        // Handle restaurant KOT and table closing on check out/completion of draft
+        const tableId = headerForModify.table_id || headerForModify.tableId || req.body.table_id || req.body.header?.table_id || req.body.tableId || req.body.header?.tableId;
+        const outlet_id = req.user?.outlet_id || headerForModify.outlet_id || 1;
+        if (status === 'COMPLETED') {
+            if (tableId) {
+                try {
+                    // 1. Mark table as Available
+                    await req.propertyDb.models.restaurant_tables.update({
+                        status: 'Available',
+                        current_guest_count: 0,
+                        current_waiter_id: null,
+                        current_captain_id: null,
+                        active_sale_id: null
+                    }, {
+                        where: { id: Number(tableId) },
+                        transaction: t
+                    });
+
+                    // 2. Mark unbilled KOTs for this table as billed and link to this sale ID
+                    await req.propertyDb.models.kot_headers.update({
+                        status: 'billed',
+                        sales_header_id: newSale.id
+                    }, {
+                        where: { 
+                            table_id: Number(tableId), 
+                            sales_header_id: null
+                        },
+                        transaction: t
+                    });
+                } catch (tblErr) {
+                    console.error('[TABLE MODIFY CHECKOUT HOOK FAIL]', tblErr.message);
+                }
+            }
+
+            // Also close explicitly passed kot_ids
+            const rawKotIds = req.body.kot_ids || req.body.kotIds || req.body.header?.kot_ids || req.body.header?.kotIds || (req.body.kot_id ? [req.body.kot_id] : null);
+            if (Array.isArray(rawKotIds) && rawKotIds.length > 0) {
+                const parsedKotIds = rawKotIds.map(id => Number(id)).filter(id => id > 0);
+                if (parsedKotIds.length > 0) {
+                    try {
+                        await req.propertyDb.models.kot_headers.update({
+                            status: 'billed',
+                            sales_header_id: newSale.id
+                        }, {
+                            where: { id: { [Op.in]: parsedKotIds } },
+                            transaction: t
+                        });
+                    } catch (kotErr) {
+                        console.error('[KOT MODIFY CHECKOUT HOOK FAIL]', kotErr.message);
+                    }
+                }
             }
         }
 

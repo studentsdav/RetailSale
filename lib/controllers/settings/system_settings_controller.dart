@@ -47,6 +47,7 @@ class SystemSettingsController extends ChangeNotifier {
         subDeliveryFreeAbove: 0,
         enableSalespersonTagging: false,
         billCopiesCount: 1,
+        showBrandName: true,
       );
     }
 

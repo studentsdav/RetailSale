@@ -1,6 +1,13 @@
 const audit = require('../../services/audit.service');
 
 const TRANSACTION_TABLES = [
+    // KOT & Restaurant transactional tables (dependent children first)
+    'kot_revisions',
+    'kot_items',
+    'kot_headers',
+    'restaurant_audit_trail',
+    'table_reservations',
+
     // Lucky Draw Campaign tables (dependent children first)
     'draw_vouchers',
     'customer_draw_progress',
@@ -166,7 +173,8 @@ exports.getSettings = async (req, res) => {
                     sub_delivery_charge_gst_percent: 0.0,
                     sub_delivery_free_above: 0.0,
                     enable_salesperson_tagging: false,
-                    bill_copies_count: 1
+                    bill_copies_count: 1,
+                    show_brand_name: true
                 }
             });
         }
@@ -227,7 +235,8 @@ exports.saveSettings = async (req, res) => {
             sub_delivery_charge_gst_percent: req.body.sub_delivery_charge_gst_percent ?? 0.0,
             sub_delivery_free_above: req.body.sub_delivery_free_above ?? 0.0,
             enable_salesperson_tagging: req.body.enable_salesperson_tagging ?? false,
-            bill_copies_count: req.body.bill_copies_count ?? 1
+            bill_copies_count: req.body.bill_copies_count ?? 1,
+            show_brand_name: req.body.show_brand_name ?? true
         };
 
         let record;
