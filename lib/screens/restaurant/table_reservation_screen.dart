@@ -123,33 +123,73 @@ class _TableReservationScreenState extends State<TableReservationScreen> {
     super.dispose();
   }
 
+  DateTime? _getSelectedSlotDateTime() {
+    final slot = _selectedTimeSlot;
+    if (slot == null || slot.isEmpty) return null;
+    try {
+      final parts = slot.split(' ');
+      final timeParts = parts[0].split(':');
+      int hour = int.parse(timeParts[0]);
+      final int minute = int.parse(timeParts[1]);
+      final amPm = parts[1].toUpperCase();
+
+      if (amPm == 'PM' && hour != 12) {
+        hour += 12;
+      } else if (amPm == 'AM' && hour == 12) {
+        hour = 0;
+      }
+
+      return DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, hour, minute);
+    } catch (_) {
+      return null;
+    }
+  }
+
   bool _isTableOccupiedOrBooked(dynamic table, RestaurantController ctrl) {
     final int tableId = table['id'];
+    final selectedSlotTime = _getSelectedSlotDateTime();
 
-    // Check existing reservations for selected date & time slot
+    // Check existing reservations for time slot overlap
     for (final resv in ctrl.reservations) {
       final int? resvTableId = resv['table_id'] ?? resv['table']?['id'];
       if (resvTableId == tableId) {
         final String resvStatus = (resv['status'] ?? '').toString().toLowerCase();
-        if (resvStatus != 'cancelled' && resvStatus != 'completed') {
+        if (resvStatus != 'cancelled' && resvStatus != 'completed' && resvStatus != 'rejected') {
           final DateTime? resvTime = DateTime.tryParse(resv['reservation_time'] ?? '');
           if (resvTime != null) {
             final isSameDay = resvTime.year == _selectedDate.year &&
                 resvTime.month == _selectedDate.month &&
                 resvTime.day == _selectedDate.day;
-            if (isSameDay) return true; // Already booked for this date/slot
+
+            if (isSameDay) {
+              if (selectedSlotTime != null) {
+                final diffInMinutes = resvTime.difference(selectedSlotTime).inMinutes.abs();
+                if (diffInMinutes < 60) {
+                  return true; // Already booked for this time slot
+                }
+              } else {
+                return true;
+              }
+            }
           }
         }
       }
     }
 
-    // Check if table is currently Occupied or Billed on canvas
+    // Check if table is currently Occupied or Billed physically on canvas right now
     final String currentStatus = (table['status'] ?? '').toString();
     if (currentStatus == 'Occupied' || currentStatus == 'Billed') {
-      final isToday = _selectedDate.year == DateTime.now().year &&
-          _selectedDate.month == DateTime.now().month &&
-          _selectedDate.day == DateTime.now().day;
-      if (isToday) return true;
+      final now = DateTime.now();
+      final isToday = _selectedDate.year == now.year &&
+          _selectedDate.month == now.month &&
+          _selectedDate.day == now.day;
+
+      if (isToday && selectedSlotTime != null) {
+        final diffInMinutes = now.difference(selectedSlotTime).inMinutes.abs();
+        if (diffInMinutes < 90) {
+          return true;
+        }
+      }
     }
 
     return false;

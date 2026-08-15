@@ -631,14 +631,37 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
   }
 
   // ==========================================
-  // TAB 4: RESERVATIONS
+  // TAB 4: RESERVATION
+  // ==========================================
+  String _formatReservationLocalTime(dynamic rawTime) {
+    if (rawTime == null || rawTime.toString().isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(rawTime.toString()).toLocal();
+      return DateFormat('hh:mm a, dd-MMM-yyyy').format(dt);
+    } catch (_) {
+      return rawTime.toString();
+    }
+  }
+
+  String _formatReservationSlotTime(dynamic rawTime) {
+    if (rawTime == null || rawTime.toString().isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(rawTime.toString()).toLocal();
+      return DateFormat('hh:mm a').format(dt);
+    } catch (_) {
+      return rawTime.toString();
+    }
+  }
+
+  // ==========================================
+  // TABLE BOOKINGS TAB & ANALYTICS
   // ==========================================
   int _getTodayCount(List<dynamic> list) {
     final now = DateTime.now();
     return list.where((resv) {
       if (resv['reservation_time'] == null) return false;
       try {
-        final dt = DateTime.parse(resv['reservation_time'].toString());
+        final dt = DateTime.parse(resv['reservation_time'].toString()).toLocal();
         return dt.year == now.year && dt.month == now.month && dt.day == now.day;
       } catch (_) {
         return false;
@@ -654,7 +677,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
     return list.where((resv) {
       if (resv['reservation_time'] == null) return false;
       try {
-        final dt = DateTime.parse(resv['reservation_time'].toString());
+        final dt = DateTime.parse(resv['reservation_time'].toString()).toLocal();
         return dt.isAfter(start) && dt.isBefore(end);
       } catch (_) {
         return false;
@@ -667,7 +690,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
     return list.where((resv) {
       if (resv['reservation_time'] == null) return false;
       try {
-        final dt = DateTime.parse(resv['reservation_time'].toString());
+        final dt = DateTime.parse(resv['reservation_time'].toString()).toLocal();
         return dt.year == now.year && dt.month == now.month;
       } catch (_) {
         return false;
@@ -884,8 +907,8 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Table: ${resv['table']?['table_name'] ?? 'N/A'} | Time: ${resv['reservation_time']}',
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                              'Table: ${resv['table']?['table_name'] ?? 'N/A'}  •  Slot Time: ${_formatReservationSlotTime(resv['reservation_time'])}  (${_formatReservationLocalTime(resv['reservation_time'])})',
+                              style: TextStyle(color: Colors.grey.shade800, fontSize: 12, fontWeight: FontWeight.w500),
                             ),
                             if (resv['customer_phone'] != null && resv['customer_phone'].toString().isNotEmpty)
                               Text('Phone: ${resv['customer_phone']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
@@ -971,8 +994,8 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Table: ${resv['table']?['table_name'] ?? 'N/A'} | Time: ${resv['reservation_time']}',
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                              'Table: ${resv['table']?['table_name'] ?? 'N/A'}  •  Slot Time: ${_formatReservationSlotTime(resv['reservation_time'])}  (${_formatReservationLocalTime(resv['reservation_time'])})',
+                              style: TextStyle(color: Colors.grey.shade800, fontSize: 12, fontWeight: FontWeight.w500),
                             ),
                             if (resv['customer_phone'] != null && resv['customer_phone'].toString().isNotEmpty)
                               Text('Phone: ${resv['customer_phone']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),

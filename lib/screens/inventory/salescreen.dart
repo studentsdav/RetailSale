@@ -285,11 +285,7 @@ class _SaleScreenState extends State<SaleScreen> {
             final baseRate = matched.retailSalePrice > 0
                 ? matched.retailSalePrice
                 : (matched.rate > 0 ? matched.rate : rate);
-            if (matched.isTaxInclusive) {
-              resolvedRate = double.parse((baseRate * (1 + matched.taxPercent / 100)).toStringAsFixed(2));
-            } else {
-              resolvedRate = baseRate;
-            }
+            resolvedRate = (rate > 0) ? rate : baseRate;
           }
 
           final saleItem = SaleItem(
