@@ -177,27 +177,35 @@ exports.createKot = async (req, res) => {
             if (!table) throw new Error('Table not found');
             await table.update({ status: 'Occupied' }, { transaction: t });
 
-            // Auto-seat reservation
+            // Auto-seat ONLY the single reservation closest to current time within the slot window
             try {
-                const todayStart = new Date();
-                todayStart.setHours(0, 0, 0, 0);
-                const todayEnd = new Date();
-                todayEnd.setHours(23, 59, 59, 999);
+                const now = new Date();
+                const windowStart = new Date(now.getTime() - 60 * 60 * 1000);
+                const windowEnd = new Date(now.getTime() + 60 * 60 * 1000);
 
-                await req.propertyDb.models.table_reservations.update(
-                    { status: 'Seated' },
-                    {
-                        where: {
-                            table_id,
-                            outlet_id,
-                            status: { [Op.in]: ['Pending', 'Confirmed', 'Reserved'] },
-                            reservation_time: {
-                                [Op.between]: [todayStart, todayEnd]
-                            }
-                        },
-                        transaction: t
-                    }
-                );
+                const activeResvs = await req.propertyDb.models.table_reservations.findAll({
+                    where: {
+                        table_id,
+                        outlet_id,
+                        status: { [Op.in]: ['Pending', 'Confirmed', 'Reserved'] },
+                        reservation_time: {
+                            [Op.between]: [windowStart, windowEnd]
+                        }
+                    },
+                    transaction: t
+                });
+
+                if (activeResvs && activeResvs.length > 0) {
+                    activeResvs.sort((a, b) => {
+                        const diffA = Math.abs(new Date(a.reservation_time).getTime() - now.getTime());
+                        const diffB = Math.abs(new Date(b.reservation_time).getTime() - now.getTime());
+                        return diffA - diffB;
+                    });
+
+                    const closest = activeResvs[0];
+                    await closest.update({ status: 'Seated' }, { transaction: t });
+                    console.log(`[AUTO SEAT RESERVATION] Marked reservation #${closest.id} for table #${table_id} as Seated`);
+                }
             } catch (resvErr) {
                 console.error('[AUTO SEAT RESERVATION FAIL]', resvErr.message);
             }

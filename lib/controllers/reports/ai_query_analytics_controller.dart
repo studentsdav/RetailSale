@@ -17,12 +17,16 @@ class AiQueryAnalyticsController extends ChangeNotifier {
 
   // AI Configuration properties
   String? aiProvider;
+  String? aiModelName;
+  String? aiBaseUrl;
   String? aiApiKey;
 
   Future<void> initPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       aiProvider = prefs.getString('ai_provider');
+      aiModelName = prefs.getString('ai_model_name');
+      aiBaseUrl = prefs.getString('ai_base_url');
       aiApiKey = prefs.getString('ai_api_key');
       notifyListeners();
     } catch (e) {
@@ -30,12 +34,19 @@ class AiQueryAnalyticsController extends ChangeNotifier {
     }
   }
 
-  Future<void> savePrefs(String provider, String apiKey) async {
+  Future<void> savePrefs({
+    required String provider,
+    required String modelName,
+    required String baseUrl,
+    required String apiKey,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
       final cleanProvider = provider.trim();
-      final cleanApiKey = apiKey.trim();
+      final cleanModel = modelName.trim();
+      final cleanUrl = baseUrl.trim();
+      final cleanKey = apiKey.trim();
 
       if (cleanProvider.isEmpty) {
         await prefs.remove('ai_provider');
@@ -45,12 +56,28 @@ class AiQueryAnalyticsController extends ChangeNotifier {
         aiProvider = cleanProvider;
       }
 
-      if (cleanApiKey.isEmpty) {
+      if (cleanModel.isEmpty) {
+        await prefs.remove('ai_model_name');
+        aiModelName = null;
+      } else {
+        await prefs.setString('ai_model_name', cleanModel);
+        aiModelName = cleanModel;
+      }
+
+      if (cleanUrl.isEmpty) {
+        await prefs.remove('ai_base_url');
+        aiBaseUrl = null;
+      } else {
+        await prefs.setString('ai_base_url', cleanUrl);
+        aiBaseUrl = cleanUrl;
+      }
+
+      if (cleanKey.isEmpty) {
         await prefs.remove('ai_api_key');
         aiApiKey = null;
       } else {
-        await prefs.setString('ai_api_key', cleanApiKey);
-        aiApiKey = cleanApiKey;
+        await prefs.setString('ai_api_key', cleanKey);
+        aiApiKey = cleanKey;
       }
 
       notifyListeners();
@@ -85,6 +112,8 @@ class AiQueryAnalyticsController extends ChangeNotifier {
         body: jsonEncode({
           'question': question.trim(),
           if (aiProvider != null && aiProvider!.isNotEmpty) 'aiProvider': aiProvider,
+          if (aiModelName != null && aiModelName!.isNotEmpty) 'aiModelName': aiModelName,
+          if (aiBaseUrl != null && aiBaseUrl!.isNotEmpty) 'aiBaseUrl': aiBaseUrl,
           if (aiApiKey != null && aiApiKey!.isNotEmpty) 'aiApiKey': aiApiKey,
         }),
       );

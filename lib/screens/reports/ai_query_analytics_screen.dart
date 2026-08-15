@@ -223,6 +223,12 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
   // Model settings configuration modal
   void _showSettingsDialog() {
     String selectedProvider = _controller.aiProvider ?? 'gemini';
+    final modelCtrl = TextEditingController(
+      text: _controller.aiModelName ?? (_getDefaultModelForProvider(_controller.aiProvider ?? 'gemini')),
+    );
+    final urlCtrl = TextEditingController(
+      text: _controller.aiBaseUrl ?? (_getDefaultUrlForProvider(_controller.aiProvider ?? 'gemini')),
+    );
     final keyCtrl = TextEditingController(text: _controller.aiApiKey ?? '');
 
     showDialog(
@@ -236,48 +242,96 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
                 children: const [
                   Icon(Icons.tune_outlined, color: Color(0xFF4F46E5)),
                   SizedBox(width: 8),
-                  Text('AI Model Settings'),
+                  Text('AI Model & Provider Settings'),
                 ],
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Configure your custom model provider and key credentials. Default server environment settings are used if fields are left blank.',
-                      style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B), height: 1.4),
-                    ),
-                    const SizedBox(height: 20),
-                    DropdownButtonFormField<String>(
-                      value: selectedProvider,
-                      decoration: const InputDecoration(
-                        labelText: 'LLM Model Provider',
-                        border: OutlineInputBorder(),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Select a predefined model engine or integrate your own custom LLM provider, base URL, and model name. If Google or OpenAI updates or deprecates a model, you can instantly change the model ID here.',
+                        style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B), height: 1.4),
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'gemini', child: Text('Gemini (gemini-2.5-flash)')),
-                        DropdownMenuItem(value: 'openai', child: Text('OpenAI (gpt-4o)')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setStateDialog(() {
-                            selectedProvider = val;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: keyCtrl,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'API Authentication Key',
-                        border: OutlineInputBorder(),
-                        helperText: 'Keys are stored locally on this terminal.',
+                      const SizedBox(height: 20),
+                      DropdownButtonFormField<String>(
+                        value: selectedProvider,
+                        decoration: const InputDecoration(
+                          labelText: 'LLM Model Provider Engine',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.psychology_outlined),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'gemini', child: Text('Google Gemini (gemini-1.5-flash / gemini-2.0-flash)')),
+                          DropdownMenuItem(value: 'openai', child: Text('OpenAI (gpt-4o / gpt-4o-mini)')),
+                          DropdownMenuItem(value: 'deepseek', child: Text('DeepSeek AI (deepseek-chat / deepseek-r1)')),
+                          DropdownMenuItem(value: 'claude', child: Text('Anthropic Claude (claude-3-5-sonnet)')),
+                          DropdownMenuItem(value: 'perplexity', child: Text('Perplexity AI (sonar-pro / sonar)')),
+                          DropdownMenuItem(value: 'custom', child: Text('Custom AI Model / Local Proxy Endpoint')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setStateDialog(() {
+                              selectedProvider = val;
+                              modelCtrl.text = _getDefaultModelForProvider(val);
+                              urlCtrl.text = _getDefaultUrlForProvider(val);
+                            });
+                          }
+                        },
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: modelCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Model ID / Name (Editable)',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.code),
+                          helperText: 'Change this if a model is deprecated or if using a new release.',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Preset Model Chips
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: _getQuickModelChipsForProvider(selectedProvider).map((m) {
+                          return ActionChip(
+                            label: Text(m, style: const TextStyle(fontSize: 11)),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {
+                              setStateDialog(() {
+                                modelCtrl.text = m;
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: urlCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Base API Endpoint URL',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.link),
+                          helperText: 'Default server provider URL or custom proxy.',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: keyCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'API Authentication Key',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.key),
+                          helperText: 'Keys are stored locally on this terminal.',
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -287,15 +341,20 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
                 ),
                 FilledButton(
                   onPressed: () async {
-                    await _controller.savePrefs(selectedProvider, keyCtrl.text);
+                    await _controller.savePrefs(
+                      provider: selectedProvider,
+                      modelName: modelCtrl.text,
+                      baseUrl: urlCtrl.text,
+                      apiKey: keyCtrl.text,
+                    );
                     if (context.mounted) {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('AI settings saved successfully.')),
+                        const SnackBar(content: Text('AI Model settings saved successfully.')),
                       );
                     }
                   },
-                  child: const Text('Save'),
+                  child: const Text('Save Settings'),
                 ),
               ],
             );
@@ -303,6 +362,57 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
         );
       },
     );
+  }
+
+  String _getDefaultModelForProvider(String provider) {
+    switch (provider) {
+      case 'gemini':
+        return 'gemini-1.5-flash';
+      case 'openai':
+        return 'gpt-4o-mini';
+      case 'deepseek':
+        return 'deepseek-chat';
+      case 'claude':
+        return 'claude-3-5-sonnet-20241022';
+      case 'perplexity':
+        return 'sonar-pro';
+      default:
+        return 'gpt-4o';
+    }
+  }
+
+  String _getDefaultUrlForProvider(String provider) {
+    switch (provider) {
+      case 'gemini':
+        return 'https://generativelanguage.googleapis.com';
+      case 'openai':
+        return 'https://api.openai.com';
+      case 'deepseek':
+        return 'https://api.deepseek.com';
+      case 'claude':
+        return 'https://api.anthropic.com';
+      case 'perplexity':
+        return 'https://api.perplexity.ai';
+      default:
+        return 'https://api.openai.com';
+    }
+  }
+
+  List<String> _getQuickModelChipsForProvider(String provider) {
+    switch (provider) {
+      case 'gemini':
+        return ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+      case 'openai':
+        return ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
+      case 'deepseek':
+        return ['deepseek-chat', 'deepseek-coder', 'deepseek-r1'];
+      case 'claude':
+        return ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'];
+      case 'perplexity':
+        return ['sonar-pro', 'sonar', 'sonar-reasoning'];
+      default:
+        return ['gpt-4o-mini', 'gpt-4o', 'deepseek-chat', 'gemini-1.5-flash'];
+    }
   }
 
   // Data conversion helpers for charting

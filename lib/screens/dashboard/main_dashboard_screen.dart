@@ -2825,6 +2825,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'keywords': ['scheme report', 'discount list', 'promotions summary', 'active coupons', 'special rates list'],
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SchemeReportScreen())),
       },
+      {
+        'category': 'Reports',
+        'icon': Icons.auto_awesome,
+        'label': 'AI Query Analytics',
+        'subLabel': 'AI Analysis ➜ Ask natural language questions, deepseek, gemini, claude, perplexity, openai',
+        'permission': 'AI_QUERY_ANALYTICS',
+        'keywords': ['ai analysis', 'ai query analytics', 'ai analytics', 'ai report', 'ai assistant', 'ai query', 'natural language analytics', 'deepseek', 'gemini', 'perplexity', 'claude', 'openai', 'llm', 'ai model'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiQueryAnalyticsScreen())),
+      },
     ];
 
     final matchingItems = !isSearching

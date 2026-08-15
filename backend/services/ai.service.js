@@ -65,12 +65,16 @@ const NARRATIVE_ANALYST_SYSTEM = `You are an expert data analyst. You will recei
 Analyze the data patterns, trends, and anomalies within these 100 rows and output a structured executive summary highlighting the key answers to the user's question. Be concise and professional. Use markdown list items and bullet points for readability.`;
 
 /**
- * Execute https call to Gemini v20.0 (gemini-2.5-flash model)
+ * Execute call to Gemini API
  */
-function callGemini(prompt, systemInstruction, customKey) {
-    const apiKey = customKey || GEMINI_API_KEY;
+function callGemini(prompt, systemInstruction, config = {}) {
+    const apiKey = config.aiApiKey || GEMINI_API_KEY;
+    const model = (config.aiModelName && config.aiModelName.trim().length > 0) ? config.aiModelName.trim() : 'gemini-1.5-flash';
+    const baseUrl = (config.aiBaseUrl && config.aiBaseUrl.trim().length > 0) ? config.aiBaseUrl.trim() : 'https://generativelanguage.googleapis.com';
+
     return new Promise((resolve, reject) => {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+        const url = `${cleanBaseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
         
         const payload = {
             contents: [{ parts: [{ text: `${systemInstruction}\n\nUser Question: ${prompt}` }] }]
@@ -80,6 +84,7 @@ function callGemini(prompt, systemInstruction, customKey) {
         const options = {
             method: 'POST',
             hostname: parsedUrl.hostname,
+            port: parsedUrl.port || 443,
             path: parsedUrl.pathname + parsedUrl.search,
             headers: {
                 'Content-Type': 'application/json'
@@ -94,7 +99,7 @@ function callGemini(prompt, systemInstruction, customKey) {
                     const response = JSON.parse(data);
                     const text = response.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (!text) {
-                        reject(new Error(response.error?.message || `Invalid response from Gemini`));
+                        reject(new Error(response.error?.message || `Invalid response from Gemini model (${model})`));
                     } else {
                         resolve(text.trim());
                     }
@@ -111,26 +116,33 @@ function callGemini(prompt, systemInstruction, customKey) {
 }
 
 /**
- * Execute https call to OpenAI Chat Completion (gpt-4o model)
+ * Execute call to OpenAI-compatible Chat Completion APIs (OpenAI, DeepSeek, Perplexity, Custom)
  */
-function callOpenAI(prompt, systemInstruction, customKey) {
-    const apiKey = customKey || OPENAI_API_KEY;
+function callOpenAICompatible(prompt, systemInstruction, config = {}, defaultModel = 'gpt-4o', defaultBaseUrl = 'https://api.openai.com') {
+    const apiKey = config.aiApiKey || OPENAI_API_KEY;
+    const model = (config.aiModelName && config.aiModelName.trim().length > 0) ? config.aiModelName.trim() : defaultModel;
+    const rawBaseUrl = (config.aiBaseUrl && config.aiBaseUrl.trim().length > 0) ? config.aiBaseUrl.trim() : defaultBaseUrl;
+    
+    let cleanBase = rawBaseUrl.replace(/\/+$/, '');
+    let fullPath = cleanBase.endsWith('/chat/completions') || cleanBase.endsWith('/v1/chat/completions')
+        ? cleanBase
+        : (cleanBase.endsWith('/v1') ? `${cleanBase}/chat/completions` : `${cleanBase}/v1/chat/completions`);
+
     return new Promise((resolve, reject) => {
-        const url = 'https://api.openai.com/v1/chat/completions';
-        
         const payload = {
-            model: 'gpt-4o',
+            model: model,
             messages: [
                 { role: 'system', content: systemInstruction },
                 { role: 'user', content: prompt }
             ]
         };
 
-        const parsedUrl = new URL(url);
+        const parsedUrl = new URL(fullPath);
         const options = {
             method: 'POST',
             hostname: parsedUrl.hostname,
-            path: parsedUrl.pathname,
+            port: parsedUrl.port || 443,
+            path: parsedUrl.pathname + parsedUrl.search,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`
@@ -145,12 +157,12 @@ function callOpenAI(prompt, systemInstruction, customKey) {
                     const response = JSON.parse(data);
                     const text = response.choices?.[0]?.message?.content;
                     if (!text) {
-                        reject(new Error(response.error?.message || 'Invalid response from OpenAI'));
+                        reject(new Error(response.error?.message || response.message || `Invalid response from AI model (${model})`));
                     } else {
                         resolve(text.trim());
                     }
                 } catch (e) {
-                    reject(new Error(`Failed to parse OpenAI response: ${data}`));
+                    reject(new Error(`Failed to parse AI response from ${model}: ${data}`));
                 }
             });
         });
@@ -162,23 +174,93 @@ function callOpenAI(prompt, systemInstruction, customKey) {
 }
 
 /**
+ * Execute call to Anthropic Claude API
+ */
+function callClaude(prompt, systemInstruction, config = {}) {
+    const apiKey = config.aiApiKey;
+    const model = (config.aiModelName && config.aiModelName.trim().length > 0) ? config.aiModelName.trim() : 'claude-3-5-sonnet-20241022';
+    const baseUrl = (config.aiBaseUrl && config.aiBaseUrl.trim().length > 0) ? config.aiBaseUrl.trim() : 'https://api.anthropic.com';
+
+    return new Promise((resolve, reject) => {
+        const cleanBase = baseUrl.replace(/\/+$/, '');
+        const fullPath = cleanBase.endsWith('/v1/messages') ? cleanBase : `${cleanBase}/v1/messages`;
+
+        const payload = {
+            model: model,
+            system: systemInstruction,
+            max_tokens: 2048,
+            messages: [
+                { role: 'user', content: prompt }
+            ]
+        };
+
+        const parsedUrl = new URL(fullPath);
+        const options = {
+            method: 'POST',
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port || 443,
+            path: parsedUrl.pathname + parsedUrl.search,
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01'
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                try {
+                    const response = JSON.parse(data);
+                    const text = response.content?.[0]?.text;
+                    if (!text) {
+                        reject(new Error(response.error?.message || `Invalid response from Claude (${model})`));
+                    } else {
+                        resolve(text.trim());
+                    }
+                } catch (e) {
+                    reject(new Error(`Failed to parse Claude response: ${data}`));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.write(JSON.stringify(payload));
+        req.end();
+    });
+}
+
+async function executeLLMCall(prompt, systemInstruction, config = {}) {
+    const provider = (config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : 'gemini'))).toLowerCase().trim();
+
+    if (provider === 'gemini') {
+        return await callGemini(prompt, systemInstruction, config);
+    } else if (provider === 'claude' || provider === 'anthropic') {
+        return await callClaude(prompt, systemInstruction, config);
+    } else if (provider === 'deepseek') {
+        return await callOpenAICompatible(prompt, systemInstruction, config, 'deepseek-chat', 'https://api.deepseek.com');
+    } else if (provider === 'perplexity') {
+        return await callOpenAICompatible(prompt, systemInstruction, config, 'sonar-pro', 'https://api.perplexity.ai');
+    } else {
+        // OpenAI or Custom provider
+        return await callOpenAICompatible(prompt, systemInstruction, config, config.aiModelName || 'gpt-4o', config.aiBaseUrl || 'https://api.openai.com');
+    }
+}
+
+/**
  * Translate natural language question into SQL query
  */
 async function translateTextToQuery(question, config = {}) {
-    const provider = config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : null));
+    const provider = (config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : null)));
     const apiKey = config.aiApiKey || (provider === 'gemini' ? GEMINI_API_KEY : OPENAI_API_KEY);
 
-    if (!apiKey) {
+    if (!apiKey && !config.aiApiKey) {
         return getMockQuery(question);
     }
 
     try {
-        let resultRaw = '';
-        if (provider === 'gemini') {
-            resultRaw = await callGemini(question, TEXT_TO_SQL_SYSTEM, apiKey);
-        } else {
-            resultRaw = await callOpenAI(question, TEXT_TO_SQL_SYSTEM, apiKey);
-        }
+        const resultRaw = await executeLLMCall(question, TEXT_TO_SQL_SYSTEM, config);
 
         // Clean any markdown formatting like ```json or ```sql if returned
         let cleanJson = resultRaw.replace(/```json/g, '').replace(/```sql/g, '').replace(/```/g, '').trim();
@@ -197,20 +279,16 @@ async function translateTextToQuery(question, config = {}) {
  * Generate analysis summary narrative of datasets
  */
 async function analyzeDatasetSummary(originalQuestion, datasetJson, config = {}) {
-    const provider = config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : null));
+    const provider = (config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : null)));
     const apiKey = config.aiApiKey || (provider === 'gemini' ? GEMINI_API_KEY : OPENAI_API_KEY);
 
-    if (!apiKey) {
+    if (!apiKey && !config.aiApiKey) {
         return getMockAnalysis(originalQuestion, datasetJson);
     }
 
     try {
         const prompt = `Original Question: ${originalQuestion}\n\nDataset Content (Top 100 rows):\n${datasetJson}`;
-        if (provider === 'gemini') {
-            return await callGemini(prompt, NARRATIVE_ANALYST_SYSTEM, apiKey);
-        } else {
-            return await callOpenAI(prompt, NARRATIVE_ANALYST_SYSTEM, apiKey);
-        }
+        return await executeLLMCall(prompt, NARRATIVE_ANALYST_SYSTEM, config);
     } catch (err) {
         console.error('[AI SERVICE] Analysis summary failed, falling back to Mock:', err.message);
         return getMockAnalysis(originalQuestion, datasetJson);

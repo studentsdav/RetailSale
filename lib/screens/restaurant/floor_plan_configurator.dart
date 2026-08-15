@@ -101,7 +101,8 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
                 onPanUpdate: isEditingCoordinates ? onPanUpdateArea : null,
                 onPanEnd: isEditingCoordinates ? (_) => onPanEndArea() : null,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  height: 56,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     color: isEditingCoordinates ? colorScheme.primaryContainer.withValues(alpha: 0.4) : const Color(0xFFE2E8F0),
                     borderRadius: const BorderRadius.only(
@@ -124,7 +125,7 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
                               '$areaName Zone / Area',
@@ -140,6 +141,8 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
                               const Text(
                                 '💡 Drag header to move | Drag bottom-right corner handle to resize card',
                                 style: TextStyle(fontSize: 9.5, color: Colors.grey),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                           ],
                         ),
@@ -216,8 +219,10 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
     final int areaCount = areaKeys.length;
     final int colsCount = areaCount > 1 ? 2 : 1;
 
-    const double defaultMinCardWidth = 360.0;
-    const double defaultMinCardHeight = 240.0;
+    const double cardHeaderHeight = 65.0;
+    const double cardPadding = 20.0;
+    const double tableCardSize = 140.0;
+    const double tableGap = 15.0;
     const double spacingX = 40.0;
     const double spacingY = 40.0;
 
@@ -229,30 +234,25 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
     for (int areaIdx = 0; areaIdx < areaKeys.length; areaIdx++) {
       final String areaName = areaKeys[areaIdx];
       final List<dynamic> areaTables = groupedTables[areaName]!;
+      final int tablesInArea = areaTables.length;
 
-      // Calculate minX, minY, maxX, maxY for tables inside this area
-      double minX = 999999;
-      double minY = 999999;
-      double maxX = -999999;
-      double maxY = -999999;
+      final int gridCols = tablesInArea > 2 ? 3 : (tablesInArea > 1 ? 2 : 1);
+      final int gridRows = max((tablesInArea / gridCols).ceil(), 1);
 
-      for (final t in areaTables) {
-        final double tx = (t['x_coordinate'] ?? 120).toDouble();
-        final double ty = (t['y_coordinate'] ?? 120).toDouble();
-        if (tx < minX) minX = tx;
-        if (ty < minY) minY = ty;
-        if (tx > maxX) maxX = tx;
-        if (ty > maxY) maxY = ty;
-      }
+      final double minCardWidth = (gridCols * tableCardSize) + ((gridCols - 1) * tableGap) + (cardPadding * 2);
+      final double minCardHeight = cardHeaderHeight + (gridRows * tableCardSize) + ((gridRows - 1) * tableGap) + cardPadding;
 
-      // Check if tables inside this area overlap
+      final double defaultWidth = max(minCardWidth, 380.0);
+      final double defaultHeight = max(minCardHeight, 260.0);
+
+      // Check if tables inside this area overlap with each other
       bool isOverlapping = false;
       for (int i = 0; i < areaTables.length; i++) {
         for (int j = i + 1; j < areaTables.length; j++) {
-          final double x1 = (areaTables[i]['x_coordinate'] ?? 120).toDouble();
-          final double y1 = (areaTables[i]['y_coordinate'] ?? 120).toDouble();
-          final double x2 = (areaTables[j]['x_coordinate'] ?? 120).toDouble();
-          final double y2 = (areaTables[j]['y_coordinate'] ?? 120).toDouble();
+          final double x1 = (areaTables[i]['x_coordinate'] ?? 0).toDouble();
+          final double y1 = (areaTables[i]['y_coordinate'] ?? 0).toDouble();
+          final double x2 = (areaTables[j]['x_coordinate'] ?? 0).toDouble();
+          final double y2 = (areaTables[j]['y_coordinate'] ?? 0).toDouble();
           if ((x1 - x2).abs() < 20 && (y1 - y2).abs() < 20) {
             isOverlapping = true;
             break;
@@ -264,25 +264,21 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
       if (!areaPositions.containsKey(areaName)) {
         final int col = areaIdx % colsCount;
         final int row = areaIdx ~/ colsCount;
-        final double defaultLeft = spacingX + (col * (defaultMinCardWidth + spacingX));
-        final double defaultTop = spacingY + (row * (defaultMinCardHeight + spacingY));
-        final double initLeft = areaTables.isEmpty ? defaultLeft : max(minX - 20.0, 15.0);
-        final double initTop = areaTables.isEmpty ? defaultTop : max(minY - 50.0, 15.0);
-        areaPositions[areaName] = Offset(initLeft, initTop);
+        final double defaultLeft = spacingX + (col * (defaultWidth + spacingX));
+        final double defaultTop = spacingY + (row * (defaultHeight + spacingY));
+        areaPositions[areaName] = Offset(defaultLeft, defaultTop);
       }
 
       final Offset currentAreaOffset = areaPositions[areaName]!;
       final double baseAreaLeft = currentAreaOffset.dx;
       final double baseAreaTop = currentAreaOffset.dy;
 
-      // Tight, balanced Area Card width & height (Exact equal 20px padding on left, right, bottom)
-      double calculatedWidth = areaTables.isEmpty ? defaultMinCardWidth : max((maxX - minX) + 140.0 + 40.0, defaultMinCardWidth);
-      double calculatedHeight = areaTables.isEmpty ? defaultMinCardHeight : max((maxY - minY) + 140.0 + 70.0, defaultMinCardHeight);
+      double calculatedWidth = defaultWidth;
+      double calculatedHeight = defaultHeight;
 
-      // Apply user's custom Canva resize if modified
       if (areaSizes.containsKey(areaName)) {
-        calculatedWidth = areaSizes[areaName]!.width;
-        calculatedHeight = areaSizes[areaName]!.height;
+        calculatedWidth = max(areaSizes[areaName]!.width, defaultWidth);
+        calculatedHeight = max(areaSizes[areaName]!.height, defaultHeight);
       }
 
       if (baseAreaLeft + calculatedWidth + 100 > totalMaxX) {
@@ -308,16 +304,15 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
             onPanUpdateArea: (details) {
               setState(() {
                 final Offset oldOffset = areaPositions[areaName] ?? const Offset(40, 40);
-                areaPositions[areaName] = Offset(
-                  (oldOffset.dx + details.delta.dx).clamp(10.0, 4000.0),
-                  (oldOffset.dy + details.delta.dy).clamp(10.0, 4000.0),
-                );
+                final double newX = (oldOffset.dx + details.delta.dx).clamp(10.0, 4000.0);
+                final double newY = (oldOffset.dy + details.delta.dy).clamp(10.0, 4000.0);
+                areaPositions[areaName] = Offset(newX, newY);
 
                 for (final table in areaTables) {
-                  final double currentX = (table['x_coordinate'] ?? 120).toDouble();
-                  final double currentY = (table['y_coordinate'] ?? 120).toDouble();
-                  table['x_coordinate'] = (currentX + details.delta.dx).clamp(30.0, 4000.0).toInt();
-                  table['y_coordinate'] = (currentY + details.delta.dy).clamp(70.0, 4000.0).toInt();
+                  final double currentX = (table['x_coordinate'] ?? (baseAreaLeft + 20)).toDouble();
+                  final double currentY = (table['y_coordinate'] ?? (baseAreaTop + 65)).toDouble();
+                  table['x_coordinate'] = (currentX + details.delta.dx).clamp(newX + 10.0, 4000.0).toInt();
+                  table['y_coordinate'] = (currentY + details.delta.dy).clamp(newY + cardHeaderHeight, 4000.0).toInt();
                 }
               });
             },
@@ -329,8 +324,8 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
             onPanUpdateCornerResize: (details) {
               setState(() {
                 final Size currentSize = areaSizes[areaName] ?? Size(calculatedWidth, calculatedHeight);
-                final double newW = (currentSize.width + details.delta.dx).clamp(300.0, 4000.0);
-                final double newH = (currentSize.height + details.delta.dy).clamp(220.0, 4000.0);
+                final double newW = (currentSize.width + details.delta.dx).clamp(defaultWidth, 4000.0);
+                final double newH = (currentSize.height + details.delta.dy).clamp(defaultHeight, 4000.0);
                 areaSizes[areaName] = Size(newW, newH);
               });
             },
@@ -341,15 +336,22 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
       // Render Table Cards inside Area Card
       for (int tIdx = 0; tIdx < areaTables.length; tIdx++) {
         final table = areaTables[tIdx];
-        double tx = (table['x_coordinate'] ?? 120).toDouble();
-        double ty = (table['y_coordinate'] ?? 120).toDouble();
+        double tx = (table['x_coordinate'] ?? 0).toDouble();
+        double ty = (table['y_coordinate'] ?? 0).toDouble();
 
-        // If table coordinates overlap or are default, space them out neatly inside Area Card
-        if (isOverlapping || (areaTables.length > 1 && tx == 120 && ty == 120)) {
-          final int tCol = tIdx % 2;
-          final int tRow = tIdx ~/ 2;
-          tx = baseAreaLeft + 25.0 + (tCol * 165.0);
-          ty = baseAreaTop + 65.0 + (tRow * 165.0);
+        // Calculate expected grid position for table tIdx
+        final int tCol = tIdx % gridCols;
+        final int tRow = tIdx ~/ gridCols;
+        final double expectedX = baseAreaLeft + cardPadding + (tCol * (tableCardSize + tableGap));
+        final double expectedY = baseAreaTop + cardHeaderHeight + (tRow * (tableCardSize + tableGap));
+
+        // Check if table overlaps header or floats outside container
+        final bool isInsideHeader = ty < (baseAreaTop + cardHeaderHeight);
+        final bool isOutsideCard = tx < baseAreaLeft || tx > (baseAreaLeft + calculatedWidth - tableCardSize) || ty > (baseAreaTop + calculatedHeight - tableCardSize);
+
+        if (tx == 0 || ty == 0 || isInsideHeader || isOutsideCard || isOverlapping) {
+          tx = expectedX;
+          ty = expectedY;
           table['x_coordinate'] = tx.toInt();
           table['y_coordinate'] = ty.toInt();
         }
@@ -369,10 +371,10 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
               onPanUpdate: isEditingCoordinates
                   ? (details) {
                       setState(() {
-                        final double currentX = (table['x_coordinate'] ?? 120).toDouble();
-                        final double currentY = (table['y_coordinate'] ?? 120).toDouble();
-                        table['x_coordinate'] = (currentX + details.delta.dx).clamp(30.0, 4000.0).toInt();
-                        table['y_coordinate'] = (currentY + details.delta.dy).clamp(70.0, 4000.0).toInt();
+                        final double currentX = (table['x_coordinate'] ?? (baseAreaLeft + 20)).toDouble();
+                        final double currentY = (table['y_coordinate'] ?? (baseAreaTop + 65)).toDouble();
+                        table['x_coordinate'] = (currentX + details.delta.dx).clamp(baseAreaLeft + 10.0, baseAreaLeft + calculatedWidth - tableCardSize).toInt();
+                        table['y_coordinate'] = (currentY + details.delta.dy).clamp(baseAreaTop + cardHeaderHeight, baseAreaTop + calculatedHeight - tableCardSize).toInt();
                       });
                     }
                   : null,
@@ -383,8 +385,8 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
                   : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 100),
-                width: 140,
-                height: 140,
+                width: tableCardSize,
+                height: tableCardSize,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -419,48 +421,57 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
                     Text(
                       table['table_name'] ?? '',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
                       'Seats: ${table['capacity']}',
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.shade50,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.amber.shade200, width: 0.5),
-                          ),
-                          child: Text(
-                            areaName,
-                            style: TextStyle(color: Colors.amber.shade800, fontSize: 9, fontWeight: FontWeight.bold),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (selectedFloorId == null && floorName.isNotEmpty) ...[
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.blue.shade200, width: 0.5),
-                            ),
-                            child: Text(
-                              floorName,
-                              style: TextStyle(color: Colors.blue.shade800, fontSize: 8.5, fontWeight: FontWeight.w600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.amber.shade200, width: 0.5),
+                              ),
+                              child: Text(
+                                areaName,
+                                style: TextStyle(color: Colors.amber.shade800, fontSize: 8.5, fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
+                          if (selectedFloorId == null && floorName.isNotEmpty) ...[
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Colors.blue.shade200, width: 0.5),
+                                ),
+                                child: Text(
+                                  floorName,
+                                  style: TextStyle(color: Colors.blue.shade800, fontSize: 8.5, fontWeight: FontWeight.w600),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ],
                 ),
@@ -472,111 +483,98 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Floor Seating Designer'),
-        actions: [
-          Row(
-            children: [
-              Text(
-                isEditingCoordinates ? 'Editing Mode Active' : 'View Mode',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isEditingCoordinates ? colorScheme.primary : Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Switch(
-                value: isEditingCoordinates,
-                onChanged: (val) {
-                  setState(() {
-                    isEditingCoordinates = val;
-                  });
-                },
-              )
-            ],
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
       body: Row(
         children: [
-          // Sidebar with Floors & Dining Areas
+          // Sidebar Filters & Controls
           Container(
             width: 250,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(right: BorderSide(color: colorScheme.outlineVariant)),
-            ),
+            color: colorScheme.surface,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Floor Selection Header
                 Container(
-                  padding: const EdgeInsets.all(16),
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Text(
-                    'Floors / Zones',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  child: Row(
                     children: [
-                      ListTile(
-                        leading: Icon(
-                          Icons.all_out,
-                          color: selectedFloorId == null ? colorScheme.primary : Colors.grey,
-                        ),
-                        title: const Text('Show All Floors'),
-                        selected: selectedFloorId == null,
-                        selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
-                        onTap: () {
-                          setState(() {
-                            selectedFloorId = null;
-                          });
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        color: colorScheme.primary,
+                        tooltip: 'Back',
+                        onPressed: () {
+                          if (Navigator.canPop(context)) {
+                            Navigator.pop(context);
+                          }
                         },
                       ),
-                      ...ctrl.floors.map((floor) {
-                        final isSelected = floor['id'] == selectedFloorId;
-                        return ListTile(
-                          leading: Icon(
-                            Icons.layers,
-                            color: isSelected ? colorScheme.primary : Colors.grey,
-                          ),
-                          title: Text(
-                            floor['name'] ?? '',
-                            style: TextStyle(
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                          selected: isSelected,
-                          selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
-                          onTap: () {
-                            setState(() {
-                              selectedFloorId = floor['id'];
-                            });
-                          },
-                        );
-                      }),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Layout Controls',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const Divider(height: 1),
-                // Dining Area Filter Header
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Text(
-                    'Dining Areas Filter',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant),
-                  ),
-                ),
                 Expanded(
-                  flex: 2,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Floor Filter Header
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        color: Colors.grey.shade100,
+                        width: double.infinity,
+                        child: const Text(
+                          'Floors / Zones',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
+                        ),
+                      ),
+                      ListTile(
+                        leading: Icon(
+                          Icons.domain,
+                          color: selectedFloorId == null ? colorScheme.primary : Colors.grey,
+                        ),
+                        title: const Text('All Floors'),
+                        selected: selectedFloorId == null,
+                        selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                        onTap: () => setState(() => selectedFloorId = null),
+                      ),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: ctrl.floors.length,
+                          itemBuilder: (context, index) {
+                            final floor = ctrl.floors[index];
+                            final isSelected = floor['id'] == selectedFloorId;
+                            return ListTile(
+                              leading: Icon(
+                                Icons.stairs,
+                                color: isSelected ? colorScheme.primary : Colors.grey,
+                              ),
+                              title: Text(floor['name'] ?? ''),
+                              selected: isSelected,
+                              selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                              onTap: () {
+                                setState(() {
+                                  selectedFloorId = floor['id'];
+                                });
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      // Dining Areas Filter Header
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        color: Colors.grey.shade100,
+                        width: double.infinity,
+                        child: const Text(
+                          'Dining Areas Filter',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
+                        ),
+                      ),
                       ListTile(
                         leading: Icon(
                           Icons.all_out,
@@ -637,9 +635,33 @@ class _FloorPlanConfiguratorState extends State<FloorPlanConfigurator> {
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'Visual Floor Layout Designer: Drag area headers to position cards | Drag bottom-right corner handle to resize card like Canva | Drag tables inside.',
+                          'Visual Floor Layout Designer: Drag area headers to position cards | Drag bottom-right corner handle to resize card | Drag tables inside.',
                           style: TextStyle(fontSize: 13, color: Colors.black87),
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            areaPositions.clear();
+                            areaSizes.clear();
+                            for (final table in ctrl.tables) {
+                              table['x_coordinate'] = 0;
+                              table['y_coordinate'] = 0;
+                            }
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Floor layout auto-aligned into clean grid format.')),
+                          );
+                        },
+                        icon: const Icon(Icons.grid_view_rounded, size: 16),
+                        label: const Text('Auto-Align Grid', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),

@@ -88,15 +88,17 @@ function getCachedData(key) {
 
 exports.executeNaturalLanguageQuery = async (req, res) => {
     try {
-        const { question, aiProvider, aiApiKey } = req.body;
+        const { question, aiProvider, aiModelName, aiBaseUrl, aiApiKey } = req.body;
         const outletId = resolveOutletId(req);
 
         if (!question || String(question).trim().isEmpty) {
             return res.status(400).json({ success: false, message: 'Question prompt is required' });
         }
 
+        const aiConfig = { aiProvider, aiModelName, aiBaseUrl, aiApiKey };
+
         // 1. Translate prompt to raw SQL query
-        const sqlQuery = await aiService.translateTextToQuery(question, { aiProvider, aiApiKey });
+        const sqlQuery = await aiService.translateTextToQuery(question, aiConfig);
 
         // 2. Execute securely inside read-only transaction
         const t = await req.propertyDb.transaction();
@@ -121,7 +123,7 @@ exports.executeNaturalLanguageQuery = async (req, res) => {
 
         // 3. Narrative analysis summary on top 100 rows
         const sampleRows = results.slice(0, 100);
-        const summaryText = await aiService.analyzeDatasetSummary(question, JSON.stringify(sampleRows), { aiProvider, aiApiKey });
+        const summaryText = await aiService.analyzeDatasetSummary(question, JSON.stringify(sampleRows), aiConfig);
 
         // 4. Cache full result
         const cacheId = crypto.randomUUID();
