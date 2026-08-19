@@ -42,7 +42,7 @@ class Item {
     required this.unit,
     required this.barcode,
     this.imagePath = '',
-    this.location = 'Kitchen',
+    this.location = '-',
     required this.rate,
     required this.retailSalePrice,
     required this.taxType,
@@ -80,9 +80,9 @@ class Item {
       unit: json['unit'] ?? '',
       barcode: json['barcode'] ?? '',
       imagePath: json['image_path'] ?? '',
-      location: (json['location'] ?? json['kitchen_location'] ?? 'Kitchen').toString().isEmpty
-          ? 'Kitchen'
-          : (json['location'] ?? json['kitchen_location'] ?? 'Kitchen').toString(),
+      location: (json['location'] ?? json['kitchen_location'] ?? '-').toString().isEmpty
+          ? '-'
+          : (json['location'] ?? json['kitchen_location'] ?? '-').toString(),
       rate: double.tryParse(json['rate'].toString()) ?? 0.0,
       retailSalePrice:
           double.tryParse(json['retail_sale_price'].toString()) ?? 0.0,

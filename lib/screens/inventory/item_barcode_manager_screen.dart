@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
@@ -29,10 +29,14 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   final Map<int, bool> _selected = {};
   final Map<int, TextEditingController> _qtyCtrls = {};
+  final TextEditingController _batchNoCtrl = TextEditingController(text: 'BAT-2608');
+  final TextEditingController _mfgDateCtrl = TextEditingController(text: '19/08/26');
   bool _selectAllVisible = false;
   bool _regenerateExisting = false;
   String _sizeKey = '50x30';
   bool _busy = false;
+  bool _printBatchNo = false;
+  bool _printMfgDate = false;
 
   static const Map<String, _LabelSize> _labelSizes = {
     '38x25': _LabelSize('Small', 38, 25, 10),
@@ -52,6 +56,8 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _batchNoCtrl.dispose();
+    _mfgDateCtrl.dispose();
     for (final controller in _qtyCtrls.values) {
       controller.dispose();
     }
@@ -167,46 +173,133 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
       color: PdfColors.black,
     );
 
+    final String batchStr = _batchNoCtrl.text.trim().isEmpty
+        ? 'BAT-2608'
+        : _batchNoCtrl.text.trim();
+    final String mfgStr = _mfgDateCtrl.text.trim().isEmpty
+        ? '19/08/26'
+        : _mfgDateCtrl.text.trim();
+
+    // ── Dimensions ─────────────────────────────────────────────────
+    const double vertPad = 3.0;
+    const double sideW = 8.0; // column visual width (= text height after rotate)
+    const double gap = 1.5;
+    const double divW = 0.5;
+
+    // Compute barcode-row height so we can pre-size the rotated text box.
+    final double labelH = size.heightMm * PdfPageFormat.mm;
+    final double nameRowH = (size.fontSize + 0.5) * 1.5 + 2;
+    final double codeRowH = size.fontSize * 1.5 + 2;
+    final double rowH = labelH - vertPad * 2 - nameRowH - codeRowH;
+
+    // â”€â”€ Vertical side text via stacked characters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // pw.Transform.rotate does NOT re-arrange layout constraints in the pdf
+    // package, so text stays horizontal and clipped. Instead we stack each
+    // character as a separate pw.Text in a Column (reversed) so the label
+    // reads bottom-to-top when viewed upright.
+    const pw.TextStyle sideStyle =
+        pw.TextStyle(fontSize: 5.5, color: PdfColors.black);
+
+    pw.Widget sideText(String t) {
+      final chars = t.split('').reversed.toList();
+      return pw.SizedBox(
+        width: sideW,
+        height: rowH,
+        child: pw.Column(
+          mainAxisAlignment: pw.MainAxisAlignment.center,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: chars
+              .map((c) => pw.Text(c,
+                  style: sideStyle, textAlign: pw.TextAlign.center))
+              .toList(),
+        ),
+      );
+    }
+
+    pw.Widget divider() => pw.Container(
+          width: divW,
+          height: rowH,
+          color: PdfColors.black,
+        );
+
     return pw.Container(
       width: size.widthMm * PdfPageFormat.mm,
-      height: size.heightMm * PdfPageFormat.mm,
-      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      height: labelH,
+      padding:
+          const pw.EdgeInsets.symmetric(horizontal: 0, vertical: vertPad),
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.black, width: .6),
         borderRadius: pw.BorderRadius.circular(6),
       ),
       child: pw.Column(
-        mainAxisAlignment: pw.MainAxisAlignment.center,
         crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
-          pw.Text(
-            item.itemName,
-            maxLines: 1,
-            textAlign: pw.TextAlign.center,
-            style: textStyle.copyWith(fontSize: size.fontSize + 1),
-          ),
-          pw.SizedBox(height: 3),
-          pw.Expanded(
-            child: pw.Center(
-              child: pw.BarcodeWidget(
-                barcode: pw.Barcode.code128(),
-                data: item.barcode,
-                width: (size.widthMm - 10) * PdfPageFormat.mm,
-                height: (size.heightMm * 0.42) * PdfPageFormat.mm,
-                drawText: false,
+          // ── Item name ──────────────────────────────────────────────
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 4),
+            child: pw.Text(
+              item.itemName,
+              maxLines: 1,
+              textAlign: pw.TextAlign.center,
+              style: textStyle.copyWith(
+                fontSize: size.fontSize + 0.5,
+                fontWeight: pw.FontWeight.bold,
               ),
             ),
           ),
           pw.SizedBox(height: 2),
-          pw.Text(
-            item.barcode,
-            textAlign: pw.TextAlign.center,
-            style: textStyle,
+          // ── Barcode row ────────────────────────────────────────────
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              // LEFT: Batch No column
+              if (_printBatchNo) ...[
+                sideText('B: $batchStr'),
+                pw.SizedBox(width: gap),
+                divider(),
+                pw.SizedBox(width: gap),
+              ],
+              // CENTRE: barcode
+              pw.Expanded(
+                child: pw.Padding(
+                  padding: pw.EdgeInsets.symmetric(
+                    horizontal:
+                        (_printBatchNo || _printMfgDate) ? 0 : 3,
+                  ),
+                  child: pw.Center(
+                    child: pw.BarcodeWidget(
+                      barcode: pw.Barcode.code128(),
+                      data: item.barcode,
+                      height: rowH * 0.85,
+                      drawText: false,
+                    ),
+                  ),
+                ),
+              ),
+              // RIGHT: Mfg Date column
+              if (_printMfgDate) ...[
+                pw.SizedBox(width: gap),
+                divider(),
+                pw.SizedBox(width: gap),
+                sideText('M: $mfgStr'),
+              ],
+            ],
+          ),
+          pw.SizedBox(height: 2),
+          // ── Barcode number ─────────────────────────────────────────
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 4),
+            child: pw.Text(
+              item.barcode,
+              textAlign: pw.TextAlign.center,
+              style: textStyle,
+            ),
           ),
         ],
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -291,6 +384,54 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
                         onChanged: (value) => _toggleSelectAll(value ?? false),
                       ),
                     ),
+                    SizedBox(
+                      width: controlWidth,
+                      child: CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Print Batch No'),
+                        value: _printBatchNo,
+                        onChanged: (value) => setState(() => _printBatchNo = value ?? false),
+                      ),
+                    ),
+                    if (_printBatchNo)
+                      SizedBox(
+                        width: 160,
+                        child: TextField(
+                          controller: _batchNoCtrl,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            labelText: 'Batch No Text',
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    SizedBox(
+                      width: controlWidth,
+                      child: CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Print Mfg Date'),
+                        value: _printMfgDate,
+                        onChanged: (value) => setState(() => _printMfgDate = value ?? false),
+                      ),
+                    ),
+                    if (_printMfgDate)
+                      SizedBox(
+                        width: 160,
+                        child: TextField(
+                          controller: _mfgDateCtrl,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            labelText: 'Mfg Date Text',
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
                   ],
                 );
               },

@@ -1155,30 +1155,43 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         ? source.trim()
         : ((orderType != null && orderType.trim().isNotEmpty) ? orderType.trim() : 'STORE');
     final cleanSource = effectiveSource.toLowerCase();
+    final bool isRestaurant = cleanSource.contains('dine') ||
+        cleanSource.contains('restaurant') ||
+        cleanSource.contains('takeaway') ||
+        cleanSource.contains('kot') ||
+        (orderType != null && (orderType.toLowerCase().contains('dine') || orderType.toLowerCase().contains('restaurant') || orderType.toLowerCase().contains('takeaway')));
+
     Color bgColor;
     Color textColor;
+    String displaySource = effectiveSource.toUpperCase();
 
-    switch (cleanSource) {
-      case 'app':
-        bgColor = Colors.green.shade50;
-        textColor = Colors.green.shade700;
-        break;
-      case 'flipkart':
-        bgColor = Colors.blue.shade50;
-        textColor = Colors.blue.shade700;
-        break;
-      case 'amazon':
-        bgColor = Colors.orange.shade50;
-        textColor = Colors.orange.shade700;
-        break;
-      case 'store':
-      case 'b2c':
-        bgColor = Colors.grey.shade100;
-        textColor = Colors.grey.shade700;
-        break;
-      default:
-        bgColor = Colors.purple.shade50;
-        textColor = Colors.purple.shade700;
+    if (isRestaurant) {
+      bgColor = Colors.deepOrange.shade50;
+      textColor = Colors.deepOrange.shade700;
+      displaySource = 'RESTAURANT';
+    } else {
+      switch (cleanSource) {
+        case 'app':
+          bgColor = Colors.green.shade50;
+          textColor = Colors.green.shade700;
+          break;
+        case 'flipkart':
+          bgColor = Colors.blue.shade50;
+          textColor = Colors.blue.shade700;
+          break;
+        case 'amazon':
+          bgColor = Colors.orange.shade50;
+          textColor = Colors.orange.shade700;
+          break;
+        case 'store':
+        case 'b2c':
+          bgColor = Colors.grey.shade100;
+          textColor = Colors.grey.shade700;
+          break;
+        default:
+          bgColor = Colors.purple.shade50;
+          textColor = Colors.purple.shade700;
+      }
     }
 
     return Container(
@@ -1189,7 +1202,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         border: Border.all(color: textColor.withOpacity(0.3), width: 0.5),
       ),
       child: Text(
-        effectiveSource.toUpperCase(),
+        displaySource,
         style: TextStyle(
           color: textColor,
           fontSize: 10,

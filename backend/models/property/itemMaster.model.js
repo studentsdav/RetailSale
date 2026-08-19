@@ -64,7 +64,7 @@ module.exports = (sequelize, DataTypes) => {
 
             location: {
                 type: DataTypes.STRING(100),
-                defaultValue: 'Kitchen'
+                defaultValue: '-'
             },
 
             rate: {

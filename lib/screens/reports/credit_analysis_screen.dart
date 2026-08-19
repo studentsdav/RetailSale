@@ -21,6 +21,7 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
   DateTime _fromDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _toDate = DateTime.now();
   bool _isLoading = false;
+  bool _showMonthlyCollection = true;
 
   final NumberFormat _inr = NumberFormat.currency(
     locale: 'en_IN',
@@ -101,9 +102,55 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
     }
   }
 
+  List<_CollectionPoint> _getCollectionData(List<CreditCustomerReport> customers) {
+    final List<RepaymentEntry> repayments = [];
+    for (final customer in customers) {
+      for (final bill in customer.bills) {
+        repayments.addAll(bill.payments);
+      }
+    }
+
+    if (_showMonthlyCollection) {
+      final Map<String, double> monthlySums = {};
+      for (final payment in repayments) {
+        final monthLabel = DateFormat('MMM yyyy').format(payment.paymentDate);
+        monthlySums[monthLabel] = (monthlySums[monthLabel] ?? 0) + payment.amount;
+      }
+      final sortedLabels = monthlySums.keys.toList()
+        ..sort((a, b) {
+          try {
+            final dateA = DateFormat('MMM yyyy').parse(a);
+            final dateB = DateFormat('MMM yyyy').parse(b);
+            return dateA.compareTo(dateB);
+          } catch (_) {
+            return a.compareTo(b);
+          }
+        });
+      return sortedLabels.map((lbl) => _CollectionPoint(lbl, monthlySums[lbl]!)).toList();
+    } else {
+      final Map<String, double> dailySums = {};
+      for (final payment in repayments) {
+        final dayLabel = DateFormat('dd-MMM').format(payment.paymentDate);
+        dailySums[dayLabel] = (dailySums[dayLabel] ?? 0) + payment.amount;
+      }
+      final sortedLabels = dailySums.keys.toList()
+        ..sort((a, b) {
+          try {
+            final dateA = DateFormat('dd-MMM').parse(a);
+            final dateB = DateFormat('dd-MMM').parse(b);
+            return dateA.compareTo(dateB);
+          } catch (_) {
+            return a.compareTo(b);
+          }
+        });
+      return sortedLabels.map((lbl) => _CollectionPoint(lbl, dailySums[lbl]!)).toList();
+    }
+  }
+
   List<_BillStatusMetric> _getBillStatusMetrics() {
     final Map<String, int> statusCounts = {};
-    for (final customer in _controller.creditCustomers) {
+    final activeCustomers = _controller.creditCustomers.where((c) => c.totalOutstanding > 0.009).toList();
+    for (final customer in activeCustomers) {
       for (final bill in customer.bills) {
         final status = bill.paymentStatus.trim().toUpperCase().isEmpty
             ? 'UNKNOWN'
@@ -202,7 +249,7 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final customers = _controller.creditCustomers;
+    final customers = _controller.creditCustomers.where((c) => c.totalOutstanding > 0.009).toList();
 
     // Filter customers who actually have outstanding debt for the charts leaderboard
     final sortedDebtors = List<CreditCustomerReport>.from(customers)
@@ -210,6 +257,7 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
     final topDebtors = sortedDebtors.where((c) => c.totalOutstanding > 0.009).take(8).toList();
 
     final statusMetrics = _getBillStatusMetrics();
+    final collectionData = _getCollectionData(customers);
 
     return Scaffold(
       appBar: AppBar(
@@ -427,6 +475,85 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
                   ),
                   const SizedBox(height: 24),
 
+                  // Collection Analytics Chart
+                  Container(
+                    height: 380,
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Credit Collection Analytics Trend',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _showMonthlyCollection ? 'Monthly credit recovery collection' : 'Daily credit recovery collection',
+                                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                ),
+                              ],
+                            ),
+                            ToggleButtons(
+                              borderRadius: BorderRadius.circular(8),
+                              selectedColor: Colors.white,
+                              fillColor: const Color(0xFF2563EB),
+                              constraints: const BoxConstraints(minHeight: 32, minWidth: 80),
+                              isSelected: [_showMonthlyCollection, !_showMonthlyCollection],
+                              onPressed: (index) {
+                                setState(() {
+                                  _showMonthlyCollection = index == 0;
+                                });
+                              },
+                              children: const [
+                                Text('Monthly'),
+                                Text('Daily'),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: collectionData.isEmpty
+                              ? const Center(child: Text('No recovery collection data in this period'))
+                              : SfCartesianChart(
+                                  primaryXAxis: const CategoryAxis(
+                                    labelRotation: 45,
+                                    majorGridLines: MajorGridLines(width: 0),
+                                  ),
+                                  primaryYAxis: NumericAxis(
+                                    numberFormat: NumberFormat.compactSimpleCurrency(locale: 'en_IN'),
+                                    majorGridLines: const MajorGridLines(width: 0.5, dashArray: [4, 4]),
+                                  ),
+                                  tooltipBehavior: TooltipBehavior(enable: true),
+                                  series: <CartesianSeries<_CollectionPoint, String>>[
+                                    AreaSeries<_CollectionPoint, String>(
+                                      dataSource: collectionData,
+                                      xValueMapper: (_CollectionPoint data, _) => data.label,
+                                      yValueMapper: (_CollectionPoint data, _) => data.amount,
+                                      name: 'Recovery Amount',
+                                      color: const Color(0xFF16A34A).withOpacity(0.15),
+                                      borderColor: const Color(0xFF16A34A),
+                                      borderWidth: 2,
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   // Customer Detailed Table
                   Container(
                     width: double.infinity,
@@ -549,4 +676,10 @@ class _BillStatusMetric {
     required this.count,
     required this.percentage,
   });
+}
+
+class _CollectionPoint {
+  final String label;
+  final double amount;
+  _CollectionPoint(this.label, this.amount);
 }

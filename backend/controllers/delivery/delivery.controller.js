@@ -1495,7 +1495,7 @@ exports.acceptOrder = async (req, res) => {
                 consumptions: subscriptionAllocation.consumptions
             });
 
-            if (subscriptionAllocation.totalCoveredAmount > 0) {
+            if (subscriptionAllocation.totalCoveredAmount > 0 && !subscriptionAllocation.isFreeAllocation) {
                 const coverages = Array.isArray(subscriptionAllocation.subscriptionCoverages)
                     ? subscriptionAllocation.subscriptionCoverages
                     : [{
@@ -2164,14 +2164,11 @@ exports.registerCustomer = async (req, res) => {
             email: email ? email.trim().toLowerCase() : ''
         }, { transaction: t });
 
-        // Sync customer to sales_headers
-        const existingSalesCustomer = await req.propertyDb.models.sales_headers.findOne({
+        // Sync customer to customers table
+        const existingSalesCustomer = await req.propertyDb.models.customers.findOne({
             where: {
                 outlet_id: actualOutletId,
-                customer_phone: phone,
-                status: { [Op.in]: ['COMPLETED', 'CUSTOMER'] },
-                is_latest: true,
-                is_deleted: false
+                customer_phone: phone
             },
             transaction: t
         });
@@ -2179,43 +2176,14 @@ exports.registerCustomer = async (req, res) => {
         if (existingSalesCustomer) {
             await existingSalesCustomer.update({
                 customer_name: name,
-                customer_address: address || existingSalesCustomer.customer_address || '',
-                status: 'CUSTOMER'
+                customer_address: address || existingSalesCustomer.customer_address || ''
             }, { transaction: t });
         } else {
-            await req.propertyDb.models.sales_headers.create({
+            await req.propertyDb.models.customers.create({
                 outlet_id: actualOutletId,
-                sale_no: `CUST-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-                sale_date: new Date(),
                 customer_name: name,
                 customer_phone: phone,
-                customer_address: address || '',
-                status: 'CUSTOMER',
-                is_latest: true,
-                is_deleted: false,
-                payment_mode: 'CASH',
-                initial_amount_paid: 0,
-                amount_paid: 0,
-                change_amount: 0,
-                balance_due: 0,
-                billing_country: 'India',
-                billing_tax_mode: 'CGST_SGST',
-                bill_format: 'A4',
-                tax_percent: 0,
-                total_qty: 0,
-                sub_total: 0,
-                taxable_amount: 0,
-                cgst_amount: 0,
-                sgst_amount: 0,
-                igst_amount: 0,
-                total_tax: 0,
-                tax_breakup: [],
-                charges: [],
-                charge_total: 0,
-                charge_tax_total: 0,
-                total_discount: 0,
-                net_amount: 0,
-                version_no: 1
+                customer_address: address || ''
             }, { transaction: t });
         }
 

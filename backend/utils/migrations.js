@@ -3872,6 +3872,69 @@ COMMIT;
         ALTER TABLE kot_headers ADD COLUMN IF NOT EXISTS kottype VARCHAR(30) DEFAULT 'g';
       `);
     }
+  },
+  {
+    version: 101,
+    description: "Create dedicated customers table and migrate historical unique customer rows from sales_headers",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        
+        -- 1. Create customers table
+        CREATE TABLE IF NOT EXISTS customers (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL,
+          customer_name VARCHAR(150),
+          customer_phone VARCHAR(20),
+          customer_address TEXT,
+          customer_gstin VARCHAR(20),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 2. Create unique index on phone for safety and speed
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_outlet_phone 
+          ON customers (outlet_id, customer_phone) 
+          WHERE customer_phone IS NOT NULL AND customer_phone <> '';
+
+        -- 3. Create normal index on name for quick lookups
+        CREATE INDEX IF NOT EXISTS idx_customers_outlet_name 
+          ON customers (outlet_id, customer_name);
+
+        -- 4. Migrate existing unique phone-based customer contacts
+        INSERT INTO customers (outlet_id, customer_name, customer_phone, customer_address, customer_gstin, created_at, updated_at)
+        SELECT DISTINCT ON (outlet_id, COALESCE(customer_phone, ''))
+          outlet_id,
+          MAX(customer_name),
+          customer_phone,
+          MAX(customer_address),
+          MAX(customer_gstin),
+          MIN(sale_date),
+          MAX(sale_date)
+        FROM sales_headers
+        WHERE is_deleted = false AND (customer_phone IS NOT NULL AND customer_phone <> '')
+        GROUP BY outlet_id, customer_phone
+        ON CONFLICT (outlet_id, customer_phone) WHERE customer_phone IS NOT NULL AND customer_phone <> '' DO NOTHING;
+
+        -- 5. Migrate remaining name-only customer contacts
+        INSERT INTO customers (outlet_id, customer_name, customer_phone, customer_address, customer_gstin, created_at, updated_at)
+        SELECT DISTINCT ON (outlet_id, COALESCE(customer_name, ''))
+          outlet_id,
+          customer_name,
+          NULL,
+          MAX(customer_address),
+          MAX(customer_gstin),
+          MIN(sale_date),
+          MAX(sale_date)
+        FROM sales_headers
+        WHERE is_deleted = false 
+          AND (customer_phone IS NULL OR customer_phone = '') 
+          AND (customer_name IS NOT NULL AND customer_name <> '')
+        GROUP BY outlet_id, customer_name;
+
+        COMMIT;
+      `);
+    }
   }
 ];
 

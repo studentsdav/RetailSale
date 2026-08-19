@@ -2078,17 +2078,6 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
             SimpleDialogOption(
               onPressed: () {
                 Navigator.pop(context);
-                _showNcOrderDialog(context, table: table);
-              },
-              child: const ListTile(
-                leading: Icon(Icons.card_giftcard, color: Colors.purple),
-                title: Text('NC Order (Non-Chargeable)'),
-                subtitle: Text('Complimentary guest order (Rs. 0 charge)'),
-              ),
-            ),
-            SimpleDialogOption(
-              onPressed: () {
-                Navigator.pop(context);
                 _showBillingCheckoutDialog(context, table, ctrl);
               },
               child: const ListTile(
@@ -2114,17 +2103,6 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
               child: const ListTile(
                 leading: Icon(Icons.merge, color: Colors.orange),
                 title: Text('Merge / Combine Tables'),
-              ),
-            ),
-            SimpleDialogOption(
-              onPressed: () async {
-                await ctrl.updateTableStatus(table['id'], 'Available',
-                    guestCount: 0);
-                Navigator.pop(context);
-              },
-              child: const ListTile(
-                leading: Icon(Icons.check_circle, color: Colors.green),
-                title: Text('Set Available / Clean Table'),
               ),
             ),
           ],

@@ -267,16 +267,30 @@ exports.listTables = async (req, res) => {
             return nowTotalMins >= resvTotalMins && nowTotalMins < (resvTotalMins + slotDuration);
         }
 
+        const now = new Date();
         const activeTableIds = new Set();
+        const autoSeatedTableIds = new Map();
         for (const resv of todayReservations) {
-            if (isReservationTimeActive(resv.reservation_time)) {
+            const resvTime = new Date(resv.reservation_time);
+            if (resvTime <= now) {
+                await resv.update({ status: 'Seated' });
+                await req.propertyDb.models.restaurant_tables.update(
+                    { status: 'Occupied', current_guest_count: resv.guest_count },
+                    { where: { id: resv.table_id, outlet_id } }
+                );
+                autoSeatedTableIds.set(resv.table_id, resv.guest_count);
+                console.log(`[AUTO SEAT RESERVATION] Marked reservation #${resv.id} as Seated and Table #${resv.table_id} as Occupied`);
+            } else if (isReservationTimeActive(resv.reservation_time)) {
                 activeTableIds.add(resv.table_id);
             }
         }
 
         const data = tables.map(t => {
             const plain = t.get({ plain: true });
-            if (plain.status === 'Reserved' || plain.status === 'Available') {
+            if (autoSeatedTableIds.has(plain.id)) {
+                plain.status = 'Occupied';
+                plain.current_guest_count = autoSeatedTableIds.get(plain.id);
+            } else if (plain.status === 'Reserved' || plain.status === 'Available') {
                 plain.status = activeTableIds.has(plain.id) ? 'Reserved' : 'Available';
             }
             return plain;
@@ -571,6 +585,50 @@ exports.createReservation = async (req, res) => {
 
         // Update table status to Reserved
         await table.update({ status: 'Reserved' }, { transaction: t });
+
+        // Auto-add or update reservation customer details in customer database
+        if (phone || customer_name) {
+            try {
+                const { Op } = require('sequelize');
+                const cleanPhone = String(phone || '').trim();
+                const scope = {};
+                if (cleanPhone) {
+                    scope.customer_phone = cleanPhone;
+                } else if (customer_name) {
+                    scope.customer_name = String(customer_name).trim();
+                }
+
+                if (Object.keys(scope).length > 0) {
+                    const existing = await req.propertyDb.models.customers.findOne({
+                        where: {
+                            outlet_id,
+                            ...scope
+                        },
+                        transaction: t
+                    });
+
+                    if (!existing) {
+                        await req.propertyDb.models.customers.create({
+                            outlet_id,
+                            customer_name: customer_name ? String(customer_name).trim() : null,
+                            customer_phone: cleanPhone || null,
+                            customer_address: address ? String(address).trim() : null,
+                            customer_gstin: gstin ? String(gstin).trim() : null
+                        }, { transaction: t });
+                    } else {
+                        const updateData = {};
+                        if (!existing.customer_name && customer_name) updateData.customer_name = String(customer_name).trim();
+                        if (!existing.customer_address && address) updateData.customer_address = String(address).trim();
+                        if (!existing.customer_gstin && gstin) updateData.customer_gstin = String(gstin).trim();
+                        if (Object.keys(updateData).length > 0) {
+                            await existing.update(updateData, { transaction: t });
+                        }
+                    }
+                }
+            } catch (custErr) {
+                console.error('[AUTO ADD RESERVATION CUSTOMER FAIL]', custErr.message);
+            }
+        }
 
         await t.commit();
         res.json({ success: true, data: reservation });

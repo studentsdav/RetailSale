@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 
 import 'package:dropdown_search/dropdown_search.dart';
@@ -49,7 +49,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   final _hsnSac = TextEditingController();
   final _barcode = TextEditingController();
   final _imagePath = TextEditingController();
-  final _location = TextEditingController(text: 'Kitchen');
+  final _location = TextEditingController(text: '-');
   final _rate = TextEditingController();
   final _retailSalePrice = TextEditingController();
   final _mrp = TextEditingController();
@@ -337,7 +337,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _hsnSac.clear();
     _barcode.clear();
     _imagePath.clear();
-    _location.text = 'Kitchen';
+    _location.text = '-';
     _rate.clear();
     _retailSalePrice.clear();
     _mrp.clear();
@@ -449,7 +449,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         unit: _unit!,
         barcode: _barcode.text.trim(),
         imagePath: _currentImagePath ?? '',
-        location: _location.text.trim().isEmpty ? 'Kitchen' : _location.text.trim(),
+        location: _location.text.trim().isEmpty ? '-' : _location.text.trim(),
         rate: buyRate,
         retailSalePrice: saleRate,
         mrp: enteredMrp,
@@ -605,7 +605,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _name.text = it.itemName;
     _hsnSac.text = it.hsnSacCode;
     _barcode.text = it.barcode;
-    _location.text = it.location.isEmpty ? 'Kitchen' : it.location;
+    _location.text = it.location.isEmpty ? '-' : it.location;
     _imagePath.text =
         it.imagePath.isNotEmpty ? it.imagePath.split('/').last : '';
     _currentImagePath = it.imagePath.isNotEmpty ? it.imagePath : null;
@@ -918,7 +918,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               ?.toString(),
           "location": cellByHeader(row, headers, 'Location')?.toString() ??
               cellByHeader(row, headers, 'Kitchen Location')?.toString() ??
-              'Kitchen',
+              '-',
           "hsn_sac_code":
               cellByHeader(row, headers, 'HSN/SAC', fallbackIndex: 2)?.toString(),
           "item_group":
@@ -1143,46 +1143,42 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               runSpacing: 14,
           children: [
             // Code is readonly, so we don't pass focus node to it.
-            _text(_code, 'Item Code', readOnly: true),
+            _text(_code, 'Item Code', readOnly: true, width: 130),
             _text(_name, 'Item Name',
                 focusNode: _nameFocus,
-                onSubmit: () => _hsnSacFocus.requestFocus()),
+                onSubmit: () => _hsnSacFocus.requestFocus(),
+                width: 210),
             _text(_hsnSac, 'HSN / SAC Code',
                 focusNode: _hsnSacFocus,
                 prevNode: _nameFocus,
                 onSubmit: () => _hasVariants
                     ? _groupFocus.requestFocus()
-                    : _barcodeFocus.requestFocus()),
+                    : _barcodeFocus.requestFocus(),
+                width: 140),
             (() {
               final Set<String> locOptions = {};
               for (final l in _locations) {
                 if (l.locationName.trim().isNotEmpty) locOptions.add(l.locationName.trim());
               }
-              for (final it in _items) {
-                if (it.location.trim().isNotEmpty) locOptions.add(it.location.trim());
-              }
               if (_location.text.trim().isNotEmpty) {
                 locOptions.add(_location.text.trim());
               }
               final List<String> dbLocations = locOptions.toList();
-              if (dbLocations.isEmpty) dbLocations.add('Kitchen');
+              if (dbLocations.isEmpty) dbLocations.add('-');
 
               final String selectedVal = dbLocations.contains(_location.text.trim())
                   ? _location.text.trim()
                   : dbLocations.first;
 
               return SizedBox(
-                width: 250,
+                width: 210,
                 child: Row(
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: selectedVal,
-                        decoration: const InputDecoration(
-                          labelText: 'Location / Station',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                        ),
+                        initialValue: selectedVal,
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                        decoration: _compactDecoration('Location / Station'),
                         items: dbLocations.map((locStr) {
                           return DropdownMenuItem<String>(
                             value: locStr,
@@ -1195,7 +1191,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.add_circle_outline, color: Colors.blue),
+                      icon: const Icon(Icons.add_circle_outline, color: Colors.blue, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                       tooltip: 'Add Location to Database',
                       onPressed: _showAddLocationDialog,
                     ),
@@ -1205,10 +1203,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             })(),
             if (_editIndex == null)
               SizedBox(
-                width: 220,
+                width: 180,
                 child: SwitchListTile(
-                  title: const Text('Has Variants'),
-                  subtitle: const Text('Sizes, Colors, etc.'),
+                  title: const Text('Has Variants', style: TextStyle(fontSize: 12)),
+                  subtitle: const Text('Sizes, Colors, etc.', style: TextStyle(fontSize: 10)),
                   value: _hasVariants,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (v) {
@@ -1223,19 +1221,24 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               _text(_barcode, 'Barcode / Scan Code',
                   focusNode: _barcodeFocus,
                   prevNode: _hsnSacFocus,
-                  onSubmit: () => _groupFocus.requestFocus()),
+                  onSubmit: () => _groupFocus.requestFocus(),
+                  width: 160),
             SizedBox(
-              width: 220,
+              width: 180,
               child: TextFormField(
                 readOnly: true,
                 controller: _imagePath,
-                decoration: InputDecoration(
-                  labelText: 'Item Image',
+                style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                decoration: _compactDecoration(
+                  'Item Image',
                   suffixIcon: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                     tooltip: 'Choose Image',
-                    icon: const Icon(Icons.image_outlined),
+                    icon: const Icon(Icons.image_outlined, size: 18),
                     onPressed: _pickItemImage,
                   ),
+                  readOnly: true,
                 ),
               ),
             ),
@@ -1261,8 +1264,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               ),
 
             // 鳩 GROUP
+            // GROUP
             SizedBox(
-              width: 220,
+              width: 175,
               child: Focus(
                 focusNode: _groupFocus,
                 onKeyEvent: (node, event) {
@@ -1300,12 +1304,14 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     showSearchBox: true,
                   ),
                   decoratorProps: DropDownDecoratorProps(
-                    decoration: InputDecoration(
-                      labelText: "Group",
+                    decoration: _compactDecoration(
+                      "Group",
                       prefixIcon: _selectedGroup == null
                           ? null
                           : IconButton(
-                              icon: const Icon(Icons.edit, size: 18),
+                              icon: const Icon(Icons.edit, size: 16),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                               tooltip: "Edit Group",
                               onPressed: _showEditGroupDialog,
                             ),
@@ -1328,9 +1334,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               ),
             ),
 
-            // 泙 SUB CATEGORY
+            // SUB CATEGORY
             SizedBox(
-              width: 220,
+              width: 175,
               child: Focus(
                 focusNode: _subCategoryFocus,
                 onKeyEvent: (node, event) {
@@ -1369,12 +1375,14 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     return list;
                   },
                   decoratorProps: DropDownDecoratorProps(
-                    decoration: InputDecoration(
-                      labelText: "Sub Category",
+                    decoration: _compactDecoration(
+                      "Sub Category",
                       prefixIcon: _selectedSubCategory == null
                           ? null
                           : IconButton(
-                              icon: const Icon(Icons.edit, size: 18),
+                              icon: const Icon(Icons.edit, size: 16),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                               tooltip: "Edit Subcategory",
                               onPressed: _showEditSubCategoryDialog,
                             ),
@@ -1398,9 +1406,9 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               ),
             ),
 
-            // 泛 BRAND
+            // BRAND
             SizedBox(
-              width: 220,
+              width: 175,
               child: Focus(
                 focusNode: _brandFocus,
                 onKeyEvent: (node, event) {
@@ -1438,12 +1446,14 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     showSearchBox: true,
                   ),
                   decoratorProps: DropDownDecoratorProps(
-                    decoration: InputDecoration(
-                      labelText: "Brand",
+                    decoration: _compactDecoration(
+                      "Brand",
                       prefixIcon: _selectedBrand == null
                           ? null
                           : IconButton(
-                              icon: const Icon(Icons.edit, size: 18),
+                              icon: const Icon(Icons.edit, size: 16),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                               tooltip: "Edit Brand",
                               onPressed: _showEditBrandDialog,
                             ),
@@ -1466,7 +1476,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             ),
 
             SizedBox(
-              width: 220,
+              width: 130,
               child: Focus(
                 focusNode: _unitFocus,
                 onKeyEvent: (node, event) {
@@ -1496,10 +1506,8 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       ),
                     ),
                   ),
-                  decoratorProps: const DropDownDecoratorProps(
-                    decoration: InputDecoration(
-                      labelText: "Unit",
-                    ),
+                  decoratorProps: DropDownDecoratorProps(
+                    decoration: _compactDecoration("Unit"),
                   ),
                   onChanged: (value) {
                     setState(() {
@@ -1576,7 +1584,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               ),
               if (_useInclusiveRates)
                 SizedBox(
-                  width: 220,
+                  width: 175,
                   child: Focus(
                     onKeyEvent: (node, event) {
                       if (event is KeyDownEvent &&
@@ -1589,8 +1597,8 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     child: DropdownButtonFormField<String>(
                       focusNode: _inclusiveScopeFocus,
                       initialValue: _inclusiveRateScope,
-                      decoration:
-                          const InputDecoration(labelText: 'Inclusive Apply To'),
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                      decoration: _compactDecoration('Inclusive Apply To'),
                       items: const [
                         DropdownMenuItem(
                           value: 'BOTH',
@@ -1627,6 +1635,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     ? _inclusiveScopeFocus
                     : _inclusiveSwitchFocus,
                 onSubmit: () => _saleRateFocus.requestFocus(),
+                width: 140,
                 helperText: _useInclusiveRates &&
                         (_inclusiveRateScope == 'BOTH' ||
                             _inclusiveRateScope == 'BUY_ONLY') &&
@@ -1649,6 +1658,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 focusNode: _saleRateFocus,
                 prevNode: _rateFocus,
                 onSubmit: () => _mrpFocus.requestFocus(),
+                width: 140,
                 helperText: _useInclusiveRates &&
                         (_inclusiveRateScope == 'BOTH' ||
                             _inclusiveRateScope == 'SALE_ONLY') &&
@@ -1668,10 +1678,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 focusNode: _mrpFocus,
                 prevNode: _saleRateFocus,
                 onSubmit: () => _taxTypeFocus.requestFocus(),
+                width: 150,
               ),
             ],
             SizedBox(
-              width: 220,
+              width: 130,
               child: Focus(
                 onKeyEvent: (node, event) {
                   if (event is KeyDownEvent &&
@@ -1684,7 +1695,8 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 child: DropdownButtonFormField<String>(
                   focusNode: _taxTypeFocus,
                   initialValue: _taxType,
-                  decoration: const InputDecoration(labelText: 'Tax Type'),
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                  decoration: _compactDecoration('Tax Type'),
                   items: _taxTypes
                       .map(
                         (value) => DropdownMenuItem(
@@ -1706,232 +1718,205 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 isDouble: true,
                 focusNode: _taxPercentFocus,
                 prevNode: _taxTypeFocus,
-                onSubmit: () => _hasVariants ? _discountFocus.requestFocus() : _openingFocus.requestFocus()),
+                onSubmit: () => _hasVariants ? _discountFocus.requestFocus() : _openingFocus.requestFocus(),
+                width: 110),
             if (!_hasVariants) ...[
               _text(_opening, 'Opening Balance',
                   isDouble: true,
                   readOnly: _editIndex == null ? false : true,
                   focusNode: _openingFocus,
                   prevNode: _taxPercentFocus,
-                  onSubmit: () => _minFocus.requestFocus()),
+                  onSubmit: () => _minFocus.requestFocus(),
+                  width: 130),
               _text(_min, 'Min Level',
                   isInt: true,
                   focusNode: _minFocus,
                   prevNode: _openingFocus,
-                  onSubmit: () => _maxFocus.requestFocus()),
+                  onSubmit: () => _maxFocus.requestFocus(),
+                  width: 110),
               _text(_max, 'Max Level',
                   isInt: true,
                   focusNode: _maxFocus,
                   prevNode: _minFocus,
-                  onSubmit: () => _discountFocus.requestFocus()),
+                  onSubmit: () => _discountFocus.requestFocus(),
+                  width: 110),
             ],
 
-            SizedBox(
-              width: 220,
-              child: Focus(
-                focusNode: _discountFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      if (_hasVariants) {
-                        _taxPercentFocus.requestFocus();
-                      } else {
-                        _maxFocus.requestFocus();
-                      }
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                      setState(
-                          () => _discountApplicable = !_discountApplicable);
-                      _schemeFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _schemeFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: SwitchListTile(
-                  title: const Text('Discount Applicable'),
-                  value: _discountApplicable,
-                  onChanged: (v) {
-                    setState(() => _discountApplicable = v);
-                    _schemeFocus.requestFocus();
-                  },
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: Focus(
-                focusNode: _schemeFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      _discountFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                      setState(() => _schemeApplicable = !_schemeApplicable);
-                      _stockableFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _stockableFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: SwitchListTile(
-                  title: const Text('Scheme Applicable'),
-                  value: _schemeApplicable,
-                  onChanged: (v) {
-                    setState(() => _schemeApplicable = v);
-                    _happyHourFocus.requestFocus();
-                  },
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: Focus(
-                focusNode: _happyHourFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      _schemeFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                      setState(() => _isHappyHour = !_isHappyHour);
-                      _stockableFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _stockableFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: SwitchListTile(
-                  title: const Text('Happy Hour Item'),
-                  value: _isHappyHour,
-                  onChanged: (v) {
-                    setState(() => _isHappyHour = v);
-                    _stockableFocus.requestFocus();
-                  },
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: Focus(
-                focusNode: _stockableFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      _happyHourFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                      setState(() => _stockable = !_stockable);
-                      _isSaleableFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _isSaleableFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: SwitchListTile(
-                  title: const Text('Stockable'),
-                  value: _stockable,
-                  onChanged: (v) {
-                    setState(() => _stockable = v);
-                    _isSaleableFocus.requestFocus();
-                  },
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: Focus(
-                focusNode: _isSaleableFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      _stockableFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                      setState(() => _isSaleable = !_isSaleable);
-                      _saveBtnFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _saveBtnFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: SwitchListTile(
-                  title: const Text('Item for Sale'),
-                  value: _isSaleable,
-                  onChanged: (v) {
-                    setState(() => _isSaleable = v);
-                    _saveBtnFocus.requestFocus();
-                  },
-                ),
-              ),
-            ),
-            FilledButton.icon(
-              focusNode: _saveBtnFocus,
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.save),
-              label: Text(_isSaving
-                  ? 'Saving...'
-                  : (_editIndex == null ? 'Save Item' : 'Update Item')),
-              onPressed: _isSaving ? null : _saveItem,
-            ),
-            OutlinedButton(
-              onPressed: _clearForm,
-              child: const Text('Clear'),
-            ),
           ],
         ),
+        _buildOptionsAndActionsBar(),
         if (_hasVariants) _variantBuilderUI(),
       ],
     ),
   ),
 );
 }
+
+  Widget _buildToggleChip({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    FocusNode? focusNode,
+  }) {
+    const Color activeGreen    = Color(0xFF008060);
+    const Color activeBg       = Color(0xFFE6F4EF);
+    const Color activeBorder   = Color(0xFF34D399);
+    const Color activeLabel    = Color(0xFF065F46);
+    const Color inactiveBg     = Color(0xFFF8FAFC);
+    const Color inactiveBorder = Color(0xFFCBD5E1);
+    const Color inactiveLabel  = Color(0xFF64748B);
+
+    return IntrinsicWidth(
+      child: Container(
+        padding: const EdgeInsets.only(left: 10, right: 4, top: 3, bottom: 3),
+        decoration: BoxDecoration(
+          color: value ? activeBg : inactiveBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: value ? activeBorder : inactiveBorder,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              title,
+              overflow: TextOverflow.visible,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: value ? activeLabel : inactiveLabel,
+                letterSpacing: 0.1,
+              ),
+            ),
+            Transform.scale(
+              scale: 0.78,
+              alignment: Alignment.centerRight,
+              child: Switch(
+                focusNode: focusNode,
+                value: value,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                activeColor: activeGreen,
+                activeTrackColor: const Color(0xFF6EE7B7),
+                inactiveThumbColor: const Color(0xFFCBD5E1),
+                inactiveTrackColor: const Color(0xFFE2E8F0),
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptionsAndActionsBar() {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 12,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          // All toggle switches aligned in one clean row
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (_editIndex == null)
+                _buildToggleChip(
+                  title: 'Has Variants',
+                  value: _hasVariants,
+                  onChanged: (v) {
+                    setState(() => _hasVariants = v);
+                    _generateVariantList();
+                  },
+                ),
+              _buildToggleChip(
+                title: 'Discount Applicable',
+                value: _discountApplicable,
+                focusNode: _discountFocus,
+                onChanged: (v) => setState(() => _discountApplicable = v),
+              ),
+              _buildToggleChip(
+                title: 'Scheme Applicable',
+                value: _schemeApplicable,
+                focusNode: _schemeFocus,
+                onChanged: (v) => setState(() => _schemeApplicable = v),
+              ),
+              _buildToggleChip(
+                title: 'Happy Hour Item',
+                value: _isHappyHour,
+                focusNode: _happyHourFocus,
+                onChanged: (v) => setState(() => _isHappyHour = v),
+              ),
+              _buildToggleChip(
+                title: 'Stockable',
+                value: _stockable,
+                focusNode: _stockableFocus,
+                onChanged: (v) => setState(() => _stockable = v),
+              ),
+              _buildToggleChip(
+                title: 'Item for Sale',
+                value: _isSaleable,
+                focusNode: _isSaleableFocus,
+                onChanged: (v) => setState(() => _isSaleable = v),
+              ),
+            ],
+          ),
+
+          // Prominent Action Buttons
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _clearForm,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  foregroundColor: const Color(0xFF475569),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                focusNode: _saveBtnFocus,
+                onPressed: _isSaving ? null : _saveItem,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF008060),
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.save, size: 18),
+                label: Text(
+                  _isSaving ? 'Saving...' : (_editIndex == null ? 'Save Item' : 'Update Item'),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   void _generateVariantList() {
     if (_selectedAttributes.isEmpty) {
@@ -2777,18 +2762,31 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                             DataCell(Text(it.itemCode)),
                             DataCell(Text(it.itemName)),
                             DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: Colors.blue.shade200, width: 0.5),
-                                ),
-                                child: Text(
-                                  it.location.isEmpty ? 'Kitchen' : it.location,
-                                  style: TextStyle(color: Colors.blue.shade800, fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              ),
+                              (() {
+                                final locText = (it.location.trim().isEmpty || it.location.trim() == '-')
+                                    ? '-'
+                                    : it.location.trim();
+                                final isDefault = locText == '-';
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isDefault ? Colors.grey.shade100 : Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: isDefault ? Colors.grey.shade300 : Colors.blue.shade200,
+                                      width: 0.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    locText,
+                                    style: TextStyle(
+                                      color: isDefault ? Colors.grey.shade700 : Colors.blue.shade800,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                );
+                              })(),
                             ),
                             DataCell(Text(it.hsnSacCode)),
                             DataCell(Text(it.itemGroup)),
@@ -2884,6 +2882,43 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         ),
       );
 
+  InputDecoration _compactDecoration(
+    String label, {
+    Widget? prefixIcon,
+    Widget? suffixIcon,
+    String? helperText,
+    bool readOnly = false,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+      floatingLabelStyle: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF008060),
+      ),
+      helperText: helperText,
+      prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      filled: true,
+      fillColor: readOnly ? const Color(0xFFF1F5F9) : Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: Color(0xFF008060), width: 1.5),
+      ),
+    );
+  }
+
   Widget _text(
     TextEditingController c,
     String l, {
@@ -2896,9 +2931,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     TextInputAction textInputAction = TextInputAction.next,
     VoidCallback? onSubmit,
     bool isOptional = false,
+    double width = 175,
   }) {
     return SizedBox(
-      width: 220,
+      width: width,
       child: Focus(
         onKeyEvent: (node, event) {
           if (event is KeyDownEvent &&
@@ -2912,6 +2948,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
           focusNode: focusNode,
           controller: c,
           readOnly: readOnly,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
           keyboardType: isInt
               ? TextInputType.number
               : isDouble
@@ -2936,12 +2973,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             }
           },
           onTapOutside: (_) => FocusScope.of(context).unfocus(),
-          decoration: InputDecoration(
-            labelText: l,
-            helperText: helperText,
-            filled: true,
-            fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
-          ),
+          decoration: _compactDecoration(l, helperText: helperText, readOnly: readOnly),
           onChanged: (_) => setState(() {}),
           validator: (v) {
             if (isOptional) return null;

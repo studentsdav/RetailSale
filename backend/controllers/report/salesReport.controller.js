@@ -195,6 +195,11 @@ exports.getSalesReport = async (req, res) => {
                     model: req.propertyDb.models.milk_subscription_consumptions,
                     as: 'consumptions',
                     required: false
+                },
+                {
+                    model: req.propertyDb.models.customer_repayments,
+                    as: 'repayments',
+                    required: false
                 }
             ],
             order: [['sale_date', 'DESC'], ['id', 'DESC']]
@@ -304,6 +309,14 @@ exports.getSalesReport = async (req, res) => {
         const data = allRecords.map((rec) => {
             if (rec.type === 'SALE') {
                 const sale = rec.record;
+                let effectivePaymentMode = sale.payment_mode;
+                if (String(sale.payment_mode).toUpperCase() === 'CREDIT' && sale.repayments && sale.repayments.length > 0) {
+                    const sortedRepayments = [...sale.repayments].sort((a, b) => new Date(a.payment_date || a.createdAt).getTime() - new Date(b.payment_date || b.createdAt).getTime());
+                    const latestRepayment = sortedRepayments[sortedRepayments.length - 1];
+                    if (latestRepayment && latestRepayment.payment_mode) {
+                        effectivePaymentMode = latestRepayment.payment_mode.toUpperCase();
+                    }
+                }
                 
                 // Subscription calculations
                 const subItems = sale.items.filter(i => i.is_advance_free);
@@ -465,7 +478,7 @@ exports.getSalesReport = async (req, res) => {
 
                 const cashPortion = Math.max(saleNetRevenue - subscriptionNet, 0);
                 if (cashPortion > 0 || !isFullSubscriptionSale) {
-                    const paymentKey = String(sale.payment_mode || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+                    const paymentKey = String(effectivePaymentMode || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
                     if (paymentKey !== 'SUBSCRIPTION') {
                         if (!paymentModeSummary[paymentKey]) {
                             paymentModeSummary[paymentKey] = {
@@ -518,7 +531,7 @@ exports.getSalesReport = async (req, res) => {
                     customer_phone: sale.customer_phone,
                     customer_address: sale.customer_address,
                     customer_gstin: sale.customer_gstin,
-                    payment_mode: sale.payment_mode,
+                    payment_mode: effectivePaymentMode,
                     payment_reference: sale.payment_reference,
                     order_type: sale.order_type,
                     sale_source: sale.sale_source || 'Store',

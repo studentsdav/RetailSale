@@ -1084,7 +1084,8 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
         totalCoveredQty,
         subscriptionId,
         subscriptionItemId,
-        subscriptionCoverages: Array.from(subscriptionCoveragesByKey.values())
+        subscriptionCoverages: Array.from(subscriptionCoveragesByKey.values()),
+        isFreeAllocation: false
     };
 }
 
@@ -1287,7 +1288,8 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
         totalCoveredQty,
         subscriptionId,
         subscriptionItemId,
-        subscriptionCoverages: Array.from(subscriptionCoveragesByKey.values())
+        subscriptionCoverages: Array.from(subscriptionCoveragesByKey.values()),
+        isFreeAllocation: true
     };
 }
 
@@ -2464,10 +2466,9 @@ function buildSaleBenefitLedgerEntries({
 }) {
     if (sale.status !== 'COMPLETED') return [];
 
-    const partyName =
-        header.customer_name || header.customer_phone || 'Walk-in Customer';
-    const normalizedDiscount = toAmount(discountAmount);
+    const partyName = header.customer_name || header.customer_phone || 'Walk-in Customer';
     const normalizedSchemeFree = toAmount(schemeFreeQtyAmount);
+    const normalizedDiscount = Math.max(0, toAmount(toAmount(discountAmount) - normalizedSchemeFree));
     const entries = [];
 
     if (normalizedDiscount > 0) {
@@ -3154,7 +3155,7 @@ exports.createSale = async (req, res) => {
         const selectedSchemes = normalizeSelectedSchemes(header.selected_schemes || header.selectedSchemes);
         const status = header.status || 'COMPLETED';
         const headerForCreate = { ...header };
-        if (status === 'DRAFT') {
+        if (status === 'DRAFT' && !headerForCreate.sale_no) {
             // Drafts must never reserve official billing sequence.
             headerForCreate.sale_no = buildDraftSaleNo();
         }
@@ -3436,7 +3437,7 @@ exports.createSale = async (req, res) => {
                 sale: referenceSale,
                 consumptions: subscriptionAllocation.consumptions
             });
-            if (subscriptionAllocation.totalCoveredAmount > 0) {
+            if (subscriptionAllocation.totalCoveredAmount > 0 && !subscriptionAllocation.isFreeAllocation) {
                 const coverages = Array.isArray(subscriptionAllocation.subscriptionCoverages)
                     ? subscriptionAllocation.subscriptionCoverages
                     : [{
@@ -4411,59 +4412,22 @@ exports.listCustomers = async (req, res) => {
         const outlet_id = req.user.outlet_id;
         const search = String(req.query.search || '').trim();
 
-        const rows = await req.propertyDb.models.sales_headers.findAll({
-            where: {
-                outlet_id,
-                status: { [Op.in]: ['COMPLETED', 'CUSTOMER'] },
-                is_latest: true,
-                is_deleted: false,
-                [Op.or]: [
-                    { customer_phone: { [Op.ne]: null } },
-                    { customer_name: { [Op.ne]: null } },
-                    { customer_gstin: { [Op.ne]: null } }
-                ]
-            },
-            attributes: [
-                'id',
-                'customer_name',
-                'customer_phone',
-                'customer_address',
-                'customer_gstin',
-                'scheme_id',
-                'scheme_name'
-            ],
+        const where = { outlet_id };
+        if (search) {
+            where[Op.or] = [
+                { customer_name: { [Op.iLike]: `%${search}%` } },
+                { customer_phone: { [Op.iLike]: `%${search}%` } },
+                { customer_address: { [Op.iLike]: `%${search}%` } },
+                { customer_gstin: { [Op.iLike]: `%${search}%` } }
+            ];
+        }
+
+        const rows = await req.propertyDb.models.customers.findAll({
+            where,
             order: [['id', 'DESC']]
         });
 
-        const unique = new Map();
-        const searchLower = search.toLowerCase();
-        for (const row of rows) {
-            const customerName = String(row.customer_name || '').trim();
-            const customerPhone = String(row.customer_phone || '').trim();
-            const customerAddress = String(row.customer_address || '').trim();
-            const customerGstin = String(row.customer_gstin || '').trim().toUpperCase();
-
-            if (!customerName && !customerPhone && !customerGstin) continue;
-
-            if (searchLower) {
-                const haystack = [
-                    customerName.toLowerCase(),
-                    customerPhone.toLowerCase(),
-                    customerAddress.toLowerCase(),
-                    customerGstin.toLowerCase()
-                ];
-                if (!haystack.some((value) => value.includes(searchLower))) {
-                    continue;
-                }
-            }
-
-            const key = customerPhone || customerGstin || customerName.toLowerCase();
-            if (!unique.has(key)) {
-                unique.set(key, row);
-            }
-        }
-
-        res.json({ success: true, data: Array.from(unique.values()) });
+        res.json({ success: true, data: rows });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -4483,55 +4447,20 @@ exports.createCustomer = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Customer name or phone is required' });
         }
 
-        const existing = await req.propertyDb.models.sales_headers.findOne({
+        const existing = await req.propertyDb.models.customers.findOne({
             where: {
                 outlet_id: req.user.outlet_id,
-                status: { [Op.in]: ['COMPLETED', 'CUSTOMER'] },
-                is_latest: true,
-                is_deleted: false,
                 ...scope
             }
         });
 
         if (existing) {
-            await existing.update({
-                ...payload,
-                status: existing.status || 'CUSTOMER'
-            });
+            await existing.update(payload);
             return res.json({ success: true, data: existing });
         }
 
-        const created = await req.propertyDb.models.sales_headers.create({
+        const created = await req.propertyDb.models.customers.create({
             outlet_id: req.user.outlet_id,
-            sale_no: `CUST-${Date.now()}`,
-            sale_date: new Date(),
-            payment_mode: 'CASH',
-            initial_amount_paid: 0,
-            amount_paid: 0,
-            change_amount: 0,
-            balance_due: 0,
-            billing_country: 'India',
-            billing_tax_mode: 'CGST_SGST',
-            bill_format: 'A4',
-            tax_percent: 0,
-            total_qty: 0,
-            sub_total: 0,
-            taxable_amount: 0,
-            cgst_amount: 0,
-            sgst_amount: 0,
-            igst_amount: 0,
-            total_tax: 0,
-            tax_breakup: [],
-            charges: [],
-            charge_total: 0,
-            charge_tax_total: 0,
-            total_discount: 0,
-            net_amount: 0,
-            status: 'CUSTOMER',
-            created_by: req.user.id,
-            version_no: 1,
-            is_latest: true,
-            is_deleted: false,
             ...payload
         });
 
@@ -4543,7 +4472,7 @@ exports.createCustomer = async (req, res) => {
 
 exports.updateCustomer = async (req, res) => {
     try {
-        const source = await req.propertyDb.models.sales_headers.findOne({
+        const source = await req.propertyDb.models.customers.findOne({
             where: {
                 id: req.params.id,
                 outlet_id: req.user.outlet_id
@@ -4568,15 +4497,7 @@ exports.updateCustomer = async (req, res) => {
             customer_gstin: payload.customer_gstin
         };
 
-        await req.propertyDb.models.sales_headers.update(
-            payload,
-            {
-                where: {
-                    outlet_id: req.user.outlet_id,
-                    ...(scope ?? { id: source.id })
-                }
-            }
-        );
+        await source.update(payload);
         await req.propertyDb.models.customer_advances.update(
             advancePayload,
             {
@@ -4595,7 +4516,7 @@ exports.updateCustomer = async (req, res) => {
 
 exports.deleteCustomer = async (req, res) => {
     try {
-        const source = await req.propertyDb.models.sales_headers.findOne({
+        const source = await req.propertyDb.models.customers.findOne({
             where: {
                 id: req.params.id,
                 outlet_id: req.user.outlet_id
@@ -4674,25 +4595,14 @@ exports.deleteCustomer = async (req, res) => {
             });
         }
 
-        // Delete only customer master row(s). Never wipe customer data from historical bills.
-        const deleted = await req.propertyDb.models.sales_headers.update(
-            {
-                is_deleted: true,
-                is_latest: false,
-                modified_by: req.user.id,
-                modified_at: new Date(),
-                modification_note: 'Customer deleted from customer list'
-            },
-            {
-                where: {
-                    outlet_id,
-                    status: 'CUSTOMER',
-                    ...scope
-                }
+        const deleted = await req.propertyDb.models.customers.destroy({
+            where: {
+                id: source.id,
+                outlet_id
             }
-        );
+        });
 
-        if (!deleted || deleted[0] === 0) {
+        if (!deleted) {
             return res.status(404).json({
                 success: false,
                 message: 'Customer master record not found for deletion'

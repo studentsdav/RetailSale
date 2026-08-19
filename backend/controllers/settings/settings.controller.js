@@ -297,37 +297,11 @@ exports.clearTransactionData = async (req, res) => {
             return WIPE_TABLES.indexOf(a) - WIPE_TABLES.indexOf(b);
         });
 
-        const headerModel = req.propertyDb.models.sales_headers;
-        const columns = headerModel?.rawAttributes || {};
-        const hasColumn = (name) => Object.prototype.hasOwnProperty.call(columns, name);
-
-        // Preserve customer master rows that are stored in sales_headers as status='CUSTOMER'.
-        const backupSelectColumns = [
-            'customer_name',
-            'customer_phone',
-            'customer_address',
-            'customer_gstin',
-            ...(hasColumn('created_by') ? ['created_by'] : []),
-            ...(hasColumn('updated_by') ? ['updated_by'] : [])
-        ];
-
-        const preservedCustomerRowsResult = await req.propertyDb.query(
-            `
-SELECT ${backupSelectColumns.join(', ')}
-FROM sales_headers
-WHERE outlet_id = :outlet_id
-  AND status = 'CUSTOMER'
-  AND is_latest = TRUE
-  AND is_deleted = FALSE
-            `,
-            {
-                replacements: { outlet_id: req.user.outlet_id },
-                transaction: t
-            }
-        );
-        const preservedCustomerRows = Array.isArray(preservedCustomerRowsResult)
-            ? (preservedCustomerRowsResult[0] || [])
-            : [];
+        // Preserve customer master rows that are stored in customers table.
+        const preservedCustomerRows = await req.propertyDb.models.customers.findAll({
+            where: { outlet_id: req.user.outlet_id },
+            transaction: t
+        });
 
         // IMPORTANT:
         // Never TRUNCATE here. TRUNCATE would remove data of all outlets.
@@ -366,65 +340,13 @@ LIMIT 1
 
         // Restore preserved customer master rows after transaction wipe.
         for (const row of preservedCustomerRows) {
-            const payload = {
+            await req.propertyDb.models.customers.create({
                 outlet_id: req.user.outlet_id,
-                sale_no: `CUST-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
-                sale_date: new Date(),
                 customer_name: row.customer_name || null,
                 customer_phone: row.customer_phone || null,
                 customer_address: row.customer_address || null,
-                customer_gstin: row.customer_gstin || null,
-                payment_mode: 'CASH',
-                payment_reference: null,
-                initial_amount_paid: 0,
-                amount_paid: 0,
-                change_amount: 0,
-                balance_due: 0,
-                order_type: 'B2C',
-                billing_country: 'India',
-                billing_tax_mode: 'CGST_SGST',
-                bill_format: 'A4',
-                tax_percent: 0,
-                scheme_id: null,
-                scheme_name: null,
-                scheme_discount: 0,
-                manual_discount_type: null,
-                manual_discount_value: 0,
-                manual_discount_amount: 0,
-                total_qty: 0,
-                sub_total: 0,
-                taxable_amount: 0,
-                cgst_amount: 0,
-                sgst_amount: 0,
-                igst_amount: 0,
-                total_tax: 0,
-                tax_breakup: [],
-                charges: [],
-                charge_total: 0,
-                charge_tax_total: 0,
-                total_discount: 0,
-                round_off_amount: 0,
-                net_amount: 0,
-                voucher_code: null,
-                voucher_label: null,
-                notes: 'Customer master preserved during transaction reset',
-                status: 'CUSTOMER',
-                original_sale_id: null,
-                previous_sale_id: null,
-                replaced_by_sale_id: null,
-                version_no: 1,
-                is_latest: true,
-                is_deleted: false
-            };
-
-            if (hasColumn('created_by')) {
-                payload.created_by = row.created_by || req.user.id;
-            }
-            if (hasColumn('updated_by')) {
-                payload.updated_by = row.updated_by || req.user.id;
-            }
-
-            await headerModel.create(payload, { transaction: t });
+                customer_gstin: row.customer_gstin || null
+            }, { transaction: t });
         }
 
         await t.commit();

@@ -421,7 +421,7 @@ class PosInvoicePrinter {
             if (hasTaxData && cgstTotal > 0)
               _thermalAmountRow('CGST', cgstTotal),
             if (hasTaxData && sgstTotal > 0)
-              _thermalAmountRow('SGST', sgstTotal),
+              _thermalAmountRow('SGST/UTGST', sgstTotal),
             if (hasTaxData && igstTotal > 0)
               _thermalAmountRow('IGST', igstTotal),
           ] else ...[
@@ -444,7 +444,7 @@ class PosInvoicePrinter {
             if (hasTaxData && cgstTotal > 0)
               _thermalAmountRow('CGST', cgstTotal),
             if (hasTaxData && sgstTotal > 0)
-              _thermalAmountRow('SGST', sgstTotal),
+              _thermalAmountRow('SGST/UTGST', sgstTotal),
             if (hasTaxData && igstTotal > 0)
               _thermalAmountRow('IGST', igstTotal),
           ],
@@ -1070,7 +1070,7 @@ class PosInvoicePrinter {
             'Discount',
             'Taxable Value',
             'CGST (Rate% & Amt)',
-            'SGST (Rate% & Amt)',
+            'SGST/UTGST (Rate% & Amt)',
             'Total Amount',
           ]
         : [
@@ -1217,7 +1217,7 @@ class PosInvoicePrinter {
               ),
             if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
             if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
-            if (hasTaxData) _a4AmountRow('Total SGST Amount', sgstTotal),
+            if (hasTaxData) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
             if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
           ] else ...[
             if (savingsAmount > 0.0009)
@@ -1236,7 +1236,7 @@ class PosInvoicePrinter {
               ),
             if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
             if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
-            if (hasTaxData) _a4AmountRow('Total SGST Amount', sgstTotal),
+            if (hasTaxData) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
             if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
           ],
           if (roundOff.abs() > 0.0009)
@@ -1998,7 +1998,7 @@ class PosInvoicePrinter {
       grouped[sgstKey] = sgstExisting == null
           ? TaxBreakdown(
               code: 'SGST',
-              label: 'SGST ${_formatTaxPercent(halfRate)}%',
+              label: 'SGST/UTGST ${_formatTaxPercent(halfRate)}%',
               taxType: 'GST',
               rate: halfRate,
               taxableAmount: taxableAmount,
@@ -2195,7 +2195,7 @@ class PosInvoicePrinter {
       ),
       TaxBreakdown(
         code: 'SGST',
-        label: 'SGST ${_formatTaxPercent(halfRate)}%',
+        label: 'SGST/UTGST ${_formatTaxPercent(halfRate)}%',
         taxType: 'GST',
         rate: halfRate,
         taxableAmount: taxableAmount,
@@ -3140,7 +3140,7 @@ class PosInvoicePrinter {
           _thermalRow('Total Qty Returned:', '${double.tryParse((creditNote['total_qty'] ?? 0).toString())?.toStringAsFixed(2)}'),
           _thermalRow('Taxable Value:', '${double.tryParse((creditNote['taxable_amount'] ?? 0).toString())?.toStringAsFixed(2)}'),
           if (cgstTotal > 0) _thermalRow('Total CGST:', cgstTotal.toStringAsFixed(2)),
-          if (sgstTotal > 0) _thermalRow('Total SGST:', sgstTotal.toStringAsFixed(2)),
+          if (sgstTotal > 0) _thermalRow('Total SGST/UTGST:', sgstTotal.toStringAsFixed(2)),
           if (igstTotal > 0) _thermalRow('Total IGST:', igstTotal.toStringAsFixed(2)),
           _thermalRow('Total Tax:', '${double.tryParse((creditNote['total_tax'] ?? 0).toString())?.toStringAsFixed(2)}'),
           pw.Divider(color: _thermalDivider, thickness: 0.5),

@@ -78,7 +78,7 @@ exports.listKots = async (req, res) => {
                     required: false,
                     include: [
                         { model: req.propertyDb.models.kitchen_stations, as: 'station', attributes: ['station_name'], required: false },
-                        { model: req.propertyDb.models.item_master, as: 'item', attributes: ['brand'], required: false }
+                        { model: req.propertyDb.models.item_master, as: 'item', attributes: ['brand', 'location'], required: false }
                     ]
                 }
             ],

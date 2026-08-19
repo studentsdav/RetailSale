@@ -61,6 +61,8 @@ propertyDb.models.request_headers =
 
 propertyDb.models.request_items =
     require('../../models/property/requestItem.model')(propertyDb, DataTypes);
+propertyDb.models.customers =
+    require('../../models/property/customer.model')(propertyDb, DataTypes);
 propertyDb.models.customer_repayments =
     require('../../models/property/customerRepayment.model')(propertyDb, DataTypes);
 propertyDb.models.customer_advances =

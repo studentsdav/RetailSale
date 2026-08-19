@@ -102,7 +102,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     'Quantity & UQC (Unit)',
     'Taxable Value',
     'CGST Amount',
-    'SGST Amount',
+    'SGST/UTGST Amount',
     'IGST Amount',
     'Total Invoice Value',
   ];
@@ -646,7 +646,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     for (final row in purchaseCtrl.filteredData) {
       final key = row.inwardsNo.toString();
       final existing = grouped[key];
-      final taxableValue = row.rate * row.qty;
+      final taxableValue = (row.gst > 0) ? row.rate * row.qty : 0.0;
       if (existing == null) {
         grouped[key] = _Gstr2Row(
           invoiceDate: row.date,
@@ -1535,7 +1535,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     children: [
                       _pdfSummaryBlock('Taxable Value', summary.taxableValue),
                       _pdfSummaryBlock('Total CGST', summary.cgstAmount),
-                      _pdfSummaryBlock('Total SGST', summary.sgstAmount),
+                      _pdfSummaryBlock('Total SGST/UTGST', summary.sgstAmount),
                       _pdfSummaryBlock('Non-Tax Sales', _nonTaxSaleTotal),
                       _pdfSummaryBlock('Sub Sale (Adv.)', ctrl.summary.subscriptionRealized),
                       _pdfSummaryBlock('Charges', summary.chargeTotal),
@@ -1948,7 +1948,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           children: [
             SizedBox(width: 220, child: _metricCard('Taxable Value', _headerTaxableTotal, const Color(0xFF0F766E))),
             SizedBox(width: 220, child: _metricCard('Total CGST', _headerCgstTotal, const Color(0xFF2563EB))),
-            SizedBox(width: 220, child: _metricCard('Total SGST', _headerSgstTotal, const Color(0xFF7C3AED))),
+            SizedBox(width: 220, child: _metricCard('Total SGST/UTGST', _headerSgstTotal, const Color(0xFF7C3AED))),
             SizedBox(width: 220, child: _metricCard('Total IGST', _headerIgstTotal, const Color(0xFF0EA5E9))),
             SizedBox(width: 220, child: _metricCard('GST Total', _headerTaxTotal, const Color(0xFFEA580C))),
             SizedBox(
@@ -2835,7 +2835,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                 const DataColumn(label: Text('Non-Tax Sales')),
                                 const DataColumn(label: Text('Taxable Value')),
                                 const DataColumn(label: Text('CGST')),
-                                const DataColumn(label: Text('SGST')),
+                                const DataColumn(label: Text('SGST/UTGST')),
                                 const DataColumn(label: Text('IGST')),
                                 const DataColumn(label: Text('Total Sales')),
                               ],
@@ -3294,52 +3294,71 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                     .map((header) =>
                                         DataColumn(label: Text(header)))
                                     .toList(),
-                                rows: _rows
-                                    .map(
-                                      (row) => DataRow(
-                                        cells: [
-                                          DataCell(Text(DateFormat('dd-MM-yyyy')
-                                              .format(row.invoiceDate))),
-                                          DataCell(Text(row.invoiceNumber)),
-                                          DataCell(SizedBox(
-                                              width: 150,
-                                              child: Text(row.customerName,
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis))),
-                                          DataCell(Text(
-                                              row.customerGstin.isEmpty
-                                                  ? 'B2C'
-                                                  : row.customerGstin)),
-                                          DataCell(SizedBox(
-                                              width: 160,
-                                              child: Text(row.placeOfSupply,
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis))),
-                                          DataCell(SizedBox(
-                                              width: 170,
-                                              child: Text(row.itemDescription,
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis))),
-                                          DataCell(Text(row.hsnSacCode)),
-                                          DataCell(Text(
-                                              '${_formatQty(row.quantity)} ${row.unit}')),
-                                          DataCell(
-                                              Text(_money(row.taxableValue))),
-                                          DataCell(
-                                              Text(_money(row.cgstAmount))),
-                                          DataCell(
-                                              Text(_money(row.sgstAmount))),
-                                          DataCell(
-                                              Text(_money(row.igstAmount))),
-                                          DataCell(Text(
-                                              _money(row.totalInvoiceValue))),
-                                        ],
-                                      ),
-                                    )
-                                    .toList(),
+                                rows: [
+                                  ..._rows.map(
+                                    (row) => DataRow(
+                                      cells: [
+                                        DataCell(Text(DateFormat('dd-MM-yyyy')
+                                            .format(row.invoiceDate))),
+                                        DataCell(Text(row.invoiceNumber)),
+                                        DataCell(SizedBox(
+                                            width: 150,
+                                            child: Text(row.customerName,
+                                                maxLines: 2,
+                                                overflow:
+                                                    TextOverflow.ellipsis))),
+                                        DataCell(Text(
+                                            row.customerGstin.isEmpty
+                                                ? 'B2C'
+                                                : row.customerGstin)),
+                                        DataCell(SizedBox(
+                                            width: 160,
+                                            child: Text(row.placeOfSupply,
+                                                maxLines: 2,
+                                                overflow:
+                                                    TextOverflow.ellipsis))),
+                                        DataCell(SizedBox(
+                                            width: 170,
+                                            child: Text(row.itemDescription,
+                                                maxLines: 2,
+                                                overflow:
+                                                    TextOverflow.ellipsis))),
+                                        DataCell(Text(row.hsnSacCode)),
+                                        DataCell(Text(
+                                            '${_formatQty(row.quantity)} ${row.unit}')),
+                                        DataCell(
+                                            Text(_money(row.taxableValue))),
+                                        DataCell(
+                                            Text(_money(row.cgstAmount))),
+                                        DataCell(
+                                            Text(_money(row.sgstAmount))),
+                                        DataCell(
+                                            Text(_money(row.igstAmount))),
+                                        DataCell(Text(
+                                            _money(row.totalInvoiceValue))),
+                                      ],
+                                    ),
+                                  ).toList(),
+                                  if (_rows.isNotEmpty)
+                                    DataRow(
+                                      color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                                      cells: [
+                                        const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold))),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        DataCell(Text(_formatQty(_rows.fold<double>(0, (sum, row) => sum + row.quantity)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.taxableValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.cgstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.sgstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.igstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.totalInvoiceValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                      ],
+                                    ),
+                                ],
                               ),
                             ),
                           ),
@@ -3423,50 +3442,70 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                   DataColumn(label: Text('Outstanding')),
                                   DataColumn(label: Text('Status')),
                                 ],
-                                rows: rows
-                                    .map(
-                                      (row) => DataRow(
-                                        cells: [
-                                          DataCell(Text(DateFormat('dd-MM-yyyy')
-                                              .format(row.invoiceDate))),
-                                          DataCell(Text(row.grnNo.isEmpty
-                                              ? '-'
-                                              : row.grnNo)),
-                                          DataCell(Text(row.billNo.isEmpty
-                                              ? '-'
-                                              : row.billNo)),
-                                          DataCell(SizedBox(
-                                            width: 180,
-                                            child: Text(
-                                              row.supplier,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          )),
-                                          DataCell(Text(
-                                              row.supplierGstin.isEmpty
-                                                  ? 'B2B/B2C'
-                                                  : row.supplierGstin)),
-                                          DataCell(Text(
-                                              row.supplierState.isEmpty
-                                                  ? '-'
-                                                  : row.supplierState)),
-                                          DataCell(Text('${row.itemCount}')),
-                                          DataCell(Text(_formatQty(row.qty))),
-                                          DataCell(
-                                              Text(_money(row.taxableValue))),
-                                          DataCell(Text(_money(row.taxAmount))),
-                                          DataCell(
-                                              Text(_money(row.totalAfterTax))),
-                                          DataCell(
-                                              Text(_money(row.paidAmount))),
-                                          DataCell(Text(
-                                              _money(row.outstandingAmount))),
-                                          DataCell(Text(row.billStatus)),
-                                        ],
-                                      ),
-                                    )
-                                    .toList(),
+                                rows: [
+                                  ...rows.map(
+                                    (row) => DataRow(
+                                      cells: [
+                                        DataCell(Text(DateFormat('dd-MM-yyyy')
+                                            .format(row.invoiceDate))),
+                                        DataCell(Text(row.grnNo.isEmpty
+                                            ? '-'
+                                            : row.grnNo)),
+                                        DataCell(Text(row.billNo.isEmpty
+                                            ? '-'
+                                            : row.billNo)),
+                                        DataCell(SizedBox(
+                                          width: 180,
+                                          child: Text(
+                                            row.supplier,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        )),
+                                        DataCell(Text(
+                                            row.supplierGstin.isEmpty
+                                                ? 'B2B/B2C'
+                                                : row.supplierGstin)),
+                                        DataCell(Text(
+                                            row.supplierState.isEmpty
+                                                ? '-'
+                                                : row.supplierState)),
+                                        DataCell(Text('${row.itemCount}')),
+                                        DataCell(Text(_formatQty(row.qty))),
+                                        DataCell(
+                                            Text(_money(row.taxableValue))),
+                                        DataCell(Text(_money(row.taxAmount))),
+                                        DataCell(
+                                            Text(_money(row.totalAfterTax))),
+                                        DataCell(
+                                            Text(_money(row.paidAmount))),
+                                        DataCell(Text(
+                                            _money(row.outstandingAmount))),
+                                        DataCell(Text(row.billStatus)),
+                                      ],
+                                    ),
+                                  ).toList(),
+                                  if (rows.isNotEmpty)
+                                    DataRow(
+                                      color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                                      cells: [
+                                        const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold))),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        const DataCell(Text('')),
+                                        DataCell(Text('${rows.fold<int>(0, (sum, r) => sum + r.itemCount)}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_formatQty(rows.fold<double>(0, (sum, r) => sum + r.qty)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(rows.fold<double>(0, (sum, r) => sum + r.taxableValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(rows.fold<double>(0, (sum, r) => sum + r.taxAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(rows.fold<double>(0, (sum, r) => sum + r.totalAfterTax)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(rows.fold<double>(0, (sum, r) => sum + r.paidAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        DataCell(Text(_money(rows.fold<double>(0, (sum, r) => sum + r.outstandingAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                        const DataCell(Text('')),
+                                      ],
+                                    ),
+                                ],
                               ),
                             ),
                           ),
