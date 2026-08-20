@@ -2447,3 +2447,65 @@ exports.adjustBulkRepayment = async (req, res) => {
     }
 };
 
+exports.getRecurringExpenses = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id || 1;
+        const items = await req.propertyDb.models.recurring_expenses.findAll({
+            where: { outlet_id },
+            order: [['id', 'DESC']]
+        });
+        res.json({ success: true, data: items });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
+exports.createRecurringExpense = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id || 1;
+        const { description, amount, frequency, expense_category_id, start_date, end_date, next_generation_date } = req.body;
+        
+        const todayStr = new Date().toISOString().split('T')[0];
+        const record = await req.propertyDb.models.recurring_expenses.create({
+            outlet_id,
+            description,
+            amount: parseFloat(amount) || 0,
+            frequency: frequency || 'MONTHLY',
+            expense_category_id: expense_category_id || null,
+            start_date: start_date || todayStr,
+            end_date: end_date || null,
+            next_generation_date: next_generation_date || start_date || todayStr,
+            is_active: true
+        });
+
+        res.json({ success: true, data: record });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
+exports.updateRecurringExpense = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id || 1;
+        const { id } = req.params;
+        const record = await req.propertyDb.models.recurring_expenses.findOne({ where: { id, outlet_id } });
+        if (!record) return res.status(404).json({ success: false, message: 'Recurring expense not found' });
+
+        await record.update(req.body);
+        res.json({ success: true, data: record });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
+exports.deleteRecurringExpense = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id || 1;
+        const { id } = req.params;
+        await req.propertyDb.models.recurring_expenses.destroy({ where: { id, outlet_id } });
+        res.json({ success: true, message: 'Deleted successfully' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+

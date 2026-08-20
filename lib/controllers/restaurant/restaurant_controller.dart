@@ -653,4 +653,16 @@ class RestaurantController extends ChangeNotifier {
       return false;
     }
   }
+
+  Future<Map<String, dynamic>?> getChallanDetails(int id) async {
+    try {
+      final res = await ApiClient.get('${ApiEndpoints.restaurantChallans}/$id');
+      if (res['success'] == true) {
+        return Map<String, dynamic>.from(res['data'] ?? {});
+      }
+    } catch (e) {
+      debugPrint('Error loading challan details: $e');
+    }
+    return null;
+  }
 }

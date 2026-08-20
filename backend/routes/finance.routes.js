@@ -36,4 +36,10 @@ router.get('/delivery-report', advancedCtrl.getDeliveryReport);
 router.get('/expiry-report', advancedCtrl.getExpiryReport);
 router.get('/payment-flow', advancedCtrl.getPaymentFlowReport);
 
+// Recurring Expenses Endpoints
+router.get('/recurring-expenses', advancedCtrl.getRecurringExpenses);
+router.post('/recurring-expenses', advancedCtrl.createRecurringExpense);
+router.put('/recurring-expenses/:id', advancedCtrl.updateRecurringExpense);
+router.delete('/recurring-expenses/:id', advancedCtrl.deleteRecurringExpense);
+
 module.exports = router;

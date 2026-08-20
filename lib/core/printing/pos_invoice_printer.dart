@@ -1315,13 +1315,20 @@ class PosInvoicePrinter {
     if (_isRefundedOrder(order)) {
       return 'REFUNDED BILL';
     }
-    if (order.status == 'DRAFT') {
-      return 'PROFORMA BILL';
+    final isDraft = order.status == 'DRAFT' ||
+        order.saleNo.trim().toUpperCase().startsWith('DRAFT-');
+    if (isDraft) {
+      return 'DRAFT / ESTIMATE BILL';
     }
     return hasTaxData ? 'TAX INVOICE' : 'INVOICE';
   }
 
   static String _receiptNumberLabel(SaleOrder order) {
+    final isDraft = order.status == 'DRAFT' ||
+        order.saleNo.trim().toUpperCase().startsWith('DRAFT-');
+    if (isDraft) {
+      return 'Draft No';
+    }
     if (order.hasBillNo) {
       return 'Bill No';
     }

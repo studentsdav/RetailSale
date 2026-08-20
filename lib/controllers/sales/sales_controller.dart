@@ -547,8 +547,11 @@ class SalesController extends ChangeNotifier {
     return Map<String, dynamic>.from(res['data'] ?? const {});
   }
 
-  Future<void> deleteDraft(int id) async {
-    await ApiClient.delete('${ApiEndpoints.sales}/drafts/$id');
+  Future<void> deleteDraft(int id, {String? reason}) async {
+    await ApiClient.delete(
+      '${ApiEndpoints.sales}/drafts/$id',
+      body: reason != null && reason.trim().isNotEmpty ? {'reason': reason.trim()} : null,
+    );
   }
 
   Future<Map<String, dynamic>> getCustomerCreditSummary(String search) async {

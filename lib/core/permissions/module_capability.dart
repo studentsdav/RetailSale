@@ -148,11 +148,9 @@ class ModuleCapability {
 
     // Retail specific permissions
     const retailPermissions = {
-      'RETAIL_SALES',
       'CUSTOMER_APP',
       'RETAILER_CONSOLE',
       'RIDER_PORTAL',
-      'RETAIL_SALES_REPORT',
       'STORE_ANALYSIS',
       'BRAND_ANALYSIS',
     };

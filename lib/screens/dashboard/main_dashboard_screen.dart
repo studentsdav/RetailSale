@@ -177,7 +177,18 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     final list = await LocalPreferences.getFavoriteDrawerItems();
     if (mounted) {
       setState(() {
-        _favoriteDrawerItems = list.toSet();
+        if (list.isEmpty) {
+          _favoriteDrawerItems = {
+            'Billing (POS)',
+            'Draft & Hold Bills',
+            'Captain Console',
+            'Floor Designer',
+            'Kitchen KDS Queue',
+            'Delivery Challans',
+          };
+        } else {
+          _favoriteDrawerItems = list.toSet();
+        }
       });
     }
   }
@@ -281,14 +292,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   bool get _isWarehouseBusiness => _businessType == 'WAREHOUSE';
   bool get _isHospitalityBusiness =>
       const {'HOTEL', 'RESTAURANT', 'CAFE', 'BAR'}.contains(_businessType);
-  bool get _showRetailSalesSection =>
-      ModuleCapability.hasRetail(_businessModule) &&
-      (_isRetailBusiness ||
-          PermissionService.can('RETAIL_SALES') ||
-          PermissionService.can('REPRINT_SALES_BILL'));
-  bool get _showRetailSalesReportSection =>
-      ModuleCapability.hasRetail(_businessModule) &&
-      (_isRetailBusiness || PermissionService.can('RETAIL_SALES_REPORT'));
+  bool get _showRetailSalesSection => true;
+  bool get _showRetailSalesReportSection => true;
   String get _dashboardTitle {
     if (_isWarehouseBusiness) return 'Warehouse Retailpos Dashboard';
     if (_isRetailBusiness) return 'Retailpos Dashboard';
@@ -2031,6 +2036,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   // ================= DRAWER =================
   IconData _getCategoryIcon(String name) {
     switch (name) {
+      case 'Billing':
+        return Icons.receipt_long_outlined;
       case 'Operations':
         return Icons.business_center_outlined;
       case 'Modify':
@@ -2061,6 +2068,32 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     final textSecondaryColor = isDark ? Colors.white70 : const Color(0xFF64748B);
 
     final List<Map<String, dynamic>> allDrawerItems = [
+      // Billing Section (Primary Navigation for Cashiers & Staff)
+      {
+        'category': 'Billing',
+        'icon': Icons.point_of_sale,
+        'label': 'Billing (POS)',
+        'permission': 'RETAIL_SALES',
+        'keywords': ['sale', 'sales', 'retail sale', 'retail sales', 'pos', 'billing', 'bill', 'billing pos', 'counter billing', 'invoice', 'make bill', 'pos sale', 'retail'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SaleScreen())),
+      },
+      {
+        'category': 'Billing',
+        'icon': Icons.drafts_outlined,
+        'label': 'Draft & Hold Bills',
+        'permission': 'RETAIL_SALES',
+        'keywords': ['draft', 'drafts', 'hold bill', 'hold bills', 'unsettled bill', 'draft sale', 'pending bill', 'table bill', 'sale', 'sales'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SaleScreen(openDraftsOnLaunch: true))),
+      },
+      {
+        'category': 'Billing',
+        'icon': Icons.receipt_long_outlined,
+        'label': 'Reprint / Modify Bills',
+        'permission': 'REPRINT_SALES_BILL',
+        'keywords': ['reprint', 'modify bill', 'sales bill', 'reprint bill', 'sale bill', 'sale', 'sales'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SalesReprintModifyScreen())),
+      },
+
       // Operations
       {
         'category': 'Operations',
@@ -2071,51 +2104,28 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
       {
         'category': 'Operations',
-        'icon': Icons.assignment_outlined,
-        'label': 'Item Request',
-        'permission': 'ITEM_REQUEST',
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockRequestScreen())),
+        'icon': Icons.shopping_bag_outlined,
+        'label': 'Customer App (Delivery)',
+        'permission': 'CUSTOMER_APP',
+        'isBeta': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerAppScreen())),
       },
       {
         'category': 'Operations',
-        'icon': Icons.download,
-        'label': 'Receive from Vendor',
-        'permission': 'STOCK_IN',
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GoodsReceivingScreen())),
+        'icon': Icons.admin_panel_settings_outlined,
+        'label': 'Supplier / Retailer Console',
+        'permission': 'RETAILER_CONSOLE',
+        'isBeta': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RetailerConsoleScreen())),
       },
-      if (_showRetailSalesSection) ...[
-        {
-          'category': 'Operations',
-          'icon': Icons.point_of_sale,
-          'label': 'Retail Sales',
-          'permission': 'RETAIL_SALES',
-          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SaleScreen())),
-        },
-        {
-          'category': 'Operations',
-          'icon': Icons.shopping_bag_outlined,
-          'label': 'Customer App (Delivery)',
-          'permission': 'CUSTOMER_APP',
-          'isBeta': true,
-          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerAppScreen())),
-        },
-        {
-          'category': 'Operations',
-          'icon': Icons.admin_panel_settings_outlined,
-          'label': 'Supplier / Retailer Console',
-          'permission': 'RETAILER_CONSOLE',
-          'isBeta': true,
-          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RetailerConsoleScreen())),
-        },
-        {
-          'category': 'Operations',
-          'icon': Icons.delivery_dining_outlined,
-          'label': 'Rider Delivery Portal',
-          'permission': 'RIDER_PORTAL',
-          'isBeta': true,
-          'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RiderConsoleScreen())),
-        },
-      ],
+      {
+        'category': 'Operations',
+        'icon': Icons.delivery_dining_outlined,
+        'label': 'Rider Delivery Portal',
+        'permission': 'RIDER_PORTAL',
+        'isBeta': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RiderConsoleScreen())),
+      },
       {
         'category': 'Operations',
         'icon': Icons.upload,
@@ -2356,14 +2366,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RestaurantSetupScreen())),
       },
       {
-        'category': 'Restaurant (Beta)',
+        'category': 'Finance & Expenses',
         'icon': Icons.local_shipping_outlined,
         'label': 'Delivery Challans',
         'permission': 'DELIVERY_CHALLANS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeliveryChallanScreen())),
       },
       {
-        'category': 'Restaurant (Beta)',
+        'category': 'Finance & Expenses',
         'icon': Icons.schedule_outlined,
         'label': 'Recurring Expenses',
         'permission': 'RECURRING_EXPENSES',
@@ -2597,6 +2607,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     ];
 
     final categories = [
+      'Billing',
       'Operations',
       'Modify',
       _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
@@ -2678,6 +2689,16 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CaptainDashboardScreen())),
       },
 
+      // Billing & Sales
+      {
+        'category': 'Billing',
+        'icon': Icons.point_of_sale,
+        'label': 'Billing (POS) / Retail Sale Screen',
+        'subLabel': 'Billing ➜ POS Cashier Counter, Sales Billing, Invoice Generation',
+        'permission': 'RETAIL_SALES',
+        'keywords': ['sale', 'sales', 'retail sale', 'retail sales', 'pos', 'billing', 'bill', 'billing pos', 'counter billing', 'invoice', 'make bill', 'pos sale', 'retail', 'salescreen'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SaleScreen())),
+      },
       // Operations & Sales
       {
         'category': 'Operations',
@@ -2849,9 +2870,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             ...filteredDrawerItems.where((item) {
               final label = (item['label'] as String).toLowerCase();
               final category = (item['category'] as String).toLowerCase();
+              final List<String> keywords = List<String>.from(item['keywords'] ?? []);
               final perm = item['permission'] as String?;
               if (perm != null && !PermissionService.can(perm)) return false;
-              return label.contains(searchQuery) || category.contains(searchQuery);
+              return label.contains(searchQuery) ||
+                  category.contains(searchQuery) ||
+                  keywords.any((kw) => kw.contains(searchQuery));
             }),
             ...filteredDeepSearch.where((item) {
               final label = (item['label'] as String).toLowerCase();

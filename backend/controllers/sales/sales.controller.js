@@ -2620,6 +2620,33 @@ async function createSaleVersion({
           })
         : null;
 
+    // Check if this sale is converted from a Delivery Challan
+    const challanRefNo = header.ref_no || (header.notes && header.notes.match(/Delivery Challan ([A-Z0-9_-]+)/i)?.[1]);
+    const originalChallanQtyMap = new Map();
+
+    if (challanRefNo && req.propertyDb.models.delivery_challan_headers) {
+        const challanHeader = await req.propertyDb.models.delivery_challan_headers.findOne({
+            where: { outlet_id, challan_no: challanRefNo },
+            include: [{ model: req.propertyDb.models.delivery_challan_items, as: 'items' }],
+            transaction
+        });
+
+        if (challanHeader) {
+            await challanHeader.update({ status: 'Converted_To_Sale' }, { transaction });
+            if (challanHeader.items && challanHeader.items.length > 0) {
+                for (const item of challanHeader.items) {
+                    const key = String(item.item_id);
+                    originalChallanQtyMap.set(key, {
+                        item_id: item.item_id,
+                        item_code: item.item_code,
+                        item_name: item.item_name,
+                        qty: parseFloat(item.qty) || 0
+                    });
+                }
+            }
+        }
+    }
+
     for (const row of saleItems) {
         const qty = toAmount(row.qty);
         let rate = toAmount(row.rate);
@@ -2669,32 +2696,25 @@ async function createSaleVersion({
 
         if (taxPercent > 0) {
             if (isTaxInclusiveRow) {
-                const effectiveTaxable = Math.max(0, amount - lineDiscount);
-                taxableAmount = toAmount(effectiveTaxable / (1 + (taxPercent / 100)));
-                taxAmount = toAmount(effectiveTaxable - taxableAmount);
-                lineTotal = toAmount(taxableAmount + taxAmount);
+                taxableAmount = toAmount(amount / (1 + (taxPercent / 100)));
+                taxAmount = toAmount(amount - taxableAmount);
             } else {
-                taxableAmount = Math.max(0, amount - lineDiscount);
-                taxAmount = toAmount(taxableAmount * (taxPercent / 100));
-                lineTotal = toAmount(taxableAmount + taxAmount);
+                taxAmount = toAmount((amount * taxPercent) / 100);
+                lineTotal = toAmount(amount + taxAmount);
             }
-        } else {
-            taxableAmount = Math.max(0, amount - lineDiscount);
-            lineTotal = taxableAmount;
         }
 
         let itemNetAmount = lineTotal;
         if (row.is_scheme_free === true) {
             schemeFreeQtyAmount = toAmount(schemeFreeQtyAmount + lineTotal);
             itemNetAmount = 0;
-        }
-        if (isAdvanceOrSubFree) {
-            advanceSubscriptionDiscount = toAmount(advanceSubscriptionDiscount + lineTotal);
+        } else if (row.is_advance_free === true) {
             subscriptionAdjustmentAmount = toAmount(subscriptionAdjustmentAmount + lineTotal);
-            const rowTaxBreakup = Array.isArray(row.tax_breakup) ? row.tax_breakup : [];
-            const cgstRow = rowTaxBreakup.find(t => t.code === 'CGST');
-            const sgstRow = rowTaxBreakup.find(t => t.code === 'SGST');
-            const igstRow = rowTaxBreakup.find(t => t.code === 'IGST');
+            advanceSubscriptionDiscount = toAmount(advanceSubscriptionDiscount + lineTotal);
+            const rowTaxesForSub = Array.isArray(row.tax_breakup) ? row.tax_breakup : [];
+            const cgstRow = rowTaxesForSub.find(t => String(t?.code).toUpperCase() === 'CGST');
+            const sgstRow = rowTaxesForSub.find(t => String(t?.code).toUpperCase() === 'SGST');
+            const igstRow = rowTaxesForSub.find(t => String(t?.code).toUpperCase() === 'IGST');
             if (cgstRow) subscriptionTaxCgst = toAmount(subscriptionTaxCgst + (cgstRow.taxAmount ?? cgstRow.tax_amount ?? 0));
             if (sgstRow) subscriptionTaxSgst = toAmount(subscriptionTaxSgst + (sgstRow.taxAmount ?? sgstRow.tax_amount ?? 0));
             if (igstRow) subscriptionTaxIgst = toAmount(subscriptionTaxIgst + (igstRow.taxAmount ?? igstRow.tax_amount ?? 0));
@@ -2768,16 +2788,41 @@ async function createSaleVersion({
             const dbItem = itemMasterMap.get(Number(row.item_id));
             const isRecipeBased = dbItem?.is_recipe_based ?? false;
             const isStockable = dbItem?.stockable ?? true;
-            if (!isRecipeBased && isStockable) {
-                stockLedgerLines.push({
-                    item_code: row.item_code,
-                    item_name: row.item_name,
-                    brand: row.brand || dbItem?.brand,
-                    qty_out: qty,
-                    is_bom_component: false
-                });
+
+            // Calculate delta stock adjustment if converted from Delivery Challan
+            const challanKey = String(row.item_id);
+            const origChallanItem = originalChallanQtyMap.get(challanKey);
+            const origChallanQty = origChallanItem ? origChallanItem.qty : 0;
+            const effectiveQtyForStock = (originalChallanQtyMap.size > 0 || origChallanItem) ? (qty - origChallanQty) : qty;
+
+            if (originalChallanQtyMap.has(challanKey)) {
+                originalChallanQtyMap.delete(challanKey); // Mark as processed
             }
-            if (isRecipeBased) {
+
+            if (!isRecipeBased && isStockable && effectiveQtyForStock !== 0) {
+                if (effectiveQtyForStock > 0) {
+                    stockLedgerLines.push({
+                        item_code: row.item_code,
+                        item_name: row.item_name,
+                        brand: row.brand || dbItem?.brand,
+                        qty_out: effectiveQtyForStock,
+                        is_bom_component: false
+                    });
+                } else if (effectiveQtyForStock < 0) {
+                    const { insertLedger } = require('../../services/stockLedger.service');
+                    await insertLedger({
+                        db: req.propertyDb,
+                        outlet_id,
+                        item_code: row.item_code,
+                        txn_date: header.sale_date || new Date(),
+                        txn_type: 'CHALLAN_SALE_RETURN',
+                        ref_no: header.sale_no,
+                        qty_in: Math.abs(effectiveQtyForStock),
+                        transaction
+                    });
+                }
+            }
+            if (isRecipeBased && effectiveQtyForStock > 0) {
                 const bomComponents = await req.propertyDb.models.item_boms.findAll({
                     where: { outlet_id, parent_item_id: row.item_id },
                     include: [{ model: req.propertyDb.models.item_master, as: 'component_item', where: { is_active: true } }],
@@ -2789,7 +2834,7 @@ async function createSaleVersion({
                             item_code: bomComp.component_item.item_code,
                             item_name: bomComp.component_item.item_name,
                             brand: bomComp.component_item.brand,
-                            qty_out: Number(bomComp.quantity) * qty,
+                            qty_out: Number(bomComp.quantity) * effectiveQtyForStock,
                             is_bom_component: true,
                             parent_item_code: row.item_code,
                             parent_item_name: row.item_name,
@@ -2797,6 +2842,25 @@ async function createSaleVersion({
                         });
                     }
                 }
+            }
+        }
+    }
+
+    // For any items in original Challan that were completely deleted/removed during Billing:
+    if (status === 'COMPLETED' && affectStock && originalChallanQtyMap.size > 0) {
+        const { insertLedger } = require('../../services/stockLedger.service');
+        for (const [_, deletedItem] of originalChallanQtyMap) {
+            if (deletedItem.qty > 0) {
+                await insertLedger({
+                    db: req.propertyDb,
+                    outlet_id,
+                    item_code: deletedItem.item_code,
+                    txn_date: header.sale_date || new Date(),
+                    txn_type: 'CHALLAN_ITEM_REMOVED',
+                    ref_no: header.sale_no,
+                    qty_in: deletedItem.qty,
+                    transaction
+                });
             }
         }
     }
@@ -3158,9 +3222,29 @@ exports.createSale = async (req, res) => {
         const selectedSchemes = normalizeSelectedSchemes(header.selected_schemes || header.selectedSchemes);
         const status = header.status || 'COMPLETED';
         const headerForCreate = { ...header };
-        if (status === 'DRAFT' && !headerForCreate.sale_no) {
-            // Drafts must never reserve official billing sequence.
-            headerForCreate.sale_no = buildDraftSaleNo();
+        const moduleUpper = String(req.user?.business_module || req.user?.module || '').toUpperCase();
+        const isRestaurant = moduleUpper === 'RESTAURANT';
+
+        if (status === 'DRAFT') {
+            if (isRestaurant) {
+                // Restaurant Case: Direct official bill number (e.g. FAM-63-26)
+                if (!headerForCreate.sale_no || String(headerForCreate.sale_no).toUpperCase().startsWith('DRAFT-')) {
+                    const resolved = await numberingHelper.resolveNextNumber({
+                        req,
+                        module: 'SALES',
+                        date: headerForCreate.sale_date || new Date(),
+                        outlet_id: req.user.outlet_id
+                    });
+                    if (resolved && resolved.number) {
+                        headerForCreate.sale_no = resolved.number;
+                    }
+                }
+            } else {
+                // Retailer Case: Temporary DRAFT- prefix while drafting
+                if (!headerForCreate.sale_no || !String(headerForCreate.sale_no).toUpperCase().startsWith('DRAFT-')) {
+                    headerForCreate.sale_no = buildDraftSaleNo();
+                }
+            }
         }
         const voucherCode = String(header.voucher_code || '').trim().toUpperCase();
         const affectStock = header.affect_stock !== false;
@@ -4328,7 +4412,9 @@ exports.listSales = async (req, res) => {
                 where.status = status;
             }
         }
-        if (latestOnly) {
+        if (status === 'DRAFT') {
+            where.is_deleted = false;
+        } else if (latestOnly) {
             where.is_latest = true;
             where.is_deleted = false;
         }
@@ -4767,6 +4853,7 @@ exports.getSaleDetails = async (req, res) => {
 
 exports.deleteDraft = async (req, res) => {
     try {
+        const { reason } = req.body || {};
         const draft = await req.propertyDb.models.sales_headers.findOne({
             where: {
                 id: req.params.id,
@@ -4776,15 +4863,23 @@ exports.deleteDraft = async (req, res) => {
         });
 
         if (!draft) {
-            return res.status(404).json({ success: false, message: 'Draft not found' });
+            return res.status(404).json({ success: false, message: 'Draft not found or already cancelled' });
         }
 
-        await req.propertyDb.models.sales_items.destroy({
-            where: { sale_id: draft.id }
-        });
-        await draft.destroy();
+        const cancelNote = reason && reason.trim() ? reason.trim() : 'Cancelled by user';
+        const auditLogNote = `[DRAFT CANCELLED] ${cancelNote} (User: ${req.user?.name || req.user?.username || req.user?.id})`;
+        const updatedNotes = draft.notes ? `${draft.notes} | ${auditLogNote}` : auditLogNote;
 
-        res.json({ success: true, message: 'Draft cleared successfully' });
+        await draft.update({
+            status: 'CANCELLED',
+            is_deleted: true,
+            modified_by: req.user.id,
+            modified_at: new Date(),
+            modification_note: cancelNote,
+            notes: updatedNotes
+        });
+
+        res.json({ success: true, message: 'Draft order cancelled and audit logged successfully' });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

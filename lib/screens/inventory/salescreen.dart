@@ -47,6 +47,11 @@ class SaleScreen extends StatefulWidget {
   final int? preloadedTableId;
   final List<Map<String, dynamic>>? preloadedItems;
   final List<int>? preloadedKotIds;
+  final String? preloadedCustomerName;
+  final String? preloadedCustomerPhone;
+  final bool affectStock;
+  final String? challanNo;
+  final bool openDraftsOnLaunch;
 
   const SaleScreen({
     super.key,
@@ -54,6 +59,11 @@ class SaleScreen extends StatefulWidget {
     this.preloadedTableId,
     this.preloadedItems,
     this.preloadedKotIds,
+    this.preloadedCustomerName,
+    this.preloadedCustomerPhone,
+    this.affectStock = true,
+    this.challanNo,
+    this.openDraftsOnLaunch = false,
   });
   @override
   State<SaleScreen> createState() => _SaleScreenState();
@@ -259,6 +269,22 @@ class _SaleScreenState extends State<SaleScreen> {
       } else {
         _saleNo.text = await ctrl.getNextSaleNo();
         _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
+      }
+
+      if (widget.preloadedCustomerName != null && widget.preloadedCustomerName!.trim().isNotEmpty) {
+        _customerName.text = widget.preloadedCustomerName!.trim();
+      }
+      if (widget.preloadedCustomerPhone != null && widget.preloadedCustomerPhone!.trim().isNotEmpty) {
+        _customerPhone.text = widget.preloadedCustomerPhone!.trim();
+      }
+      if (widget.challanNo != null && widget.challanNo!.trim().isNotEmpty) {
+        _notes.text = 'Converted from Delivery Challan ${widget.challanNo}';
+      }
+
+      if (widget.openDraftsOnLaunch) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showDraftsDialog();
+        });
       }
 
       if (widget.preloadedItems != null && widget.preloadedItems!.isNotEmpty) {
@@ -6426,7 +6452,7 @@ class _SaleScreenState extends State<SaleScreen> {
       notes: noteParts.isEmpty ? null : noteParts.join(' | '),
       modificationNote:
           isEditing ? (modReason ?? 'Sales bill updated from reprint section') : null,
-      affectStock: !isEditing || _affectStockOnEdit,
+      affectStock: widget.affectStock && (!isEditing || _affectStockOnEdit),
       items: orderItems,
       salesmanId: _selectedSalesperson?['id'],
       tableId: _preloadedTableId,
@@ -6595,8 +6621,13 @@ class _SaleScreenState extends State<SaleScreen> {
           }
         }
       }
-    if (isEditing) {
-      Navigator.pop(context, true);
+    }
+
+    final bool isRestaurantTableSale = _preloadedTableId != null || order.tableId != null;
+    if (isEditing || (status == 'COMPLETED' && isRestaurantTableSale)) {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      }
     } else {
       await _resetSaleForm();
     }
@@ -6612,10 +6643,17 @@ class _SaleScreenState extends State<SaleScreen> {
       final int targetPrintId = primarySaleId > 0 ? primarySaleId : savedSaleId;
 
       if (targetPrintId > 0) {
-        final String primarySaleNo = (saveResponse?['data']?['primary_sale_no'] ?? saveResponse?['sale_no'] ?? order.saleNo).toString();
+        final String primarySaleNo = (modifyResponse?['data']?['sale_no'] ??
+            modifyResponse?['sale_no'] ??
+            saveResponse?['data']?['primary_sale_no'] ??
+            saveResponse?['data']?['sale_no'] ??
+            saveResponse?['sale_no'] ??
+            order.saleNo).toString();
         final printOrder = order.copyWith(
           saleNo: primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo,
-          hasBillNo: (primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo).isNotEmpty,
+          status: status,
+          hasBillNo: (primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo).isNotEmpty &&
+              !primarySaleNo.toUpperCase().startsWith('DRAFT-'),
           orderId: targetPrintId,
         );
         _handlePrintAfterSave(
@@ -6626,7 +6664,7 @@ class _SaleScreenState extends State<SaleScreen> {
         });
       }
     }
-  }}
+  }
 
   List<int>? _normalizeSaleIds(dynamic value) {
     if (value is List) {
@@ -6798,9 +6836,21 @@ class _SaleScreenState extends State<SaleScreen> {
         .map((e) => BillingCharge.fromJson(Map<String, dynamic>.from(e)))
         .toList();
 
+    final loadedSaleNo = details['sale_no']?.toString() ?? '';
+    final isDraftNo = loadedSaleNo.trim().toUpperCase().startsWith('DRAFT-');
+    String displaySaleNo = loadedSaleNo;
+    if (isDraftNo || loadedSaleNo.trim().isEmpty) {
+      try {
+        final nextOfficialNo = await ctrl.getNextSaleNo();
+        if (nextOfficialNo.trim().isNotEmpty) {
+          displaySaleNo = nextOfficialNo;
+        }
+      } catch (_) {}
+    }
+
     setState(() {
       _activeDraftId = draftId;
-      _saleNo.text = details['sale_no']?.toString() ?? '';
+      _saleNo.text = displaySaleNo;
       _saleDate = DateTime.tryParse(details['sale_date']?.toString() ?? '') ??
           DateTime.now();
       _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
@@ -6849,7 +6899,7 @@ class _SaleScreenState extends State<SaleScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Draft / Delivery Orders'),
         content: SizedBox(
           width: 640,
@@ -6859,7 +6909,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   shrinkWrap: true,
                   itemCount: drafts.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
+                  itemBuilder: (builderCtx, index) {
                     final draft = drafts[index];
                     final saleDate = DateTime.tryParse(
                       draft['sale_date']?.toString() ?? '',
@@ -6882,16 +6932,10 @@ class _SaleScreenState extends State<SaleScreen> {
                             icon: const Icon(Icons.print_outlined),
                           ),
                           IconButton(
-                            tooltip: 'Delete Draft',
+                            tooltip: 'Cancel & Audit Log Draft',
                             onPressed: draftId <= 0
                                 ? null
-                                : () async {
-                                    await ctrl.deleteDraft(draftId);
-                                    _loadSubscriptionDraftCounts();
-                                    if (!mounted) return;
-                                    Navigator.pop(context);
-                                    await _showDraftsDialog();
-                                  },
+                                : () => _confirmCancelDraft(dialogContext, draft),
                             icon: const Icon(
                               Icons.delete_outline,
                               color: Colors.red,
@@ -6901,17 +6945,19 @@ class _SaleScreenState extends State<SaleScreen> {
                         ],
                       ),
                       onTap: () async {
-                        Navigator.pop(context);
+                        final saleNo = draft['sale_no']?.toString() ?? '';
+                        Navigator.of(dialogContext).pop();
                         await _loadDraft(draft);
                         _loadSubscriptionDraftCounts();
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Draft ${draft['sale_no']} loaded successfully.',
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Draft $saleNo loaded successfully.',
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        }
                       },
                     );
                   },
@@ -6919,12 +6965,79 @@ class _SaleScreenState extends State<SaleScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Close'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmCancelDraft(BuildContext dialogContext, Map<String, dynamic> draft) async {
+    final draftId = int.tryParse(draft['id']?.toString() ?? '') ?? 0;
+    final saleNo = draft['sale_no']?.toString() ?? 'Draft';
+    final reasonCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: dialogContext,
+      builder: (confirmCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Cancel Draft Order $saleNo?')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Draft $saleNo will be marked as CANCELLED for audit records.\n'
+              'The bill sequence $saleNo will remain logged to prevent missing bill sequence issues.',
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: reasonCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Reason for Cancellation *',
+                hintText: 'e.g. Customer cancelled order, wrong entry...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(confirmCtx, false),
+            child: const Text('Keep Draft'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(confirmCtx, true),
+            child: const Text('Confirm Cancel Draft'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final reason = reasonCtrl.text.trim();
+      await ctrl.deleteDraft(draftId, reason: reason.isEmpty ? 'Cancelled by cashier' : reason);
+      _loadSubscriptionDraftCounts();
+      if (!mounted) return;
+      Navigator.of(dialogContext).pop();
+      await _showDraftsDialog();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Draft $saleNo cancelled & audit logged.'),
+            backgroundColor: Colors.orange.shade800,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _printDraftById(int draftId) async {
