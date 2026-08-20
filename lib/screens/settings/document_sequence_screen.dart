@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
 import '../../controllers/inventory/document_sequence_controller.dart';
 import '../../models/inventory/document_sequence_model.dart';
+import '../../core/auth/token_storage.dart';
+import '../../core/permissions/module_capability.dart';
 
 class DocumentSequenceScreen extends StatefulWidget {
   const DocumentSequenceScreen({super.key});
@@ -14,6 +15,8 @@ class DocumentSequenceScreen extends StatefulWidget {
 
 class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
   final DocumentSequenceController ctrl = DocumentSequenceController();
+  String _businessModule = 'ALL';
+
   final List<MapEntry<String, String>> _moduleDefs = const [
     MapEntry('KOT / Restaurant Order No', 'KOT'),
     MapEntry('Purchase Order No', 'PO'),
@@ -23,6 +26,12 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     MapEntry('Request No', 'REQUEST'),
     MapEntry('Damage No', 'DAMAGE'),
   ];
+
+  List<MapEntry<String, String>> get _visibleModuleDefs {
+    return _moduleDefs
+        .where((def) => ModuleCapability.isSequenceAllowed(def.value, _businessModule))
+        .toList();
+  }
 
   final Map<String, List<_NumberingRowState>> _rowsByModule = {
     'KOT': [],
@@ -53,6 +62,9 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
   }
 
   Future<void> _loadSettings() async {
+    final userMap = await TokenStorage.getUser();
+    _businessModule = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
+
     await ctrl.load();
 
     for (final def in _moduleDefs) {
@@ -223,7 +235,7 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            ..._moduleDefs.map(
+            ..._visibleModuleDefs.map(
               (def) => _buildPolarisModuleSection(def.key, def.value),
             ),
             const SizedBox(height: 24),

@@ -10,6 +10,7 @@ module.exports = async (req, res, next) => {
             try {
                 // Dynamically ensure columns exist
                 await propertyDb.query(`
+                    ALTER TABLE outlets ADD COLUMN IF NOT EXISTS business_module VARCHAR(50) DEFAULT 'ALL';
                     ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS salesman_id INTEGER NULL;
                     ALTER TABLE hr_attendance_punches ADD COLUMN IF NOT EXISTS leave_type_id INTEGER NULL;
                     ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS x_coordinate INTEGER NULL;

@@ -51,6 +51,7 @@ router.get('/items/next-code', itemCtrl.getNextItemCode);
 router.post('/items', itemCtrl.createItem);
 router.get('/items', itemCtrl.getItems);
 router.post('/items/bulk-import', itemCtrl.bulkImportItems);
+router.post('/items/bulk-update-location', itemCtrl.bulkUpdateLocation);
 router.delete('/items/delete-all-for-fresh-import', itemCtrl.deleteAllItemsForFreshImport);
 router.post('/items/generate-barcodes', itemCtrl.generateBarcodes);
 router.post('/items/:id/open-pack', itemCtrl.openPackStock);

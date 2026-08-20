@@ -1,5 +1,6 @@
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/auth/token_storage.dart';
 
 class OutletController {
   Future<OutletCheckResult> outletExists() async {
@@ -53,6 +54,20 @@ class OutletController {
       }
     } catch (e) {
       throw Exception(e.toString().replaceAll("Exception: ", ""));
+    }
+  }
+
+  Future<bool> updateBusinessModule(String businessModule) async {
+    try {
+      final user = await TokenStorage.getUser();
+      final outletCode = user?['outlet_code'] ?? '';
+      final res = await ApiClient.put(ApiEndpoints.updateOutletModule, {
+        'business_module': businessModule,
+        'outlet_code': outletCode,
+      });
+      return res['success'] == true;
+    } catch (e) {
+      return false;
     }
   }
 }

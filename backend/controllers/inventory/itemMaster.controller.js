@@ -937,3 +937,48 @@ exports.deleteItemImage = async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+exports.bulkUpdateLocation = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id || 1;
+        const { item_ids, location } = req.body;
+
+        if (!location || !String(location).trim()) {
+            return res.status(400).json({ success: false, message: 'Stock Location is required' });
+        }
+
+        const targetLocation = String(location).trim();
+        const whereClause = { outlet_id };
+
+        if (Array.isArray(item_ids) && item_ids.length > 0) {
+            whereClause.id = { [Op.in]: item_ids };
+        }
+
+        const ItemModel = req.propertyDb.models.item_master || req.propertyDb.models.items;
+        const [affectedCount] = await ItemModel.update(
+            { location: targetLocation },
+            { where: whereClause }
+        );
+
+        await audit.log({
+            req,
+            module: 'ITEM_MASTER',
+            action: 'BULK_UPDATE_LOCATION',
+            table: 'items',
+            recordId: 0,
+            old_data: {},
+            new_data: { location: targetLocation, affectedCount },
+            outlet_id,
+            user_id: req.user?.id || 1
+        });
+
+        return res.json({
+            success: true,
+            message: `Successfully updated location to "${targetLocation}" for ${affectedCount} item(s)`,
+            data: { updatedCount: affectedCount, location: targetLocation }
+        });
+    } catch (e) {
+        console.error('Error in bulkUpdateLocation:', e);
+        return res.status(500).json({ success: false, message: e.message });
+    }
+};

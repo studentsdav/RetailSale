@@ -9,6 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../controllers/security/password_recovery_controller.dart';
 import '../../utils/branding_storage.dart';
+import '../../core/settings/local_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -29,6 +30,7 @@ class _LoginScreenState extends State<LoginScreen>
   String? _selectedOutlet;
   bool _obscure = true;
   String? _logoPath;
+  String? _bgCoverImagePath;
 
   late final AnimationController _logoCtrl;
   late final Animation<double> _logoAnim;
@@ -67,11 +69,13 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _loadOutletLogo() async {
-    final outletCode = _selectedOutlet;
-    if (outletCode == null) return;
-    final path = await BrandingStorage.getLogoPathForOutlet(outletCode);
+    if (_selectedOutlet != null) {
+      final path = await BrandingStorage.getLogoPathForOutlet(_selectedOutlet!);
+      if (mounted) setState(() => _logoPath = path);
+    }
+    final branding = await LocalPreferences.getAppBranding();
     if (!mounted) return;
-    setState(() => _logoPath = path);
+    setState(() => _bgCoverImagePath = branding.homeBgImagePath);
   }
 
   @override
@@ -250,6 +254,18 @@ class _LoginScreenState extends State<LoginScreen>
                   Theme.of(context).colorScheme.secondary,
                 ],
               ),
+              image: _bgCoverImagePath != null &&
+                      _bgCoverImagePath!.isNotEmpty &&
+                      File(_bgCoverImagePath!).existsSync()
+                  ? DecorationImage(
+                      image: FileImage(File(_bgCoverImagePath!)),
+                      fit: BoxFit.cover,
+                      colorFilter: ColorFilter.mode(
+                        Colors.black.withOpacity(0.35),
+                        BlendMode.darken,
+                      ),
+                    )
+                  : null,
               borderRadius:
                   const BorderRadius.horizontal(left: Radius.circular(18)),
             ),

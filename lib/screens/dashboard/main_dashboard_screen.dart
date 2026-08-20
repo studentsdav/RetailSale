@@ -22,6 +22,7 @@ import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../models/auth/permission_service.dart';
+import '../../core/permissions/module_capability.dart';
 import '../../models/common/property_info_model.dart';
 import '../auth/login_screen.dart' show LoginScreen;
 import '../auth/user_management_screen.dart';
@@ -263,6 +264,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   String get _businessType => (user?.outletType ?? '').toUpperCase();
+  String get _businessModule => user?.businessModule ?? 'ALL';
   bool get _isRetailBusiness =>
       _businessType == 'RETAIL' ||
       const {
@@ -280,11 +282,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   bool get _isHospitalityBusiness =>
       const {'HOTEL', 'RESTAURANT', 'CAFE', 'BAR'}.contains(_businessType);
   bool get _showRetailSalesSection =>
-      _isRetailBusiness ||
-      PermissionService.can('RETAIL_SALES') ||
-      PermissionService.can('REPRINT_SALES_BILL');
+      ModuleCapability.hasRetail(_businessModule) &&
+      (_isRetailBusiness ||
+          PermissionService.can('RETAIL_SALES') ||
+          PermissionService.can('REPRINT_SALES_BILL'));
   bool get _showRetailSalesReportSection =>
-      _isRetailBusiness || PermissionService.can('RETAIL_SALES_REPORT');
+      ModuleCapability.hasRetail(_businessModule) &&
+      (_isRetailBusiness || PermissionService.can('RETAIL_SALES_REPORT'));
   String get _dashboardTitle {
     if (_isWarehouseBusiness) return 'Warehouse Retailpos Dashboard';
     if (_isRetailBusiness) return 'Retailpos Dashboard';
@@ -2836,17 +2840,20 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
     ];
 
+    final filteredDrawerItems = ModuleCapability.filterDrawerItems(allDrawerItems, _businessModule);
+    final filteredDeepSearch = ModuleCapability.filterDrawerItems(deepSearchRegistry, _businessModule);
+
     final matchingItems = !isSearching
         ? <Map<String, dynamic>>[]
         : [
-            ...allDrawerItems.where((item) {
+            ...filteredDrawerItems.where((item) {
               final label = (item['label'] as String).toLowerCase();
               final category = (item['category'] as String).toLowerCase();
               final perm = item['permission'] as String?;
               if (perm != null && !PermissionService.can(perm)) return false;
               return label.contains(searchQuery) || category.contains(searchQuery);
             }),
-            ...deepSearchRegistry.where((item) {
+            ...filteredDeepSearch.where((item) {
               final label = (item['label'] as String).toLowerCase();
               final subLabel = (item['subLabel'] as String).toLowerCase();
               final category = (item['category'] as String).toLowerCase();
@@ -3235,7 +3242,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                         ),
                         InkWell(
                           borderRadius: BorderRadius.circular(4),
-                          onTap: () => _openManageFavoritesDialog(allDrawerItems),
+                          onTap: () => _openManageFavoritesDialog(filteredDrawerItems),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             child: Row(
@@ -3285,7 +3292,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                       ),
                     )
                   else
-                    ...allDrawerItems.where((item) {
+                    ...filteredDrawerItems.where((item) {
                       final label = item['label'] as String;
                       if (!_favoriteDrawerItems.contains(label)) return false;
                       final perm = item['permission'] as String?;
@@ -3314,7 +3321,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
                   // CATEGORIES SECTION
                   ...categories.map((categoryName) {
-                    final categoryItems = allDrawerItems.where((item) {
+                    final categoryItems = filteredDrawerItems.where((item) {
                       if (item['category'] != categoryName) return false;
                       final perm = item['permission'] as String?;
                       if (perm != null && !PermissionService.can(perm)) return false;

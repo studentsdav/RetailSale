@@ -9,6 +9,8 @@ const { requestSetupOtp, verifySetupOtp } = require('../modules/verificationCont
 
 router.post('/outlet/check', outletCtrl.checkOutlet);
 router.post('/outlet', outletCtrl.createOutlet);
+router.put('/outlet/module', outletCtrl.updateOutletModule);
+router.post('/outlet/module', outletCtrl.updateOutletModule);
 // router.post('/create-admin', outletCtrl.createAdmin);
 router.get('/property-info', ctrl.getPropertyInfo);
 router.get('/outlets', async (req, res) => {

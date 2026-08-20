@@ -173,6 +173,7 @@ exports.login = async (req, res, next) => {
                 outlet_code: currentOutlet.outlet_code,
                 property_name: property?.property_name || '',
                 outlet_type: currentOutlet.outlet_type || '',
+                business_module: currentOutlet.business_module || 'ALL',
                 permissions
             }
         });
@@ -317,6 +318,7 @@ exports.verifySupplierOtp = async (req, res) => {
                 outlet_code: currentOutlet.outlet_code,
                 property_name: property?.property_name || '',
                 outlet_type: currentOutlet.outlet_type || '',
+                business_module: currentOutlet.business_module || 'ALL',
                 permissions: ['*']
             }
         });

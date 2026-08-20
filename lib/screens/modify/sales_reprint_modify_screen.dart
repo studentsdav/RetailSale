@@ -30,7 +30,14 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   DateTime _fromDate = DateTime.now().subtract(const Duration(days: 7));
   DateTime _toDate = DateTime.now();
   bool _loading = false;
-  List<String> _availablePaymentMethods = ['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT'];
+  String _selectedSourceFilter = 'ALL';
+  List<String> _availablePaymentMethods = [
+    'CASH',
+    'CARD',
+    'UPI',
+    'BANK',
+    'CREDIT'
+  ];
   List<Map<String, dynamic>> _sales = const [];
   Map<String, dynamic>? _selectedSale;
   Map<String, dynamic>? _selectedDetails;
@@ -174,8 +181,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     } catch (_) {}
 
     // Rebuild SaleOrder with the current bill_format substituted in
-    final reprintJson =
-        Map<String, dynamic>.from(_selectedDetails!['details'] ?? _selectedDetails!);
+    final reprintJson = Map<String, dynamic>.from(
+        _selectedDetails!['details'] ?? _selectedDetails!);
     reprintJson['bill_format'] = currentBillFormat;
     // Preserve items from the original details map
     if (_selectedDetails!['items'] != null) {
@@ -237,14 +244,16 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
 
   Future<void> _showReturnDialog() async {
     if (_selectedOrder == null) return;
-    
+
     // Maintain a map of item_id -> (isSelected, returnQty)
     final itemsState = <int, Map<String, dynamic>>{};
     final rawItems = _selectedDetails?['items'] as List? ?? const [];
     for (final rawItem in rawItems) {
       final itemId = int.tryParse(rawItem['item_id']?.toString() ?? '') ?? 0;
-      final originalQty = double.tryParse(rawItem['qty']?.toString() ?? '') ?? 0.0;
-      final returnedQty = double.tryParse(rawItem['returned_qty']?.toString() ?? '') ?? 0.0;
+      final originalQty =
+          double.tryParse(rawItem['qty']?.toString() ?? '') ?? 0.0;
+      final returnedQty =
+          double.tryParse(rawItem['returned_qty']?.toString() ?? '') ?? 0.0;
       final remainingQty = originalQty - returnedQty;
       if (remainingQty <= 0) continue; // Item is already fully returned
 
@@ -253,14 +262,17 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         'selected': true, // Default to selected
         'qty': remainingQty, // Default to remaining quantity
         'maxQty': remainingQty,
-        'name': '${rawItem['item_name']?.toString() ?? ''}${brand.isNotEmpty ? ' ($brand)' : ''}',
+        'name':
+            '${rawItem['item_name']?.toString() ?? ''}${brand.isNotEmpty ? ' ($brand)' : ''}',
         'code': rawItem['item_code']?.toString() ?? '',
       };
     }
 
     if (itemsState.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All items in this bill have already been returned.')),
+        const SnackBar(
+            content:
+                Text('All items in this bill have already been returned.')),
       );
       return;
     }
@@ -270,7 +282,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setInnerState) {
-            final allSelected = itemsState.values.every((val) => val['selected'] == true);
+            final allSelected =
+                itemsState.values.every((val) => val['selected'] == true);
 
             void toggleAll(bool? val) {
               setInnerState(() {
@@ -281,11 +294,11 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
             }
 
             return AlertDialog(
-              title: Row(
+              title: const Row(
                 children: [
-                  const Icon(Icons.assignment_return_outlined, color: Colors.orange),
-                  const SizedBox(width: 8),
-                  const Text('Select Items to Return'),
+                  Icon(Icons.assignment_return_outlined, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Select Items to Return'),
                 ],
               ),
               content: SizedBox(
@@ -299,7 +312,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                     ),
                     const SizedBox(height: 12),
                     CheckboxListTile(
-                      title: const Text('Select All / Deselect All', style: TextStyle(fontWeight: FontWeight.bold)),
+                      title: const Text('Select All / Deselect All',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                       value: allSelected,
                       onChanged: toggleAll,
                       controlAffinity: ListTileControlAffinity.leading,
@@ -327,10 +341,17 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                 ),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(state['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      Text('${state['code']} • Max: ${state['maxQty']}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                      Text(state['name'],
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600)),
+                                      Text(
+                                          '${state['code']} • Max: ${state['maxQty']}',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black54)),
                                     ],
                                   ),
                                 ),
@@ -341,12 +362,16 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                     initialValue: state['qty'].toString(),
                                     decoration: const InputDecoration(
                                       border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                      contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 8),
                                     ),
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
                                     enabled: state['selected'],
                                     onChanged: (val) {
-                                      final parsed = double.tryParse(val) ?? 0.0;
+                                      final parsed =
+                                          double.tryParse(val) ?? 0.0;
                                       if (parsed > state['maxQty']) {
                                         setInnerState(() {
                                           state['qty'] = state['maxQty'];
@@ -378,10 +403,15 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                 FilledButton(
                   onPressed: () {
                     // Check if at least one item is selected with > 0 quantity
-                    final selectedEntries = itemsState.entries.where((e) => e.value['selected'] == true && e.value['qty'] > 0).toList();
+                    final selectedEntries = itemsState.entries
+                        .where((e) =>
+                            e.value['selected'] == true && e.value['qty'] > 0)
+                        .toList();
                     if (selectedEntries.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please select at least one item with quantity > 0 to return')),
+                        const SnackBar(
+                            content: Text(
+                                'Please select at least one item with quantity > 0 to return')),
                       );
                       return;
                     }
@@ -410,15 +440,17 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     try {
       final saleId = int.parse('${_selectedSale!['id']}');
       await ctrl.returnSale(saleId: saleId, items: selectedItems);
-      
+
       await _loadSales();
       if (_selectedSale != null) {
         await _selectSale(_selectedSale!);
       }
-      
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sale items returned successfully and stock reverted to inventory!')),
+        const SnackBar(
+            content: Text(
+                'Sale items returned successfully and stock reverted to inventory!')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -448,10 +480,9 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
       await ctrl.updateSalePaymentMode(
         saleId: saleId,
         paymentMode: selectedPayment['payment_mode'] as String,
-        paymentLines:
-            (selectedPayment['payment_lines'] as List? ?? const [])
-                .map((entry) => Map<String, dynamic>.from(entry))
-                .toList(),
+        paymentLines: (selectedPayment['payment_lines'] as List? ?? const [])
+            .map((entry) => Map<String, dynamic>.from(entry))
+            .toList(),
       );
       await _loadSales();
       if (_selectedSale != null) {
@@ -459,7 +490,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
             'Payment updated and ledger synced.',
           ),
@@ -488,7 +519,10 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         if (decoded is List) {
           final rows = decoded
               .map((entry) => {
-                    'method': (entry['method'] ?? 'CASH').toString().trim().toUpperCase(),
+                    'method': (entry['method'] ?? 'CASH')
+                        .toString()
+                        .trim()
+                        .toUpperCase(),
                     'amount':
                         double.tryParse((entry['amount'] ?? 0).toString()) ?? 0,
                   })
@@ -501,7 +535,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
 
     final fallback = <Map<String, dynamic>>[];
     if (fallbackPaid > 0) {
-      fallback.add({'method': fallbackMode.toUpperCase(), 'amount': fallbackPaid});
+      fallback
+          .add({'method': fallbackMode.toUpperCase(), 'amount': fallbackPaid});
     }
     if (fallbackDue > 0) {
       fallback.add({'method': 'CREDIT', 'amount': fallbackDue});
@@ -528,8 +563,9 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     String amount1 = initialLines.isNotEmpty
         ? (initialLines[0]['amount'] as double).toStringAsFixed(2)
         : netAmount.toStringAsFixed(2);
-    String mode2 =
-        initialLines.length > 1 ? '${initialLines[1]['method']}'.toUpperCase() : 'UPI';
+    String mode2 = initialLines.length > 1
+        ? '${initialLines[1]['method']}'.toUpperCase()
+        : 'UPI';
     String amount2 = initialLines.length > 1
         ? (initialLines[1]['amount'] as double).toStringAsFixed(2)
         : '0.00';
@@ -563,7 +599,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                       Expanded(
                         flex: 2,
                         child: DropdownButtonFormField<String>(
-                          value: allowedModes.contains(mode1) ? mode1 : 'CASH',
+                          initialValue:
+                              allowedModes.contains(mode1) ? mode1 : 'CASH',
                           decoration: const InputDecoration(
                             labelText: 'Method 1',
                             border: OutlineInputBorder(),
@@ -619,7 +656,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                         Expanded(
                           flex: 2,
                           child: DropdownButtonFormField<String>(
-                            value: allowedModes.contains(mode2) ? mode2 : 'UPI',
+                            initialValue:
+                                allowedModes.contains(mode2) ? mode2 : 'UPI',
                             decoration: const InputDecoration(
                               labelText: 'Method 2',
                               border: OutlineInputBorder(),
@@ -643,8 +681,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                               labelText: 'Amount 2',
                               border: OutlineInputBorder(),
                             ),
-                            keyboardType:
-                                const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             onChanged: (value) => amount2 = value.trim(),
                           ),
                         ),
@@ -652,7 +690,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                     ),
                   ],
                   DropdownButtonFormField<String>(
-                    value: allowedModes.contains(mode1) ? mode1 : 'CASH',
+                    initialValue: allowedModes.contains(mode1) ? mode1 : 'CASH',
                     decoration: const InputDecoration(
                       labelText: 'Primary Mode (Bill Header)',
                       border: OutlineInputBorder(),
@@ -788,6 +826,32 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                         onSubmitted: (_) => _loadSales(),
                       ),
                     ),
+                    SizedBox(
+                      width: 170,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedSourceFilter,
+                        decoration: const InputDecoration(
+                          labelText: 'Source',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 10),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'ALL', child: Text('All Sources')),
+                          DropdownMenuItem(
+                              value: 'RESTAURANT', child: Text('Restaurant')),
+                          DropdownMenuItem(
+                              value: 'STORE', child: Text('Store')),
+                          DropdownMenuItem(value: 'APP', child: Text('App')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedSourceFilter = val);
+                          }
+                        },
+                      ),
+                    ),
                     FilledButton.icon(
                       onPressed: _loadSales,
                       icon: const Icon(Icons.search),
@@ -798,24 +862,44 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Expanded(
-              child: Row(
-                children: [
+            Builder(
+              builder: (context) {
+                final filteredSales = _sales.where((sale) {
+                  if (_selectedSourceFilter == 'ALL') return true;
+                  final src =
+                      (sale['sale_source'] ?? '').toString().toLowerCase();
+                  final ord =
+                      (sale['order_type'] ?? '').toString().toLowerCase();
+                  if (_selectedSourceFilter == 'RESTAURANT') {
+                    return src.contains('restaurant') ||
+                        src.contains('dine') ||
+                        src.contains('takeaway') ||
+                        src.contains('kot') ||
+                        ord.contains('restaurant') ||
+                        ord.contains('dine') ||
+                        ord.contains('takeaway');
+                  }
+                  return src.contains(_selectedSourceFilter.toLowerCase()) ||
+                      ord.contains(_selectedSourceFilter.toLowerCase());
+                }).toList();
+
+                return Expanded(
+                    child: Row(children: [
                   Expanded(
                     flex: 4,
                     child: Card(
                       child: _loading && _sales.isEmpty
                           ? const Center(child: CircularProgressIndicator())
-                          : _sales.isEmpty
+                          : filteredSales.isEmpty
                               ? const Center(
                                   child: Text('No completed bills found.'),
                                 )
                               : ListView.separated(
-                                  itemCount: _sales.length,
+                                  itemCount: filteredSales.length,
                                   separatorBuilder: (_, __) =>
                                       const Divider(height: 1),
                                   itemBuilder: (context, index) {
-                                    final sale = _sales[index];
+                                    final sale = filteredSales[index];
                                     final selected =
                                         sale['id'] == _selectedSale?['id'];
                                     final saleDate = DateTime.tryParse(
@@ -828,7 +912,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                         children: [
                                           Text('${sale['sale_no'] ?? 'Bill'}'),
                                           const SizedBox(width: 8),
-                                          _buildSourceTag(sale['sale_source'], orderType: sale['order_type']),
+                                          _buildSourceTag(sale['sale_source'],
+                                              orderType: sale['order_type']),
                                         ],
                                       ),
                                       subtitle: Text(
@@ -866,7 +951,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Wrap(
-                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
                                               spacing: 8,
                                               children: [
                                                 Text(
@@ -875,7 +961,10 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                       .textTheme
                                                       .titleLarge,
                                                 ),
-                                                _buildSourceTag(_selectedOrder!.saleSource, orderType: _selectedOrder!.orderType),
+                                                _buildSourceTag(
+                                                    _selectedOrder!.saleSource,
+                                                    orderType: _selectedOrder!
+                                                        .orderType),
                                               ],
                                             ),
                                             Text(
@@ -918,17 +1007,41 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           _selectedOrder!.totalQty
                                               .toStringAsFixed(2)),
                                       ...(() {
-                                        final bool anyInclusive = _selectedOrder!.items.any((item) => item.isTaxInclusive);
+                                        final bool anyInclusive =
+                                            _selectedOrder!.items.any(
+                                                (item) => item.isTaxInclusive);
                                         final double displaySubTotal = anyInclusive
-                                            ? _selectedOrder!.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100))))
+                                            ? _selectedOrder!.items.fold<
+                                                    double>(
+                                                0,
+                                                (sum, item) =>
+                                                    sum +
+                                                    (item.isTaxInclusive
+                                                        ? item.amount
+                                                        : (item.amount *
+                                                            (1 +
+                                                                item.taxPercent /
+                                                                    100))))
                                             : _selectedOrder!.subTotal;
                                         final double displayDiscount = anyInclusive
-                                            ? _selectedOrder!.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.lineDiscount : (item.lineDiscount * (1 + item.taxPercent / 100))))
+                                            ? _selectedOrder!.items.fold<
+                                                    double>(
+                                                0,
+                                                (sum, item) =>
+                                                    sum +
+                                                    (item.isTaxInclusive
+                                                        ? item.lineDiscount
+                                                        : (item.lineDiscount *
+                                                            (1 +
+                                                                item.taxPercent /
+                                                                    100))))
                                             : _selectedOrder!.totalDiscount;
 
                                         return [
-                                          _metricCard('Sub Total', _fmtAmount(displaySubTotal)),
-                                          _metricCard('Discount', _fmtAmount(displayDiscount)),
+                                          _metricCard('Sub Total',
+                                              _fmtAmount(displaySubTotal)),
+                                          _metricCard('Discount',
+                                              _fmtAmount(displayDiscount)),
                                         ];
                                       })(),
                                       _metricCard('Tax',
@@ -952,20 +1065,32 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                     child: ListView(
                                       children: [
                                         ..._selectedOrder!.items.map((item) {
-                                          final rawItem = (_selectedDetails?['items'] as List? ?? const []).firstWhere(
-                                            (raw) => raw['item_id'] == item.itemId,
+                                          final rawItem =
+                                              (_selectedDetails?['items']
+                                                          as List? ??
+                                                      const [])
+                                                  .firstWhere(
+                                            (raw) =>
+                                                raw['item_id'] == item.itemId,
                                             orElse: () => null,
                                           );
-                                          final returnedQty = double.tryParse(rawItem?['returned_qty']?.toString() ?? '') ?? 0.0;
+                                          final returnedQty = double.tryParse(
+                                                  rawItem?['returned_qty']
+                                                          ?.toString() ??
+                                                      '') ??
+                                              0.0;
                                           final returnSuffix = returnedQty > 0
                                               ? ' (Ret: ${returnedQty.toStringAsFixed(2)})'
                                               : '';
 
                                           return ListTile(
                                             contentPadding: EdgeInsets.zero,
-                                            title: Text(item.brand != null && item.brand!.trim().isNotEmpty
-                                                  ? '${item.itemName} (${item.brand!.trim()})'
-                                                  : item.itemName),
+                                            title: Text(item.brand != null &&
+                                                    item.brand!
+                                                        .trim()
+                                                        .isNotEmpty
+                                                ? '${item.itemName} (${item.brand!.trim()})'
+                                                : item.itemName),
                                             subtitle: Text(
                                               '${item.itemCode} • Qty ${item.qty.toStringAsFixed(2)}$returnSuffix • Rate ${item.rate.toStringAsFixed(2)}',
                                             ),
@@ -974,8 +1099,11 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                             ),
                                           );
                                         }),
-                                        if (_selectedDetails?['credit_notes'] != null &&
-                                            (_selectedDetails?['credit_notes'] as List).isNotEmpty) ...[
+                                        if (_selectedDetails?['credit_notes'] !=
+                                                null &&
+                                            (_selectedDetails?['credit_notes']
+                                                    as List)
+                                                .isNotEmpty) ...[
                                           const SizedBox(height: 16),
                                           const Divider(),
                                           const Text(
@@ -986,12 +1114,20 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 8),
-                                          ...(_selectedDetails?['credit_notes'] as List).map((cn) {
-                                            final cnMap = Map<String, dynamic>.from(cn);
-                                            final cnDate = DateTime.tryParse(cnMap['credit_note_date']?.toString() ?? '') ?? DateTime.now();
+                                          ...(_selectedDetails?['credit_notes']
+                                                  as List)
+                                              .map((cn) {
+                                            final cnMap =
+                                                Map<String, dynamic>.from(cn);
+                                            final cnDate = DateTime.tryParse(
+                                                    cnMap['credit_note_date']
+                                                            ?.toString() ??
+                                                        '') ??
+                                                DateTime.now();
                                             return ListTile(
                                               contentPadding: EdgeInsets.zero,
-                                              title: Text('${cnMap['credit_note_no']}'),
+                                              title: Text(
+                                                  '${cnMap['credit_note_no']}'),
                                               subtitle: Text(
                                                 'Date: ${DateFormat('dd-MMM-yyyy').format(cnDate)} • Reason: ${cnMap['reason'] ?? 'Sales Return'}',
                                               ),
@@ -1000,17 +1136,27 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                 children: [
                                                   Text(
                                                     'Rs. ${double.parse((cnMap['net_amount'] ?? 0).toString()).toStringAsFixed(2)}',
-                                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                                                    style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors.red),
                                                   ),
                                                   const SizedBox(width: 8),
                                                   IconButton(
-                                                    icon: const Icon(Icons.print, color: Colors.blue),
+                                                    icon: const Icon(
+                                                        Icons.print,
+                                                        color: Colors.blue),
                                                     onPressed: () {
-                                                      final mapWithSale = Map<String, dynamic>.from(cnMap);
-                                                      mapWithSale['sale'] = _selectedDetails;
-                                                      _printCreditNote(mapWithSale);
+                                                      final mapWithSale = Map<
+                                                          String,
+                                                          dynamic>.from(cnMap);
+                                                      mapWithSale['sale'] =
+                                                          _selectedDetails;
+                                                      _printCreditNote(
+                                                          mapWithSale);
                                                     },
-                                                    tooltip: 'Print Credit Note',
+                                                    tooltip:
+                                                        'Print Credit Note',
                                                   ),
                                                 ],
                                               ),
@@ -1092,20 +1238,25 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                               ),
                                             ),
                                           ),
-                                        if (_canModifySales && _selectedDetails?['status'] != 'RETURNED')
+                                        if (_canModifySales &&
+                                            _selectedDetails?['status'] !=
+                                                'RETURNED')
                                           Tooltip(
-                                            message: 'Return items from this bill',
+                                            message:
+                                                'Return items from this bill',
                                             child: SizedBox(
                                               width: 120,
                                               height: 40,
                                               child: FilledButton.icon(
                                                 onPressed: _showReturnDialog,
                                                 icon: const Icon(
-                                                  Icons.assignment_return_outlined,
+                                                  Icons
+                                                      .assignment_return_outlined,
                                                 ),
                                                 label: const Text('Return'),
                                                 style: FilledButton.styleFrom(
-                                                  backgroundColor: Colors.orange,
+                                                  backgroundColor:
+                                                      Colors.orange,
                                                   foregroundColor: Colors.white,
                                                 ),
                                               ),
@@ -1119,8 +1270,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                             ),
                     ),
                   ),
-                ],
-              ),
+                ]));
+              },
             ),
           ],
         ),
@@ -1153,13 +1304,18 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   Widget _buildSourceTag(String? source, {String? orderType}) {
     final effectiveSource = (source != null && source.trim().isNotEmpty)
         ? source.trim()
-        : ((orderType != null && orderType.trim().isNotEmpty) ? orderType.trim() : 'STORE');
+        : ((orderType != null && orderType.trim().isNotEmpty)
+            ? orderType.trim()
+            : 'STORE');
     final cleanSource = effectiveSource.toLowerCase();
     final bool isRestaurant = cleanSource.contains('dine') ||
         cleanSource.contains('restaurant') ||
         cleanSource.contains('takeaway') ||
         cleanSource.contains('kot') ||
-        (orderType != null && (orderType.toLowerCase().contains('dine') || orderType.toLowerCase().contains('restaurant') || orderType.toLowerCase().contains('takeaway')));
+        (orderType != null &&
+            (orderType.toLowerCase().contains('dine') ||
+                orderType.toLowerCase().contains('restaurant') ||
+                orderType.toLowerCase().contains('takeaway')));
 
     Color bgColor;
     Color textColor;
@@ -1168,7 +1324,15 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     if (isRestaurant) {
       bgColor = Colors.deepOrange.shade50;
       textColor = Colors.deepOrange.shade700;
-      displaySource = 'RESTAURANT';
+      if (cleanSource.contains('takeaway') ||
+          (orderType != null && orderType.toLowerCase().contains('takeaway'))) {
+        displaySource = 'RESTAURANT (TAKEAWAY)';
+      } else if (cleanSource.contains('dine') ||
+          (orderType != null && orderType.toLowerCase().contains('dine'))) {
+        displaySource = 'RESTAURANT (DINE-IN)';
+      } else {
+        displaySource = 'RESTAURANT';
+      }
     } else {
       switch (cleanSource) {
         case 'app':

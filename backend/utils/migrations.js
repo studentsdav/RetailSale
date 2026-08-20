@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS outlets (
   outlet_code VARCHAR(20) UNIQUE,
   outlet_name VARCHAR(100),
   outlet_type VARCHAR(50),
+  business_module VARCHAR(50) DEFAULT 'ALL',
   contact_email VARCHAR(150),          -- Used to send password reset links or OTPs
   contact_phone VARCHAR(20),           -- Used for SMS verification
   recovery_pin_hash VARCHAR(255),      -- A hashed 4 or 6-digit PIN set during initial setup specifically for recovery
@@ -3933,6 +3934,19 @@ COMMIT;
         GROUP BY outlet_id, customer_name;
 
         COMMIT;
+      `);
+    }
+  },
+  {
+    version: 102,
+    description: "Update cash_ledger notes and transaction_type for subscription sales to Advance Adjustment",
+    up: async (db) => {
+      await db.query(`
+        UPDATE cash_ledger
+        SET transaction_type = 'ADVANCE_APPLY',
+            notes = REPLACE(notes, 'Scheme free quantity expense booked for sale', 'Advance adjusted for subscription sale')
+        WHERE (payment_method = 'SUBSCRIPTION' OR notes LIKE '%Scheme free%')
+          AND (notes LIKE '%Scheme free%' OR transaction_type = 'SALE_SCHEME_FREE_EXPENSE');
       `);
     }
   }

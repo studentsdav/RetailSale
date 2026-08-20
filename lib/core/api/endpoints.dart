@@ -21,6 +21,7 @@ class ApiEndpoints {
       '/api/public/verify-and-download';
   static const String triggerAutoReinstall = '/api/public/trigger-reinstall';
   static const createOutlet = '/api/public/outlet';
+  static const updateOutletModule = '/api/public/outlet/module';
 
   static const stockLocations = '/api/inventory/locations';
 

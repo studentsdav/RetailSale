@@ -39,6 +39,7 @@ class UserProfile {
   final String outletCode;
   final String propertyName;
   final String outletType;
+  final String businessModule;
 
   UserProfile({
     required this.username,
@@ -47,6 +48,7 @@ class UserProfile {
     required this.outletCode,
     required this.propertyName,
     required this.outletType,
+    required this.businessModule,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -57,6 +59,7 @@ class UserProfile {
       outletCode: json['outlet_code'] ?? '',
       propertyName: json['property_name'] ?? '',
       outletType: json['outlet_type'] ?? '',
+      businessModule: json['business_module'] ?? json['outlet_module'] ?? 'ALL',
     );
   }
 }

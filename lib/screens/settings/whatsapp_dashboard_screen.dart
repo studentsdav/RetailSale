@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../controllers/settings/whatsapp_controller.dart';
 import '../../models/auth/permission_service.dart';
+import '../../core/auth/token_storage.dart';
 
 class WhatsAppDashboardScreen extends StatefulWidget {
   const WhatsAppDashboardScreen({super.key});
@@ -16,6 +17,7 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final WhatsAppController _whatsappCtrl = WhatsAppController();
+  String _businessModule = 'ALL';
 
   bool _loading = false;
   
@@ -128,6 +130,9 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
   Future<void> _loadInitialData() async {
     setState(() => _loading = true);
     try {
+      final userMap = await TokenStorage.getUser();
+      _businessModule = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
+
       await _whatsappCtrl.getConfig();
       await _whatsappCtrl.getTemplates();
       await _whatsappCtrl.getCampaigns();
@@ -1823,9 +1828,11 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                       const SizedBox(height: 16),
                       SwitchListTile(
                         value: _allowAutomaticMessages,
-                        title: const Text('Allow Automatic Billing Alerts'),
-                        subtitle: const Text('Automatically send invoice alert message to customer phone number on billing checkout.'),
-                        activeColor: const Color(0xFF075E54),
+                        title: Text(_businessModule == 'INVENTORY' ? 'Allow Automatic Inventory & PO Alerts' : 'Allow Automatic Billing Alerts'),
+                        subtitle: Text(_businessModule == 'INVENTORY'
+                            ? 'Automatically send purchase order, stock receipt, and inventory alert notifications.'
+                            : 'Automatically send invoice alert message to customer phone number on billing checkout.'),
+                        activeThumbColor: const Color(0xFF075E54),
                         onChanged: _isAdmin
                             ? (val) {
                                 setState(() {

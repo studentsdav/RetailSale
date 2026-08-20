@@ -84,6 +84,7 @@ exports.createOutlet = async (req, res) => {
             outlet_code,
             outlet_name,
             outlet_type,
+            business_module = 'ALL',
             contact_email,
             contact_phone,
             recovery_pin,
@@ -124,6 +125,7 @@ exports.createOutlet = async (req, res) => {
             outlet_code,
             outlet_name,
             outlet_type,
+            business_module,
             contact_email,
             contact_phone,
             recovery_pin_hash: pinHash,
@@ -228,6 +230,60 @@ exports.createAdmin = async (req, res) => {
         res.json({
             success: true,
             message: 'Admin user created successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+exports.updateOutletModule = async (req, res) => {
+    try {
+        const { business_module, outlet_id, outlet_code } = req.body;
+
+        if (!business_module) {
+            return res.status(400).json({
+                success: false,
+                message: 'business_module is required'
+            });
+        }
+
+        let outlet = null;
+        if (req.user?.outlet_id) {
+            outlet = await req.propertyDb.models.outlets.findByPk(req.user.outlet_id);
+        } else if (outlet_id) {
+            outlet = await req.propertyDb.models.outlets.findByPk(outlet_id);
+        } else if (outlet_code) {
+            outlet = await req.propertyDb.models.outlets.findOne({ where: { outlet_code } });
+        }
+
+        if (!outlet) {
+            outlet = await req.propertyDb.models.outlets.findOne({ where: { is_active: true } });
+        }
+
+        if (!outlet) {
+            return res.status(404).json({
+                success: false,
+                message: 'No active outlet found'
+            });
+        }
+
+        const validModules = ['INVENTORY', 'RETAIL', 'RESTAURANT', 'ALL'];
+        if (!validModules.includes(business_module.toUpperCase())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid business_module value. Allowed: INVENTORY, RETAIL, RESTAURANT, ALL'
+            });
+        }
+
+        await outlet.update({ business_module: business_module.toUpperCase() });
+
+        res.json({
+            success: true,
+            message: 'Business module updated successfully',
+            business_module: outlet.business_module
         });
     } catch (error) {
         res.status(500).json({

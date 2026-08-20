@@ -6608,32 +6608,25 @@ class _SaleScreenState extends State<SaleScreen> {
     final shouldPrint = status == 'COMPLETED' &&
         (printAfterSave || (settingsCtrl.settings?.autoPrintOnSave ?? false));
     if (shouldPrint) {
-      final idsToPrint = savedSaleIds.isNotEmpty ? savedSaleIds : [savedSaleId];
-      final List<String> savedSaleNos = (saveResponse?['sale_nos'] as List?)?.map((e) => e.toString()).toList() ?? [];
-      for (int i = 0; i < idsToPrint.length; i++) {
-        final saleId = idsToPrint[i];
-        if (saleId <= 0) continue;
-        
-        String finalSaleNo = order.saleNo;
-        if (savedSaleNos.length > i) {
-          finalSaleNo = savedSaleNos[i];
-        }
-        
+      final int primarySaleId = int.tryParse((saveResponse?['data']?['primary_sale_id'] ?? saveResponse?['sale_id'] ?? 0).toString()) ?? 0;
+      final int targetPrintId = primarySaleId > 0 ? primarySaleId : savedSaleId;
+
+      if (targetPrintId > 0) {
+        final String primarySaleNo = (saveResponse?['data']?['primary_sale_no'] ?? saveResponse?['sale_no'] ?? order.saleNo).toString();
         final printOrder = order.copyWith(
-          saleNo: finalSaleNo,
-          hasBillNo: finalSaleNo.isNotEmpty,
-          orderId: saleId,
+          saleNo: primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo,
+          hasBillNo: (primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo).isNotEmpty,
+          orderId: targetPrintId,
         );
         _handlePrintAfterSave(
           printOrder,
-          preBuildPdfFuture: i == 0 ? preBuildPdfFuture : null,
+          preBuildPdfFuture: preBuildPdfFuture,
         ).catchError((e) {
           debugPrint('Printing error: $e');
         });
-        preBuildPdfFuture = null;
       }
     }
-    }}
+  }}
 
   List<int>? _normalizeSaleIds(dynamic value) {
     if (value is List) {

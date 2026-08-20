@@ -95,4 +95,24 @@ class ItemController extends ChangeNotifier {
     await load();
     return Map<String, dynamic>.from(res['data'] as Map);
   }
+
+  Future<int> bulkUpdateLocation({
+    List<int> itemIds = const [],
+    required String location,
+  }) async {
+    loading = true;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.post('${ApiEndpoints.items}/bulk-update-location', {
+        'item_ids': itemIds,
+        'location': location,
+      });
+      await load();
+      return res['data']?['updatedCount'] ?? 0;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
 }

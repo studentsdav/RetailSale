@@ -2488,17 +2488,20 @@ function buildSaleBenefitLedgerEntries({
     }
 
     if (normalizedSchemeFree > 0) {
+        const isSubscription = String(paymentMode || '').toUpperCase() === 'SUBSCRIPTION';
         entries.push({
             outlet_id: req.user.outlet_id,
             txn_date: header.sale_date,
-            transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
+            transaction_type: isSubscription ? 'ADVANCE_APPLY' : 'SALE_SCHEME_FREE_EXPENSE',
             reference_type: 'SALE',
             reference_id: sale.id,
             reference_no: sale.sale_no,
             party_name: partyName,
             payment_method: paymentMode,
             amount_out: normalizedSchemeFree,
-            notes: `Scheme free quantity expense booked for sale ${sale.sale_no}`,
+            notes: isSubscription
+                ? `Advance adjusted for subscription sale ${sale.sale_no}`
+                : `Scheme free quantity expense booked for sale ${sale.sale_no}`,
             created_by
         });
     }

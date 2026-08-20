@@ -18,6 +18,9 @@ import '../../controllers/sales/sales_controller.dart';
 import 'commission_rules_screen.dart';
 import 'happy_hour_config_screen.dart';
 import 'bill_value_promo_config_screen.dart';
+import '../../controllers/public/outlet_controller.dart';
+import '../../core/auth/token_storage.dart';
+import 'package:file_picker/file_picker.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -51,6 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<Printer> _printers = const [];
   bool _loadingPrinters = false;
   bool _showNotifications = true;
+  String _currentActiveModule = 'ALL';
   bool _didLoadBranding = false;
   bool _isCreatingEncBackup = false;
   AppBrandingModel _branding = AppBrandingModel.defaults();
@@ -88,8 +92,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadLocalPreferences() async {
     final showNotifications = await LocalPreferences.getShowNotifications();
+    final userMap = await TokenStorage.getUser();
+    final mod = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
     if (!mounted) return;
-    setState(() => _showNotifications = showNotifications);
+    setState(() {
+      _showNotifications = showNotifications;
+      _currentActiveModule = mod;
+    });
   }
 
   Future<void> _openFavoritesManager() async {
@@ -200,6 +209,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _pickBackgroundImage() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+      );
+
+      final path = result?.files.single.path;
+      if (path != null && path.isNotEmpty) {
+        setState(() {
+          _branding = _branding.copyWith(homeBgImagePath: path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to pick image: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _showClearTransactionDataDialog() async {
     final confirmController = TextEditingController();
     final confirmed = await showDialog<bool>(
@@ -246,57 +277,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(color: Color(0xFF64748B), height: 1.4),
                   ),
                   const SizedBox(height: 18),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Type DELETE ALL DATA to continue',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: confirmController,
-                          decoration: const InputDecoration(
-                            hintText: 'DELETE ALL DATA',
-                            border: OutlineInputBorder(),
+                  StatefulBuilder(
+                    builder: (context, setDialogState) {
+                      String? inlineError;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Type DELETE ALL DATA to continue',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: confirmController,
+                                  decoration: InputDecoration(
+                                    hintText: 'DELETE ALL DATA',
+                                    errorText: inlineError,
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                  onChanged: (_) {
+                                    if (inlineError != null) {
+                                      setDialogState(() => inlineError = null);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogContext, false),
-                        child: const Text('Cancel'),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 14,
+                          const SizedBox(height: 18),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(dialogContext, false),
+                                child: const Text('Cancel'),
+                              ),
+                              const SizedBox(width: 12),
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  final text = confirmController.text.trim().toUpperCase();
+                                  if (text != 'DELETE ALL DATA') {
+                                    setDialogState(() {
+                                      inlineError = 'Please type DELETE ALL DATA to confirm';
+                                    });
+                                    return;
+                                  }
+                                  Navigator.pop(dialogContext, true);
+                                },
+                                icon: const Icon(Icons.delete_forever, size: 18),
+                                label: const Text('Delete Now'),
+                              ),
+                            ],
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(dialogContext, true),
-                        icon: const Icon(Icons.delete_forever, size: 18),
-                        label: const Text('Delete Now'),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -315,14 +372,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     try {
-      await ApiClient.post('/api/inventory/settings/clear-transaction-data', {
+      final res = await ApiClient.post('/api/inventory/settings/clear-transaction-data', {
         'confirm_text': confirmText,
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Transaction data deleted successfully')),
-      );
-    } catch (_) {}
+      if (res['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Transaction data deleted successfully')),
+        );
+      } else {
+        showErrorSnackbar(res['message'] ?? 'Failed to delete transaction data');
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorSnackbar('Failed to delete transaction data: $e');
+      }
+    }
   }
 
   void showErrorSnackbar(String message) {
@@ -413,24 +478,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
 
+    final showSaleAndPayment = _currentActiveModule != 'INVENTORY';
+
     return DefaultTabController(
-      length: 7,
+      length: showSaleAndPayment ? 8 : 7,
       child: Scaffold(
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? const Color(0xFF121214)
             : const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: const Text('Settings'),
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
             tabs: [
-              Tab(text: 'Operations'),
-              Tab(text: 'Security & Gateways'),
-              Tab(text: 'Appearance'),
-              Tab(text: 'Billing & Print'),
-              Tab(text: 'Branding'),
-              Tab(text: 'Keyboard Shortcuts'),
-              Tab(text: 'Sale & Payment'),
+              const Tab(text: 'Operations'),
+              const Tab(text: 'Security & Gateways'),
+              const Tab(text: 'Appearance'),
+              const Tab(text: 'Billing & Print'),
+              const Tab(text: 'Branding'),
+              const Tab(text: 'Keyboard Shortcuts'),
+              if (showSaleAndPayment) const Tab(text: 'Sale & Payment'),
+              const Tab(text: 'Business Module'),
             ],
           ),
         ),
@@ -1346,13 +1414,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       _settingRow(
                         title: 'Home Screen Background Image',
-                        description: 'Path or asset name for home page screen theme image',
+                        description: 'Select an image file or enter path for home page backdrop theme',
                         control: SizedBox(
-                          width: 280,
-                          child: TextFormField(
-                            key: ValueKey('branding-bgpath-${_branding.homeBgImagePath}'),
-                            initialValue: _branding.homeBgImagePath,
-                            onChanged: (value) => _branding = _branding.copyWith(homeBgImagePath: value),
+                          width: 360,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  key: ValueKey('branding-bgpath-${_branding.homeBgImagePath}'),
+                                  initialValue: _branding.homeBgImagePath,
+                                  onChanged: (value) => _branding = _branding.copyWith(homeBgImagePath: value),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Select image file...',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                ),
+                                onPressed: _pickBackgroundImage,
+                                icon: const Icon(Icons.photo_library_outlined, size: 18),
+                                label: const Text('Browse...'),
+                              ),
+                              if (_branding.homeBgImagePath != null &&
+                                  _branding.homeBgImagePath!.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                IconButton.filledTonal(
+                                  style: IconButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _branding = _branding.copyWith(homeBgImagePath: '');
+                                    });
+                                  },
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  tooltip: 'Remove Cover Image',
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ),
@@ -1394,28 +1496,250 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ], constraints),
 
                 // 6. SALE & PAYMENT TAB
-                buildTabBody([
-                  _customSection(
-                    'Sale Channels & Payment Options',
-                    'Manage customized sale channels and payment options used during checkouts.',
-                    [
-                      if (_loadingSettingsData)
-                        const Padding(
-                          padding: EdgeInsets.all(24.0),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else ...[
-                        _saleSourcesSettingsSection(),
-                        const Divider(),
-                        _paymentMethodsSettingsSection(),
-                      ]
-                    ],
-                  ),
-                ], constraints),
+                if (showSaleAndPayment)
+                  buildTabBody([
+                    _customSection(
+                      'Sale Channels & Payment Options',
+                      'Manage customized sale channels and payment options used during checkouts.',
+                      [
+                        if (_loadingSettingsData)
+                          const Padding(
+                            padding: EdgeInsets.all(24.0),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else ...[
+                          _saleSourcesSettingsSection(),
+                          const Divider(),
+                          _paymentMethodsSettingsSection(),
+                        ]
+                      ],
+                    ),
+                  ], constraints),
+
+                // 8. BUSINESS MODULE TAB
+                _buildBusinessModuleTab(buildTabBody, constraints),
               ],
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildBusinessModuleTab(
+      Widget Function(List<Widget>, BoxConstraints) buildTabBody,
+      BoxConstraints constraints) {
+    return buildTabBody([
+      _customSection(
+        'Active Business Feature Suite',
+        'Configure feature set visibility and menu permissions for this outlet (Inventory, Retail POS, Restaurant, or All Modules).',
+        [
+          _settingRow(
+            title: 'Selected Module Suite',
+            description:
+                'Choose active module suite to enable corresponding workflows and hide unauthorized menus',
+            isLast: true,
+            control: SizedBox(
+              width: 260,
+              child: DropdownButtonFormField<String>(
+                value: _currentActiveModule,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.widgets_outlined),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'INVENTORY',
+                    child: Text('Inventory Only', overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: 'RETAIL',
+                    child: Text('Retail (POS + Inventory)', overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: 'RESTAURANT',
+                    child: Text('Restaurant (KDS + Inventory)', overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: 'ALL',
+                    child: Text('All Modules (Full Suite)', overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+                onChanged: (value) async {
+                  if (value != null) {
+                    final ok =
+                        await OutletController().updateBusinessModule(value);
+                    if (ok) {
+                      final userMap = await TokenStorage.getUser();
+                      if (userMap != null) {
+                        userMap['business_module'] = value;
+                        await TokenStorage.saveUser(userMap);
+                      }
+                      setState(() => _currentActiveModule = value);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text(
+                                  'Business Module updated to $value. Navigation menus refreshed.')),
+                        );
+                      }
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Failed to update Business Module'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 20),
+      Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Module Features Suite Overview',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B)),
+            ),
+            const SizedBox(height: 14),
+            _moduleCard(
+              title: '📦 Inventory Only',
+              badgeColor: Colors.blue,
+              isSelected: _currentActiveModule == 'INVENTORY',
+              features: [
+                'Item Master & Stock Locations',
+                'Purchase Orders & Goods Receiving (GRN)',
+                'Stock Dispatches & Location Transfers',
+                'Assembly / BOM & Damage Management',
+                'HRMS Employee Directory, Attendance & Payroll',
+                'Stock Ledger & Financial Ledger Reports'
+              ],
+            ),
+            const SizedBox(height: 12),
+            _moduleCard(
+              title: '🛍️ Retail (POS + Inventory Included)',
+              badgeColor: const Color(0xFF10B981),
+              isSelected: _currentActiveModule == 'RETAIL',
+              features: [
+                'Point of Sale (Enterprise POS & Cashier)',
+                'Customer App & Online Delivery Integration',
+                'Supplier / Retailer Console',
+                'Rider Delivery Portal',
+                'Sales Reprints & Daily Closing Reports',
+                '+ All Inventory, Stock & HRMS Features Included'
+              ],
+            ),
+            const SizedBox(height: 12),
+            _moduleCard(
+              title: '🍽️ Restaurant (KDS/KOTs + Inventory Included)',
+              badgeColor: Colors.orange,
+              isSelected: _currentActiveModule == 'RESTAURANT',
+              features: [
+                'Kitchen Display System (KDS Queue)',
+                'Floor Plan & Dining Table Designer',
+                'Captain Console & KOT Builder',
+                'Running Orders & KOT History Logs',
+                'Delivery Challans & Recurring Expenses',
+                '+ All Inventory, Stock & HRMS Features Included'
+              ],
+            ),
+            const SizedBox(height: 12),
+            _moduleCard(
+              title: '🌐 All Modules (Full Suite Access)',
+              badgeColor: Colors.purple,
+              isSelected: _currentActiveModule == 'ALL',
+              features: [
+                'Retail Sales (POS), Customer App & Delivery Portals',
+                'Restaurant KDS, KOTs, Tables & Dining Operations',
+                'Complete Inventory, Stock Control & Purchase Orders',
+                'HRMS, Payroll Processing & AI Query Analytics'
+              ],
+            ),
+          ],
+        ),
+      ),
+    ], constraints);
+  }
+
+  Widget _moduleCard({
+    required String title,
+    required Color badgeColor,
+    required bool isSelected,
+    required List<String> features,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isSelected ? badgeColor.withOpacity(0.08) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? badgeColor : const Color(0xFFE2E8F0),
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? badgeColor : const Color(0xFF1E293B),
+                ),
+              ),
+              const Spacer(),
+              if (isSelected)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: badgeColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'ACTIVE MODULE',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: features.map((f) {
+              return Chip(
+                label: Text(f, style: const TextStyle(fontSize: 11)),
+                padding: const EdgeInsets.all(2),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                backgroundColor: const Color(0xFFF1F5F9),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }

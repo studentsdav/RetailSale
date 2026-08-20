@@ -249,7 +249,7 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final customers = _controller.creditCustomers.where((c) => c.totalOutstanding > 0.009).toList();
+    final customers = _controller.creditCustomers.where((c) => c.totalOutstanding > 0.009 || c.totalAdvance > 0.009).toList();
 
     // Filter customers who actually have outstanding debt for the charts leaderboard
     final sortedDebtors = List<CreditCustomerReport>.from(customers)

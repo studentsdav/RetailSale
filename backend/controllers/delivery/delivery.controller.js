@@ -1577,14 +1577,14 @@ exports.acceptOrder = async (req, res) => {
                         db: req.propertyDb,
                         outlet_id,
                         txn_date: new Date(),
-                        transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
+                        transaction_type: 'ADVANCE_APPLY',
                         reference_type: 'SALE',
                         reference_id: String(saleHeader.id),
                         reference_no: saleHeader.sale_no,
                         party_name: order.customer_name || order.customer_phone || 'Walk-in Customer',
                         payment_method: 'SUBSCRIPTION',
                         amount_out: uncoveredByAdvance,
-                        notes: `Subscription free item expense for delivery order #${order.id} (${saleHeader.sale_no})`,
+                        notes: `Advance adjusted for subscription item consumption for delivery order #${order.id} (${saleHeader.sale_no})`,
                         created_by: userId,
                         transaction: t
                     });
@@ -1930,14 +1930,14 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                             db: req.propertyDb,
                             outlet_id: order.outlet_id,
                             txn_date: new Date(),
-                            transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
+                            transaction_type: 'ADVANCE_APPLY',
                             reference_type: 'SALE',
                             reference_id: String(sale.id),
                             reference_no: sale.sale_no,
                             party_name: expParty,
                             payment_method: 'SUBSCRIPTION',
                             amount_out: uncoveredByAdvance,
-                            notes: `Subscription free item expense for delivery order #${order.id} (${sale.sale_no})`,
+                            notes: `Advance adjusted for subscription item consumption for delivery order #${order.id} (${sale.sale_no})`,
                             created_by: req.user?.id || 1,
                             transaction: t
                         });

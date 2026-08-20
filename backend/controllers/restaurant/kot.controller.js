@@ -66,6 +66,7 @@ exports.listKots = async (req, res) => {
 
         const kots = await req.propertyDb.models.kot_headers.findAll({
             where: whereClause,
+            distinct: true,
             logging: console.log,
             include: [
                 { model: req.propertyDb.models.restaurant_tables, as: 'table', attributes: ['table_name', 'status'], required: false },
@@ -85,14 +86,19 @@ exports.listKots = async (req, res) => {
             order: [['created_time', 'DESC']]
         });
 
-        let resultData = kots.map(kot => {
+        const seenKotIds = new Set();
+        let resultData = [];
+        for (const kot of kots) {
             const plain = kot.get({ plain: true });
+            if (plain.id && seenKotIds.has(plain.id)) continue;
+            if (plain.id) seenKotIds.add(plain.id);
+
             // Format captain name to 'N/A' if null/empty/dummy
             if (!plain.captain || !plain.captain.employee_name || plain.captain.employee_name.toString().toLowerCase().includes('dummy')) {
                 plain.captain = { employee_name: 'N/A' };
             }
-            return plain;
-        });
+            resultData.push(plain);
+        }
 
         if (active_only === 'true') {
             resultData = resultData.filter(kot => {
@@ -354,22 +360,21 @@ exports.updateKotStatus = async (req, res) => {
             updateData.cooking_start = now;
             await req.propertyDb.models.kot_items.update(
                 { status: 'Preparing' },
-                { where: { kot_header_id: id, status: 'New', outlet_id } }
+                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'new', 'p', 'Pending', 'pending'] }, outlet_id } }
             );
         }
         else if (status === 'Ready') {
             updateData.ready_time = now;
             await req.propertyDb.models.kot_items.update(
                 { status: 'Ready' },
-                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'Preparing'] }, outlet_id } }
+                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'new', 'p', 'Pending', 'pending', 'Preparing', 'preparing'] }, outlet_id } }
             );
         }
         else if (status === 'Served') {
             updateData.served_time = now;
-            updateData.kds_dismissed = true;
             await req.propertyDb.models.kot_items.update(
                 { status: 'Served' },
-                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'Preparing', 'Ready'] }, outlet_id } }
+                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'new', 'p', 'Pending', 'pending', 'Preparing', 'preparing', 'Ready', 'ready'] }, outlet_id } }
             );
         }
         else if (status === 'Closed') {
@@ -377,7 +382,7 @@ exports.updateKotStatus = async (req, res) => {
             updateData.kds_dismissed = true;
             await req.propertyDb.models.kot_items.update(
                 { status: 'Served' },
-                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'Preparing', 'Ready', 'Served'] }, outlet_id } }
+                { where: { kot_header_id: id, status: { [Op.in]: ['New', 'new', 'p', 'Pending', 'pending', 'Preparing', 'preparing', 'Ready', 'ready', 'Served', 'served'] }, outlet_id } }
             );
         }
         else if (status === 'Cancelled' || status === 'cancelled' || status === 'Rejected') {

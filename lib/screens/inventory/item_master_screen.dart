@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dropdown_search/dropdown_search.dart';
@@ -1054,6 +1054,201 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     await _loadItems();
   }
 
+  Future<void> _openBulkLocationDialog() async {
+    String? selectedLocation;
+    final customLocationCtrl = TextEditingController();
+    bool applyToFilteredOnly = false;
+
+    final locNames = _locations
+        .map((l) => l.locationName.trim())
+        .where((n) => n.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (locNames.isNotEmpty) {
+      selectedLocation = locNames.first;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final countToUpdate =
+                applyToFilteredOnly ? _filtered.length : _items.length;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.edit_location_alt_outlined, color: Colors.indigo),
+                  SizedBox(width: 10),
+                  Text(
+                    'Bulk Location Update',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select or enter the new Stock Location / Warehouse to apply across items.',
+                      style:
+                          TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Select Existing Location:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    if (locNames.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: locNames.contains(selectedLocation)
+                            ? selectedLocation
+                            : null,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                        ),
+                        items: locNames.map((loc) {
+                          return DropdownMenuItem(
+                            value: loc,
+                            child: Text(loc),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            selectedLocation = val;
+                            customLocationCtrl.clear();
+                          });
+                        },
+                      ),
+                    const SizedBox(height: 12),
+                    const Text('Or Enter New / Custom Location:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: customLocationCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. Rack A-1, Main Warehouse, Shelf 3',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                      onChanged: (val) {
+                        if (val.trim().isNotEmpty) {
+                          setDialogState(() => selectedLocation = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      activeColor: Colors.indigo,
+                      title: Text(
+                        'Apply only to current search results (${_filtered.length} items)',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        applyToFilteredOnly
+                            ? 'Will update only the ${_filtered.length} filtered items'
+                            : 'Will update ALL ${_items.length} catalog items',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      value: applyToFilteredOnly,
+                      onChanged: (val) => setDialogState(
+                          () => applyToFilteredOnly = val ?? false),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.indigo,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: () async {
+                    final targetLoc = (customLocationCtrl.text.trim().isNotEmpty
+                            ? customLocationCtrl.text.trim()
+                            : selectedLocation ?? '')
+                        .trim();
+
+                    if (targetLoc.isEmpty) {
+                      messenger.showSnackBar(
+                        const SnackBar(
+                            content:
+                                Text('Please select or enter a valid location')),
+                      );
+                      return;
+                    }
+
+                    Navigator.pop(ctx);
+
+                    final targetIds = applyToFilteredOnly
+                        ? _filtered.map((it) => it.id).toList()
+                        : <int>[];
+
+                    try {
+                      final updatedCount =
+                          await itemCtrl.bulkUpdateLocation(
+                        itemIds: targetIds,
+                        location: targetLoc,
+                      );
+
+                      await _loadItems();
+                      if (!mounted) return;
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Successfully updated stock location to "$targetLoc" for $updatedCount item(s)',
+                          ),
+                          backgroundColor: const Color(0xFF008060),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Error updating locations: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.check, size: 18),
+                  label: Text('Apply to $countToUpdate Items'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return EntryShortcuts(
@@ -1066,14 +1261,44 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
           title: const Text('Item Master / Retail Catalog'),
           actions: [
             if (_canResetAndImport)
-              TextButton.icon(
-                onPressed: _deleteAllAndImportNew,
-                icon: const Icon(Icons.delete_sweep, color: Colors.white),
-                label: const Text(
-                  'Delete All & Import',
-                  style: TextStyle(color: Colors.white),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  onPressed: _deleteAllAndImportNew,
+                  icon: const Icon(Icons.delete_sweep, size: 16),
+                  label: const Text(
+                    'Delete All & Import',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
                 ),
               ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF008060),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed: _openBulkLocationDialog,
+                icon: const Icon(Icons.edit_location_alt_outlined, size: 16),
+                label: const Text(
+                  'Bulk Location',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.upload_file),
               tooltip: 'Import Excel',
@@ -1138,619 +1363,484 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Row 1: Code, Name, HSN, Location, Barcode, Image
             Wrap(
               spacing: 14,
               runSpacing: 14,
-          children: [
-            // Code is readonly, so we don't pass focus node to it.
-            _text(_code, 'Item Code', readOnly: true, width: 130),
-            _text(_name, 'Item Name',
-                focusNode: _nameFocus,
-                onSubmit: () => _hsnSacFocus.requestFocus(),
-                width: 210),
-            _text(_hsnSac, 'HSN / SAC Code',
-                focusNode: _hsnSacFocus,
-                prevNode: _nameFocus,
-                onSubmit: () => _hasVariants
-                    ? _groupFocus.requestFocus()
-                    : _barcodeFocus.requestFocus(),
-                width: 140),
-            (() {
-              final Set<String> locOptions = {};
-              for (final l in _locations) {
-                if (l.locationName.trim().isNotEmpty) locOptions.add(l.locationName.trim());
-              }
-              if (_location.text.trim().isNotEmpty) {
-                locOptions.add(_location.text.trim());
-              }
-              final List<String> dbLocations = locOptions.toList();
-              if (dbLocations.isEmpty) dbLocations.add('-');
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _text(_code, 'Item Code', readOnly: true, width: 130),
+                _text(_name, 'Item Name',
+                    focusNode: _nameFocus,
+                    onSubmit: () => _hsnSacFocus.requestFocus(),
+                    width: 210),
+                _text(_hsnSac, 'HSN / SAC Code',
+                    focusNode: _hsnSacFocus,
+                    prevNode: _nameFocus,
+                    onSubmit: () => _hasVariants
+                        ? _groupFocus.requestFocus()
+                        : _barcodeFocus.requestFocus(),
+                    width: 140),
+                (() {
+                  final Set<String> locOptions = {};
+                  for (final l in _locations) {
+                    if (l.locationName.trim().isNotEmpty) locOptions.add(l.locationName.trim());
+                  }
+                  if (_location.text.trim().isNotEmpty) {
+                    locOptions.add(_location.text.trim());
+                  }
+                  final List<String> dbLocations = locOptions.toList();
+                  if (dbLocations.isEmpty) dbLocations.add('-');
 
-              final String selectedVal = dbLocations.contains(_location.text.trim())
-                  ? _location.text.trim()
-                  : dbLocations.first;
+                  final String selectedVal = dbLocations.contains(_location.text.trim())
+                      ? _location.text.trim()
+                      : dbLocations.first;
 
-              return SizedBox(
-                width: 210,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: selectedVal,
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-                        decoration: _compactDecoration('Location / Station'),
-                        items: dbLocations.map((locStr) {
-                          return DropdownMenuItem<String>(
-                            value: locStr,
-                            child: Text(locStr, overflow: TextOverflow.ellipsis),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _location.text = val);
-                        },
+                  return SizedBox(
+                    width: 210,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedVal,
+                            style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                            decoration: _compactDecoration('Location / Station'),
+                            items: dbLocations.map((locStr) {
+                              return DropdownMenuItem<String>(
+                                value: locStr,
+                                child: Text(locStr, overflow: TextOverflow.ellipsis),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) setState(() => _location.text = val);
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline, color: Colors.blue, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Add Location to Database',
+                          onPressed: _showAddLocationDialog,
+                        ),
+                      ],
+                    ),
+                  );
+                })(),
+                if (!_hasVariants)
+                  _text(_barcode, 'Barcode / Scan Code',
+                      focusNode: _barcodeFocus,
+                      prevNode: _hsnSacFocus,
+                      onSubmit: () => _groupFocus.requestFocus(),
+                      width: 160),
+                SizedBox(
+                  width: 180,
+                  child: TextFormField(
+                    readOnly: true,
+                    controller: _imagePath,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                    decoration: _compactDecoration(
+                      'Item Image',
+                      suffixIcon: IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(Icons.image_outlined, size: 20),
+                        tooltip: 'Select Image File',
+                        onPressed: _pickItemImage,
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline, color: Colors.blue, size: 20),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Add Location to Database',
-                      onPressed: _showAddLocationDialog,
-                    ),
-                  ],
-                ),
-              );
-            })(),
-            if (_editIndex == null)
-              SizedBox(
-                width: 180,
-                child: SwitchListTile(
-                  title: const Text('Has Variants', style: TextStyle(fontSize: 12)),
-                  subtitle: const Text('Sizes, Colors, etc.', style: TextStyle(fontSize: 10)),
-                  value: _hasVariants,
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (v) {
-                    setState(() {
-                      _hasVariants = v;
-                    });
-                    _generateVariantList();
-                  },
-                ),
-              ),
-            if (!_hasVariants)
-              _text(_barcode, 'Barcode / Scan Code',
-                  focusNode: _barcodeFocus,
-                  prevNode: _hsnSacFocus,
-                  onSubmit: () => _groupFocus.requestFocus(),
-                  width: 160),
-            SizedBox(
-              width: 180,
-              child: TextFormField(
-                readOnly: true,
-                controller: _imagePath,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-                decoration: _compactDecoration(
-                  'Item Image',
-                  suffixIcon: IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Choose Image',
-                    icon: const Icon(Icons.image_outlined, size: 18),
-                    onPressed: _pickItemImage,
                   ),
-                  readOnly: true,
                 ),
-              ),
+                if ((_pickedImagePath ?? _currentImagePath) != null)
+                  Column(
+                    children: [
+                      SizedBox(
+                        width: 140,
+                        height: 140,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: _imageWidget((_pickedImagePath ?? _currentImagePath)!),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _removeItemImage,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Remove Image'),
+                      ),
+                    ],
+                  ),
+              ],
             ),
-            if ((_pickedImagePath ?? _currentImagePath) != null)
-              Column(
-                children: [
-                  SizedBox(
-                    width: 140,
-                    height: 140,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: _imageWidget(
-                          (_pickedImagePath ?? _currentImagePath)!),
+            const SizedBox(height: 12),
+
+            // Row 2: Group, Sub Category, Brand, Unit, Buy Rate, Sale Rate, MRP, Tax Type, Tax %, Balances
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 180,
+                  child: Focus(
+                    focusNode: _groupFocus,
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent) {
+                        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                          _barcodeFocus.requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                        if (event.logicalKey == LogicalKeyboardKey.enter ||
+                            event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                            event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                          _groupDropdownKey.currentState?.openDropDownSearch();
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: DropdownSearch<GroupModel>(
+                      key: _groupDropdownKey,
+                      selectedItem: _selectedGroup,
+                      items: (filter, infiniteScrollProps) {
+                        final List<GroupModel> list = List<GroupModel>.from(_groups);
+                        list.add(GroupModel(id: -1, groupName: "+ Add New Group"));
+                        return list;
+                      },
+                      itemAsString: (item) => item.groupName,
+                      compareFn: (a, b) => a.id == b.id,
+                      popupProps: const PopupProps.menu(showSearchBox: true),
+                      decoratorProps: DropDownDecoratorProps(
+                        decoration: _compactDecoration(
+                          "Group",
+                          prefixIcon: _selectedGroup == null
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.edit, size: 16),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  tooltip: 'Edit Group',
+                                  onPressed: _showEditGroupDialog,
+                                ),
+                        ),
+                      ),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        if (value.id == -1) {
+                          _showAddGroupDialog();
+                          return;
+                        }
+                        setState(() {
+                          _selectedGroup = value;
+                          _selectedSubCategory = null;
+                        });
+                        _subCategoryFocus.requestFocus();
+                      },
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _removeItemImage,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Remove Image'),
+                ),
+
+                SizedBox(
+                  width: 180,
+                  child: Focus(
+                    focusNode: _subCategoryFocus,
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent) {
+                        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                          _groupFocus.requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                        if (event.logicalKey == LogicalKeyboardKey.enter ||
+                            event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                            event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                          _subCategoryDropdownKey.currentState?.openDropDownSearch();
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: DropdownSearch<SubCategoryModel>(
+                      key: _subCategoryDropdownKey,
+                      selectedItem: _selectedSubCategory,
+                      items: (filter, infiniteScrollProps) {
+                        if (_selectedGroup == null) return [];
+                        final List<SubCategoryModel> list = _subCategories
+                            .where((s) => s.groupId == _selectedGroup!.id)
+                            .toList();
+                        list.add(SubCategoryModel(
+                            id: -1,
+                            groupId: _selectedGroup!.id,
+                            subCategoryName: "+ Add New SubCategory"));
+                        return list;
+                      },
+                      itemAsString: (item) => item.subCategoryName,
+                      compareFn: (a, b) => a.id == b.id,
+                      popupProps: const PopupProps.menu(showSearchBox: true),
+                      decoratorProps: DropDownDecoratorProps(
+                        decoration: _compactDecoration(
+                          "Sub Category",
+                          prefixIcon: _selectedSubCategory == null
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.edit, size: 16),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  tooltip: 'Edit SubCategory',
+                                  onPressed: _showEditSubCategoryDialog,
+                                ),
+                        ),
+                      ),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        if (value.id == -1) {
+                          _showAddSubCategoryDialog();
+                          return;
+                        }
+                        setState(() {
+                          _selectedSubCategory = value;
+                        });
+                        _brandFocus.requestFocus();
+                      },
+                    ),
+                  ),
+                ),
+
+                SizedBox(
+                  width: 180,
+                  child: Focus(
+                    focusNode: _brandFocus,
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent) {
+                        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                          _subCategoryFocus.requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                        if (event.logicalKey == LogicalKeyboardKey.enter ||
+                            event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                            event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                          _brandDropdownKey.currentState?.openDropDownSearch();
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: DropdownSearch<BrandModel>(
+                      key: _brandDropdownKey,
+                      selectedItem: _selectedBrand,
+                      items: (filter, infiniteScrollProps) {
+                        final List<BrandModel> list = List<BrandModel>.from(_brands);
+                        list.add(BrandModel(id: -1, brandName: "+ Add New Brand"));
+                        return list;
+                      },
+                      itemAsString: (item) => item.brandName,
+                      compareFn: (a, b) => a.id == b.id,
+                      popupProps: const PopupProps.menu(showSearchBox: true),
+                      decoratorProps: DropDownDecoratorProps(
+                        decoration: _compactDecoration(
+                          "Brand",
+                          prefixIcon: _selectedBrand == null
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.edit, size: 16),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  tooltip: 'Edit Brand',
+                                  onPressed: _showEditBrandDialog,
+                                ),
+                        ),
+                      ),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        if (value.id == -1) {
+                          _showAddBrandDialog();
+                          return;
+                        }
+                        setState(() {
+                          _selectedBrand = value;
+                        });
+                        _unitFocus.requestFocus();
+                      },
+                    ),
+                  ),
+                ),
+
+                SizedBox(
+                  width: 130,
+                  child: Focus(
+                    focusNode: _unitFocus,
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent) {
+                        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                          _brandFocus.requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                        if (event.logicalKey == LogicalKeyboardKey.enter ||
+                            event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                            event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                          _unitDropdownKey.currentState?.openDropDownSearch();
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: DropdownSearch<String>(
+                      key: _unitDropdownKey,
+                      selectedItem: _unit,
+                      items: (filter, infiniteScrollProps) => _units,
+                      popupProps: const PopupProps.menu(
+                        showSearchBox: true,
+                        searchFieldProps: TextFieldProps(
+                          decoration: InputDecoration(
+                            hintText: "Search unit...",
+                          ),
+                        ),
+                      ),
+                      decoratorProps: DropDownDecoratorProps(
+                        decoration: _compactDecoration("Unit"),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _unit = value;
+                        });
+                        if (_hasVariants) {
+                          _taxTypeFocus.requestFocus();
+                        } else {
+                          _rateFocus.requestFocus();
+                        }
+                      },
+                    ),
+                  ),
+                ),
+
+                if (!_hasVariants) ...[
+                  _text(
+                    _rate,
+                    _useInclusiveRates &&
+                            (_inclusiveRateScope == 'BOTH' ||
+                                _inclusiveRateScope == 'BUY_ONLY')
+                        ? 'Buy Rate (Inclusive)'
+                        : 'Buy Rate',
+                    isDouble: true,
+                    focusNode: _rateFocus,
+                    prevNode: _unitFocus,
+                    onSubmit: () => _saleRateFocus.requestFocus(),
+                    width: 140,
+                    helperText: _useInclusiveRates &&
+                            (_inclusiveRateScope == 'BOTH' ||
+                                _inclusiveRateScope == 'BUY_ONLY') &&
+                            _rate.text.trim().isNotEmpty
+                        ? InclusiveRateHelper.previewText(
+                            label: 'Buy',
+                            inclusiveAmount: double.tryParse(_rate.text.trim()) ?? 0,
+                            taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
+                          )
+                        : null,
+                  ),
+                  _text(
+                    _retailSalePrice,
+                    _useInclusiveRates &&
+                            (_inclusiveRateScope == 'BOTH' ||
+                                _inclusiveRateScope == 'SALE_ONLY')
+                        ? 'Sale Rate (Inclusive)'
+                        : 'Sale Rate',
+                    isDouble: true,
+                    focusNode: _saleRateFocus,
+                    prevNode: _rateFocus,
+                    onSubmit: () => _mrpFocus.requestFocus(),
+                    width: 140,
+                    helperText: _useInclusiveRates &&
+                            (_inclusiveRateScope == 'BOTH' ||
+                                _inclusiveRateScope == 'SALE_ONLY') &&
+                            _retailSalePrice.text.trim().isNotEmpty
+                        ? InclusiveRateHelper.previewText(
+                            label: 'Sale',
+                            inclusiveAmount:
+                                double.tryParse(_retailSalePrice.text.trim()) ?? 0,
+                            taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
+                          )
+                        : null,
+                  ),
+                  _text(
+                    _mrp,
+                    'MRP (Crossed Price)',
+                    isDouble: true,
+                    focusNode: _mrpFocus,
+                    prevNode: _saleRateFocus,
+                    onSubmit: () => _taxTypeFocus.requestFocus(),
+                    width: 150,
                   ),
                 ],
-              ),
-
-            // 鳩 GROUP
-            // GROUP
-            SizedBox(
-              width: 175,
-              child: Focus(
-                focusNode: _groupFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                      _barcodeFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _groupDropdownKey.currentState?.openDropDownSearch();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: DropdownSearch<GroupModel>(
-                  key: _groupDropdownKey,
-                  selectedItem: _selectedGroup,
-                  items: (filter, infiniteScrollProps) {
-                    final List<GroupModel> list =
-                        List<GroupModel>.from(_groups);
-                    list.add(
-                      GroupModel(
-                        id: -1,
-                        groupName: "+ Add New Group",
-                      ),
-                    );
-                    return list;
-                  },
-                  itemAsString: (g) => g.groupName,
-                  compareFn: (a, b) => a.id == b.id,
-                  popupProps: const PopupProps.menu(
-                    showSearchBox: true,
-                  ),
-                  decoratorProps: DropDownDecoratorProps(
-                    decoration: _compactDecoration(
-                      "Group",
-                      prefixIcon: _selectedGroup == null
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.edit, size: 16),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              tooltip: "Edit Group",
-                              onPressed: _showEditGroupDialog,
-                            ),
-                    ),
-                  ),
-                  onChanged: (value) async {
-                    if (value == null) return;
-                    if (value.id == -1) {
-                      _showAddGroupDialog();
-                      return;
-                    }
-
-                    setState(() {
-                      _selectedGroup = value;
-                      _selectedSubCategory = null;
-                    });
-                    _subCategoryFocus.requestFocus(); // Chaining
-                  },
-                ),
-              ),
-            ),
-
-            // SUB CATEGORY
-            SizedBox(
-              width: 175,
-              child: Focus(
-                focusNode: _subCategoryFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                      _groupFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _subCategoryDropdownKey.currentState
-                          ?.openDropDownSearch();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: DropdownSearch<SubCategoryModel>(
-                  key: _subCategoryDropdownKey,
-                  selectedItem: _selectedSubCategory,
-                  items: (filter, infiniteScrollProps) {
-                    if (_selectedGroup == null) {
-                      return <SubCategoryModel>[];
-                    }
-                    final List<SubCategoryModel> list = _subCategories
-                        .where((s) => s.groupId == _selectedGroup!.id)
-                        .toList();
-                    list.add(
-                      SubCategoryModel(
-                        id: -1,
-                        groupId: _selectedGroup!.id,
-                        subCategoryName: "+ Add New SubCategory",
-                      ),
-                    );
-                    return list;
-                  },
-                  decoratorProps: DropDownDecoratorProps(
-                    decoration: _compactDecoration(
-                      "Sub Category",
-                      prefixIcon: _selectedSubCategory == null
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.edit, size: 16),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              tooltip: "Edit Subcategory",
-                              onPressed: _showEditSubCategoryDialog,
-                            ),
-                    ),
-                  ),
-                  itemAsString: (s) => s.subCategoryName,
-                  compareFn: (a, b) => a.id == b.id,
-                  onChanged: (value) async {
-                    if (value == null) return;
-                    if (value.id == -1) {
-                      _showAddSubCategoryDialog();
-                      return;
-                    }
-
-                    setState(() {
-                      _selectedSubCategory = value;
-                    });
-                    _brandFocus.requestFocus(); // Chaining
-                  },
-                ),
-              ),
-            ),
-
-            // BRAND
-            SizedBox(
-              width: 175,
-              child: Focus(
-                focusNode: _brandFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                      _subCategoryFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _brandDropdownKey.currentState?.openDropDownSearch();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: DropdownSearch<BrandModel>(
-                  key: _brandDropdownKey,
-                  selectedItem: _selectedBrand,
-                  items: (filter, infiniteScrollProps) {
-                    final List<BrandModel> list =
-                        List<BrandModel>.from(_brands);
-                    list.add(
-                      BrandModel(
-                        id: -1,
-                        brandName: "+ Add New Brand",
-                      ),
-                    );
-                    return list;
-                  },
-                  itemAsString: (b) => b.brandName,
-                  compareFn: (a, b) => a.id == b.id,
-                  popupProps: const PopupProps.menu(
-                    showSearchBox: true,
-                  ),
-                  decoratorProps: DropDownDecoratorProps(
-                    decoration: _compactDecoration(
-                      "Brand",
-                      prefixIcon: _selectedBrand == null
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.edit, size: 16),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              tooltip: "Edit Brand",
-                              onPressed: _showEditBrandDialog,
-                            ),
-                    ),
-                  ),
-                  onChanged: (value) async {
-                    if (value == null) return;
-                    if (value.id == -1) {
-                      _showAddBrandDialog();
-                      return;
-                    }
-
-                    setState(() {
-                      _selectedBrand = value;
-                    });
-                    _unitFocus.requestFocus(); // Chaining
-                  },
-                ),
-              ),
-            ),
-
-            SizedBox(
-              width: 130,
-              child: Focus(
-                focusNode: _unitFocus,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent) {
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                      _brandFocus.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _unitDropdownKey.currentState?.openDropDownSearch();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: DropdownSearch<String>(
-                  key: _unitDropdownKey,
-                  selectedItem: _unit,
-                  items: (filter, infiniteScrollProps) => _units,
-                  popupProps: const PopupProps.menu(
-                    showSearchBox: true,
-                    searchFieldProps: TextFieldProps(
-                      decoration: InputDecoration(
-                        hintText: "Search unit...",
-                      ),
-                    ),
-                  ),
-                  decoratorProps: DropDownDecoratorProps(
-                    decoration: _compactDecoration("Unit"),
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      _unit = value;
-                    });
-                    if (_hasVariants) {
-                      _taxTypeFocus.requestFocus();
-                    } else {
-                      _inclusiveSwitchFocus.requestFocus();
-                    }
-                  },
-                ),
-              ),
-            ),
-
-            if (!_hasVariants) ...[
-              SizedBox(
-                width: 220,
-                child: Focus(
-                  focusNode: _inclusiveSwitchFocus,
-                  onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent) {
-                      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                          event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                        _unitFocus.requestFocus();
-                        return KeyEventResult.handled;
-                      }
-                      if (event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                        setState(() {
-                          _useInclusiveRates = !_useInclusiveRates;
-                          if (!_useInclusiveRates) {
-                            _inclusiveRateScope = 'BOTH';
-                          }
-                        });
-                        if (_useInclusiveRates) {
-                          _inclusiveScopeFocus.requestFocus();
-                        } else {
-                          _rateFocus.requestFocus();
-                        }
-                        return KeyEventResult.handled;
-                      }
-                      if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                          event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                        if (_useInclusiveRates) {
-                          _inclusiveScopeFocus.requestFocus();
-                        } else {
-                          _rateFocus.requestFocus();
-                        }
-                        return KeyEventResult.handled;
-                      }
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: SwitchListTile(
-                    title: const Text('Get Inclusive'),
-                    value: _useInclusiveRates,
-                    contentPadding: EdgeInsets.zero,
-                    onChanged: (value) {
-                      setState(() {
-                        _useInclusiveRates = value;
-                        if (!value) {
-                          _inclusiveRateScope = 'BOTH';
-                        }
-                      });
-                      if (value) {
-                        _inclusiveScopeFocus.requestFocus();
-                      } else {
-                        _rateFocus.requestFocus();
-                      }
-                    },
-                  ),
-                ),
-              ),
-              if (_useInclusiveRates)
                 SizedBox(
-                  width: 175,
+                  width: 130,
                   child: Focus(
                     onKeyEvent: (node, event) {
                       if (event is KeyDownEvent &&
                           event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                        _inclusiveSwitchFocus.requestFocus();
+                        _mrpFocus.requestFocus();
                         return KeyEventResult.handled;
                       }
                       return KeyEventResult.ignored;
                     },
                     child: DropdownButtonFormField<String>(
-                      focusNode: _inclusiveScopeFocus,
-                      initialValue: _inclusiveRateScope,
+                      focusNode: _taxTypeFocus,
+                      initialValue: _taxType,
                       style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-                      decoration: _compactDecoration('Inclusive Apply To'),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'BOTH',
-                          child: Text('Buy and Sale Rate'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'SALE_ONLY',
-                          child: Text('Sale Rate Only'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'BUY_ONLY',
-                          child: Text('Buy Rate Only'),
-                        ),
-                      ],
+                      decoration: _compactDecoration('Tax Type'),
+                      items: _taxTypes
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (value) {
                         if (value != null) {
-                          setState(() => _inclusiveRateScope = value);
+                          setState(() => _taxType = value);
                         }
-                        _rateFocus.requestFocus(); // Chaining
+                        _taxPercentFocus.requestFocus();
                       },
                     ),
                   ),
                 ),
-              _text(
-                _rate,
-                _useInclusiveRates &&
-                        (_inclusiveRateScope == 'BOTH' ||
-                            _inclusiveRateScope == 'BUY_ONLY')
-                    ? 'Buy Rate (Inclusive)'
-                    : 'Buy Rate',
-                isDouble: true,
-                focusNode: _rateFocus,
-                prevNode: _useInclusiveRates
-                    ? _inclusiveScopeFocus
-                    : _inclusiveSwitchFocus,
-                onSubmit: () => _saleRateFocus.requestFocus(),
-                width: 140,
-                helperText: _useInclusiveRates &&
-                        (_inclusiveRateScope == 'BOTH' ||
-                            _inclusiveRateScope == 'BUY_ONLY') &&
-                        _rate.text.trim().isNotEmpty
-                    ? InclusiveRateHelper.previewText(
-                        label: 'Buy',
-                        inclusiveAmount: double.tryParse(_rate.text.trim()) ?? 0,
-                        taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
-                      )
-                    : null,
-              ),
-              _text(
-                _retailSalePrice,
-                _useInclusiveRates &&
-                        (_inclusiveRateScope == 'BOTH' ||
-                            _inclusiveRateScope == 'SALE_ONLY')
-                    ? 'Sale Rate (Inclusive)'
-                    : 'Sale Rate',
-                isDouble: true,
-                focusNode: _saleRateFocus,
-                prevNode: _rateFocus,
-                onSubmit: () => _mrpFocus.requestFocus(),
-                width: 140,
-                helperText: _useInclusiveRates &&
-                        (_inclusiveRateScope == 'BOTH' ||
-                            _inclusiveRateScope == 'SALE_ONLY') &&
-                        _retailSalePrice.text.trim().isNotEmpty
-                    ? InclusiveRateHelper.previewText(
-                        label: 'Sale',
-                        inclusiveAmount:
-                            double.tryParse(_retailSalePrice.text.trim()) ?? 0,
-                        taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
-                      )
-                    : null,
-              ),
-              _text(
-                _mrp,
-                'MRP (Crossed Price)',
-                isDouble: true,
-                focusNode: _mrpFocus,
-                prevNode: _saleRateFocus,
-                onSubmit: () => _taxTypeFocus.requestFocus(),
-                width: 150,
-              ),
-            ],
-            SizedBox(
-              width: 130,
-              child: Focus(
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent &&
-                      event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                    _mrpFocus.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: DropdownButtonFormField<String>(
-                  focusNode: _taxTypeFocus,
-                  initialValue: _taxType,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-                  decoration: _compactDecoration('Tax Type'),
-                  items: _taxTypes
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text(value),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _taxType = value);
-                    }
-                    _taxPercentFocus.requestFocus(); // Chaining
-                  },
-                ),
-              ),
+                _text(_taxPercent, 'Tax %',
+                    isDouble: true,
+                    focusNode: _taxPercentFocus,
+                    prevNode: _taxTypeFocus,
+                    onSubmit: () => _hasVariants
+                        ? _discountFocus.requestFocus()
+                        : _openingFocus.requestFocus(),
+                    width: 110),
+                if (!_hasVariants) ...[
+                  _text(_opening, 'Opening Balance',
+                      isDouble: true,
+                      readOnly: _editIndex == null ? false : true,
+                      focusNode: _openingFocus,
+                      prevNode: _taxPercentFocus,
+                      onSubmit: () => _minFocus.requestFocus(),
+                      width: 130),
+                  _text(_min, 'Min Level',
+                      isInt: true,
+                      focusNode: _minFocus,
+                      prevNode: _openingFocus,
+                      onSubmit: () => _maxFocus.requestFocus(),
+                      width: 110),
+                  _text(_max, 'Max Level',
+                      isInt: true,
+                      focusNode: _maxFocus,
+                      prevNode: _minFocus,
+                      onSubmit: () => _discountFocus.requestFocus(),
+                      width: 110),
+                ],
+              ],
             ),
-            _text(_taxPercent, 'Tax %',
-                isDouble: true,
-                focusNode: _taxPercentFocus,
-                prevNode: _taxTypeFocus,
-                onSubmit: () => _hasVariants ? _discountFocus.requestFocus() : _openingFocus.requestFocus(),
-                width: 110),
-            if (!_hasVariants) ...[
-              _text(_opening, 'Opening Balance',
-                  isDouble: true,
-                  readOnly: _editIndex == null ? false : true,
-                  focusNode: _openingFocus,
-                  prevNode: _taxPercentFocus,
-                  onSubmit: () => _minFocus.requestFocus(),
-                  width: 130),
-              _text(_min, 'Min Level',
-                  isInt: true,
-                  focusNode: _minFocus,
-                  prevNode: _openingFocus,
-                  onSubmit: () => _maxFocus.requestFocus(),
-                  width: 110),
-              _text(_max, 'Max Level',
-                  isInt: true,
-                  focusNode: _maxFocus,
-                  prevNode: _minFocus,
-                  onSubmit: () => _discountFocus.requestFocus(),
-                  width: 110),
-            ],
-
+            _buildOptionsAndActionsBar(),
+            if (_hasVariants) _variantBuilderUI(),
           ],
         ),
-        _buildOptionsAndActionsBar(),
-        if (_hasVariants) _variantBuilderUI(),
-      ],
-    ),
-  ),
-);
-}
+      ),
+    );
+  }
 
   Widget _buildToggleChip({
     required String title,
@@ -1840,6 +1930,48 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     setState(() => _hasVariants = v);
                     _generateVariantList();
                   },
+                ),
+              _buildToggleChip(
+                title: 'Get Inclusive',
+                value: _useInclusiveRates,
+                focusNode: _inclusiveSwitchFocus,
+                onChanged: (v) {
+                  setState(() {
+                    _useInclusiveRates = v;
+                    if (!v) {
+                      _inclusiveRateScope = 'BOTH';
+                    }
+                  });
+                },
+              ),
+              if (_useInclusiveRates)
+                SizedBox(
+                  width: 160,
+                  child: DropdownButtonFormField<String>(
+                    focusNode: _inclusiveScopeFocus,
+                    initialValue: _inclusiveRateScope,
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
+                    decoration: _compactDecoration('Apply To'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'BOTH',
+                        child: Text('Buy & Sale Rate'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'SALE_ONLY',
+                        child: Text('Sale Rate Only'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'BUY_ONLY',
+                        child: Text('Buy Rate Only'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _inclusiveRateScope = value);
+                      }
+                    },
+                  ),
                 ),
               _buildToggleChip(
                 title: 'Discount Applicable',

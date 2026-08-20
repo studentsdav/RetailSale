@@ -19,6 +19,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             allowNull: false
         },
+        business_module: {
+            type: DataTypes.STRING(50),
+            allowNull: false,
+            defaultValue: 'ALL'
+        },
         recovery_pin_hash: {
             type: DataTypes.STRING(255),
             allowNull: false

@@ -16,6 +16,7 @@ class _KdsScreenState extends State<KdsScreen> {
   Timer? _timer;
   String selectedLocationFilter = 'All';
   bool _oneOptionMode = false;
+  bool _showServedOrders = false;
 
   @override
   void initState() {
@@ -38,20 +39,35 @@ class _KdsScreenState extends State<KdsScreen> {
       final res = await ApiClient.get('/api/restaurant/kots?active_only=true');
       if (res['success'] == true) {
         final List raw = res['data'] ?? [];
-        // Filter out billed / completed / closed / served orders so only active unbilled KOTs show
         final List unbilled = raw.where((kot) {
+          final bool isDismissed = kot['kds_dismissed'] == true || kot['kds_dismissed'] == 1;
+          if (isDismissed) return false;
+
           final String status = (kot['status'] ?? '').toString().toUpperCase();
           final bool isBilled = kot['is_billed'] == true ||
               status == 'BILLED' ||
               status == 'COMPLETED' ||
               status == 'CLOSED' ||
-              status == 'SERVED' ||
               status == 'DISMISSED';
-          return !isBilled;
+          if (isBilled) return false;
+
+          if (!_showServedOrders && status == 'SERVED') {
+            return false;
+          }
+          return true;
         }).toList();
 
+        final Set<int> seenKotIds = {};
+        final List uniqueKots = [];
+        for (final kot in unbilled) {
+          final int kId = int.tryParse((kot['id'] ?? 0).toString()) ?? 0;
+          if (kId > 0 && seenKotIds.contains(kId)) continue;
+          if (kId > 0) seenKotIds.add(kId);
+          uniqueKots.add(kot);
+        }
+
         setState(() {
-          activeKotsList = unbilled;
+          activeKotsList = uniqueKots;
         });
       }
     } catch (e) {
@@ -214,19 +230,40 @@ class _KdsScreenState extends State<KdsScreen> {
         title: const Text('Kitchen Display System (KDS)'),
         elevation: 0,
         actions: [
-          Row(
-            children: [
-              const Text('One Option Mode', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              Switch(
-                value: _oneOptionMode,
-                onChanged: (val) {
-                  setState(() {
-                    _oneOptionMode = val;
-                  });
-                },
-              ),
-              const SizedBox(width: 8),
-            ],
+          Tooltip(
+            message: 'Show Served Orders: Keep served items visible in kitchen queue',
+            child: Row(
+              children: [
+                const Text('Show Served', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                Switch(
+                  value: _showServedOrders,
+                  onChanged: (val) {
+                    setState(() {
+                      _showServedOrders = val;
+                    });
+                    _fetchKots();
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+          Tooltip(
+            message: 'Direct Fast-Track Mode: Single-step status transitions for high-speed kitchen operations',
+            child: Row(
+              children: [
+                const Text('Direct Serve Mode', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                Switch(
+                  value: _oneOptionMode,
+                  onChanged: (val) {
+                    setState(() {
+                      _oneOptionMode = val;
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -545,74 +582,108 @@ class _KdsScreenState extends State<KdsScreen> {
                                       ),
                                     ),
                                     // Action Bar
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                                      child: Row(
-                                        children: [
-                                          if (_oneOptionMode && !isKotCancelled)
-                                            Expanded(
-                                              child: ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.green.shade700,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                onPressed: () => _updateKotStatus(kot['id'], 'Served'),
-                                                icon: const Icon(Icons.check_circle_outline, size: 16),
-                                                label: const Text('Mark Served'),
-                                              ),
-                                            ),
-                                          if (!_oneOptionMode && !isKotCancelled && kot['status'] != 'Preparing' && kot['status'] != 'Ready')
-                                            Expanded(
-                                              child: ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.blue.shade700,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                onPressed: () => _updateKotStatus(kot['id'], 'Preparing'),
-                                                icon: const Icon(Icons.restaurant, size: 16),
-                                                label: const Text('Preparing'),
-                                              ),
-                                            ),
-                                          if (!_oneOptionMode && !isKotCancelled && kot['status'] == 'Preparing')
-                                            Expanded(
-                                              child: ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.orange.shade700,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                onPressed: () => _updateKotStatus(kot['id'], 'Ready'),
-                                                icon: const Icon(Icons.check, size: 16),
-                                                label: const Text('Mark Ready'),
-                                              ),
-                                            ),
-                                          if (isKotCancelled)
-                                            Expanded(
-                                              child: ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.grey.shade700,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                onPressed: () => _updateKotStatus(kot['id'], kot['status'], kdsDismissed: true),
-                                                icon: const Icon(Icons.clear_all, size: 16),
-                                                label: Text(kot['status'] == 'Rejected' ? 'Dismiss Rejected' : 'Dismiss Cancelled'),
-                                              ),
-                                            ),
-                                          if (!_oneOptionMode && kot['status'] == 'Ready' && (kot['service_type'] ?? '').toString().toUpperCase().contains('NC'))
-                                            Expanded(
-                                              child: ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.green.shade700,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                onPressed: () => _updateKotStatus(kot['id'], 'Served'),
-                                                icon: const Icon(Icons.check_circle_outline, size: 16),
-                                                label: const Text('Dismiss Order'),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    )
+                                     Builder(
+                                       builder: (context) {
+                                         final bool isServed = kot['status'] == 'Served' || kot['status'] == 'SERVED';
+                                         return Container(
+                                           padding: const EdgeInsets.all(8),
+                                           color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                                           child: Row(
+                                             children: [
+                                               if (isServed)
+                                                 Expanded(
+                                                   child: Container(
+                                                     padding: const EdgeInsets.symmetric(vertical: 8),
+                                                     decoration: BoxDecoration(
+                                                       color: Colors.teal.shade50,
+                                                       borderRadius: BorderRadius.circular(8),
+                                                       border: Border.all(color: Colors.teal.shade200),
+                                                     ),
+                                                     child: Row(
+                                                       mainAxisAlignment: MainAxisAlignment.center,
+                                                       children: [
+                                                         Icon(Icons.check_circle, size: 16, color: Colors.teal.shade700),
+                                                         const SizedBox(width: 6),
+                                                         Text(
+                                                           'Status: Served',
+                                                           style: TextStyle(
+                                                             color: Colors.teal.shade800,
+                                                             fontWeight: FontWeight.bold,
+                                                             fontSize: 13,
+                                                           ),
+                                                         ),
+                                                       ],
+                                                     ),
+                                                   ),
+                                                 ),
+                                               if (_oneOptionMode && !isKotCancelled && !isServed)
+                                                 Expanded(
+                                                   child: ElevatedButton.icon(
+                                                     style: ElevatedButton.styleFrom(
+                                                       backgroundColor: kot['status'] == 'Ready' ? Colors.green.shade700 : Colors.orange.shade700,
+                                                       foregroundColor: Colors.white,
+                                                     ),
+                                                     onPressed: () => _updateKotStatus(
+                                                       kot['id'],
+                                                       kot['status'] == 'Ready' ? 'Served' : 'Ready',
+                                                     ),
+                                                     icon: Icon(kot['status'] == 'Ready' ? Icons.check_circle_outline : Icons.check, size: 16),
+                                                     label: Text(kot['status'] == 'Ready' ? 'Mark Served' : 'Mark Ready'),
+                                                   ),
+                                                 ),
+                                               if (!_oneOptionMode && !isKotCancelled && !isServed && kot['status'] != 'Preparing' && kot['status'] != 'Ready')
+                                                 Expanded(
+                                                   child: ElevatedButton.icon(
+                                                     style: ElevatedButton.styleFrom(
+                                                       backgroundColor: Colors.blue.shade700,
+                                                       foregroundColor: Colors.white,
+                                                     ),
+                                                     onPressed: () => _updateKotStatus(kot['id'], 'Preparing'),
+                                                     icon: const Icon(Icons.restaurant, size: 16),
+                                                     label: const Text('Preparing'),
+                                                   ),
+                                                 ),
+                                               if (!_oneOptionMode && !isKotCancelled && !isServed && kot['status'] == 'Preparing')
+                                                 Expanded(
+                                                   child: ElevatedButton.icon(
+                                                     style: ElevatedButton.styleFrom(
+                                                       backgroundColor: Colors.orange.shade700,
+                                                       foregroundColor: Colors.white,
+                                                     ),
+                                                     onPressed: () => _updateKotStatus(kot['id'], 'Ready'),
+                                                     icon: const Icon(Icons.check, size: 16),
+                                                     label: const Text('Mark Ready'),
+                                                   ),
+                                                 ),
+                                               if (isKotCancelled)
+                                                 Expanded(
+                                                   child: ElevatedButton.icon(
+                                                     style: ElevatedButton.styleFrom(
+                                                       backgroundColor: Colors.grey.shade700,
+                                                       foregroundColor: Colors.white,
+                                                     ),
+                                                     onPressed: () => _updateKotStatus(kot['id'], kot['status'], kdsDismissed: true),
+                                                     icon: const Icon(Icons.clear_all, size: 16),
+                                                     label: Text(kot['status'] == 'Rejected' ? 'Dismiss Rejected' : 'Dismiss Cancelled'),
+                                                   ),
+                                                 ),
+                                               if (!_oneOptionMode && !isKotCancelled && !isServed && kot['status'] == 'Ready')
+                                                 Expanded(
+                                                   child: ElevatedButton.icon(
+                                                     style: ElevatedButton.styleFrom(
+                                                       backgroundColor: Colors.green.shade700,
+                                                       foregroundColor: Colors.white,
+                                                     ),
+                                                     onPressed: () => _updateKotStatus(kot['id'], 'Served'),
+                                                     icon: const Icon(Icons.check_circle_outline, size: 16),
+                                                     label: const Text('Mark Served'),
+                                                   ),
+                                                 ),
+                                             ],
+                                           ),
+                                         );
+                                       },
+                                     )
                                   ],
                                 ),
                               );

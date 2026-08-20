@@ -30,6 +30,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
   final _outletCode = TextEditingController();
   final _outletName = TextEditingController();
   String _outletType = 'HOTEL';
+  String _businessModule = 'ALL';
 
   // Enterprise Recovery Fields
   final _contactEmail = TextEditingController();
@@ -128,6 +129,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
         'outlet_code': code,
         'outlet_name': _outletName.text.trim(),
         'outlet_type': _outletType,
+        'business_module': _businessModule,
         'contact_email': _contactEmail.text.trim(),
         'contact_phone': _contactPhone.text.trim(),
         'recovery_pin': _recoveryPin.text.trim(),
@@ -575,6 +577,8 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
             icon: Icons.business),
         const SizedBox(height: 18),
         _dropdown(),
+        const SizedBox(height: 18),
+        _moduleDropdown(),
         const SizedBox(height: 24),
         _buildSectionHeader("Recovery & Verification Data"),
         const SizedBox(height: 16),
@@ -1079,6 +1083,38 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
         DropdownMenuItem(value: 'MART', child: Text('Store Mart')),
       ],
       onChanged: (v) => setState(() => _outletType = v!),
+    );
+  }
+
+  Widget _moduleDropdown() {
+    return DropdownButtonFormField<String>(
+      initialValue: _businessModule,
+      decoration: InputDecoration(
+          labelText: "Business Module Feature Set *",
+          helperText: "Controls which features are enabled for this business",
+          prefixIcon: const Icon(Icons.widgets),
+          filled: true,
+          fillColor: const Color(0xffF7F9FC),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
+      items: const [
+        DropdownMenuItem(
+          value: 'INVENTORY',
+          child: Text('Inventory Only (Stock, PO, HRMS & Reports)'),
+        ),
+        DropdownMenuItem(
+          value: 'RETAIL',
+          child: Text('Retail (POS + Inventory Included)'),
+        ),
+        DropdownMenuItem(
+          value: 'RESTAURANT',
+          child: Text('Restaurant (KDS, KOTs, Tables + Inventory Included)'),
+        ),
+        DropdownMenuItem(
+          value: 'ALL',
+          child: Text('All Features (Retail + Restaurant + Inventory)'),
+        ),
+      ],
+      onChanged: (v) => setState(() => _businessModule = v!),
     );
   }
 

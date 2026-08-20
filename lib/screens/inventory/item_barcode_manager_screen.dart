@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
@@ -29,19 +29,32 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   final Map<int, bool> _selected = {};
   final Map<int, TextEditingController> _qtyCtrls = {};
-  final TextEditingController _batchNoCtrl = TextEditingController(text: 'BAT-2608');
-  final TextEditingController _mfgDateCtrl = TextEditingController(text: '19/08/26');
+
+  // Controllers for label metadata matching Image 1
+  final TextEditingController _batchNoCtrl =
+      TextEditingController(text: 'BKJ2501');
+  final TextEditingController _mfgDateCtrl =
+      TextEditingController(text: '16 MAY 2025');
+  final TextEditingController _expiryDateCtrl =
+      TextEditingController(text: '16 NOV 2025');
+  final TextEditingController _countryCtrl =
+      TextEditingController(text: 'INDIA');
+
   bool _selectAllVisible = false;
   bool _regenerateExisting = false;
   String _sizeKey = '50x30';
   bool _busy = false;
-  bool _printBatchNo = false;
-  bool _printMfgDate = false;
+
+  // Checkbox toggles (default enabled for complete metadata sticker)
+  bool _printBatchNo = true;
+  bool _printMfgDate = true;
+  bool _printExpiryDate = true;
+  bool _printCountry = true;
 
   static const Map<String, _LabelSize> _labelSizes = {
-    '38x25': _LabelSize('Small', 38, 25, 10),
-    '50x30': _LabelSize('Medium', 50, 30, 12),
-    '70x40': _LabelSize('Large', 70, 40, 13),
+    '38x25': _LabelSize('Small Label', 38, 25, 9),
+    '50x30': _LabelSize('Medium Label (Standard)', 50, 30, 10),
+    '70x40': _LabelSize('Large Label (Enterprise)', 70, 40, 12),
   };
 
   @override
@@ -58,6 +71,8 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
     _searchCtrl.dispose();
     _batchNoCtrl.dispose();
     _mfgDateCtrl.dispose();
+    _expiryDateCtrl.dispose();
+    _countryCtrl.dispose();
     for (final controller in _qtyCtrls.values) {
       controller.dispose();
     }
@@ -93,7 +108,7 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
         widget.items.where((item) => _selected[item.id] == true).toList();
     if (selectedItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one item')),
+        const SnackBar(content: Text('Select at least one item to generate barcode labels')),
       );
       return;
     }
@@ -125,7 +140,7 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
 
       for (final item in printableItems) {
         for (int i = 0; i < _qtyFor(item); i++) {
-          labels.add(_buildLabel(item, size));
+          labels.add(_buildPdfLabel(item, size));
         }
       }
 
@@ -153,12 +168,15 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Barcode label PDF saved at: ${file.path}')),
+        SnackBar(
+          content: Text('Barcode label PDF saved successfully: ${file.path}'),
+          backgroundColor: const Color(0xFF008060),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) {
@@ -167,132 +185,58 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
     }
   }
 
-  pw.Widget _buildLabel(Item item, _LabelSize size) {
-    final textStyle = pw.TextStyle(
-      fontSize: size.fontSize,
-      color: PdfColors.black,
-    );
+  /// Builds PDF label sticker matching Image 1 format
+  pw.Widget _buildPdfLabel(Item item, _LabelSize size) {
+    final labelW = size.widthMm * PdfPageFormat.mm;
+    final labelH = size.heightMm * PdfPageFormat.mm;
 
-    final String batchStr = _batchNoCtrl.text.trim().isEmpty
-        ? 'BAT-2608'
-        : _batchNoCtrl.text.trim();
-    final String mfgStr = _mfgDateCtrl.text.trim().isEmpty
-        ? '19/08/26'
-        : _mfgDateCtrl.text.trim();
+    final metaRows = <pw.Widget>[];
 
-    // ── Dimensions ─────────────────────────────────────────────────
-    const double vertPad = 3.0;
-    const double sideW = 8.0; // column visual width (= text height after rotate)
-    const double gap = 1.5;
-    const double divW = 0.5;
-
-    // Compute barcode-row height so we can pre-size the rotated text box.
-    final double labelH = size.heightMm * PdfPageFormat.mm;
-    final double nameRowH = (size.fontSize + 0.5) * 1.5 + 2;
-    final double codeRowH = size.fontSize * 1.5 + 2;
-    final double rowH = labelH - vertPad * 2 - nameRowH - codeRowH;
-
-    // â”€â”€ Vertical side text via stacked characters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // pw.Transform.rotate does NOT re-arrange layout constraints in the pdf
-    // package, so text stays horizontal and clipped. Instead we stack each
-    // character as a separate pw.Text in a Column (reversed) so the label
-    // reads bottom-to-top when viewed upright.
-    const pw.TextStyle sideStyle =
-        pw.TextStyle(fontSize: 5.5, color: PdfColors.black);
-
-    pw.Widget sideText(String t) {
-      final chars = t.split('').reversed.toList();
-      return pw.SizedBox(
-        width: sideW,
-        height: rowH,
-        child: pw.Column(
-          mainAxisAlignment: pw.MainAxisAlignment.center,
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: chars
-              .map((c) => pw.Text(c,
-                  style: sideStyle, textAlign: pw.TextAlign.center))
-              .toList(),
-        ),
-      );
+    if (_printBatchNo && _batchNoCtrl.text.trim().isNotEmpty) {
+      metaRows.add(_buildPdfMetaRow('BATCH NO.', _batchNoCtrl.text.trim(), size.fontSize));
+    }
+    if (_printMfgDate && _mfgDateCtrl.text.trim().isNotEmpty) {
+      metaRows.add(_buildPdfMetaRow('PACKED ON', _mfgDateCtrl.text.trim(), size.fontSize));
+    }
+    if (_printExpiryDate && _expiryDateCtrl.text.trim().isNotEmpty) {
+      metaRows.add(_buildPdfMetaRow('BEST BEFORE', _expiryDateCtrl.text.trim(), size.fontSize));
+    }
+    if (_printCountry && _countryCtrl.text.trim().isNotEmpty) {
+      metaRows.add(_buildPdfMetaRow('COUNTRY OF ORIGIN', _countryCtrl.text.trim(), size.fontSize));
     }
 
-    pw.Widget divider() => pw.Container(
-          width: divW,
-          height: rowH,
-          color: PdfColors.black,
-        );
+    final barcodeText = item.barcode.trim().isEmpty ? '8906123450128' : item.barcode.trim();
 
     return pw.Container(
-      width: size.widthMm * PdfPageFormat.mm,
+      width: labelW,
       height: labelH,
-      padding:
-          const pw.EdgeInsets.symmetric(horizontal: 0, vertical: vertPad),
+      padding: const pw.EdgeInsets.all(5),
       decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.black, width: .6),
-        borderRadius: pw.BorderRadius.circular(6),
+        color: PdfColors.white,
+        border: pw.Border.all(color: PdfColors.black, width: 0.8),
+        borderRadius: pw.BorderRadius.circular(4),
       ),
       child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          // ── Item name ──────────────────────────────────────────────
-          pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 4),
-            child: pw.Text(
-              item.itemName,
-              maxLines: 1,
-              textAlign: pw.TextAlign.center,
-              style: textStyle.copyWith(
-                fontSize: size.fontSize + 0.5,
-                fontWeight: pw.FontWeight.bold,
-              ),
+          if (metaRows.isNotEmpty) ...[
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: metaRows,
             ),
-          ),
-          pw.SizedBox(height: 2),
-          // ── Barcode row ────────────────────────────────────────────
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
-            children: [
-              // LEFT: Batch No column
-              if (_printBatchNo) ...[
-                sideText('B: $batchStr'),
-                pw.SizedBox(width: gap),
-                divider(),
-                pw.SizedBox(width: gap),
-              ],
-              // CENTRE: barcode
-              pw.Expanded(
-                child: pw.Padding(
-                  padding: pw.EdgeInsets.symmetric(
-                    horizontal:
-                        (_printBatchNo || _printMfgDate) ? 0 : 3,
-                  ),
-                  child: pw.Center(
-                    child: pw.BarcodeWidget(
-                      barcode: pw.Barcode.code128(),
-                      data: item.barcode,
-                      height: rowH * 0.85,
-                      drawText: false,
-                    ),
-                  ),
+            pw.SizedBox(height: 3),
+          ],
+          pw.Expanded(
+            child: pw.Center(
+              child: pw.BarcodeWidget(
+                barcode: pw.Barcode.code128(),
+                data: barcodeText,
+                drawText: true,
+                textStyle: pw.TextStyle(
+                  fontSize: size.fontSize * 0.85,
+                  fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              // RIGHT: Mfg Date column
-              if (_printMfgDate) ...[
-                pw.SizedBox(width: gap),
-                divider(),
-                pw.SizedBox(width: gap),
-                sideText('M: $mfgStr'),
-              ],
-            ],
-          ),
-          pw.SizedBox(height: 2),
-          // ── Barcode number ─────────────────────────────────────────
-          pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 4),
-            child: pw.Text(
-              item.barcode,
-              textAlign: pw.TextAlign.center,
-              style: textStyle,
             ),
           ),
         ],
@@ -300,212 +244,385 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
     );
   }
 
+  pw.Widget _buildPdfMetaRow(String label, String value, double baseFontSize) {
+    final style = pw.TextStyle(
+      fontSize: baseFontSize * 0.72,
+      fontWeight: pw.FontWeight.bold,
+      color: PdfColors.black,
+    );
+
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 1.5),
+      child: pw.Row(
+        children: [
+          pw.SizedBox(
+            width: 76,
+            child: pw.Text(label, style: style),
+          ),
+          pw.Text(': ', style: style),
+          pw.Expanded(
+            child: pw.Text(value.toUpperCase(), style: style, maxLines: 1),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final items = _filteredItems;
     final selectedCount =
         widget.items.where((item) => _selected[item.id] == true).length;
+    final sampleItem = items.isNotEmpty ? items.first : null;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Barcode Label Generator'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth > 1100;
-                final medium = constraints.maxWidth > 760;
-                final searchWidth = wide ? 300.0 : medium ? 260.0 : constraints.maxWidth;
-                final controlWidth = wide ? 240.0 : medium ? 220.0 : constraints.maxWidth;
-
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: searchWidth,
-                      child: TextField(
-                        controller: _searchCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Search Item',
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    SizedBox(
-                      width: controlWidth,
-                      child: DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        initialValue: _sizeKey,
-                        decoration: const InputDecoration(labelText: 'Label Size'),
-                        items: _labelSizes.entries
-                            .map(
-                              (entry) => DropdownMenuItem(
-                                value: entry.key,
-                                child: Text(
-                                  '${entry.value.name} (${entry.key} mm)',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _sizeKey = value);
-                          }
-                        },
-                      ),
-                    ),
-                    SizedBox(
-                      width: controlWidth,
-                      child: SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Regenerate Existing'),
-                        subtitle: const Text(
-                          'Update barcode even if already set',
-                        ),
-                        value: _regenerateExisting,
-                        onChanged: (value) =>
-                            setState(() => _regenerateExisting = value),
-                      ),
-                    ),
-                    SizedBox(
-                      width: controlWidth,
-                      child: CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Select All Visible'),
-                        value: _selectAllVisible,
-                        onChanged: (value) => _toggleSelectAll(value ?? false),
-                      ),
-                    ),
-                    SizedBox(
-                      width: controlWidth,
-                      child: CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Print Batch No'),
-                        value: _printBatchNo,
-                        onChanged: (value) => setState(() => _printBatchNo = value ?? false),
-                      ),
-                    ),
-                    if (_printBatchNo)
-                      SizedBox(
-                        width: 160,
-                        child: TextField(
-                          controller: _batchNoCtrl,
-                          style: const TextStyle(fontSize: 13),
-                          decoration: const InputDecoration(
-                            labelText: 'Batch No Text',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                    SizedBox(
-                      width: controlWidth,
-                      child: CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Print Mfg Date'),
-                        value: _printMfgDate,
-                        onChanged: (value) => setState(() => _printMfgDate = value ?? false),
-                      ),
-                    ),
-                    if (_printMfgDate)
-                      SizedBox(
-                        width: 160,
-                        child: TextField(
-                          controller: _mfgDateCtrl,
-                          style: const TextStyle(fontSize: 13),
-                          decoration: const InputDecoration(
-                            labelText: 'Mfg Date Text',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '$selectedCount item(s) selected. Set print qty for each selected item.',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+            Text(
+              'Barcode Label Generator',
+              style: TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Card(
-                child: ListView.separated(
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    final selected = _selected[item.id] ?? false;
-                    return ListTile(
-                      leading: Checkbox(
-                        value: selected,
-                        onChanged: (value) {
-                          setState(() {
-                            _selected[item.id] = value ?? false;
-                            if (!(value ?? false)) {
-                              _selectAllVisible = false;
-                            }
-                          });
-                        },
-                      ),
-                      title: Text(item.itemName),
-                      subtitle: Text(
-                        '${item.itemCode} | ${item.barcode.trim().isEmpty ? "No barcode" : item.barcode}',
-                      ),
-                      trailing: SizedBox(
-                        width: 110,
-                        child: TextField(
-                          controller: _qtyCtrls[item.id],
-                          enabled: selected,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Print Qty',
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+            Text(
+              'Enterprise Custom Label Printing Suite',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF008060),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
+              onPressed: _busy ? null : _generateBarcodeLabels,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.print, size: 18),
+              label: Text(_busy ? 'Generating...' : 'Print Barcode PDF'),
             ),
-            const SizedBox(height: 12),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top Control & Options Panel ──────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // Search Item
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: _searchCtrl,
+                          decoration: InputDecoration(
+                            hintText: 'Search items by name, code or barcode...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                            ),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      // Label Size Dropdown
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _sizeKey,
+                          decoration: InputDecoration(
+                            labelText: 'Label Size',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          items: _labelSizes.entries
+                              .map(
+                                (entry) => DropdownMenuItem(
+                                  value: entry.key,
+                                  child: Text(
+                                    '${entry.value.name} (${entry.key} mm)',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _sizeKey = value);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
+
+                  const Text(
+                    'Label Fields & Sticker Controls (First Checkbox -> Label -> Value)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── Enterprise Option Grid: Checkbox FIRST -> Label -> Value ──
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      // 1. Batch No
+                      _buildOptionTile(
+                        value: _printBatchNo,
+                        onChanged: (val) =>
+                            setState(() => _printBatchNo = val ?? false),
+                        label: 'BATCH NO.',
+                        controller: _batchNoCtrl,
+                        hintText: 'BKJ2501',
+                      ),
+                      // 2. Packed On
+                      _buildOptionTile(
+                        value: _printMfgDate,
+                        onChanged: (val) =>
+                            setState(() => _printMfgDate = val ?? false),
+                        label: 'PACKED ON',
+                        controller: _mfgDateCtrl,
+                        hintText: '16 MAY 2025',
+                      ),
+                      // 3. Best Before / Expiry
+                      _buildOptionTile(
+                        value: _printExpiryDate,
+                        onChanged: (val) =>
+                            setState(() => _printExpiryDate = val ?? false),
+                        label: 'BEST BEFORE',
+                        controller: _expiryDateCtrl,
+                        hintText: '16 NOV 2025',
+                      ),
+                      // 4. Country of Origin
+                      _buildOptionTile(
+                        value: _printCountry,
+                        onChanged: (val) =>
+                            setState(() => _printCountry = val ?? false),
+                        label: 'COUNTRY OF ORIGIN',
+                        controller: _countryCtrl,
+                        hintText: 'INDIA',
+                      ),
+                      // 5. Select All Visible
+                      _buildOptionTile(
+                        value: _selectAllVisible,
+                        onChanged: (val) => _toggleSelectAll(val ?? false),
+                        label: 'Select All Visible Items',
+                      ),
+                      // 6. Regenerate Existing
+                      _buildOptionTile(
+                        value: _regenerateExisting,
+                        onChanged: (val) =>
+                            setState(() => _regenerateExisting = val ?? false),
+                        label: 'Force Regenerate Barcodes',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Live Sticker Preview & Selection Table ───────────────────────
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    'Selected items will be barcode-updated, then a barcode label PDF will open.',
-                    style: TextStyle(color: Colors.grey.shade700),
+                // Live Sticker Preview Card matching Image 1
+                SizedBox(
+                  width: 320,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.02),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.remove_red_eye_outlined,
+                                size: 18, color: Color(0xFF008060)),
+                            SizedBox(width: 8),
+                            Text(
+                              'Live Sticker Label Preview',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildLiveStickerCard(sampleItem),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  onPressed: _busy ? null : _generateBarcodeLabels,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.view_week_outlined),
-                  label:
-                      Text(_busy ? 'Generating...' : 'Generate Barcode PDF'),
+                const SizedBox(width: 20),
+
+                // Selected Items Table
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFF8FAFC),
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(12)),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                '$selectedCount Item(s) Selected',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                              const Spacer(),
+                              const Text(
+                                'Set print quantity for each item',
+                                style: TextStyle(
+                                    fontSize: 12, color: Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        SizedBox(
+                          height: 380,
+                          child: ListView.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              final selected = _selected[item.id] ?? false;
+                              return ListTile(
+                                leading: Checkbox(
+                                  value: selected,
+                                  activeColor: const Color(0xFF008060),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selected[item.id] = value ?? false;
+                                      if (!(value ?? false)) {
+                                        _selectAllVisible = false;
+                                      }
+                                    });
+                                  },
+                                ),
+                                title: Text(
+                                  item.itemName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14),
+                                ),
+                                subtitle: Text(
+                                  'Code: ${item.itemCode} | Barcode: ${item.barcode.trim().isEmpty ? "Auto-generate" : item.barcode}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                trailing: SizedBox(
+                                  width: 95,
+                                  child: TextField(
+                                    controller: _qtyCtrls[item.id],
+                                    enabled: selected,
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    decoration: InputDecoration(
+                                      labelText: 'Print Qty',
+                                      isDense: true,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -514,6 +631,214 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
       ),
     );
   }
+
+  /// Enterprise Option Tile: Checkbox FIRST -> Label -> Value
+  Widget _buildOptionTile({
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+    required String label,
+    TextEditingController? controller,
+    String? hintText,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: value ? const Color(0xFFF0FDF4) : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: value ? const Color(0xFF008060) : const Color(0xFFCBD5E1),
+          width: value ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 1. FIRST CHECKBOX
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: Checkbox(
+              value: value,
+              onChanged: onChanged,
+              activeColor: const Color(0xFF008060),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 2. THEN LABEL
+          InkWell(
+            onTap: () => onChanged(!value),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: value ? FontWeight.bold : FontWeight.w600,
+                color: value ? const Color(0xFF0F172A) : const Color(0xFF475569),
+              ),
+            ),
+          ),
+          // 3. THEN VALUE INPUT
+          if (controller != null && value) ...[
+            const SizedBox(width: 8),
+            const Text(':',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 120,
+              height: 32,
+              child: TextField(
+                controller: controller,
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  hintText: hintText,
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  fillColor: Colors.white,
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFF94A3B8)),
+                  ),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Builds Live On-Screen Sticker Card matching Image 1
+  Widget _buildLiveStickerCard(Item? sampleItem) {
+    final barcodeText = sampleItem != null && sampleItem.barcode.trim().isNotEmpty
+        ? sampleItem.barcode.trim()
+        : '8906123450128';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB), // Sticker cream tint matching Image 1
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD97706), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_printBatchNo && _batchNoCtrl.text.trim().isNotEmpty)
+            _buildLiveMetaRow('BATCH NO.', _batchNoCtrl.text.trim()),
+          if (_printMfgDate && _mfgDateCtrl.text.trim().isNotEmpty)
+            _buildLiveMetaRow('PACKED ON', _mfgDateCtrl.text.trim()),
+          if (_printExpiryDate && _expiryDateCtrl.text.trim().isNotEmpty)
+            _buildLiveMetaRow('BEST BEFORE', _expiryDateCtrl.text.trim()),
+          if (_printCountry && _countryCtrl.text.trim().isNotEmpty)
+            _buildLiveMetaRow('COUNTRY OF ORIGIN', _countryCtrl.text.trim()),
+          const SizedBox(height: 10),
+          // Barcode bars representation
+          Center(
+            child: Column(
+              children: [
+                Container(
+                  height: 48,
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    image: DecorationImage(
+                      image: AssetImage('assets/images/barcode_pattern.png'),
+                      fit: BoxFit.cover,
+                      onError: null,
+                    ),
+                  ),
+                  child: CustomPaint(
+                    painter: _BarcodePainter(),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '8   ${barcodeText.length > 6 ? barcodeText.substring(0, 6) : barcodeText}   ${barcodeText.length > 6 ? barcodeText.substring(6) : "450128"}   >',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLiveMetaRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF1E293B),
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const Text(
+            ': ',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1E293B),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Custom painter to render realistic barcode bars in live preview
+class _BarcodePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF0F172A)
+      ..strokeWidth = 2;
+
+    double x = 4;
+    int barIndex = 0;
+    while (x < size.width - 4) {
+      final width = (barIndex % 3 == 0) ? 3.5 : (barIndex % 2 == 0) ? 2.0 : 1.0;
+      final gap = (barIndex % 5 == 0) ? 4.0 : 2.5;
+
+      canvas.drawRect(Rect.fromLTWH(x, 0, width, size.height), paint);
+      x += width + gap;
+      barIndex++;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _LabelSize {

@@ -63,6 +63,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   String ledgerPaymentMethod = '';
   String deliveryStatus = '';
   String expiryStatus = 'ALL';
+  bool _showOutstandingOnly = false;
 
   final Set<String> _expandedBillsCustomers = {};
   final Set<String> _expandedAdvancesCustomers = {};
@@ -2224,6 +2225,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
   Widget _creditTab() {
     final customers = ctrl.creditCustomers.where((customer) {
+      if (_showOutstandingOnly && customer.totalOutstanding <= 0.009) {
+        return false;
+      }
       return customer.totalAdvance > 0.009 || customer.totalOutstanding > 0.009;
     }).toList();
 
@@ -2381,26 +2385,48 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       ],
                     ),
                   ),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CreditAnalysisScreen(),
+                  Wrap(
+                    spacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      FilterChip(
+                        label: const Text('Hide Paid Customers'),
+                        selected: _showOutstandingOnly,
+                        selectedColor: const Color(0xFFEFF6FF),
+                        checkmarkColor: const Color(0xFF2563EB),
+                        labelStyle: TextStyle(
+                          color: _showOutstandingOnly ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                          fontWeight: _showOutstandingOnly ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 12,
                         ),
-                      ).then((_) {
-                        _loadCurrentTab();
-                      });
-                    },
-                    icon: const Icon(Icons.analytics_outlined, size: 18),
-                    label: const Text('Credit Analysis'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF2563EB),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        onSelected: (val) {
+                          setState(() {
+                            _showOutstandingOnly = val;
+                          });
+                        },
                       ),
-                    ),
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const CreditAnalysisScreen(),
+                            ),
+                          ).then((_) {
+                            _loadCurrentTab();
+                          });
+                        },
+                        icon: const Icon(Icons.analytics_outlined, size: 18),
+                        label: const Text('Credit Analysis'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF2563EB),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -4197,12 +4223,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         return 'Expense';
       case 'SUPPLIER_PAYMENT':
         return 'Supplier Payment';
+      case 'SALE_SCHEME_FREE_EXPENSE':
       case 'SUBSCRIPTION_SCHEME_FREE_EXPENSE':
-        return 'Subscription Advance Adjustment';
       case 'SALE_SUBSCRIPTION_FREE_EXPENSE':
-        return 'Subscription Advance Adjustment';
       case 'SALE_SUBSCRIPTION_ADJUSTMENT':
-        return 'Subscription Advance Adjustment';
+        return 'Advance Adjustment';
       case 'SALE_MODIFY_ADJUSTMENT':
         return 'Bill Adjustment';
       default:

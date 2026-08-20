@@ -914,38 +914,51 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
 
   String _getKitchenStatusForTable(int tableId, List<dynamic> runningItems) {
     if (runningItems.isEmpty) return '';
-    
-    // Check if there is any chef-rejected item/KOT
-    final hasRejected = runningItems.any((item) => 
-      item['kot_status'] == 'Rejected' || item['status'] == 'Rejected'
-    );
-    if (hasRejected) return 'Rejected';
 
-    // Check if there is any staff-cancelled item/KOT
-    final hasCancelled = runningItems.any((item) => 
-      item['kot_status'] == 'Cancelled' || item['status'] == 'Cancelled'
-    );
-    if (hasCancelled) return 'Cancelled';
+    // â”€â”€ Step 1: Separate active items from cancelled/rejected ones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // A previously-cancelled KOT may appear alongside a new active KOT.
+    // Do NOT let stale cancelled items shadow the new KOT status.
+    bool isCancelledOrRejected(dynamic item) {
+      final ks = (item['kot_status'] ?? '').toString().trim().toLowerCase();
+      final st = (item['status'] ?? '').toString().trim().toLowerCase();
+      return ks == 'cancelled' || ks == 'rejected' ||
+             st == 'cancelled' || st == 'rejected';
+    }
 
-    // Check if any is ready
-    final hasReady = runningItems.any((item) => 
-      item['kot_status'] == 'Ready' || item['status'] == 'Ready'
-    );
-    if (hasReady) return 'Ready';
+    final activeItems = runningItems.where((i) => !isCancelledOrRejected(i)).toList();
 
-    // Check if any is preparing
-    final hasPreparing = runningItems.any((item) => 
-      item['kot_status'] == 'Preparing' || item['status'] == 'Preparing'
-    );
-    if (hasPreparing) return 'Preparing';
+    bool isStatus(dynamic item, String target) {
+      final ks = (item['kot_status'] ?? '').toString().trim().toLowerCase();
+      final st = (item['status'] ?? '').toString().trim().toLowerCase();
+      final t = target.toLowerCase();
+      if (t == 'ready') return ks == 'ready' || ks == 'r' || st == 'ready' || st == 'r';
+      if (t == 'preparing') return ks == 'preparing' || st == 'preparing';
+      if (t == 'served') return ks == 'served' || st == 'served';
+      return ks == t || st == t;
+    }
 
-    // Check if any is served
-    final hasServed = runningItems.any((item) => 
-      item['kot_status'] == 'Served' || item['status'] == 'Served'
-    );
-    if (hasServed) return 'Served';
+    if (activeItems.isNotEmpty) {
+      if (activeItems.every((i) => isStatus(i, 'Served'))) {
+        return 'Served';
+      }
+      if (activeItems.any((i) => isStatus(i, 'Pending') || isStatus(i, 'New') || isStatus(i, 'p'))) {
+        return 'Pending';
+      }
+      if (activeItems.any((i) => isStatus(i, 'Preparing'))) {
+        return 'Preparing';
+      }
+      if (activeItems.any((i) => isStatus(i, 'Ready'))) {
+        return 'Ready';
+      }
+      return 'Pending';
+    }
 
-    return 'Pending';
+    final allRejected = runningItems.every((i) {
+      final ks = (i['kot_status'] ?? '').toString().trim().toLowerCase();
+      final st = (i['status'] ?? '').toString().trim().toLowerCase();
+      return ks == 'rejected' || st == 'rejected';
+    });
+    return allRejected ? 'Rejected' : 'Cancelled';
   }
 
   String _getTableRunningTime(int tableId, {Map<String, dynamic>? table}) {
@@ -1744,6 +1757,55 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                                                     fontWeight:
                                                         FontWeight.bold),
                                               ),
+                                              // ── Kitchen Status Badge ──────────────────────
+                                              if (isOccupiedOrBilling) (() {
+                                                final kStatus = _getKitchenStatusForTable(table['id'], runningItems);
+                                                if (kStatus.isEmpty) return const SizedBox.shrink();
+
+                                                final Color badgeColor = kStatus == 'Rejected'
+                                                    ? Colors.red.shade600
+                                                    : (kStatus == 'Cancelled'
+                                                        ? Colors.grey.shade600
+                                                        : (kStatus == 'Ready'
+                                                            ? Colors.green.shade600
+                                                            : (kStatus == 'Preparing'
+                                                                ? Colors.blue.shade600
+                                                                : (kStatus == 'Served'
+                                                                    ? Colors.teal.shade600
+                                                                    : Colors.orange.shade700))));
+
+                                                return Container(
+                                                  margin: const EdgeInsets.only(top: 4, bottom: 2),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: badgeColor,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: Colors.white24, width: 0.5),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Container(
+                                                        width: 6,
+                                                        height: 6,
+                                                        decoration: const BoxDecoration(
+                                                          color: Colors.white,
+                                                          shape: BoxShape.circle,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        kStatus.toUpperCase(),
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 8.5,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              })(),
                                               Row(
                                                 children: [
                                                   Expanded(

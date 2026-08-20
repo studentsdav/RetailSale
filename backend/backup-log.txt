@@ -6153,3 +6153,154 @@ SyntaxError: Identifier 'isTaxInclusiveRow' has already been declared
 2026-08-15T09:30:32.992Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-15T09:30:33.068Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-15T09:30:33.081Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-19T16:54:54.811Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-19T16:54:54.973Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-19T16:54:54.989Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-19T17:30:00.068Z [INFO] Hourly backup job started.
+2026-08-19T17:30:00.098Z [INFO] Hourly backup job started.
+2026-08-19T17:30:00.124Z [INFO] Hourly backup job started.
+2026-08-19T17:30:00.788Z [INFO] Backup created. File size: 0.08 MB
+2026-08-19T17:30:00.790Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-19T17:30:00.800Z [INFO] Backup created. File size: 0.08 MB
+2026-08-19T17:30:00.801Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-19T17:30:00.809Z [INFO] Backup created. File size: 0.08 MB
+2026-08-19T17:30:00.810Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-19T17:30:00.883Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-19T17:30:00.971Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-19T17:30:00.980Z [INFO] Hourly backup job execution finished.
+2026-08-19T17:30:00.991Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-19T17:30:00.996Z [INFO] Hourly backup job execution finished.
+2026-08-19T17:30:07.904Z [INFO] Cloud upload sequence completed successfully.
+2026-08-19T17:30:07.915Z [INFO] Hourly backup job execution finished.
+2026-08-19T17:30:30.066Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-19T17:30:30.133Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-19T17:30:30.149Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:11:36.390Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:11:36.571Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:11:36.586Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:19:03.356Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:19:03.445Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:19:03.465Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:30:20.460Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:30:20.553Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:30:20.572Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:44:13.882Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:44:13.962Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:44:13.977Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:55:41.463Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:55:41.560Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:55:41.575Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T14:58:53.245Z [ERROR] [FATAL] Uncaught Exception: Invalid destructuring assignment target
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\public\outlet.controller.js:87
+            business_module: req.body.business_module || 'ALL',
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SyntaxError: Invalid destructuring assignment target
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\auth\login.controller.js:7:33)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-20T14:58:55.656Z [ERROR] [FATAL] Uncaught Exception: Invalid destructuring assignment target
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\public\outlet.controller.js:87
+            business_module: req.body.business_module || 'ALL',
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SyntaxError: Invalid destructuring assignment target
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\auth\login.controller.js:7:33)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-20T14:59:00.203Z [ERROR] [FATAL] Uncaught Exception: Invalid destructuring assignment target
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\public\outlet.controller.js:87
+            business_module: req.body.business_module || 'ALL',
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SyntaxError: Invalid destructuring assignment target
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\auth\login.controller.js:7:33)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-20T14:59:06.651Z [ERROR] [FATAL] Uncaught Exception: Invalid destructuring assignment target
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\public\outlet.controller.js:87
+            business_module: req.body.business_module || 'ALL',
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SyntaxError: Invalid destructuring assignment target
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\auth\login.controller.js:7:33)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-20T15:03:36.827Z [ERROR] [FATAL] Uncaught Exception: Invalid destructuring assignment target
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\public\outlet.controller.js:87
+            business_module: req.body.business_module || 'ALL',
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SyntaxError: Invalid destructuring assignment target
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\auth\login.controller.js:7:33)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-20T15:04:35.571Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:04:35.672Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:04:35.685Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:05:01.100Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-08-20T15:15:30.400Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:15:30.458Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:15:30.468Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:30:00.055Z [INFO] Hourly backup job started.
+2026-08-20T15:30:00.399Z [INFO] Hourly backup job started.
+2026-08-20T15:30:00.428Z [INFO] Hourly backup job started.
+2026-08-20T15:30:01.201Z [INFO] Backup created. File size: 0.09 MB
+2026-08-20T15:30:01.202Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-20T15:30:01.216Z [INFO] Backup created. File size: 0.09 MB
+2026-08-20T15:30:01.219Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-20T15:30:01.224Z [INFO] Backup created. File size: 0.09 MB
+2026-08-20T15:30:01.225Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-20T15:30:01.299Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-20T15:30:01.306Z [INFO] Hourly backup job execution finished.
+2026-08-20T15:30:01.316Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-20T15:30:01.324Z [INFO] Hourly backup job execution finished.
+2026-08-20T15:30:01.336Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-20T15:30:10.383Z [INFO] Cloud upload sequence completed successfully.
+2026-08-20T15:30:10.388Z [INFO] Hourly backup job execution finished.
+2026-08-20T15:30:35.759Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:30:35.829Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:30:35.845Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T15:44:12.542Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-08-20T15:50:52.672Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-08-20T16:04:16.115Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T16:04:16.192Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T16:04:16.206Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T16:09:51.819Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T16:09:51.879Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-20T16:09:51.894Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

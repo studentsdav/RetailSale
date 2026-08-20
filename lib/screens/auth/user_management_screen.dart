@@ -3,6 +3,8 @@ import 'package:retailpos/controllers/security/user_controller.dart';
 
 import '../../controllers/public/outlet_controller.dart' show OutletController;
 import '../../models/security/app_user_model.dart';
+import '../../core/permissions/module_capability.dart';
+import '../../core/auth/token_storage.dart';
 
 /// ================= SCREEN =================
 class Permission1 {
@@ -128,9 +130,31 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     ]),
   ];
 
+  String _userBusinessModule = 'ALL';
+
+  List<PermissionGroup> get filteredPermissionGroups {
+    return permissionGroups.where((group) {
+      if (group.categoryName == 'Retail Sales' &&
+          !ModuleCapability.hasRetail(_userBusinessModule)) {
+        return false;
+      }
+      if (group.categoryName == 'Restaurant (Beta)' &&
+          !ModuleCapability.hasRestaurant(_userBusinessModule)) {
+        return false;
+      }
+      return true;
+    }).map((group) {
+      final filteredItems = group.items
+          .where((p) =>
+              ModuleCapability.isPermissionAllowed(p.key, _userBusinessModule))
+          .toList();
+      return PermissionGroup(group.categoryName, filteredItems);
+    }).where((group) => group.items.isNotEmpty).toList();
+  }
+
   List<Permission1> get allPermissions {
     final list = <Permission1>[];
-    for (final gp in permissionGroups) {
+    for (final gp in filteredPermissionGroups) {
       list.addAll(gp.items);
     }
     return list;
@@ -139,7 +163,15 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   @override
   void initState() {
     super.initState();
+    _loadActiveModule();
     _loadUsers();
+  }
+
+  Future<void> _loadActiveModule() async {
+    final userMap = await TokenStorage.getUser();
+    final mod = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
+    if (!mounted) return;
+    setState(() => _userBusinessModule = mod);
   }
 
   @override
@@ -590,7 +622,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   children: [
                     ...() {
                       final widgets = <Widget>[];
-                      for (final group in permissionGroups) {
+                      for (final group in filteredPermissionGroups) {
                         final hasAll = group.items.every((p) => u.permissions.contains(p.key));
                         final hasNone = group.items.every((p) => !u.permissions.contains(p.key));
                         
