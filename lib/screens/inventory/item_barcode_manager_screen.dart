@@ -46,6 +46,7 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
   bool _busy = false;
 
   // Checkbox toggles (default enabled for complete metadata sticker)
+  bool _printItemName = true;
   bool _printBatchNo = true;
   bool _printMfgDate = true;
   bool _printExpiryDate = true;
@@ -192,6 +193,22 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
 
     final metaRows = <pw.Widget>[];
 
+    if (_printItemName && item.itemName.trim().isNotEmpty) {
+      metaRows.add(
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 2),
+          child: pw.Text(
+            item.itemName.trim().toUpperCase(),
+            style: pw.TextStyle(
+              fontSize: size.fontSize * 0.85,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.black,
+            ),
+            maxLines: 1,
+          ),
+        ),
+      );
+    }
     if (_printBatchNo && _batchNoCtrl.text.trim().isNotEmpty) {
       metaRows.add(_buildPdfMetaRow('BATCH NO.', _batchNoCtrl.text.trim(), size.fontSize));
     }
@@ -427,6 +444,13 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
                     spacing: 12,
                     runSpacing: 12,
                     children: [
+                      // 0. Item Name
+                      _buildOptionTile(
+                        value: _printItemName,
+                        onChanged: (val) =>
+                            setState(() => _printItemName = val ?? false),
+                        label: 'PRINT ITEM NAME',
+                      ),
                       // 1. Batch No
                       _buildOptionTile(
                         value: _printBatchNo,
@@ -729,6 +753,8 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_printItemName && (sampleItem?.itemName.trim().isNotEmpty ?? true))
+            _buildLiveMetaRow('ITEM NAME', sampleItem?.itemName.trim() ?? 'Sample Product'),
           if (_printBatchNo && _batchNoCtrl.text.trim().isNotEmpty)
             _buildLiveMetaRow('BATCH NO.', _batchNoCtrl.text.trim()),
           if (_printMfgDate && _mfgDateCtrl.text.trim().isNotEmpty)

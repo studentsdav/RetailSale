@@ -150,6 +150,12 @@ class SalesReport {
   final String customerGstin;
   final String paymentMode;
   final String paymentReference;
+  final double cashAmount;
+  final double cardAmount;
+  final double upiAmount;
+  final double otherAmount;
+  final double advanceAmount;
+  final double advanceAdjustmentAmount;
   final String orderType;
   final String saleSource;
   final String billingTaxMode;
@@ -181,6 +187,12 @@ class SalesReport {
     required this.customerGstin,
     required this.paymentMode,
     required this.paymentReference,
+    this.cashAmount = 0,
+    this.cardAmount = 0,
+    this.upiAmount = 0,
+    this.otherAmount = 0,
+    this.advanceAmount = 0,
+    this.advanceAdjustmentAmount = 0,
     required this.orderType,
     required this.saleSource,
     required this.billingTaxMode,
@@ -214,6 +226,12 @@ class SalesReport {
       customerGstin: json['customer_gstin'] ?? '',
       paymentMode: json['payment_mode'] ?? '',
       paymentReference: json['payment_reference'] ?? '',
+      cashAmount: _toDouble(json['cash_amount']),
+      cardAmount: _toDouble(json['card_amount']),
+      upiAmount: _toDouble(json['upi_amount']),
+      otherAmount: _toDouble(json['other_amount']),
+      advanceAmount: _toDouble(json['advance_amount']),
+      advanceAdjustmentAmount: _toDouble(json['advance_adjustment_amount']),
       orderType: json['order_type'] ?? '',
       saleSource: json['sale_source'] ?? 'Store',
       billingTaxMode: json['billing_tax_mode'] ?? '',

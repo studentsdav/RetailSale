@@ -106,6 +106,11 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'subscription_id',
             as: 'settlements'
         });
+
+        MilkSubscription.hasMany(models.milk_subscription_items, {
+            foreignKey: 'subscription_id',
+            as: 'subscription_items'
+        });
     };
 
     return MilkSubscription;

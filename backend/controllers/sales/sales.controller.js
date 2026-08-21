@@ -2413,12 +2413,18 @@ function buildSalePaymentLedgerEntries({
         }
         if (lineAmount <= 0) continue;
 
+        let lineTxnType = 'SALE_CASH';
+        const method = String(line.method || paymentMode || '').toUpperCase();
+        if (method === 'CREDIT') lineTxnType = 'SALE_CREDIT';
+        else if (method === 'CARD') lineTxnType = 'SALE_CARD';
+        else if (method === 'UPI') lineTxnType = 'SALE_UPI';
+        else if (method === 'ADVANCE' || method === 'ADVANCE_ADJUSTMENT' || method === 'ADVANCE_APPLY') lineTxnType = 'ADVANCE_APPLY';
+        else lineTxnType = 'SALE_CASH';
+
         entries.push({
             outlet_id: req.user.outlet_id,
             txn_date: header.sale_date,
-            transaction_type: paymentMode === 'CREDIT' || balanceDue > 0
-                ? 'SALE_CREDIT'
-                : 'SALE_CASH',
+            transaction_type: lineTxnType,
             reference_type: 'SALE',
             reference_id: sale.id,
             reference_no: sale.sale_no,
@@ -2545,7 +2551,7 @@ async function createSaleVersion({
     const paymentMode = String(header.payment_mode || 'CASH').trim().toUpperCase();
     const roundOffAmount = toAmount(header.round_off_amount || 0);
     const netAmount = toAmount(header.net_amount);
-    const invoiceDiscount = Math.max(0, toAmount(invoiceDiscountAmount));
+    const invoiceDiscount = Math.max(0, toAmount(invoiceDiscountAmount || header.total_discount || 0));
     const amountPaid = toAmount(
         header.amount_paid ?? (paymentMode === 'CREDIT' ? 0 : netAmount)
     );
@@ -2690,18 +2696,21 @@ async function createSaleVersion({
         const lineDiscount = toAmount(row.line_discount || 0);
         const amount = toAmount(qty * rate);
         const isTaxInclusiveRow = taxType === 'GST_INCLUSIVE' || row.isTaxInclusive === true || row.is_tax_inclusive === true;
+        const grossInclusiveAmount = isTaxInclusiveRow ? amount : toAmount(amount * (1 + (taxPercent / 100)));
+
         let taxableAmount = amount;
         let taxAmount = 0;
-        let lineTotal = amount;
+        let lineTotal = grossInclusiveAmount;
 
-        if (taxPercent > 0) {
-            if (isTaxInclusiveRow) {
-                taxableAmount = toAmount(amount / (1 + (taxPercent / 100)));
-                taxAmount = toAmount(amount - taxableAmount);
-            } else {
-                taxAmount = toAmount((amount * taxPercent) / 100);
-                lineTotal = toAmount(amount + taxAmount);
-            }
+        if (row.taxable_amount != null && row.tax_amount != null) {
+            taxableAmount = toAmount(row.taxable_amount);
+            taxAmount = toAmount(row.tax_amount);
+            lineTotal = toAmount(row.line_total ?? (taxableAmount + taxAmount));
+        } else if (taxPercent > 0) {
+            const netInclusive = Math.max(0, grossInclusiveAmount - lineDiscount);
+            taxableAmount = toAmount(netInclusive / (1 + (taxPercent / 100)));
+            taxAmount = toAmount(netInclusive - taxableAmount);
+            lineTotal = netInclusive;
         }
 
         let itemNetAmount = lineTotal;
@@ -2723,17 +2732,37 @@ async function createSaleVersion({
         }
 
         totalQty += qty;
-        subTotal += amount;
+        subTotal += grossInclusiveAmount;
         itemsTaxableTotal += taxableAmount;
         itemsTaxTotal += taxAmount;
         itemsLineTotal += lineTotal;
 
-        const rowTaxes = Array.isArray(row.tax_breakup) ? row.tax_breakup : [];
+        const rowTaxes = Array.isArray(row.tax_breakup) && row.tax_breakup.length > 0
+            ? row.tax_breakup
+            : (taxPercent > 0 ? [
+                {
+                    code: 'CGST',
+                    label: 'CGST',
+                    taxType: String(taxType || 'GST').toUpperCase(),
+                    rate: taxPercent / 2,
+                    taxableAmount: toAmount(taxableAmount),
+                    taxAmount: toAmount(taxAmount / 2)
+                },
+                {
+                    code: 'SGST',
+                    label: 'SGST',
+                    taxType: String(taxType || 'GST').toUpperCase(),
+                    rate: taxPercent / 2,
+                    taxableAmount: toAmount(taxableAmount),
+                    taxAmount: toAmount(taxAmount / 2)
+                }
+            ] : []);
+
         for (const tax of rowTaxes) {
             const taxCode = String(tax?.code || '').trim().toUpperCase();
             const taxLabel = String(tax?.label || taxCode || '').trim();
             const taxRate = toAmount(tax?.rate);
-            const taxableValue = toAmount(tax?.taxableAmount ?? taxableAmount);
+            const taxableValue = toAmount(tax?.taxableAmount ?? tax?.taxable_amount ?? taxableAmount);
             const taxValue = toAmount(tax?.taxAmount ?? tax?.tax_amount);
             const key = `${taxCode}|${taxLabel}|${taxRate}`;
             const existing = taxSummary.get(key);
@@ -2887,7 +2916,9 @@ async function createSaleVersion({
         return copy;
     });
 
-    const derivedNetAmount = Math.max(0, itemsLineTotal + headerChargeTotal + headerChargeTaxTotal + roundOffAmount - invoiceDiscount - advanceSubscriptionDiscount);
+    const itemDiscountSum = salesItemRows.reduce((sum, r) => sum + toAmount(r.line_discount || 0), 0);
+    const remainingUnappliedDiscount = Math.max(0, invoiceDiscount - itemDiscountSum);
+    const derivedNetAmount = Math.max(0, itemsLineTotal + headerChargeTotal + headerChargeTaxTotal + roundOffAmount - remainingUnappliedDiscount - advanceSubscriptionDiscount);
     const effectiveChangeAmount = header.change_amount != null ? Math.max(toAmount(header.change_amount), 0) : (paymentMode === 'CASH' ? Math.max(toAmount(amountPaid - derivedNetAmount), 0) : 0);
     const effectiveBalanceDue = (paymentMode === 'CASH' && amountPaid >= derivedNetAmount)
         ? 0
@@ -3876,10 +3907,15 @@ exports.modifySale = async (req, res) => {
             });
         }
 
-        require('fs').appendFileSync(
-            require('path').join(__dirname, '../../debug.log'),
-            `[${new Date().toISOString()}] DEBUG modifySale: saleId=${saleId}, userOutlet=${req.user?.outlet_id}, storeOutlet=${require('../../utils/context').contextStorage.getStore()?.get('outlet_id')}\n`
-        );
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const logPath = path.join(require('os').tmpdir(), 'retailsale_debug.log');
+            fs.appendFileSync(
+                logPath,
+                `[${new Date().toISOString()}] DEBUG modifySale: saleId=${saleId}, userOutlet=${req.user?.outlet_id}\n`
+            );
+        } catch (_) {}
 
         const currentSale = await req.propertyDb.models.sales_headers.findOne({
             where: {
@@ -3907,8 +3943,9 @@ exports.modifySale = async (req, res) => {
             });
         }
 
-        if ((currentSale.status || '').toUpperCase() === 'DRAFT' &&
-            status === 'COMPLETED') {
+        const isDraftConversion = (currentSale.status || '').toUpperCase() === 'DRAFT' && status === 'COMPLETED';
+
+        if (isDraftConversion) {
             const resolved = await numberingHelper.resolveNextNumber({
                 req,
                 module: 'SALES',
@@ -3966,9 +4003,9 @@ exports.modifySale = async (req, res) => {
                 modified_at: new Date(),
                 modification_note: headerForModify.modification_note || 'Bill modified from reprint section'
             },
-            createPayment: false,
-            stockTxnType: 'SALE_MODIFY',
-            affectStock: false
+            createPayment: isDraftConversion,
+            stockTxnType: isDraftConversion ? 'SALE' : 'SALE_MODIFY',
+            affectStock: isDraftConversion ? affectStock : false
         });
 
         await currentSale.update({
@@ -5602,6 +5639,8 @@ exports.createSubscription = async (req, res) => {
             updated_by: req.user.id
         }, { transaction: t });
 
+        const todayTxnDate = formatDateLocalYmd(new Date());
+
         const prepaidAmount = totalPaymentAmount;
         const paymentMode = String(req.body.payment_mode || req.body.paymentMode || 'SUBSCRIPTION').trim().toUpperCase();
         const prepaidTaxableAmount = baseTaxableFromBody > 0 ? baseTaxableFromBody : prepaidAmount;
@@ -5613,7 +5652,7 @@ exports.createSubscription = async (req, res) => {
                   customer_name: identity.customer_name || null,
                   customer_phone: identity.customer_phone || null,
                   customer_gstin: identity.customer_gstin || null,
-                advance_date: startDate,
+                advance_date: todayTxnDate,
                 original_amount: prepaidAmount,
                 available_amount: prepaidAmount,
                 payment_mode: paymentMode,
@@ -5630,7 +5669,7 @@ exports.createSubscription = async (req, res) => {
                   customer_phone: identity.customer_phone || null,
                   customer_gstin: identity.customer_gstin || null,
                 item_id: item.id,
-                advance_date: startDate,
+                advance_date: todayTxnDate,
                   original_qty: prepaidQty,
                   available_qty: prepaidQty,
                   rate: itemRate,
@@ -5642,7 +5681,7 @@ exports.createSubscription = async (req, res) => {
             await createLedgerEntry({
                 db: req.propertyDb,
                 outlet_id: req.user.outlet_id,
-                txn_date: startDate,
+                txn_date: todayTxnDate,
                 transaction_type: 'CUSTOMER_ADVANCE',
                 reference_type: 'SUBSCRIPTION',
                 reference_id: subscription.id,
@@ -5654,6 +5693,22 @@ exports.createSubscription = async (req, res) => {
                 created_by: req.user.id,
                 transaction: t
             });
+        }
+
+        const reqItems = Array.isArray(req.body.items || req.body.subscription_items) && (req.body.items || req.body.subscription_items).length > 0
+            ? (req.body.items || req.body.subscription_items)
+            : [{ item_id: itemId, daily_qty: toRoundedAmount(req.body.daily_allowed_qty ?? req.body.dailyAllowedQty), rate_override: itemRate }];
+
+        for (const subItem of reqItems) {
+            const subItemId = Number(subItem.item_id || subItem.itemId || itemId);
+            if (subItemId > 0) {
+                await req.propertyDb.models.milk_subscription_items.create({
+                    subscription_id: subscription.id,
+                    item_id: subItemId,
+                    daily_qty: toRoundedAmount(subItem.daily_qty ?? subItem.dailyQty ?? 1.0),
+                    rate_override: subItem.rate_override ? toRoundedAmount(subItem.rate_override) : null
+                }, { transaction: t });
+            }
         }
 
         for (const scheme of selectedSchemes) {

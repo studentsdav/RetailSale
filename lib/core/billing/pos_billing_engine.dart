@@ -15,25 +15,22 @@ class PosBillingEngine {
   }) {
     final totalQty = items.fold<double>(0, (sum, item) => sum + item.qty);
 
-    final bool anyInclusive = items.any((item) => item.isTaxInclusive);
+    double discountEligibleTotalInclusive = 0.0;
+    double schemeEligibleTotalInclusive = 0.0;
 
-    final double discountEligibleTotal = items
-        .where((item) => item.discountApplicable)
-        .fold<double>(0, (sum, item) => sum + (anyInclusive
-            ? (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))
-            : item.amount));
+    for (final item in items) {
+      final double grossInclusive = item.isTaxInclusive
+          ? item.amount
+          : (item.amount * (1 + item.taxPercent / 100));
 
-    final double schemeEligibleTotal = schemeItemId != null
-        ? items
-            .where((item) => item.itemId == schemeItemId && item.schemeApplicable)
-            .fold<double>(0, (sum, item) => sum + (anyInclusive
-                ? (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))
-                : item.amount))
-        : items
-            .where((item) => item.schemeApplicable)
-            .fold<double>(0, (sum, item) => sum + (anyInclusive
-                ? (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))
-                : item.amount));
+      if (item.discountApplicable) {
+        discountEligibleTotalInclusive += grossInclusive;
+      }
+      if (item.schemeApplicable &&
+          (schemeItemId == null || item.itemId == schemeItemId)) {
+        schemeEligibleTotalInclusive += grossInclusive;
+      }
+    }
 
     final computedItems = <SaleItem>[];
     final taxSummary = <String, TaxBreakdown>{};
@@ -42,78 +39,45 @@ class PosBillingEngine {
     double calculatedDiscount = 0.0;
 
     for (final item in items) {
-      final double gross = item.amount;
       final double grossInclusive = item.isTaxInclusive
-          ? gross
-          : (gross * (1 + item.taxPercent / 100));
+          ? item.amount
+          : (item.amount * (1 + item.taxPercent / 100));
 
-      final double schemeShare = schemeEligibleTotal > 0 &&
+      final double schemeShareInclusive = schemeEligibleTotalInclusive > 0 &&
               item.schemeApplicable &&
               (schemeItemId == null || item.itemId == schemeItemId)
-          ? (anyInclusive
-              ? (grossInclusive / schemeEligibleTotal) * schemeDiscountAmount
-              : (gross / schemeEligibleTotal) * schemeDiscountAmount)
+          ? (grossInclusive / schemeEligibleTotalInclusive) * schemeDiscountAmount
           : 0.0;
 
-       final double manualShare = discountEligibleTotal > 0 && item.discountApplicable
-          ? (anyInclusive
-              ? (grossInclusive / discountEligibleTotal) * manualDiscountAmount
-              : (gross / discountEligibleTotal) * manualDiscountAmount)
-          : 0.0;
+      final double manualShareInclusive =
+          discountEligibleTotalInclusive > 0 && item.discountApplicable
+              ? (grossInclusive / discountEligibleTotalInclusive) * manualDiscountAmount
+              : 0.0;
 
-      double lineDiscount;
+      double lineDiscountInclusive;
       if (item.isSchemeFree) {
-        lineDiscount = gross;
-      } else if (item.isTaxInclusive) {
-        // For inclusive items, discount is distributed on the inclusive base.
-        // lineDiscount is stored as the inclusive discount amount.
-        final double lineDiscountInclusive = (schemeShare + manualShare).clamp(0.0, grossInclusive);
-        lineDiscount = lineDiscountInclusive;
+        lineDiscountInclusive = grossInclusive;
       } else {
-        // For exclusive items, schemeShare and manualShare are already
-        // computed on the exclusive gross, so lineDiscount is exclusive directly.
-        lineDiscount = (schemeShare + manualShare).clamp(0.0, gross);
+        lineDiscountInclusive =
+            (schemeShareInclusive + manualShareInclusive).clamp(0.0, grossInclusive);
       }
 
-      double taxableAmount;
-      double taxAmount;
-      double lineTotal;
-      List<TaxBreakdown> lineTaxes;
+      final netInclusive = (grossInclusive - lineDiscountInclusive).clamp(0.0, double.infinity);
+      final taxableAmount = netInclusive / (1 + item.taxPercent / 100);
+      final lineTaxes = _resolveTaxes(
+        taxMode: taxMode,
+        taxType: item.taxType,
+        taxPercent: item.taxPercent,
+        taxableAmount: taxableAmount,
+      );
+      final taxAmount = netInclusive - taxableAmount;
+      final lineTotal = netInclusive;
 
-      if (item.isTaxInclusive) {
-        final netInclusive = (gross - lineDiscount).clamp(0.0, double.infinity);
-        taxableAmount = netInclusive / (1 + item.taxPercent / 100);
-        lineTaxes = _resolveTaxes(
-          taxMode: taxMode,
-          taxType: item.taxType,
-          taxPercent: item.taxPercent,
-          taxableAmount: taxableAmount,
-        );
-        taxAmount = netInclusive - taxableAmount;
-        lineTotal = netInclusive;
-
-        // For inclusive items, both sub_total and total_discount are stored as
-        // inclusive amounts so that sub_total - total_discount = net_amount.
-        // e.g. 500 (MRP incl. GST) - 200 (discount) = 300 (net payable).
-        calculatedSubTotal += gross;          // inclusive MRP = 500
-        calculatedDiscount += lineDiscount;   // inclusive discount = 200
-      } else {
-        taxableAmount = (gross - lineDiscount).clamp(0.0, double.infinity);
-        lineTaxes = _resolveTaxes(
-          taxMode: taxMode,
-          taxType: item.taxType,
-          taxPercent: item.taxPercent,
-          taxableAmount: taxableAmount,
-        );
-        taxAmount = lineTaxes.fold<double>(0, (sum, entry) => sum + entry.taxAmount);
-        lineTotal = taxableAmount + taxAmount;
-
-        calculatedSubTotal += gross;
-        calculatedDiscount += lineDiscount;
-      }
+      calculatedSubTotal += grossInclusive;
+      calculatedDiscount += lineDiscountInclusive;
 
       final enriched = item.copyWith(
-        lineDiscount: lineDiscount,
+        lineDiscount: lineDiscountInclusive,
         taxableAmount: taxableAmount,
         taxAmount: taxAmount,
         lineTotal: lineTotal,

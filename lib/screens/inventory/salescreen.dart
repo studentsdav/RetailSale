@@ -138,6 +138,7 @@ class _SaleScreenState extends State<SaleScreen> {
   TimeOfDay? _schemeEndTime;
   bool _loadingItemSchemeStatus = false;
   bool _loadingItemAdvanceStatus = false;
+  final Map<int, double> _editingOriginalItemQuantities = {};
   int _itemSchemeStatusRequestId = 0;
   Map<String, dynamic>? _itemSchemeProgress;
   final Map<int, Map<String, dynamic>> _itemSchemeProgressByScheme = {};
@@ -487,6 +488,11 @@ class _SaleScreenState extends State<SaleScreen> {
       _items
         ..clear()
         ..addAll(order.items);
+      _editingOriginalItemQuantities.clear();
+      for (final item in order.items) {
+        _editingOriginalItemQuantities[item.itemId] =
+            (_editingOriginalItemQuantities[item.itemId] ?? 0.0) + item.qty;
+      }
       _charges = charges.isEmpty ? _charges : charges;
       _selectedSchemes
         ..clear()
@@ -584,7 +590,14 @@ class _SaleScreenState extends State<SaleScreen> {
   double get _totalQty => _items.fold(0, (sum, item) => sum + item.qty);
   double get _schemeBaseAmount => _items
       .where((item) => item.schemeApplicable)
-      .fold<double>(0, (sum, item) => sum + item.amount);
+      .fold<double>(
+        0,
+        (sum, item) =>
+            sum +
+            (item.isTaxInclusive
+                ? item.amount
+                : (item.amount * (1 + item.taxPercent / 100))),
+      );
 
   double get _schemeFreeSavingsAmount {
     double savings = 0;
@@ -645,7 +658,14 @@ class _SaleScreenState extends State<SaleScreen> {
 
   double get _discountBaseAmount => _items
       .where((item) => item.discountApplicable)
-      .fold<double>(0, (sum, item) => sum + item.amount);
+      .fold<double>(
+        0,
+        (sum, item) =>
+            sum +
+            (item.isTaxInclusive
+                ? item.amount
+                : (item.amount * (1 + item.taxPercent / 100))),
+      );
 
   double get _schemeDiscountAmount {
     if (_schemeUsageMode != 'APPLY_NOW' ||
@@ -9253,7 +9273,11 @@ class _SaleScreenState extends State<SaleScreen> {
                     final isSelected = cartQty > 0;
 
                     final bool isStockable = item.stockable;
-                    final double stock = item.openingBalance - cartQty;
+                    final double origQty = _editingSaleId != null
+                        ? (_editingOriginalItemQuantities[item.id] ?? 0.0)
+                        : 0.0;
+                    final double effectiveCartQty = cartQty - origQty;
+                    final double stock = item.openingBalance - effectiveCartQty;
                     final bool isOutOfStock = isStockable && stock <= 0;
                     final bool allowNegativeStock = settingsCtrl.settings?.allowNegativeStock ?? false;
 
@@ -9667,7 +9691,7 @@ class _SaleScreenState extends State<SaleScreen> {
             final bool anyInclusiveCart = _invoice.items.isNotEmpty && _invoice.items.any((item) => item.isTaxInclusive);
             if (anyInclusiveCart) {
               final double displaySubTotal = _invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100))));
-              final double displayDiscount = _invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.lineDiscount : (item.lineDiscount * (1 + item.taxPercent / 100))));
+              final double displayDiscount = _invoice.totalDiscount;
               final double discountPercent = displaySubTotal > 0 ? (displayDiscount / displaySubTotal) * 100 : 0.0;
               final double cgst = _invoice.totalTax / 2;
               final double sgst = _invoice.totalTax / 2;
@@ -10058,7 +10082,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   final bool anyInclusiveCart = invoice.items.isNotEmpty && invoice.items.any((item) => item.isTaxInclusive);
                   if (anyInclusiveCart) {
                     final double displaySubTotal = invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100))));
-                    final double displayDiscount = invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.lineDiscount : (item.lineDiscount * (1 + item.taxPercent / 100))));
+                    final double displayDiscount = invoice.totalDiscount;
                     final double discountPercent = displaySubTotal > 0 ? (displayDiscount / displaySubTotal) * 100 : 0.0;
                     final double cgst = invoice.totalTax / 2;
                     final double sgst = invoice.totalTax / 2;

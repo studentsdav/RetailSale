@@ -522,6 +522,43 @@ exports.getSalesReport = async (req, res) => {
                     .filter(c => !(c.status === 'PENDING' && toNumber(c.excess_qty) > 0 && sale.payment_mode !== 'SUBSCRIPTION'))
                     .reduce((sum, c) => sum + toNumber(c.covered_amount), 0);
 
+                let cashAmount = 0;
+                let cardAmount = 0;
+                let upiAmount = 0;
+                let otherAmount = 0;
+                let advanceAmount = 0;
+                let advanceAdjustmentAmount = 0;
+
+                const ref = String(sale.payment_reference || '').trim();
+                if (ref.startsWith('POSPAY:')) {
+                    try {
+                        const lines = JSON.parse(ref.substring(7));
+                        if (Array.isArray(lines)) {
+                            for (const line of lines) {
+                                const method = String(line.method || '').toUpperCase();
+                                const amt = toNumber(line.amount);
+                                if (method === 'CASH') cashAmount += amt;
+                                else if (method === 'CARD') cardAmount += amt;
+                                else if (method === 'UPI') upiAmount += amt;
+                                else if (method === 'ADVANCE_ADDED' || method === 'ADVANCE_DEPOSIT') advanceAmount += amt;
+                                else if (method === 'ADVANCE' || method === 'ADVANCE_ADJUSTMENT' || method === 'ADVANCE_APPLY' || method === 'SUBSCRIPTION') advanceAdjustmentAmount += amt;
+                                else otherAmount += amt;
+                            }
+                        }
+                    } catch (_) {}
+                }
+
+                const totalParsed = cashAmount + cardAmount + upiAmount + otherAmount + advanceAmount + advanceAdjustmentAmount;
+                if (totalParsed === 0 && saleNetRevenue > 0) {
+                    const mode = String(effectivePaymentMode || 'CASH').toUpperCase();
+                    if (mode === 'CASH') cashAmount = saleNetRevenue;
+                    else if (mode === 'CARD') cardAmount = saleNetRevenue;
+                    else if (mode === 'UPI') upiAmount = saleNetRevenue;
+                    else if (mode === 'ADVANCE' || mode === 'ADVANCE_ADJUSTMENT' || mode === 'SUBSCRIPTION') advanceAdjustmentAmount = saleNetRevenue;
+                    else if (mode === 'ADVANCE_ADDED') advanceAmount = saleNetRevenue;
+                    else otherAmount = saleNetRevenue;
+                }
+
                 return {
                     id: sale.id,
                     sale_no: sale.sale_no,
@@ -533,6 +570,12 @@ exports.getSalesReport = async (req, res) => {
                     customer_gstin: sale.customer_gstin,
                     payment_mode: effectivePaymentMode,
                     payment_reference: sale.payment_reference,
+                    cash_amount: roundAmount(cashAmount),
+                    card_amount: roundAmount(cardAmount),
+                    upi_amount: roundAmount(upiAmount),
+                    other_amount: roundAmount(otherAmount),
+                    advance_amount: roundAmount(advanceAmount),
+                    advance_adjustment_amount: roundAmount(advanceAdjustmentAmount),
                     order_type: sale.order_type,
                     sale_source: sale.sale_source || 'Store',
                     billing_country: sale.billing_country,

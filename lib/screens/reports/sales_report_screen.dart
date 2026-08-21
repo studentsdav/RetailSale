@@ -496,8 +496,19 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   double get _billWiseGst5TaxTotal => _billWiseTaxBandsTotal[5]?.taxAmount ?? 0;
   double get _billWiseGst18TaxTotal =>
       _billWiseTaxBandsTotal[18]?.taxAmount ?? 0;
-  double get _billWiseGst40TaxTotal =>
-      _billWiseTaxBandsTotal[40]?.taxAmount ?? 0;
+  double get _billWiseCashTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.cashAmount);
+  double get _billWiseCardTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.cardAmount);
+  double get _billWiseUpiTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.upiAmount);
+  double get _billWiseOtherTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.otherAmount);
+  double get _billWiseAdvAddedTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.advanceAmount);
+  double get _billWiseAdvAdjTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.advanceAdjustmentAmount);
+
   int get _paymentWiseCountTotal =>
       ctrl.paymentModes.fold<int>(0, (sum, entry) => sum + entry.count);
   double get _paymentWiseAmountTotal =>
@@ -2566,6 +2577,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                   const DataColumn(label: Text('Date')),
                                   const DataColumn(label: Text('Bill No')),
                                   const DataColumn(label: Text('Payment')),
+                                  const DataColumn(label: Text('Cash')),
+                                  const DataColumn(label: Text('Card')),
+                                  const DataColumn(label: Text('UPI')),
+                                  const DataColumn(label: Text('Other')),
+                                  const DataColumn(label: Text('Adv Deposit')),
+                                  const DataColumn(label: Text('Adv Adjusted')),
                                   const DataColumn(label: Text('Subtotal')),
                                   const DataColumn(label: Text('Discount')),
                                   const DataColumn(label: Text('Charges')),
@@ -2613,6 +2630,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                         DataCell(
                                             Text(_maskedBillNo(sale.saleNo))),
                                         DataCell(Text(sale.paymentMode)),
+                                        DataCell(Text(_money(sale.cashAmount))),
+                                        DataCell(Text(_money(sale.cardAmount))),
+                                        DataCell(Text(_money(sale.upiAmount))),
+                                        DataCell(Text(_money(sale.otherAmount))),
+                                        DataCell(Text(_money(sale.advanceAmount))),
+                                        DataCell(Text(_money(sale.advanceAdjustmentAmount))),
                                         DataCell(Text(_money(sale.subTotal))),
                                         DataCell(Text(_money(sale.totalDiscount))),
                                         DataCell(Text(_money(sale.chargeTotal))),
@@ -2665,6 +2688,48 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                       ),
                                       const DataCell(Text('')),
                                       const DataCell(Text('')),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseCashTotal),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseCardTotal),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseUpiTotal),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseOtherTotal),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseAdvAddedTotal),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _money(_billWiseAdvAdjTotal),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
                                       DataCell(
                                         Text(
                                           _money(_billWiseSubTotalTotal),

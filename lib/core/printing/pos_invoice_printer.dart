@@ -1923,7 +1923,7 @@ class PosInvoicePrinter {
     }
     final lineDiscount = order.items.fold<double>(
       0,
-      (sum, item) => sum + (item.isTaxInclusive ? item.lineDiscount : (item.lineDiscount * (1 + item.taxPercent / 100))),
+      (sum, item) => sum + item.lineDiscount,
     );
     if (lineDiscount > 0.0009) {
       return lineDiscount;

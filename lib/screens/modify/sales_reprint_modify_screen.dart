@@ -1023,19 +1023,10 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                                 item.taxPercent /
                                                                     100))))
                                             : _selectedOrder!.subTotal;
-                                        final double displayDiscount = anyInclusive
-                                            ? _selectedOrder!.items.fold<
-                                                    double>(
-                                                0,
-                                                (sum, item) =>
-                                                    sum +
-                                                    (item.isTaxInclusive
-                                                        ? item.lineDiscount
-                                                        : (item.lineDiscount *
-                                                            (1 +
-                                                                item.taxPercent /
-                                                                    100))))
-                                            : _selectedOrder!.totalDiscount;
+                                        final double displayDiscount = _selectedOrder!.totalDiscount > 0
+                                            ? _selectedOrder!.totalDiscount
+                                            : _selectedOrder!.items.fold<double>(
+                                                0, (sum, item) => sum + item.lineDiscount);
 
                                         return [
                                           _metricCard('Sub Total',
