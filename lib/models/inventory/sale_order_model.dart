@@ -444,11 +444,18 @@ class SaleOrder {
       taxPercent: parseNum(json['tax_percent']),
       schemeId: json['scheme_id'],
       schemeName: json['scheme_name']?.toString(),
-      schemeUsageMode: json['scheme_usage_mode']?.toString(),
       schemeDiscount: parseNum(json['scheme_discount']),
-      manualDiscountType: json['manual_discount_type']?.toString(),
-      manualDiscountValue: parseNum(json['manual_discount_value']),
-      manualDiscountAmount: parseNum(json['manual_discount_amount']),
+      manualDiscountType: json['manual_discount_type']?.toString() ?? json['manualDiscountType']?.toString() ?? 'AMOUNT',
+      manualDiscountValue: parseNum(json['manual_discount_value'] ?? json['manualDiscountValue']) > 0
+          ? parseNum(json['manual_discount_value'] ?? json['manualDiscountValue'])
+          : (parseNum(json['manual_discount_amount'] ?? json['manualDiscountAmount']) > 0
+              ? parseNum(json['manual_discount_amount'] ?? json['manualDiscountAmount'])
+              : parseNum(json['total_discount'] ?? json['totalDiscount'] ?? json['discount_amount'])),
+      manualDiscountAmount: parseNum(json['manual_discount_amount'] ?? json['manualDiscountAmount']) > 0
+          ? parseNum(json['manual_discount_amount'] ?? json['manualDiscountAmount'])
+          : (parseNum(json['manual_discount_value'] ?? json['manualDiscountValue']) > 0
+              ? parseNum(json['manual_discount_value'] ?? json['manualDiscountValue'])
+              : parseNum(json['total_discount'] ?? json['totalDiscount'] ?? json['discount_amount'])),
       taxableAmount: parseNum(json['taxable_amount']),
       cgstAmount: parseNum(json['cgst_amount']),
       sgstAmount: parseNum(json['sgst_amount']),

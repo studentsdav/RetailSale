@@ -27,7 +27,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   final settingsCtrl = SystemSettingsController();
   final _searchCtrl = TextEditingController();
 
-  DateTime _fromDate = DateTime.now().subtract(const Duration(days: 7));
+  DateTime _fromDate = DateTime.now();
   DateTime _toDate = DateTime.now();
   bool _loading = false;
   String _selectedSourceFilter = 'ALL';

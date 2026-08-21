@@ -482,9 +482,15 @@ class _SaleScreenState extends State<SaleScreen> {
       _customerPhone.text = order.customerPhone ?? '';
       _customerAddress.text = order.customerAddress ?? '';
       _customerGstin.text = order.customerGstin ?? '';
-      _notes.text = order.notes ?? '';
-      _manualDiscountType = order.manualDiscountType ?? 'AMOUNT';
-      _manualDiscountValue.text = order.manualDiscountValue.toStringAsFixed(2);
+      _manualDiscountType = (order.manualDiscountType != null && order.manualDiscountType!.isNotEmpty)
+          ? order.manualDiscountType!
+          : 'AMOUNT';
+      final loadedDisc = order.manualDiscountValue > 0
+          ? order.manualDiscountValue
+          : (order.manualDiscountAmount > 0
+              ? order.manualDiscountAmount
+              : order.totalDiscount);
+      _manualDiscountValue.text = loadedDisc > 0 ? loadedDisc.toStringAsFixed(2) : '';
       _items
         ..clear()
         ..addAll(order.items);
@@ -2792,6 +2798,19 @@ class _SaleScreenState extends State<SaleScreen> {
     for (final row in _customerSubscriptions) {
       final rowItemId = int.tryParse(row['item_id']?.toString() ?? '') ?? 0;
       if (rowItemId != itemId) continue;
+
+      final startDateRaw = row['start_date'];
+      if (startDateRaw != null) {
+        final startDate = DateTime.tryParse(startDateRaw.toString());
+        if (startDate != null) {
+          final startDay = DateTime(startDate.year, startDate.month, startDate.day);
+          final currentDay = DateTime(_saleDate.year, _saleDate.month, _saleDate.day);
+          if (currentDay.isBefore(startDay)) {
+            continue;
+          }
+        }
+      }
+
       hasSubscriptionRow = true;
       final remainingToday = _num(row['today_remaining_qty']);
       if (remainingToday > 0) {
@@ -5363,16 +5382,18 @@ class _SaleScreenState extends State<SaleScreen> {
                                     });
                                   },
                                 ),
-                                ActionChip(
-                                  avatar: const Icon(Icons.restaurant_menu, size: 14, color: Color(0xFF9333EA)),
-                                  label: const Text('Split by Items...', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                                  backgroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF9333EA))),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    _showSplitBillDialog();
-                                  },
-                                ),
+                                if (false) ...[
+                                  ActionChip(
+                                    avatar: const Icon(Icons.restaurant_menu, size: 14, color: Color(0xFF9333EA)),
+                                    label: const Text('Split by Items...', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                    backgroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF9333EA))),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      _showSplitBillDialog();
+                                    },
+                                  ),
+                                ],
                               ],
                             ),
                           ],

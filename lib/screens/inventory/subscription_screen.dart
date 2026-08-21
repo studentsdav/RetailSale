@@ -18,6 +18,18 @@ import '../../controllers/settings/system_settings_controller.dart';
 import '../../models/inventory/item_model.dart';
 import '../../models/inventory/sale_customer_model.dart';
 
+class _SubscriptionItemLine {
+  Item? item;
+  final TextEditingController dailyQtyCtrl;
+
+  _SubscriptionItemLine({this.item, String dailyQty = '1.0'})
+      : dailyQtyCtrl = TextEditingController(text: dailyQty);
+
+  void dispose() {
+    dailyQtyCtrl.dispose();
+  }
+}
+
 class SubscriptionScreen extends StatefulWidget {
   final SaleCustomer? initialCustomer;
   final bool renewMode;
@@ -39,9 +51,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   final _customerPhone = TextEditingController();
   final _customerAddress = TextEditingController();
   final _customerGstin = TextEditingController();
-  final _dailyQty = TextEditingController(text: '2');
+  final _dailyQty = TextEditingController(text: '1.0');
   final _totalPayment = TextEditingController(text: '0');
   final _search = TextEditingController();
+  final List<_SubscriptionItemLine> _additionalItems = [];
 
   DateTime _startDate =
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -76,6 +89,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     _dailyQty.dispose();
     _totalPayment.dispose();
     _search.dispose();
+    for (final line in _additionalItems) {
+      line.dispose();
+    }
     super.dispose();
   }
 
@@ -665,8 +681,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   double get _dailyQtyValue => double.tryParse(_dailyQty.text.trim()) ?? 0;
 
-  double get _baseSubscriptionAmount =>
-      _itemRate * _dailyQtyValue * _payableSubscriptionDays;
+  double get _baseSubscriptionAmount {
+    double total = _itemRate * _dailyQtyValue * _payableSubscriptionDays;
+    for (final line in _additionalItems) {
+      final item = line.item;
+      if (item != null) {
+        final rate = item.retailSalePrice > 0 ? item.retailSalePrice : item.rate;
+        final qty = double.tryParse(line.dailyQtyCtrl.text.trim()) ?? 0;
+        total += rate * qty * _payableSubscriptionDays;
+      }
+    }
+    return total;
+  }
 
   bool get _hasBonusExtension {
     // Keep this independent from computed totals to avoid recursive getter loops.
@@ -977,12 +1003,24 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         ? (paymentLines.first['method']?.toString() ?? 'SUBSCRIPTION')
         : 'SUBSCRIPTION';
 
+    final subscriptionItems = [
+      {
+        'item_id': item.id,
+        'daily_qty': double.tryParse(_dailyQty.text.trim()) ?? 1.0,
+      },
+      ..._additionalItems.where((line) => line.item != null).map((line) => {
+            'item_id': line.item!.id,
+            'daily_qty': double.tryParse(line.dailyQtyCtrl.text.trim()) ?? 1.0,
+          }),
+    ];
+
     final payload = <String, dynamic>{
       'customer_name': _selectedCustomer!.customerName.trim(),
       'customer_phone': _selectedCustomer!.customerPhone.trim(),
       'customer_address': _selectedCustomer!.customerAddress.trim(),
       'customer_gstin': _selectedCustomer!.customerGstin.trim(),
       'item_id': item.id,
+      'subscription_items': subscriptionItems,
       'start_date': _startDate.toIso8601String(),
       'end_date': _endDate.toIso8601String(),
       'daily_allowed_qty': double.tryParse(_dailyQty.text.trim()) ?? 0,
@@ -1308,17 +1346,28 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             style: pw.TextStyle(font: mono, fontSize: 9),
           ),
           pw.Text(
-            'Item    : ${subscription['item_name'] ?? ''}',
-            style: pw.TextStyle(font: mono, fontSize: 9),
-          ),
-          pw.Text(
             'Period  : ${subscription['start_date']} to ${subscription['end_date']}',
             style: pw.TextStyle(font: mono, fontSize: 9),
           ),
-          pw.Text(
-            'DailyQty: ${subscription['daily_allowed_qty'] ?? ''}',
-            style: pw.TextStyle(font: mono, fontSize: 9),
-          ),
+          if ((subscription['created_subscriptions'] as List? ?? const []).isNotEmpty) ...[
+            pw.Text(
+              'Items Subscribed:',
+              style: pw.TextStyle(font: mono, fontSize: 9, fontWeight: pw.FontWeight.bold),
+            ),
+            ...(subscription['created_subscriptions'] as List).map((sub) => pw.Text(
+              ' - ${sub['item_name']} (Daily Qty: ${sub['daily_allowed_qty'] ?? 1})',
+              style: pw.TextStyle(font: mono, fontSize: 8.5),
+            )),
+          ] else ...[
+            pw.Text(
+              'Item    : ${subscription['item_name'] ?? ''}',
+              style: pw.TextStyle(font: mono, fontSize: 9),
+            ),
+            pw.Text(
+              'DailyQty: ${subscription['daily_allowed_qty'] ?? ''}',
+              style: pw.TextStyle(font: mono, fontSize: 9),
+            ),
+          ],
           divider(),
           kvLine(
             'Item Subtotal',
@@ -2650,6 +2699,71 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                           },
                                         ),
                                       ),
+                                       ..._additionalItems.asMap().entries.map((entry) {
+                                         final index = entry.key;
+                                         final line = entry.value;
+                                         return Row(
+                                           mainAxisSize: MainAxisSize.min,
+                                           children: [
+                                             SizedBox(
+                                               width: itemFieldWidth,
+                                               child: DropdownSearch<Item>(
+                                                 selectedItem: line.item,
+                                                 items: (filter, _) async {
+                                                   if (filter.trim().isEmpty) return _ctrl.items;
+                                                   final q = filter.trim().toLowerCase();
+                                                   return _ctrl.items.where((i) =>
+                                                     i.itemName.toLowerCase().contains(q) ||
+                                                     i.itemCode.toLowerCase().contains(q)).toList();
+                                                 },
+                                                 itemAsString: (i) => i.brand.isNotEmpty
+                                                     ? '${i.itemCode} - ${i.itemName} (${i.brand})'
+                                                     : '${i.itemCode} - ${i.itemName}',
+                                                 compareFn: (a, b) => a.id == b.id,
+                                                 popupProps: const PopupProps.menu(showSearchBox: true),
+                                                 decoratorProps: DropDownDecoratorProps(
+                                                   decoration: InputDecoration(
+                                                     labelText: 'Additional Item #${index + 2}',
+                                                     hintText: 'Search item',
+                                                   ),
+                                                 ),
+                                                 onChanged: (val) {
+                                                   setState(() => line.item = val);
+                                                   _syncSuggestedPaymentAmount(force: true);
+                                                 },
+                                               ),
+                                             ),
+                                             const SizedBox(width: 8),
+                                             SizedBox(
+                                               width: compactFieldWidth - 36,
+                                               child: TextField(
+                                                 controller: line.dailyQtyCtrl,
+                                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                 decoration: const InputDecoration(labelText: 'Daily Qty'),
+                                                 onChanged: (_) => _syncSuggestedPaymentAmount(force: true),
+                                               ),
+                                             ),
+                                             IconButton(
+                                               icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                               onPressed: () {
+                                                 setState(() {
+                                                   _additionalItems.removeAt(index).dispose();
+                                                 });
+                                                 _syncSuggestedPaymentAmount(force: true);
+                                               },
+                                             ),
+                                           ],
+                                         );
+                                       }),
+                                       OutlinedButton.icon(
+                                         icon: const Icon(Icons.add, size: 18),
+                                         label: const Text('+ Add Another Item'),
+                                         onPressed: () {
+                                           setState(() {
+                                             _additionalItems.add(_SubscriptionItemLine());
+                                           });
+                                         },
+                                       ),
                                       SizedBox(
                                         width: compactFieldWidth,
                                         child: TextField(

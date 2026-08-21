@@ -6384,3 +6384,145 @@ SyntaxError: Invalid destructuring assignment target
 2026-08-21T15:16:55.356Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-21T15:16:55.450Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-21T15:16:55.487Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:30:00.079Z [INFO] Hourly backup job started.
+2026-08-21T15:30:00.223Z [INFO] Hourly backup job started.
+2026-08-21T15:30:00.253Z [INFO] Hourly backup job started.
+2026-08-21T15:30:01.200Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T15:30:01.201Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T15:30:01.209Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T15:30:01.210Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T15:30:01.215Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T15:30:01.216Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T15:30:01.280Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-21T15:30:01.385Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-21T15:30:01.397Z [INFO] Hourly backup job execution finished.
+2026-08-21T15:30:01.415Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-21T15:30:01.425Z [INFO] Hourly backup job execution finished.
+2026-08-21T15:30:08.442Z [INFO] Cloud upload sequence completed successfully.
+2026-08-21T15:30:08.452Z [INFO] Hourly backup job execution finished.
+2026-08-21T15:32:36.015Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:32:36.147Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:32:36.158Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:36:15.487Z [ERROR] [FATAL] Uncaught Exception: Missing catch or finally after try
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\sales\sales.controller.js:4203
+    }
+    ^
+
+SyntaxError: Missing catch or finally after try
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\sales.routes.js:4:14)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-21T15:36:20.537Z [ERROR] [FATAL] Uncaught Exception: Missing catch or finally after try
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\sales\sales.controller.js:4208
+    }
+    ^
+
+SyntaxError: Missing catch or finally after try
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\sales.routes.js:4:14)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-21T15:39:09.777Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:39:09.869Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:39:09.875Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:45:02.220Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:45:02.381Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:45:02.396Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:57:01.853Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:57:01.927Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T15:57:01.942Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:00:38.317Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-08-21T16:10:51.694Z [ERROR] [FATAL] Uncaught Exception: Identifier 'roundOffAmount' has already been declared
+D:\inventorynew\RetailSale new\RetailSale\backend\controllers\sales\sales.controller.js:2932
+    const roundOffAmount = resolvedRoundOff;
+          ^
+
+SyntaxError: Identifier 'roundOffAmount' has already been declared
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\sales.routes.js:4:14)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-21T16:11:56.768Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:11:56.845Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:11:56.874Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:15:18.204Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:15:18.264Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:15:18.275Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:30:00.065Z [INFO] Hourly backup job started.
+2026-08-21T16:30:00.327Z [INFO] Hourly backup job started.
+2026-08-21T16:30:00.342Z [INFO] Hourly backup job started.
+2026-08-21T16:30:01.063Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T16:30:01.066Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T16:30:01.077Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T16:30:01.078Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T16:30:01.130Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T16:30:01.131Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T16:30:01.150Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-21T16:30:01.158Z [INFO] Hourly backup job execution finished.
+2026-08-21T16:30:01.167Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-21T16:30:01.343Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-21T16:30:01.354Z [INFO] Hourly backup job execution finished.
+2026-08-21T16:30:08.892Z [INFO] Cloud upload sequence completed successfully.
+2026-08-21T16:30:08.900Z [INFO] Hourly backup job execution finished.
+2026-08-21T16:39:19.246Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:39:19.295Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:39:19.304Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:58:31.062Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:58:31.111Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T16:58:31.121Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:07:21.281Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:07:21.325Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:07:21.334Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:16:11.343Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:16:11.394Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:16:11.404Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:26:53.297Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:26:53.385Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:26:53.402Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:30:00.051Z [INFO] Hourly backup job started.
+2026-08-21T17:30:00.079Z [INFO] Hourly backup job started.
+2026-08-21T17:30:00.101Z [INFO] Hourly backup job started.
+2026-08-21T17:30:00.754Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T17:30:00.757Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T17:30:00.771Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T17:30:00.773Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T17:30:00.785Z [INFO] Backup created. File size: 0.10 MB
+2026-08-21T17:30:00.786Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-21T17:30:00.877Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-21T17:30:00.887Z [INFO] Hourly backup job execution finished.
+2026-08-21T17:30:00.896Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-21T17:30:00.911Z [INFO] Hourly backup job execution finished.
+2026-08-21T17:30:00.924Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-21T17:30:07.191Z [INFO] Cloud upload sequence completed successfully.
+2026-08-21T17:30:07.203Z [INFO] Hourly backup job execution finished.
+2026-08-21T17:33:03.310Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:33:03.364Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:33:03.373Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:33:50.659Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:33:50.738Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:33:50.748Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:41:47.566Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:41:47.657Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:41:47.669Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:56:48.952Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:56:49.045Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-21T17:56:49.061Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

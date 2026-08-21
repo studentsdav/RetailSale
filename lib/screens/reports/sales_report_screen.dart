@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:excel/excel.dart' as exc;
@@ -513,61 +514,107 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       ctrl.paymentModes.fold<int>(0, (sum, entry) => sum + entry.count);
   double get _paymentWiseAmountTotal =>
       ctrl.paymentModes.fold<double>(0, (sum, entry) => sum + entry.amount);
+  List<Map<String, dynamic>> _extractPaymentSplits(SalesReport sale) {
+    final List<Map<String, dynamic>> splits = [];
+    if (sale.paymentReference != null && sale.paymentReference!.startsWith('POSPAY:')) {
+      try {
+        final decoded = jsonDecode(sale.paymentReference!.substring(7));
+        if (decoded is List) {
+          for (final row in decoded) {
+            final mode = (row['method'] ?? 'CASH').toString().toUpperCase();
+            final amt = double.tryParse(row['amount']?.toString() ?? '') ?? 0;
+            if (amt > 0.009) {
+              splits.add({'mode': mode, 'amount': amt});
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (splits.isEmpty) {
+      if (sale.cashAmount > 0.009) splits.add({'mode': 'CASH', 'amount': sale.cashAmount});
+      if (sale.cardAmount > 0.009) splits.add({'mode': 'CARD', 'amount': sale.cardAmount});
+      if (sale.upiAmount > 0.009) splits.add({'mode': 'UPI', 'amount': sale.upiAmount});
+      if (sale.otherAmount > 0.009) splits.add({'mode': 'OTHER', 'amount': sale.otherAmount});
+      if (sale.advanceAmount > 0.009) splits.add({'mode': 'ADVANCE_DEPOSIT', 'amount': sale.advanceAmount});
+      if (sale.advanceAdjustmentAmount > 0.009) splits.add({'mode': 'ADVANCE_ADJUSTMENT', 'amount': sale.advanceAdjustmentAmount});
+      if (sale.subscription > 0.009 && sale.paymentMode != 'SUBSCRIPTION') splits.add({'mode': 'SUBSCRIPTION', 'amount': sale.subscription});
+    }
+
+    final double paidSum = splits.fold<double>(0, (sum, item) => sum + (item['amount'] as double));
+    final double rem = sale.netAmount - paidSum;
+    if (rem > 0.009) {
+      final String mode = (sale.paymentMode.isNotEmpty && sale.paymentMode != 'SPLIT') ? sale.paymentMode : 'CREDIT';
+      splits.add({'mode': mode, 'amount': rem});
+    }
+
+    if (splits.isEmpty && sale.netAmount > 0) {
+      splits.add({
+        'mode': (sale.paymentMode.isNotEmpty && sale.paymentMode != 'SPLIT') ? sale.paymentMode : 'CASH',
+        'amount': sale.netAmount
+      });
+    }
+    return splits;
+  }
+
   List<PaymentBreakdownRow> get _paymentBreakdownRows {
     final List<PaymentBreakdownRow> rows = [];
     for (final sale in _billWiseSales) {
-      final double subAmount = sale.subscription;
-      final double cashAmount = sale.netAmount - subAmount;
-
-      if (sale.paymentMode == 'SUBSCRIPTION') {
-        rows.add(PaymentBreakdownRow(
-          saleDate: sale.saleDate,
-          saleNo: sale.saleNo,
-          paymentMode: 'SUBSCRIPTION',
-          taxedSales: _billWiseTaxSaleValue(sale),
-          nonTaxSales: _billWiseNonTaxSaleValue(sale),
-          tax: sale.totalTax,
-          netAmount: sale.netAmount,
-        ));
-      } else if (subAmount > 0) {
-        final double totalBillNet = sale.netAmount;
-        final double subRatio = totalBillNet > 0 ? (subAmount / totalBillNet) : 0;
-        final double cashRatio = 1.0 - subRatio;
+      final splits = _extractPaymentSplits(sale);
+      final double totalBillNet = sale.netAmount;
+      for (final split in splits) {
+        final String mode = split['mode'] as String;
+        final double amt = split['amount'] as double;
+        final double ratio = totalBillNet > 0 ? (amt / totalBillNet) : 0;
 
         rows.add(PaymentBreakdownRow(
           saleDate: sale.saleDate,
           saleNo: sale.saleNo,
-          paymentMode: 'SUBSCRIPTION',
-          taxedSales: _billWiseTaxSaleValue(sale) * subRatio,
-          nonTaxSales: _billWiseNonTaxSaleValue(sale) * subRatio,
-          tax: sale.totalTax * subRatio,
-          netAmount: subAmount,
-        ));
-
-        if (cashAmount > 0) {
-          rows.add(PaymentBreakdownRow(
-            saleDate: sale.saleDate,
-            saleNo: sale.saleNo,
-            paymentMode: sale.paymentMode,
-            taxedSales: _billWiseTaxSaleValue(sale) * cashRatio,
-            nonTaxSales: _billWiseNonTaxSaleValue(sale) * cashRatio,
-            tax: sale.totalTax * cashRatio,
-            netAmount: cashAmount,
-          ));
-        }
-      } else {
-        rows.add(PaymentBreakdownRow(
-          saleDate: sale.saleDate,
-          saleNo: sale.saleNo,
-          paymentMode: sale.paymentMode,
-          taxedSales: _billWiseTaxSaleValue(sale),
-          nonTaxSales: _billWiseNonTaxSaleValue(sale),
-          tax: sale.totalTax,
-          netAmount: sale.netAmount,
+          paymentMode: mode,
+          taxedSales: _billWiseTaxSaleValue(sale) * ratio,
+          nonTaxSales: _billWiseNonTaxSaleValue(sale) * ratio,
+          tax: sale.totalTax * ratio,
+          netAmount: amt,
         ));
       }
     }
     return rows;
+  }
+
+  List<Map<String, dynamic>> get _uniquePaymentModeSummaries {
+    final Map<String, double> totals = {};
+    for (final row in _paymentBreakdownRows) {
+      final mode = row.paymentMode.toUpperCase();
+      totals[mode] = (totals[mode] ?? 0) + row.netAmount;
+    }
+    if (totals.isEmpty) {
+      for (final entry in ctrl.paymentModes) {
+        if (entry.amount > 0) {
+          totals[entry.key.toUpperCase()] = entry.amount;
+        }
+      }
+    }
+    final List<Map<String, dynamic>> list = [];
+    totals.forEach((modeKey, amount) {
+      if (amount.abs() > 0.009) {
+        String label = modeKey;
+        if (modeKey == 'CASH') label = 'CASH';
+        else if (modeKey == 'UPI') label = 'UPI';
+        else if (modeKey == 'CARD') label = 'CARD';
+        else if (modeKey == 'CREDIT') label = 'CREDIT';
+        else if (modeKey == 'ADVANCE_DEPOSIT') label = 'ADVANCE DEPOSIT';
+        else if (modeKey == 'ADVANCE_ADJUSTMENT') label = 'ADVANCE ADJUSTED';
+        else if (modeKey == 'SUBSCRIPTION') label = 'SUBSCRIPTION';
+        else label = modeKey;
+
+        list.add({
+          'key': modeKey,
+          'label': label,
+          'amount': amount,
+        });
+      }
+    });
+    return list;
   }
 
   double get _paymentReportTaxSaleTotal => _paymentBreakdownRows.fold<double>(
@@ -2180,14 +2227,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           Wrap(
             spacing: 12,
             runSpacing: 12,
-            children: ctrl.paymentModes
+            children: _uniquePaymentModeSummaries
                 .map(
                   (entry) => SizedBox(
                     width: 190,
                     child: _metricCard(
-                      entry.label,
-                      entry.amount,
-                      _paymentColor(entry.key),
+                      entry['label'] as String,
+                      entry['amount'] as double,
+                      _paymentColor(entry['key'] as String),
                     ),
                   ),
                 )
@@ -3653,6 +3700,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         return const Color(0xFF0F766E);
       case 'CREDIT':
         return const Color(0xFFDC2626);
+      case 'ADVANCE_DEPOSIT':
+      case 'ADVANCE':
+        return const Color(0xFFD97706);
+      case 'ADVANCE_ADJUSTMENT':
+        return const Color(0xFF0284C7);
+      case 'SUBSCRIPTION':
+        return const Color(0xFF0D9488);
       default:
         return const Color(0xFF475569);
     }

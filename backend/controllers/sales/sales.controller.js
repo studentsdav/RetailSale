@@ -1348,11 +1348,19 @@ function buildSubscriptionMetrics(subscription, consumptions = []) {
     const creditedAmount = balanceDelta < 0 ? Math.abs(balanceDelta) : 0;
     const outstandingAmount = balanceDelta > 0 ? balanceDelta : 0;
 
+    const startDay = dateOnly(subscription?.start_date);
+    const elapsedDays = (today && startDay && today >= startDay)
+        ? Math.min(totalDays, diffDaysInclusive(startDay, today))
+        : 0;
+    const consumedDaysCount = activeDays.size;
+    const missedDaysCount = Math.max(0, elapsedDays - consumedDaysCount);
+    const daysLeftCount = Math.max(0, totalDays - consumedDaysCount - missedDaysCount);
+
     return {
         total_days: totalDays,
-        consumed_days: activeDays.size,
-        missed_days: Math.max(totalDays - activeDays.size, 0),
-        days_left: today && endDay && endDay >= today ? diffDaysInclusive(today, endDay) : 0,
+        consumed_days: consumedDaysCount,
+        missed_days: missedDaysCount,
+        days_left: daysLeftCount,
         consumed_qty: Number(consumedQty.toFixed(2)),
         actual_value: Number(actualValue.toFixed(2)),
         gross_covered_value: Number(consumedValue.toFixed(2)),
@@ -2431,9 +2439,7 @@ function buildSalePaymentLedgerEntries({
             party_name: header.customer_name || header.customer_phone || 'Walk-in Customer',
             payment_method: line.method,
             amount_in: lineAmount,
-            notes: balanceDue > 0
-                ? `Sale ${sale.sale_no} created with outstanding ${balanceDue.toFixed(2)}`
-                : `Payment received for sale ${sale.sale_no}`,
+            notes: `Payment received for sale ${sale.sale_no}`,
             created_by
         });
     }
@@ -2549,7 +2555,7 @@ async function createSaleVersion({
     const status = header.status || 'COMPLETED';
     const voucherCode = String(header.voucher_code || '').trim().toUpperCase();
     const paymentMode = String(header.payment_mode || 'CASH').trim().toUpperCase();
-    const roundOffAmount = toAmount(header.round_off_amount || 0);
+    let roundOffAmount = toAmount(header.round_off_amount || 0);
     const netAmount = toAmount(header.net_amount);
     const invoiceDiscount = Math.max(0, toAmount(invoiceDiscountAmount || header.total_discount || 0));
     const amountPaid = toAmount(
@@ -2918,11 +2924,29 @@ async function createSaleVersion({
 
     const itemDiscountSum = salesItemRows.reduce((sum, r) => sum + toAmount(r.line_discount || 0), 0);
     const remainingUnappliedDiscount = Math.max(0, invoiceDiscount - itemDiscountSum);
-    const derivedNetAmount = Math.max(0, itemsLineTotal + headerChargeTotal + headerChargeTaxTotal + roundOffAmount - remainingUnappliedDiscount - advanceSubscriptionDiscount);
-    const effectiveChangeAmount = header.change_amount != null ? Math.max(toAmount(header.change_amount), 0) : (paymentMode === 'CASH' ? Math.max(toAmount(amountPaid - derivedNetAmount), 0) : 0);
-    const effectiveBalanceDue = (paymentMode === 'CASH' && amountPaid >= derivedNetAmount)
+    const unroundedNet = Math.max(0, itemsLineTotal + headerChargeTotal + headerChargeTaxTotal - remainingUnappliedDiscount - advanceSubscriptionDiscount);
+    
+    let resolvedRoundOff = toAmount(header.round_off_amount ?? header.roundOffAmount ?? 0);
+    if (resolvedRoundOff === 0) {
+        if (header.net_amount != null || header.netAmount != null) {
+            const targetNet = toAmount(header.net_amount ?? header.netAmount);
+            resolvedRoundOff = toAmount(targetNet - unroundedNet);
+        } else {
+            resolvedRoundOff = toAmount(Math.round(unroundedNet) - unroundedNet);
+        }
+    }
+
+    const derivedNetAmount = Math.max(0, toAmount(unroundedNet + resolvedRoundOff));
+    roundOffAmount = resolvedRoundOff;
+
+    const rawDiff = derivedNetAmount - amountPaid;
+    const effectiveBalanceDue = (paymentMode !== 'CREDIT' && rawDiff <= 0.50)
         ? 0
-        : Math.max(toAmount(derivedNetAmount - Math.min(amountPaid, derivedNetAmount)), 0);
+        : Math.max(toAmount(rawDiff), 0);
+
+    const effectiveChangeAmount = header.change_amount != null
+        ? Math.max(toAmount(header.change_amount), 0)
+        : (paymentMode === 'CASH' && amountPaid > derivedNetAmount ? Math.max(toAmount(amountPaid - derivedNetAmount), 0) : 0);
 
 
     const saleCreateData = {
@@ -2934,6 +2958,7 @@ async function createSaleVersion({
         order_type: header.order_type || header.orderType || 'STORE',
         sale_source: header.sale_source || header.saleSource || header.order_type || header.orderType || 'STORE',
         payment_mode: paymentMode,
+        payment_reference: header.payment_reference || header.paymentReference || null,
         initial_amount_paid: amountPaid,
         amount_paid: amountPaid,
         change_amount: effectiveChangeAmount,
@@ -2948,8 +2973,10 @@ async function createSaleVersion({
         tax_breakup: adjustedTaxBreakup,
         charges: headerCharges,
         charge_total: headerChargeTotal,
-        charge_tax_total: headerChargeTaxTotal,
         total_discount: derivedTotalDiscount,
+        manual_discount_type: header.manual_discount_type || header.manualDiscountType || 'AMOUNT',
+        manual_discount_value: toAmount(header.manual_discount_value ?? header.manualDiscountValue ?? derivedTotalDiscount),
+        manual_discount_amount: toAmount(header.manual_discount_amount ?? header.manualDiscountAmount ?? derivedTotalDiscount),
         round_off_amount: roundOffAmount,
         net_amount: derivedNetAmount,
         status,
@@ -3868,9 +3895,14 @@ exports.createSale = async (req, res) => {
         });
     } catch (error) {
         await t.rollback();
-        res.status(error.status || 500).json({
+        let errMessage = error.message;
+        if (error.name === 'SequelizeValidationError' || (error.errors && Array.isArray(error.errors) && error.errors.length > 0)) {
+            errMessage = error.errors.map(e => e.message || String(e.path ? `${e.path}: ${e.message}` : e)).join(', ');
+        }
+        res.status(error.status || 400).json({
             success: false,
-            error: error.message
+            error: errMessage,
+            message: errMessage
         });
     }
 };
@@ -3990,6 +4022,16 @@ exports.modifySale = async (req, res) => {
             ? await allocateItemAdvanceConsumption({ req, header: headerForModify, items: saleItems, transaction: t })
             : { items: saleItems, advanceAppliedAmount: 0 };
 
+        const supersededSaleNo = `${currentSale.sale_no}#v${currentSale.version_no || 1}`;
+        await currentSale.update({
+            sale_no: supersededSaleNo,
+            is_latest: false,
+            is_deleted: true,
+            modified_by: req.user.id,
+            modified_at: new Date(),
+            modification_note: headerForModify.modification_note || 'Superseded by modified bill version'
+        }, { transaction: t });
+
         const newSale = await createSaleVersion({
             req,
             transaction: t,
@@ -4009,12 +4051,7 @@ exports.modifySale = async (req, res) => {
         });
 
         await currentSale.update({
-            is_latest: false,
-            is_deleted: true,
-            replaced_by_sale_id: newSale.id,
-            modified_by: req.user.id,
-            modified_at: new Date(),
-            modification_note: headerForModify.modification_note || 'Superseded by modified bill version'
+            replaced_by_sale_id: newSale.id
         }, { transaction: t });
 
         if (status === 'COMPLETED' && affectStock) {
@@ -4193,9 +4230,14 @@ exports.modifySale = async (req, res) => {
         });
     } catch (error) {
         await t.rollback();
-        res.status(error.status || 500).json({
+        let errMessage = error.message;
+        if (error.name === 'SequelizeValidationError' || (error.errors && Array.isArray(error.errors) && error.errors.length > 0)) {
+            errMessage = error.errors.map(e => e.message || String(e.path ? `${e.path}: ${e.message}` : e)).join(', ');
+        }
+        res.status(error.status || 400).json({
             success: false,
-            error: error.message
+            error: errMessage,
+            message: errMessage
         });
     }
 };
@@ -5338,6 +5380,13 @@ exports.listSubscriptions = async (req, res) => {
             }
             const advanceSummary = await getSubscriptionItemAdvanceSummary(req, subscription);
             const cashAdvanceSummary = await getSubscriptionCustomerAdvanceSummary(req, subscription);
+            const isSettled = String(subscription.status || '').toUpperCase() === 'SETTLED' || String(subscription.status || '').toUpperCase() === 'CANCELLED';
+            const origAmount = advanceSummary.original_amount || cashAdvanceSummary.original_amount || 0;
+            const consumedAmount = isSettled ? origAmount : (advanceSummary.consumed_amount || cashAdvanceSummary.consumed_amount || 0);
+            const remainingAmount = isSettled ? 0 : ((advanceSummary.available_amount != null && advanceSummary.original_qty > 0) ? advanceSummary.available_amount : (cashAdvanceSummary.available_amount || 0));
+            const remainingQty = isSettled ? 0 : advanceSummary.available_qty;
+            const consumedQty = isSettled ? advanceSummary.original_qty : advanceSummary.consumed_qty;
+
             data.push({
                 ...subscription.toJSON(),
                 active_subscription: subscription.active_subscription === true && subscription.status === 'ACTIVE',
@@ -5347,12 +5396,11 @@ exports.listSubscriptions = async (req, res) => {
                 },
                 advance_summary: advanceSummary,
                 advance_original_qty: advanceSummary.original_qty,
-                advance_consumed_qty: advanceSummary.consumed_qty,
-                advance_remaining_qty: advanceSummary.available_qty,
-                advance_rate: advanceSummary.rate,
-                advance_original_amount: cashAdvanceSummary.original_amount || advanceSummary.original_amount,
-                advance_consumed_amount: cashAdvanceSummary.consumed_amount || advanceSummary.consumed_amount,
-                advance_remaining_amount: cashAdvanceSummary.available_amount || advanceSummary.available_amount,
+                advance_consumed_qty: consumedQty,
+                advance_remaining_qty: remainingQty,
+                advance_original_amount: origAmount,
+                advance_consumed_amount: consumedAmount,
+                advance_remaining_amount: remainingAmount,
                 ...buildSubscriptionMetrics(subscription, consumptions),
                 search_index: haystack
             });
@@ -5392,6 +5440,12 @@ exports.listCustomerSubscriptions = async (req, res) => {
         const rows = [];
         const remainingAssignedByItem = new Set();
         for (const subscription of subscriptions) {
+            const startDateStr = formatDateLocalYmd(subscription.start_date);
+            const endDateStr = subscription.end_date ? formatDateLocalYmd(subscription.end_date) : null;
+            const isStarted = !startDateStr || asOfDay >= startDateStr;
+            const isEnded = endDateStr ? asOfDay > endDateStr : false;
+            const isApplicableToday = isStarted && !isEnded && subscription.status === 'ACTIVE' && subscription.active_subscription === true;
+
             const coveredRows = await loadSubscriptionConsumptionRows(req, subscription);
             const advanceSummary = await getSubscriptionItemAdvanceSummary(req, subscription);
             const cashAdvanceSummary = await getSubscriptionCustomerAdvanceSummary(req, subscription);
@@ -5403,13 +5457,20 @@ exports.listCustomerSubscriptions = async (req, res) => {
                 today
             );
             const dailyLimit = toAmount(subscription.daily_allowed_qty);
-            const todayRemainingForItem = Math.max(dailyLimit - todayConsumedQty, 0);
+            const todayRemainingForItem = isApplicableToday ? Math.max(dailyLimit - todayConsumedQty, 0) : 0;
             const assignKey = `${itemId}`;
             const alreadyAssignedForItem = remainingAssignedByItem.has(assignKey);
-            const todayRemainingQty = alreadyAssignedForItem ? 0 : todayRemainingForItem;
-            if (!alreadyAssignedForItem) {
+            const todayRemainingQty = (alreadyAssignedForItem || !isApplicableToday) ? 0 : todayRemainingForItem;
+            if (!alreadyAssignedForItem && isApplicableToday) {
                 remainingAssignedByItem.add(assignKey);
             }
+            const isSettled = String(subscription.status || '').toUpperCase() === 'SETTLED' || String(subscription.status || '').toUpperCase() === 'CANCELLED';
+            const origAmount = advanceSummary.original_amount || cashAdvanceSummary.original_amount || 0;
+            const consumedAmount = isSettled ? origAmount : (advanceSummary.consumed_amount || cashAdvanceSummary.consumed_amount || 0);
+            const remainingAmount = isSettled ? 0 : ((advanceSummary.available_amount != null && advanceSummary.original_qty > 0) ? advanceSummary.available_amount : (cashAdvanceSummary.available_amount || 0));
+            const remainingQty = isSettled ? 0 : advanceSummary.available_qty;
+            const consumedQty = isSettled ? advanceSummary.original_qty : advanceSummary.consumed_qty;
+
             rows.push({
                 ...subscription.toJSON(),
                 scheme_totals: {
@@ -5418,17 +5479,16 @@ exports.listCustomerSubscriptions = async (req, res) => {
                 },
                 advance_summary: advanceSummary,
                 advance_original_qty: advanceSummary.original_qty,
-                advance_consumed_qty: advanceSummary.consumed_qty,
-                advance_remaining_qty: advanceSummary.available_qty,
-                advance_rate: advanceSummary.rate,
-                advance_original_amount: cashAdvanceSummary.original_amount || advanceSummary.original_amount,
-                advance_consumed_amount: cashAdvanceSummary.consumed_amount || advanceSummary.consumed_amount,
-                advance_remaining_amount: cashAdvanceSummary.available_amount || advanceSummary.available_amount,
+                advance_consumed_qty: consumedQty,
+                advance_remaining_qty: remainingQty,
+                advance_original_amount: origAmount,
+                advance_consumed_amount: consumedAmount,
+                advance_remaining_amount: remainingAmount,
                 today_consumed_qty: todayConsumedQty,
                 today_remaining_qty: todayRemainingQty,
                 daily_allowed_qty: dailyLimit,
                 consumption: coveredRows.map((row) => row.toJSON()),
-                active_subscription: subscription.active_subscription === true && subscription.status === 'ACTIVE',
+                active_subscription: isApplicableToday,
                 ...buildSubscriptionMetrics(subscription, coveredRows)
             });
         }
@@ -5612,117 +5672,129 @@ exports.createSubscription = async (req, res) => {
             (baseTaxableFromBody + derivedTaxAmount)
         );
 
-        const subscription = await req.propertyDb.models.milk_subscriptions.create({
-            outlet_id: req.user.outlet_id,
-            customer_name: identity.customer_name || null,
-            customer_phone: identity.customer_phone || null,
-            customer_gstin: identity.customer_gstin || null,
-            customer_address: String(req.body.customer_address || '').trim() || null,
-            item_id: itemId,
-            item_name: item.item_name,
-            start_date: startDate,
-            end_date: endDate,
-            daily_allowed_qty: toRoundedAmount(req.body.daily_allowed_qty ?? req.body.dailyAllowedQty),
-            total_payment_amount: totalPaymentAmount,
-            scheme_discount_amount: schemeTotals.scheme_discount_amount,
-            bonus_qty: schemeTotals.bonus_qty + bonusQty,
-            selected_schemes: selectedSchemes,
-            // App self-subscriptions need to flow through the home-delivery job.
-            // Retailer-created records still override this explicitly from the UI.
-            delivery_type: String(req.body.delivery_type || 'HOME').trim().toUpperCase(),
-            delivery_charge_amount: toRoundedAmount(req.body.delivery_charge_amount ?? req.body.deliveryChargeAmount ?? 0.0),
-            delivery_charge_gst_percent: toRoundedAmount(req.body.delivery_charge_gst_percent ?? req.body.deliveryChargeGstPercent ?? 0.0),
-            delivery_charge_tax_amount: toRoundedAmount(req.body.delivery_charge_tax_amount ?? req.body.deliveryChargeTaxAmount ?? 0.0),
-            status: 'ACTIVE',
-            active_subscription: true,
-            created_by: req.user.id,
-            updated_by: req.user.id
-        }, { transaction: t });
+        const reqItems = Array.isArray(req.body.items || req.body.subscription_items) && (req.body.items || req.body.subscription_items).length > 0
+            ? (req.body.items || req.body.subscription_items)
+            : [{ item_id: itemId, daily_qty: toRoundedAmount(req.body.daily_allowed_qty ?? req.body.dailyAllowedQty) }];
 
+        const totalSubscriptionDays = Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)) + 1);
+        const payableDays = schemeTotals.bonus_qty > 0 ? Math.max(0, totalSubscriptionDays - 1) : totalSubscriptionDays;
         const todayTxnDate = formatDateLocalYmd(new Date());
-
-        const prepaidAmount = totalPaymentAmount;
         const paymentMode = String(req.body.payment_mode || req.body.paymentMode || 'SUBSCRIPTION').trim().toUpperCase();
-        const prepaidTaxableAmount = baseTaxableFromBody > 0 ? baseTaxableFromBody : prepaidAmount;
-        const prepaidQty = itemRate > 0 ? toRoundedAmount(prepaidTaxableAmount / itemRate) : 0;
-          if (prepaidAmount > 0 && prepaidQty > 0) {
-              await req.propertyDb.models.customer_advances.create({
-                  outlet_id: req.user.outlet_id,
-                  source_sale_id: null,
-                  customer_name: identity.customer_name || null,
-                  customer_phone: identity.customer_phone || null,
-                  customer_gstin: identity.customer_gstin || null,
-                advance_date: todayTxnDate,
-                original_amount: prepaidAmount,
-                available_amount: prepaidAmount,
-                payment_mode: paymentMode,
-                reference_no: getSubscriptionReferenceNo(subscription.id),
-                note: `Subscription prepaid amount for ${item.item_name}`,
+
+        const createdSubscriptions = [];
+        let primarySubscription = null;
+
+        for (let idx = 0; idx < reqItems.length; idx++) {
+            const subItem = reqItems[idx];
+            const subItemId = Number(subItem.item_id || subItem.itemId || itemId);
+            if (!Number.isFinite(subItemId) || subItemId <= 0) continue;
+
+            const subDailyQty = toRoundedAmount(subItem.daily_qty ?? subItem.dailyQty ?? subItem.daily_allowed_qty ?? 1.0);
+            const subItemMaster = (subItemId === itemId && item)
+                ? item
+                : (await req.propertyDb.models.item_master.findOne({
+                    where: { id: subItemId, outlet_id: req.user.outlet_id },
+                    transaction: t
+                }) || item);
+
+            const subItemRate = toRoundedAmount(subItemMaster.retail_sale_price || subItemMaster.rate || 0);
+            const subTaxPercent = toRoundedAmount(subItemMaster.tax_percent || 0);
+            const subBaseAmount = toRoundedAmount(subItemRate * subDailyQty * payableDays);
+            const subTaxAmount = toRoundedAmount((subBaseAmount * subTaxPercent) / 100);
+            const subTotalPayment = reqItems.length === 1 && totalPaymentAmount > 0
+                ? totalPaymentAmount
+                : toRoundedAmount(subBaseAmount + subTaxAmount);
+
+            const subRecord = await req.propertyDb.models.milk_subscriptions.create({
+                outlet_id: req.user.outlet_id,
+                customer_name: identity.customer_name || null,
+                customer_phone: identity.customer_phone || null,
+                customer_gstin: identity.customer_gstin || null,
+                customer_address: String(req.body.customer_address || '').trim() || null,
+                item_id: subItemId,
+                item_name: subItemMaster.item_name,
+                start_date: startDate,
+                end_date: endDate,
+                daily_allowed_qty: subDailyQty,
+                total_payment_amount: subTotalPayment,
+                scheme_discount_amount: idx === 0 ? schemeTotals.scheme_discount_amount : 0,
+                bonus_qty: idx === 0 ? (schemeTotals.bonus_qty + bonusQty) : 0,
+                selected_schemes: idx === 0 ? selectedSchemes : [],
+                delivery_type: String(req.body.delivery_type || 'HOME').trim().toUpperCase(),
+                delivery_charge_amount: idx === 0 ? toRoundedAmount(req.body.delivery_charge_amount ?? req.body.deliveryChargeAmount ?? 0.0) : 0.0,
+                delivery_charge_gst_percent: idx === 0 ? toRoundedAmount(req.body.delivery_charge_gst_percent ?? req.body.deliveryChargeGstPercent ?? 0.0) : 0.0,
+                delivery_charge_tax_amount: idx === 0 ? toRoundedAmount(req.body.delivery_charge_tax_amount ?? req.body.deliveryChargeTaxAmount ?? 0.0) : 0.0,
+                status: 'ACTIVE',
+                active_subscription: true,
                 created_by: req.user.id,
                 updated_by: req.user.id
             }, { transaction: t });
 
-              await req.propertyDb.models.customer_item_advances.create({
-                  outlet_id: req.user.outlet_id,
-                  source_sale_id: null,
-                  customer_name: identity.customer_name || null,
-                  customer_phone: identity.customer_phone || null,
-                  customer_gstin: identity.customer_gstin || null,
-                item_id: item.id,
-                advance_date: todayTxnDate,
-                  original_qty: prepaidQty,
-                  available_qty: prepaidQty,
-                  rate: itemRate,
-                  note: `Subscription #${subscription.id} prepaid qty for ${item.item_name}`,
-                  created_by: req.user.id,
-                  updated_by: req.user.id
-              }, { transaction: t });
+            if (idx === 0) primarySubscription = subRecord;
 
-            await createLedgerEntry({
-                db: req.propertyDb,
-                outlet_id: req.user.outlet_id,
-                txn_date: todayTxnDate,
-                transaction_type: 'CUSTOMER_ADVANCE',
-                reference_type: 'SUBSCRIPTION',
-                reference_id: subscription.id,
-                reference_no: getSubscriptionReferenceNo(subscription.id),
-                party_name: identity.customer_name || identity.customer_phone || 'Subscription Customer',
-                payment_method: paymentMode,
-                amount_in: prepaidAmount,
-                notes: `Prepaid subscription amount for ${item.item_name}`,
-                created_by: req.user.id,
-                transaction: t
-            });
-        }
-
-        const reqItems = Array.isArray(req.body.items || req.body.subscription_items) && (req.body.items || req.body.subscription_items).length > 0
-            ? (req.body.items || req.body.subscription_items)
-            : [{ item_id: itemId, daily_qty: toRoundedAmount(req.body.daily_allowed_qty ?? req.body.dailyAllowedQty), rate_override: itemRate }];
-
-        for (const subItem of reqItems) {
-            const subItemId = Number(subItem.item_id || subItem.itemId || itemId);
-            if (subItemId > 0) {
-                await req.propertyDb.models.milk_subscription_items.create({
-                    subscription_id: subscription.id,
-                    item_id: subItemId,
-                    daily_qty: toRoundedAmount(subItem.daily_qty ?? subItem.dailyQty ?? 1.0),
-                    rate_override: subItem.rate_override ? toRoundedAmount(subItem.rate_override) : null
+            const prepaidQty = subItemRate > 0 ? toRoundedAmount(subBaseAmount / subItemRate) : 0;
+            if (subTotalPayment > 0 && (prepaidQty > 0 || subBaseAmount > 0)) {
+                await req.propertyDb.models.customer_advances.create({
+                    outlet_id: req.user.outlet_id,
+                    source_sale_id: null,
+                    customer_name: identity.customer_name || null,
+                    customer_phone: identity.customer_phone || null,
+                    customer_gstin: identity.customer_gstin || null,
+                    advance_date: todayTxnDate,
+                    original_amount: subTotalPayment,
+                    available_amount: subTotalPayment,
+                    payment_mode: paymentMode,
+                    reference_no: getSubscriptionReferenceNo(subRecord.id),
+                    note: `Subscription prepaid amount for ${subItemMaster.item_name}`,
+                    created_by: req.user.id,
+                    updated_by: req.user.id
                 }, { transaction: t });
-            }
-        }
 
-        for (const scheme of selectedSchemes) {
-            await req.propertyDb.models.milk_subscription_schemes.create({
-                outlet_id: req.user.outlet_id,
-                subscription_id: subscription.id,
-                scheme_type: scheme.scheme_type,
-                scheme_name: scheme.scheme_name,
-                scheme_value: toRoundedAmount(scheme.scheme_value),
-                bonus_qty: toRoundedAmount(scheme.bonus_qty),
-                discount_amount: toRoundedAmount(scheme.discount_amount),
-                notes: scheme.notes,
-                created_by: req.user.id
+                await req.propertyDb.models.customer_item_advances.create({
+                    outlet_id: req.user.outlet_id,
+                    source_sale_id: null,
+                    customer_name: identity.customer_name || null,
+                    customer_phone: identity.customer_phone || null,
+                    customer_gstin: identity.customer_gstin || null,
+                    item_id: subItemId,
+                    advance_date: todayTxnDate,
+                    original_qty: prepaidQty > 0 ? prepaidQty : (subDailyQty * payableDays),
+                    available_qty: prepaidQty > 0 ? prepaidQty : (subDailyQty * payableDays),
+                    rate: subItemRate,
+                    note: `Subscription #${subRecord.id} prepaid qty for ${subItemMaster.item_name}`,
+                    created_by: req.user.id,
+                    updated_by: req.user.id
+                }, { transaction: t });
+
+                await createLedgerEntry({
+                    db: req.propertyDb,
+                    outlet_id: req.user.outlet_id,
+                    txn_date: todayTxnDate,
+                    transaction_type: 'CUSTOMER_ADVANCE',
+                    reference_type: 'SUBSCRIPTION',
+                    reference_id: subRecord.id,
+                    reference_no: getSubscriptionReferenceNo(subRecord.id),
+                    party_name: identity.customer_name || identity.customer_phone || 'Subscription Customer',
+                    payment_method: paymentMode,
+                    amount_in: subTotalPayment,
+                    notes: `Prepaid subscription amount for ${subItemMaster.item_name}`,
+                    created_by: req.user.id,
+                    transaction: t
+                });
+            }
+
+            await req.propertyDb.models.milk_subscription_items.create({
+                subscription_id: subRecord.id,
+                item_id: subItemId,
+                daily_qty: subDailyQty,
+                rate_override: subItemRate
             }, { transaction: t });
+
+            createdSubscriptions.push({
+                ...subRecord.toJSON(),
+                item_name: subItemMaster.item_name,
+                daily_allowed_qty: subDailyQty
+            });
         }
 
         await audit.log({
@@ -5730,8 +5802,8 @@ exports.createSubscription = async (req, res) => {
             module: 'SALES',
             action: 'CREATE',
             table: 'milk_subscriptions',
-            recordId: subscription.id,
-            new_data: subscription.toJSON(),
+            recordId: primarySubscription.id,
+            new_data: primarySubscription.toJSON(),
             outlet_id: req.user.outlet_id,
             user_id: req.user.id
         });
@@ -5740,14 +5812,10 @@ exports.createSubscription = async (req, res) => {
         res.json({
             success: true,
             data: {
-                ...subscription.toJSON(),
+                ...primarySubscription.toJSON(),
                 item_name: item.item_name,
                 selected_schemes: selectedSchemes,
-                taxable_amount: prepaidTaxableAmount,
-                tax_percent: taxPercent,
-                tax_amount: derivedTaxAmount,
-                total_payment_amount: totalPaymentAmount,
-                item_rate: itemRate
+                created_subscriptions: createdSubscriptions
             }
         });
     } catch (error) {

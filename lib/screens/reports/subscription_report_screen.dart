@@ -88,6 +88,8 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
           children: [
             _filterCard(),
             const SizedBox(height: 12),
+            _summaryCards(),
+            const SizedBox(height: 12),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -98,6 +100,82 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _summaryCards() {
+    int activeCount = 0;
+    double prepaidSum = 0;
+    double remainingSum = 0;
+    double consumedQtySum = 0;
+
+    for (final row in _rows) {
+      if (row['active_subscription'] == true || row['status'] == 'ACTIVE') {
+        activeCount++;
+      }
+      prepaidSum += _num(row['prepaid_value']);
+      remainingSum += _num(row['advance_remaining_amount']);
+      consumedQtySum += _num(row['advance_consumed_qty']);
+    }
+
+    Widget card(String title, String value, Color color, IconData icon) {
+      return Container(
+        width: 210,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        card('Active Subscriptions', activeCount.toString(), const Color(0xFF15803D), Icons.subscriptions),
+        card('Total Prepaid', 'Rs. ${prepaidSum.toStringAsFixed(2)}', const Color(0xFF2563EB), Icons.payments),
+        card('Remaining Balance', 'Rs. ${remainingSum.toStringAsFixed(2)}', const Color(0xFFD97706), Icons.account_balance_wallet),
+        card('Delivered Qty', consumedQtySum.toStringAsFixed(consumedQtySum % 1 == 0 ? 0 : 2), const Color(0xFF7C3AED), Icons.local_shipping),
+      ],
     );
   }
 
@@ -208,10 +286,10 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
                     _ReportHeaderCell('Left'),
                     _ReportHeaderCell('Adv Qty'),
                     _ReportHeaderCell('Use Qty'),
-                    _ReportHeaderCell('Adv Left'),
-                    _ReportHeaderCell('Adv Amt'),
+                    _ReportHeaderCell('Adv Left Qty'),
+                    _ReportHeaderCell('Adv Left Amt'),
                     _ReportHeaderCell('Prepaid'),
-                    _ReportHeaderCell('Actual'),
+                    _ReportHeaderCell('Adv Used Amt'),
                     _ReportHeaderCell('Due'),
                     _ReportHeaderCell('Status'),
                   ],
@@ -226,7 +304,7 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
                   final advanceLeftQty = _num(row['advance_remaining_qty']);
                   final advanceLeftAmt = _num(row['advance_remaining_amount']);
                   final prepaid = _num(row['prepaid_value']);
-                  final actual = _num(row['actual_value']);
+                  final actual = _num(row['advance_consumed_amount'] > 0 ? row['advance_consumed_amount'] : row['actual_value']);
                   final outstanding = _num(row['outstanding_amount']);
                   final status =
                       row['active_subscription'] == true ? 'Active' : '${row['status'] ?? ''}';

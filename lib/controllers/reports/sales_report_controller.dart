@@ -8,7 +8,7 @@ import '../../models/reports/sales_report_model.dart';
 class SalesReportController extends ChangeNotifier {
   bool loading = false;
 
-  DateTime fromDate = DateTime.now().subtract(const Duration(days: 30));
+  DateTime fromDate = DateTime.now();
   DateTime toDate = DateTime.now();
   String? paymentMode;
   String? search;

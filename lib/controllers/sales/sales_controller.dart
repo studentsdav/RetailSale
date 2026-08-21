@@ -414,7 +414,13 @@ class SalesController extends ChangeNotifier {
     SaleOrder payload, {
     required String modificationNote,
   }) async {
-    final res = await ApiClient.put('${ApiEndpoints.sales}/$id', payload.toJson());
+    final body = payload.toJson();
+    if (body['header'] is Map<String, dynamic>) {
+      (body['header'] as Map<String, dynamic>)['modification_note'] = modificationNote;
+    } else if (body['header'] is Map) {
+      body['header']['modification_note'] = modificationNote;
+    }
+    final res = await ApiClient.put('${ApiEndpoints.sales}/$id', body);
     return Map<String, dynamic>.from(res);
   }
 

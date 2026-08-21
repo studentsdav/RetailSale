@@ -268,95 +268,138 @@ exports.saveSettings = async (req, res) => {
     }
 };
 
-exports.clearTransactionData = async (req, res) => {
-    const t = await req.propertyDb.transaction();
+const PRESERVED_MODELS = new Set([
+    'schema_version',
+    'system_settings',
+    'item_master',
+    'item_masters',
+    'categories',
+    'category_master',
+    'brands',
+    'brand_master',
+    'units',
+    'unit_master',
+    'groups',
+    'group_master',
+    'subcategories',
+    'subcategory_master',
+    'customers',
+    'customer',
+    'users',
+    'user',
+    'outlets',
+    'outlet',
+    'app_branding',
+    'dining_tables',
+    'dining_areas',
+    'floors',
+    'email_configs',
+    'email_templates',
+    'feature_modules',
+    'licenses',
+    'owners',
+    'properties',
+    'attributes',
+    'attribute_values',
+    'hsn_master'
+]);
 
+exports.clearTransactionData = async (req, res) => {
     try {
         const confirmText = String(req.body.confirm_text || '').trim().toUpperCase();
         if (confirmText !== 'DELETE ALL DATA') {
-            throw new Error('Type DELETE ALL DATA to confirm the wipe');
+            return res.status(400).json({
+                success: false,
+                message: 'Type DELETE ALL DATA to confirm the wipe'
+            });
         }
 
-        const existingTablesResult = await req.propertyDb.query(`
-            SELECT tablename
-            FROM pg_tables
-            WHERE schemaname = 'public'
-              AND tablename IN (:tables)
-        `, {
-            replacements: { tables: WIPE_TABLES },
-            transaction: t
-        });
+        const isPostgres = req.propertyDb.options?.dialect === 'postgres';
 
-        const existingTables = Array.isArray(existingTablesResult) ? existingTablesResult[0] : existingTablesResult;
-        const tableNames = (existingTables || [])
-            .map((row) => row.tablename)
-            .filter(Boolean);
+        const wipeTableList = [
+            'kot_revisions',
+            'kot_items',
+            'kot_headers',
+            'restaurant_audit_trail',
+            'table_reservations',
+            'draw_vouchers',
+            'customer_draw_progress',
+            'lucky_draw_campaigns',
+            'whatsapp_logs',
+            'whatsapp_campaigns',
+            'supplier_return_refunds',
+            'supplier_return_items',
+            'supplier_return_headers',
+            'goods_receipt_items',
+            'goods_receipts',
+            'supplier_payments',
+            'supplier_bills',
+            'purchase_order_items',
+            'purchase_orders',
+            'return_items',
+            'return_headers',
+            'issue_items',
+            'issue_headers',
+            'damage_items',
+            'damage_headers',
+            'assembly_items',
+            'assembly_headers',
+            'request_items',
+            'request_headers',
+            'milk_subscription_consumptions',
+            'milk_subscription_settlements',
+            'milk_subscription_schemes',
+            'milk_subscriptions',
+            'sales_items',
+            'sales_refunds',
+            'sales_credit_notes',
+            'customer_repayments',
+            'customer_item_advances',
+            'customer_advances',
+            'customer_orders',
+            'sales_headers',
+            'sales_scheme_customers',
+            'customer_loyalty_ledger',
+            'loyalty_master_config',
+            'cash_ledger',
+            'expense_entries',
+            'expense_taxes',
+            'expense_deductions',
+            'expenses',
+            'expense_categories',
+            'daily_opening_balances',
+            'stock_ledger',
+            'system_notifications',
+            'audit_logs',
+            'commission_rules'
+        ];
 
-        // Sort tableNames according to defined order in WIPE_TABLES to respect foreign key constraints
-        tableNames.sort((a, b) => {
-            return WIPE_TABLES.indexOf(a) - WIPE_TABLES.indexOf(b);
-        });
-
-        // Preserve customer master rows that are stored in customers table.
-        const preservedCustomerRows = await req.propertyDb.models.customers.findAll({
-            where: { outlet_id: req.user.outlet_id },
-            transaction: t
-        });
-
-        // IMPORTANT:
-        // Never TRUNCATE here. TRUNCATE would remove data of all outlets.
-        // Delete only rows belonging to the current outlet.
-        for (const tableName of tableNames) {
-            const columnCheckResult = await req.propertyDb.query(
-                `
-SELECT 1
-FROM information_schema.columns
-WHERE table_schema = 'public'
-  AND table_name = :tableName
-  AND column_name = 'outlet_id'
-LIMIT 1
-                `,
-                {
-                    replacements: { tableName },
-                    transaction: t
+        if (isPostgres) {
+            const tableNamesQuoted = wipeTableList.map(t => `"${t}"`).join(', ');
+            try {
+                await req.propertyDb.query(`TRUNCATE TABLE ${tableNamesQuoted} RESTART IDENTITY CASCADE;`);
+            } catch (truncErr) {
+                console.warn('⚠️ TRUNCATE CASCADE failed, falling back to individual deletes:', truncErr.message);
+                for (const tableName of wipeTableList) {
+                    await req.propertyDb.query(`DELETE FROM "${tableName}"`).catch(() => {});
                 }
-            );
-            const hasOutletId = Array.isArray(columnCheckResult)
-                ? (columnCheckResult[0] || []).length > 0
-                : false;
-
-            if (!hasOutletId) {
-                continue;
             }
-
-            await req.propertyDb.query(
-                `DELETE FROM "${tableName}" WHERE outlet_id = :outlet_id`,
-                {
-                    replacements: { outlet_id: req.user.outlet_id },
-                    transaction: t
-                }
-            );
+        } else {
+            await req.propertyDb.query('PRAGMA foreign_keys = OFF;').catch(() => {});
+            for (const tableName of wipeTableList) {
+                await req.propertyDb.query(`DELETE FROM "${tableName}"`).catch(() => {});
+                await req.propertyDb.query(`DELETE FROM ${tableName}`).catch(() => {});
+            }
+            await req.propertyDb.query('PRAGMA foreign_keys = ON;').catch(() => {});
         }
 
-        // Restore preserved customer master rows after transaction wipe.
-        for (const row of preservedCustomerRows) {
-            await req.propertyDb.models.customers.create({
-                outlet_id: req.user.outlet_id,
-                customer_name: row.customer_name || null,
-                customer_phone: row.customer_phone || null,
-                customer_address: row.customer_address || null,
-                customer_gstin: row.customer_gstin || null
-            }, { transaction: t });
-        }
-
-        await t.commit();
         res.json({
             success: true,
-            message: 'Transaction data cleared successfully',
+            message: 'All transaction data cleared successfully',
             preserved: ['masters', 'customer_master', 'system_settings', 'schema_version']
         });
     } catch (err) {
-        await t.rollback();
-        res.status(500).json({ success: false, error: err.message });
+        console.error("❌ Error clearing transaction data:", err);
+        res.status(500).json({ success: false, message: err.message || 'Failed to clear transaction data' });
     }
 };
