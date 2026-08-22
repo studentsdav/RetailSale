@@ -150,6 +150,7 @@ class SalesReport {
   final String customerGstin;
   final String paymentMode;
   final String paymentReference;
+  final String notes;
   final double cashAmount;
   final double cardAmount;
   final double upiAmount;
@@ -187,6 +188,7 @@ class SalesReport {
     required this.customerGstin,
     required this.paymentMode,
     required this.paymentReference,
+    this.notes = '',
     this.cashAmount = 0,
     this.cardAmount = 0,
     this.upiAmount = 0,
@@ -226,6 +228,7 @@ class SalesReport {
       customerGstin: json['customer_gstin'] ?? '',
       paymentMode: json['payment_mode'] ?? '',
       paymentReference: json['payment_reference'] ?? '',
+      notes: json['notes'] ?? '',
       cashAmount: _toDouble(json['cash_amount']),
       cardAmount: _toDouble(json['card_amount']),
       upiAmount: _toDouble(json['upi_amount']),

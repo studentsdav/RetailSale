@@ -50,6 +50,7 @@ import '../restaurant/restaurant_setup_screen.dart';
 import '../restaurant/kds_screen.dart';
 import '../restaurant/delivery_challan_screen.dart';
 import '../restaurant/recurring_expenses_screen.dart';
+import '../restaurant/restaurant_analytics_reports_screen.dart';
 import '../inventory/approval_center_screen.dart';
 import '../inventory/submitted_status_screen.dart';
 import 'customer_app_screen.dart';
@@ -2510,6 +2511,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'Restaurant Setup',
         'permission': 'RESTAURANT_SETUP',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RestaurantSetupScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.analytics_outlined,
+        'label': 'Restaurant Analytics & Reports',
+        'permission': 'RESTAURANT_ANALYTICS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RestaurantAnalyticsReportsScreen())),
       },
       {
         'category': 'Finance & Expenses',

@@ -6645,3 +6645,6 @@ SyntaxError: Identifier 'roundOffAmount' has already been declared
 2026-08-22T16:30:01.301Z [INFO] Hourly backup job execution finished.
 2026-08-22T16:30:07.482Z [INFO] Cloud upload sequence completed successfully.
 2026-08-22T16:30:07.493Z [INFO] Hourly backup job execution finished.
+2026-08-22T16:30:58.073Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-22T16:30:58.151Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-22T16:30:58.167Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
