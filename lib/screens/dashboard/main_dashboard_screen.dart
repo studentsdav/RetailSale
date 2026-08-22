@@ -53,8 +53,14 @@ import '../restaurant/recurring_expenses_screen.dart';
 import '../inventory/approval_center_screen.dart';
 import '../inventory/submitted_status_screen.dart';
 import 'customer_app_screen.dart';
+import 'lynx_feature_testing_screen.dart';
+import 'autonomous_agent_screen.dart';
 import 'retailer_console_screen.dart';
 import 'rider_console_screen.dart';
+import '../reports/operations_intelligence_screen.dart';
+import '../settings/workflow_automation_screen.dart';
+import '../settings/developer_ecosystem_screen.dart';
+import '../settings/plugin_marketplace_screen.dart';
 import '../modify/purchase_modify.dart';
 import '../modify/receiving_modify.dart';
 import '../modify/request_modify.dart';
@@ -96,6 +102,7 @@ import '../settings/loyalty_master_config_screen.dart';
 import '../settings/whatsapp_dashboard_screen.dart';
 import '../settings/smtp_settings_screen.dart';
 import 'notification_screen.dart';
+import '../../widgets/lynx_assist_modal.dart';
 
 class MainDashboardScreen extends StatefulWidget {
   const MainDashboardScreen({super.key});
@@ -1068,6 +1075,130 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     return '${d.inHours}h ${d.inMinutes % 60}m';
   }
 
+  void _handleLynxAction(String actionType, Map<String, dynamic>? payload) {
+    switch (actionType) {
+      case 'CREATE_BILL':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const SaleScreen()));
+        break;
+      case 'SEARCH_ITEM':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ItemMasterScreen()));
+        break;
+      case 'LOW_STOCK_ALERT':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockBalanceScreen()));
+        break;
+      case 'STOCK_TRANSFER':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockTransferScreen()));
+        break;
+      case 'STOCK_ISSUE':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockIssueScreen()));
+        break;
+      case 'STOCK_REQUEST':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockRequestScreen()));
+        break;
+      case 'DAMAGE_ITEMS':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const DamageItemScreen()));
+        break;
+      case 'CREATE_PO':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseOrderScreen()));
+        break;
+      case 'GRN':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const GoodsReceivingScreen()));
+        break;
+      case 'SUPPLIER_MASTER':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const SupplierMasterScreen()));
+        break;
+      case 'SUPPLIER_RETURN':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const SupplierReturnScreen()));
+        break;
+      case 'SALES_RETURN':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ReturnIssueScreen()));
+        break;
+      case 'ASSEMBLY_BOM':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AssemblyScreen()));
+        break;
+      case 'VIEW_REPORTS':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReportScreen()));
+        break;
+      case 'CLOSING_REPORT':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ClosingReportScreen()));
+        break;
+      case 'CASH_LEDGER':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CashLedgerScreen()));
+        break;
+      case 'STOCK_LEDGER':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockLedgerReportScreen()));
+        break;
+      case 'EMPLOYEES':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const EmployeeScreen()));
+        break;
+      case 'ATTENDANCE':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AttendanceScreen()));
+        break;
+      case 'PAYROLL':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const PayrollScreen()));
+        break;
+      case 'HRMS_MASTERS':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const HrmsMastersScreen()));
+        break;
+      case 'CAPTAIN_POS':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CaptainDashboardScreen()));
+        break;
+      case 'RESTAURANT_SETUP':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const RestaurantSetupScreen()));
+        break;
+      case 'KDS':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const KdsScreen()));
+        break;
+      case 'DELIVERY_CHALLAN':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const DeliveryChallanScreen()));
+        break;
+      case 'RECURRING_EXPENSES':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const RecurringExpensesScreen()));
+        break;
+      case 'WHATSAPP':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const WhatsAppDashboardScreen()));
+        break;
+      case 'USER_MANAGEMENT':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const UserManagementScreen()));
+        break;
+      case 'SYSTEM_SETTINGS':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
+        break;
+      case 'PROPERTY_INFO':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyInfoScreen(outletid: 0)));
+        break;
+      case 'AI_ANALYTICS':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AiQueryAnalyticsScreen()));
+        break;
+      case 'OPERATIONS_INTELLIGENCE':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const OperationsIntelligenceScreen()));
+        break;
+      case 'WORKFLOW_AUTOMATION':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const WorkflowAutomationScreen()));
+        break;
+      case 'AUTONOMOUS_AGENT':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AutonomousAgentScreen()));
+        break;
+      case 'DEVELOPER_ECOSYSTEM':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const DeveloperEcosystemScreen()));
+        break;
+      case 'PLUGIN_MARKETPLACE':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const PluginMarketplaceScreen()));
+        break;
+      case 'FEATURE_TESTING_HUB':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const LynxFeatureTestingScreen()));
+        break;
+      case 'CUSTOMER_LOOKUP':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CustomerAppScreen()));
+        break;
+      case 'HELP_SUPPORT':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const HelpScreen()));
+        break;
+      default:
+        break;
+    }
+  }
+
   // ================= UI =================
   @override
   Widget build(BuildContext context) {
@@ -1129,6 +1260,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     ),
             ),
           IconButton(
+              tooltip: 'LYNX ASSIST (AI Companion)',
+              onPressed: () {
+                LynxAssistModal.show(context, onActionTriggered: _handleLynxAction);
+              },
+              icon: const Icon(Icons.smart_toy_rounded, color: Color(0xFFE53935))),
+          IconButton(
               tooltip: 'Refresh',
               onPressed: () {
                 Navigator.push(
@@ -1159,6 +1296,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               },
               icon: const Icon(Icons.logout)),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFFC81E1E),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.smart_toy_rounded),
+        label: const Text('LYNX ASSIST', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        onPressed: () {
+          LynxAssistModal.show(context, onActionTriggered: _handleLynxAction);
+        },
       ),
       body: property == null
           ? Center(
@@ -2563,7 +2709,64 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamageReportSumScreen())),
       },
 
+      // LYNX Innovation Hub
+      {
+        'category': 'LYNX Innovation Hub',
+        'icon': Icons.science_rounded,
+        'label': '⚡ Feature Testing Hub',
+        'subLabel': 'Test all features from Phase 1 to Plugins',
+        'isNew': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LynxFeatureTestingScreen())),
+      },
+      {
+        'category': 'LYNX Innovation Hub',
+        'icon': Icons.psychology_rounded,
+        'label': '🤖 Autonomous AI Agent',
+        'subLabel': 'Phase 5: Proactive Anomaly Proposals',
+        'isNew': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AutonomousAgentScreen())),
+      },
+      {
+        'category': 'LYNX Innovation Hub',
+        'icon': Icons.speed_rounded,
+        'label': '⚙️ Operations Intelligence',
+        'subLabel': 'Phase 3: Sales Velocity & Expiry Watcher',
+        'isNew': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OperationsIntelligenceScreen())),
+      },
+      {
+        'category': 'LYNX Innovation Hub',
+        'icon': Icons.bolt_rounded,
+        'label': '⚡ Workflow Automation',
+        'subLabel': 'Phase 4: Rule-based WhatsApp & PO engine',
+        'isNew': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WorkflowAutomationScreen())),
+      },
+      {
+        'category': 'LYNX Innovation Hub',
+        'icon': Icons.code_rounded,
+        'label': '🔌 Developer & Webhooks',
+        'subLabel': 'Section 6: Open REST APIs & Webhooks',
+        'isNew': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeveloperEcosystemScreen())),
+      },
+      {
+        'category': 'LYNX Innovation Hub',
+        'icon': Icons.extension_rounded,
+        'label': '🛍️ Add-on Plugin Marketplace',
+        'subLabel': 'Tally Sync, Zomato/Swiggy, Loyalty Wheel, SMS',
+        'isNew': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PluginMarketplaceScreen())),
+      },
+
       // System
+      {
+        'category': 'System',
+        'icon': Icons.science_rounded,
+        'label': '⚡ LYNX Feature Testing Hub',
+        'isNew': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LynxFeatureTestingScreen())),
+      },
       {
         'category': 'System',
         'icon': Icons.help_outline,
@@ -2607,6 +2810,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     ];
 
     final categories = [
+      'LYNX Innovation Hub',
       'Billing',
       'Operations',
       'Modify',

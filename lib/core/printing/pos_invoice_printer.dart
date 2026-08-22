@@ -394,60 +394,63 @@ class PosInvoicePrinter {
           _dashedDivider(),
           _thermalAmountRow('Total Items', totalItems.toDouble()),
           _thermalAmountRow('Total Qty', order.totalQty),
-          if (order.items.any((item) => item.isTaxInclusive)) ...[
-            _thermalAmountRow(
-              'Subtotal (Incl. GST)',
-              order.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))),
-            ),
-            if (savingsAmount > 0.0009)
-              _thermalAmountRow(_savingLabel(order), savingsAmount),
-            _thermalAmountRow(
-              'Net Amount (Incl. GST)',
-              order.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))) - savingsAmount,
-            ),
-            if (order.refundAmount > 0) ...[
-              _dashedDivider(),
-              _thermalAmountRow('Refunded Amt', order.refundAmount),
-              _thermalAmountRow('Net Payable', order.netAmount - order.refundAmount),
-            ],
-            if (order.loyaltyPointsRedeemed > 0 &&
-                order.loyaltyDiscountAmount > 0)
-              pw.Text(
-                'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
-                style: emphasisStyle,
-              ),
-            if (hasTaxData) _dashedDivider(),
-            if (hasTaxData) _thermalAmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
-            if (hasTaxData && cgstTotal > 0)
-              _thermalAmountRow('CGST', cgstTotal),
-            if (hasTaxData && sgstTotal > 0)
-              _thermalAmountRow('SGST/UTGST', sgstTotal),
-            if (hasTaxData && igstTotal > 0)
-              _thermalAmountRow('IGST', igstTotal),
-          ] else ...[
-            _thermalAmountRow('Subtotal', order.subTotal),
-            if (order.refundAmount > 0) ...[
-              _dashedDivider(),
-              _thermalAmountRow('Refunded Amt', order.refundAmount),
-              _thermalAmountRow('Net Payable', order.netAmount - order.refundAmount),
-            ],
-            if (savingsAmount > 0.0009)
-              _thermalAmountRow(_savingLabel(order), savingsAmount),
-            if (order.loyaltyPointsRedeemed > 0 &&
-                order.loyaltyDiscountAmount > 0)
-              pw.Text(
-                'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
-                style: emphasisStyle,
-              ),
-            if (hasTaxData) _dashedDivider(),
-            if (hasTaxData) _thermalAmountRow('Taxable Amt', _adjustedItemTaxableTotal(order)),
-            if (hasTaxData && cgstTotal > 0)
-              _thermalAmountRow('CGST', cgstTotal),
-            if (hasTaxData && sgstTotal > 0)
-              _thermalAmountRow('SGST/UTGST', sgstTotal),
-            if (hasTaxData && igstTotal > 0)
-              _thermalAmountRow('IGST', igstTotal),
-          ],
+          ...(() {
+            final double preTaxSum = order.items
+                .where((item) => !item.isTaxInclusive)
+                .fold<double>(0, (sum, item) => sum + item.amount);
+            final double postTaxSum = order.items
+                .where((item) => item.isTaxInclusive)
+                .fold<double>(0, (sum, item) => sum + item.amount);
+
+            final bool allInclusive = order.items.isNotEmpty && order.items.every((item) => item.isTaxInclusive);
+            final String subtotalLabel = allInclusive ? 'Subtotal (Incl. GST)' : 'Subtotal';
+            final double rawSubtotal = order.items.fold<double>(0, (sum, item) => sum + item.amount);
+
+            String? subTotalNote;
+            if (preTaxSum > 0 && postTaxSum > 0) {
+              subTotalNote = '(Pre-tax: ${preTaxSum.toStringAsFixed(2)}, Post-tax: ${postTaxSum.toStringAsFixed(2)})';
+            }
+
+            return [
+              _thermalAmountRow(subtotalLabel, rawSubtotal),
+              if (subTotalNote != null)
+                pw.Container(
+                  alignment: pw.Alignment.centerLeft,
+                  margin: const pw.EdgeInsets.only(bottom: 2),
+                  child: pw.Text(
+                    subTotalNote,
+                    style: pw.TextStyle(
+                      fontSize: 7,
+                      fontStyle: pw.FontStyle.italic,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ),
+              if (savingsAmount > 0.0009)
+                _thermalAmountRow(_savingLabel(order), savingsAmount),
+              if (allInclusive)
+                _thermalAmountRow('Net Amount (Incl. GST)', (rawSubtotal - savingsAmount).clamp(0.0, double.infinity)),
+              if (order.refundAmount > 0) ...[
+                _dashedDivider(),
+                _thermalAmountRow('Refunded Amt', order.refundAmount),
+                _thermalAmountRow('Net Payable', order.netAmount - order.refundAmount),
+              ],
+              if (order.loyaltyPointsRedeemed > 0 &&
+                  order.loyaltyDiscountAmount > 0)
+                pw.Text(
+                  'Savings by points redeemed: ${order.loyaltyPointsRedeemed} points (- ${order.loyaltyDiscountAmount.toStringAsFixed(2)})',
+                  style: emphasisStyle,
+                ),
+              if (hasTaxData) _dashedDivider(),
+              if (hasTaxData) _thermalAmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
+              if (hasTaxData && cgstTotal > 0)
+                _thermalAmountRow('CGST', cgstTotal),
+              if (hasTaxData && sgstTotal > 0)
+                _thermalAmountRow('SGST/UTGST', sgstTotal),
+              if (hasTaxData && igstTotal > 0)
+                _thermalAmountRow('IGST', igstTotal),
+            ];
+          })(),
           ...order.charges.where((charge) => charge.amount > 0).map(
                 (charge) => _thermalAmountRow(
                   charge.name,
@@ -2237,15 +2240,6 @@ class PosInvoicePrinter {
   }
 
   static double _displayRate(SaleItem item) {
-    // For tax-inclusive items the `rate` stored in the DB already IS the
-    // consumer-facing inclusive price (e.g. ₹500 incl. GST).
-    // Historically, `referenceRate`/`original_rate` was saved incorrectly as
-    // rate + lineDiscount/qty (e.g. 500 + 200 = 700) for inclusive items,
-    // so we must NOT use it for inclusive items.
-    // For exclusive items, referenceRate is the pre-discount MRP, which is
-    // the intended display value.
-    if (item.isTaxInclusive) return item.rate;
-    if (item.referenceRate > 0) return item.referenceRate;
     return item.rate;
   }
 

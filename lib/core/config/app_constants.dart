@@ -1,6 +1,6 @@
 class AppConstants {
   // APP
-  static const appName = 'INV';
+  static const appName = 'FAMALTH LYNX';
   static const appVersion = '1.0.0';
 
   // ROLES (must match backend)

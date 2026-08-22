@@ -460,40 +460,6 @@ exports.getSalesReport = async (req, res) => {
                 profit = roundAmount(profit + salePositiveProfit);
                 loss = roundAmount(loss + saleLoss);
 
-                // Split payment breakdown between SUBSCRIPTION and CASH/ONLINE
-                if (subscriptionNet > 0) {
-                    const subKey = 'SUBSCRIPTION';
-                    if (!paymentModeSummary[subKey]) {
-                        paymentModeSummary[subKey] = {
-                            payment_mode: subKey,
-                            amount: 0,
-                            sales_count: 0
-                        };
-                    }
-                    paymentModeSummary[subKey].amount = roundAmount(
-                        paymentModeSummary[subKey].amount + subscriptionNet
-                    );
-                    paymentModeSummary[subKey].sales_count += 1;
-                }
-
-                const cashPortion = Math.max(saleNetRevenue - subscriptionNet, 0);
-                if (cashPortion > 0 || !isFullSubscriptionSale) {
-                    const paymentKey = String(effectivePaymentMode || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
-                    if (paymentKey !== 'SUBSCRIPTION') {
-                        if (!paymentModeSummary[paymentKey]) {
-                            paymentModeSummary[paymentKey] = {
-                                payment_mode: paymentKey,
-                                amount: 0,
-                                sales_count: 0
-                            };
-                        }
-                        paymentModeSummary[paymentKey].amount = roundAmount(
-                            paymentModeSummary[paymentKey].amount + cashPortion
-                        );
-                        paymentModeSummary[paymentKey].sales_count += 1;
-                    }
-                }
-
                 timeZoneMap[zone.key].sales_count += 1;
                 timeZoneMap[zone.key].total_sales = roundAmount(
                     timeZoneMap[zone.key].total_sales + saleNetRevenue
@@ -559,6 +525,55 @@ exports.getSalesReport = async (req, res) => {
                     else otherAmount = saleNetRevenue;
                 }
 
+                // Accumulate accurate payment mode breakdown from actual split breakdown:
+                const paymentSplits = [];
+                if (subscriptionNet > 0) {
+                    paymentSplits.push({ mode: 'SUBSCRIPTION', amount: subscriptionNet });
+                }
+                if (cashAmount > 0.009) paymentSplits.push({ mode: 'CASH', amount: cashAmount });
+                if (cardAmount > 0.009) paymentSplits.push({ mode: 'CARD', amount: cardAmount });
+                if (upiAmount > 0.009) paymentSplits.push({ mode: 'UPI', amount: upiAmount });
+                if (otherAmount > 0.009) paymentSplits.push({ mode: 'OTHER', amount: otherAmount });
+                if (advanceAmount > 0.009) paymentSplits.push({ mode: 'ADVANCE DEPOSIT', amount: advanceAmount });
+                if (advanceAdjustmentAmount > 0.009) paymentSplits.push({ mode: 'ADVANCE ADJUSTED', amount: advanceAdjustmentAmount });
+
+                if (paymentSplits.length === 0 && saleNetRevenue > 0) {
+                    const mode = String(effectivePaymentMode || 'CASH').toUpperCase();
+                    paymentSplits.push({ mode: mode, amount: saleNetRevenue });
+                }
+
+                for (const item of paymentSplits) {
+                    const pKey = item.mode;
+                    if (!paymentModeSummary[pKey]) {
+                        paymentModeSummary[pKey] = {
+                            payment_mode: pKey,
+                            amount: 0,
+                            sales_count: 0
+                        };
+                    }
+                    paymentModeSummary[pKey].amount = roundAmount(
+                        paymentModeSummary[pKey].amount + item.amount
+                    );
+                    paymentModeSummary[pKey].sales_count += 1;
+                }
+
+                let billCgst = toNumber(sale.cgst_amount);
+                let billSgst = toNumber(sale.sgst_amount);
+                let billIgst = toNumber(sale.igst_amount);
+                if (billCgst === 0 && billSgst === 0 && billIgst === 0 && saleTotalTax > 0) {
+                    for (const tax of safeArray(sale.tax_breakup)) {
+                        const code = String(tax.code || tax.label || '').toUpperCase();
+                        const amt = toNumber(tax.tax_amount || tax.taxAmount);
+                        if (code.includes('CGST')) billCgst += amt;
+                        else if (code.includes('SGST') || code.includes('UTGST')) billSgst += amt;
+                        else if (code.includes('IGST')) billIgst += amt;
+                    }
+                    if (billCgst === 0 && billSgst === 0 && billIgst === 0) {
+                        billCgst = roundAmount(saleTotalTax / 2);
+                        billSgst = roundAmount(saleTotalTax / 2);
+                    }
+                }
+
                 return {
                     id: sale.id,
                     sale_no: sale.sale_no,
@@ -585,9 +600,9 @@ exports.getSalesReport = async (req, res) => {
                     total_qty: toNumber(sale.total_qty),
                     sub_total: saleGross,
                     taxable_amount: saleTaxable,
-                    cgst_amount: toNumber(sale.cgst_amount),
-                    sgst_amount: toNumber(sale.sgst_amount),
-                    igst_amount: toNumber(sale.igst_amount),
+                    cgst_amount: roundAmount(billCgst),
+                    sgst_amount: roundAmount(billSgst),
+                    igst_amount: roundAmount(billIgst),
                     total_tax: saleTotalTax,
                     charge_total: saleChargeTotal,
                     charge_tax_total: toNumber(sale.charge_tax_total),

@@ -15,20 +15,16 @@ class PosBillingEngine {
   }) {
     final totalQty = items.fold<double>(0, (sum, item) => sum + item.qty);
 
-    double discountEligibleTotalInclusive = 0.0;
-    double schemeEligibleTotalInclusive = 0.0;
+    double discountEligibleTotal = 0.0;
+    double schemeEligibleTotal = 0.0;
 
     for (final item in items) {
-      final double grossInclusive = item.isTaxInclusive
-          ? item.amount
-          : (item.amount * (1 + item.taxPercent / 100));
-
       if (item.discountApplicable) {
-        discountEligibleTotalInclusive += grossInclusive;
+        discountEligibleTotal += item.amount;
       }
       if (item.schemeApplicable &&
           (schemeItemId == null || item.itemId == schemeItemId)) {
-        schemeEligibleTotalInclusive += grossInclusive;
+        schemeEligibleTotal += item.amount;
       }
     }
 
@@ -39,71 +35,119 @@ class PosBillingEngine {
     double calculatedDiscount = 0.0;
 
     for (final item in items) {
-      final double grossInclusive = item.isTaxInclusive
-          ? item.amount
-          : (item.amount * (1 + item.taxPercent / 100));
-
-      final double schemeShareInclusive = schemeEligibleTotalInclusive > 0 &&
+      final double itemAmount = item.amount;
+      final double schemeShare = schemeEligibleTotal > 0 &&
               item.schemeApplicable &&
               (schemeItemId == null || item.itemId == schemeItemId)
-          ? (grossInclusive / schemeEligibleTotalInclusive) * schemeDiscountAmount
+          ? (itemAmount / schemeEligibleTotal) * schemeDiscountAmount
           : 0.0;
-
-      final double manualShareInclusive =
-          discountEligibleTotalInclusive > 0 && item.discountApplicable
-              ? (grossInclusive / discountEligibleTotalInclusive) * manualDiscountAmount
+      final double manualShare =
+          discountEligibleTotal > 0 && item.discountApplicable
+              ? (itemAmount / discountEligibleTotal) * manualDiscountAmount
               : 0.0;
 
-      double lineDiscountInclusive;
-      if (item.isSchemeFree) {
-        lineDiscountInclusive = grossInclusive;
-      } else {
-        lineDiscountInclusive =
-            (schemeShareInclusive + manualShareInclusive).clamp(0.0, grossInclusive);
-      }
-
-      final netInclusive = (grossInclusive - lineDiscountInclusive).clamp(0.0, double.infinity);
-      final taxableAmount = netInclusive / (1 + item.taxPercent / 100);
-      final lineTaxes = _resolveTaxes(
-        taxMode: taxMode,
-        taxType: item.taxType,
-        taxPercent: item.taxPercent,
-        taxableAmount: taxableAmount,
-      );
-      final taxAmount = netInclusive - taxableAmount;
-      final lineTotal = netInclusive;
-
-      calculatedSubTotal += grossInclusive;
-      calculatedDiscount += lineDiscountInclusive;
-
-      final enriched = item.copyWith(
-        lineDiscount: lineDiscountInclusive,
-        taxableAmount: taxableAmount,
-        taxAmount: taxAmount,
-        lineTotal: lineTotal,
-        taxBreakup: lineTaxes,
-      );
-      computedItems.add(enriched);
-
-      for (final tax in lineTaxes) {
-        final key = '${tax.code}_${tax.rate}';
-        final existing = taxSummary[key];
-        if (existing == null) {
-          taxSummary[key] = tax;
+      if (item.isTaxInclusive) {
+        final double grossInclusive = itemAmount;
+        double lineDiscount;
+        if (item.isSchemeFree) {
+          lineDiscount = grossInclusive;
         } else {
-          taxSummary[key] = TaxBreakdown(
-            code: existing.code,
-            label: existing.label,
-            taxType: existing.taxType,
-            rate: existing.rate,
-            taxableAmount: existing.taxableAmount + tax.taxableAmount,
-            taxAmount: existing.taxAmount + tax.taxAmount,
-          );
+          lineDiscount = (schemeShare + manualShare).clamp(0.0, grossInclusive);
+        }
+
+        final netInclusive = (grossInclusive - lineDiscount).clamp(0.0, double.infinity);
+        final taxableAmount = netInclusive / (1 + item.taxPercent / 100);
+        final lineTaxes = _resolveTaxes(
+          taxMode: taxMode,
+          taxType: item.taxType,
+          taxPercent: item.taxPercent,
+          taxableAmount: taxableAmount,
+        );
+        final taxAmount = netInclusive - taxableAmount;
+        final lineTotal = netInclusive;
+
+        calculatedSubTotal += grossInclusive;
+        calculatedDiscount += lineDiscount;
+
+        final enriched = item.copyWith(
+          lineDiscount: lineDiscount,
+          taxableAmount: taxableAmount,
+          taxAmount: taxAmount,
+          lineTotal: lineTotal,
+          taxBreakup: lineTaxes,
+        );
+        computedItems.add(enriched);
+
+        for (final tax in lineTaxes) {
+          final key = '${tax.code}_${tax.rate}';
+          final existing = taxSummary[key];
+          if (existing == null) {
+            taxSummary[key] = tax;
+          } else {
+            taxSummary[key] = TaxBreakdown(
+              code: existing.code,
+              label: existing.label,
+              taxType: existing.taxType,
+              rate: existing.rate,
+              taxableAmount: existing.taxableAmount + tax.taxableAmount,
+              taxAmount: existing.taxAmount + tax.taxAmount,
+            );
+          }
+        }
+      } else {
+        final double grossExclusive = itemAmount;
+        double lineDiscount;
+        if (item.isSchemeFree) {
+          lineDiscount = grossExclusive;
+        } else {
+          lineDiscount = (schemeShare + manualShare).clamp(0.0, grossExclusive);
+        }
+
+        final taxableAmount = (grossExclusive - lineDiscount).clamp(0.0, double.infinity);
+        final lineTaxes = _resolveTaxes(
+          taxMode: taxMode,
+          taxType: item.taxType,
+          taxPercent: item.taxPercent,
+          taxableAmount: taxableAmount,
+        );
+        final taxAmount = taxableAmount * (item.taxPercent / 100);
+        final lineTotal = taxableAmount + taxAmount;
+
+        calculatedSubTotal += grossExclusive;
+        calculatedDiscount += lineDiscount;
+
+        final enriched = item.copyWith(
+          lineDiscount: lineDiscount,
+          taxableAmount: taxableAmount,
+          taxAmount: taxAmount,
+          lineTotal: lineTotal,
+          taxBreakup: lineTaxes,
+        );
+        computedItems.add(enriched);
+
+        for (final tax in lineTaxes) {
+          final key = '${tax.code}_${tax.rate}';
+          final existing = taxSummary[key];
+          if (existing == null) {
+            taxSummary[key] = tax;
+          } else {
+            taxSummary[key] = TaxBreakdown(
+              code: existing.code,
+              label: existing.label,
+              taxType: existing.taxType,
+              rate: existing.rate,
+              taxableAmount: existing.taxableAmount + tax.taxableAmount,
+              taxAmount: existing.taxAmount + tax.taxAmount,
+            );
+          }
         }
       }
     }
 
-    final double subTotal = calculatedSubTotal;
+    final bool allExclusiveCart = items.isNotEmpty && items.every((item) => !item.isTaxInclusive);
+    final double subTotal = allExclusiveCart
+        ? items.fold<double>(0, (sum, item) => sum + item.amount)
+        : calculatedSubTotal;
 
     final activeCharges = charges
         .where(

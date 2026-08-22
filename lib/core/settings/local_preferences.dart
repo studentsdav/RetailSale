@@ -178,4 +178,73 @@ class LocalPreferences {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_favoriteDrawerItemsKey, items);
   }
+
+  // --- LYNX ASSIST AI SETTINGS & LOCAL CHAT HISTORY ---
+  static const _lynxAiApiKeyKey = 'lynx_ai_api_key';
+  static const _lynxAiProviderKey = 'lynx_ai_provider';
+  static const _lynxAiModelNameKey = 'lynx_ai_model_name';
+  static const _lynxAiBaseUrlKey = 'lynx_ai_base_url';
+  static const _lynxChatHistoryKey = 'lynx_chat_history';
+
+  static Future<String> getLynxAiApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lynxAiApiKeyKey) ?? '';
+  }
+
+  static Future<void> setLynxAiApiKey(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lynxAiApiKeyKey, value);
+  }
+
+  static Future<String> getLynxAiProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lynxAiProviderKey) ?? 'gemini';
+  }
+
+  static Future<void> setLynxAiProvider(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lynxAiProviderKey, value);
+  }
+
+  static Future<String> getLynxAiModelName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lynxAiModelNameKey) ?? 'gemini-1.5-flash';
+  }
+
+  static Future<void> setLynxAiModelName(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lynxAiModelNameKey, value);
+  }
+
+  static Future<String> getLynxAiBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lynxAiBaseUrlKey) ?? 'https://generativelanguage.googleapis.com';
+  }
+
+  static Future<void> setLynxAiBaseUrl(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lynxAiBaseUrlKey, value);
+  }
+
+  static Future<List<Map<String, dynamic>>> getLynxChatHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_lynxChatHistoryKey);
+    if (raw == null || raw.trim().isEmpty) return [];
+    try {
+      final List decoded = jsonDecode(raw) as List;
+      return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> setLynxChatHistory(List<Map<String, dynamic>> messages) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lynxChatHistoryKey, jsonEncode(messages));
+  }
+
+  static Future<void> clearLynxChatHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lynxChatHistoryKey);
+  }
 }

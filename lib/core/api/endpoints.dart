@@ -166,4 +166,23 @@ class ApiEndpoints {
   static const String emailConfigurations = '/api/restaurant/email-configurations';
   static const String emailTemplates = '/api/restaurant/email-templates';
   static const String recurringExpenses = '/api/finance/recurring-expenses';
+
+  // LYNX ASSIST, GROW, OPERATE, AUTOMATE, AI AGENT & DEVELOPER ECOSYSTEM Endpoints
+  static const String lynxAssistChat = '/api/v1/ai/chat';
+  static const String lynxAssistVoice = '/api/v1/ai/voice-command';
+  static const String cartRecommendations = '/api/v1/intelligence/recommendations';
+  static const String customerInsights = '/api/v1/intelligence/customer-insights';
+  static const String operationsHealth = '/api/v1/operations/health-snapshot';
+  static const String operationsReorderAlerts = '/api/v1/operations/reorder-alerts';
+  static const String operationsExpiryAlerts = '/api/v1/operations/expiry-alerts';
+  static const String workflowRules = '/api/v1/workflows/rules';
+  static const String workflowTrigger = '/api/v1/workflows/trigger';
+  static const String agentProposals = '/api/v1/agent/proposals';
+  static const String agentAuditLogs = '/api/v1/agent/audit-logs';
+  static const String developerInfo = '/api/v1/developer/ecosystem/info';
+  static const String developerWebhooks = '/api/v1/developer/webhooks';
+  static const String developerApiKeys = '/api/v1/developer/api-keys';
+  static const String pluginsMarketplace = '/api/v1/plugins/marketplace';
+  static const String pluginsInstalled = '/api/v1/plugins/installed';
+  static const String pluginInstall = '/api/v1/plugins/install';
 }

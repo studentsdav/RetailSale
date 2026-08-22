@@ -1018,21 +1018,41 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                     sum +
                                                     (item.isTaxInclusive
                                                         ? item.amount
-                                                        : (item.amount *
-                                                            (1 +
-                                                                item.taxPercent /
-                                                                    100))))
-                                            : _selectedOrder!.subTotal;
+                                                        : item.amount))
+                                            : _selectedOrder!.items.fold<double>(
+                                                0, (sum, item) => sum + item.amount);
                                         final double displayDiscount = _selectedOrder!.totalDiscount > 0
                                             ? _selectedOrder!.totalDiscount
                                             : _selectedOrder!.items.fold<double>(
                                                 0, (sum, item) => sum + item.lineDiscount);
+                                        final double displayTaxableAmount = _selectedOrder!.taxableAmount > 0
+                                            ? _selectedOrder!.taxableAmount
+                                            : _selectedOrder!.items.fold<double>(
+                                                0, (sum, item) => sum + item.taxableAmount);
+
+                                        final double preTaxSum = _selectedOrder!.items
+                                            .where((item) => !item.isTaxInclusive)
+                                            .fold<double>(0, (sum, item) => sum + item.amount);
+                                        final double postTaxSum = _selectedOrder!.items
+                                            .where((item) => item.isTaxInclusive)
+                                            .fold<double>(0, (sum, item) => sum + item.amount);
+
+                                        String? subTotalNote;
+                                        if (preTaxSum > 0 && postTaxSum > 0) {
+                                          subTotalNote = '(Pre-tax: ${_fmtAmount(preTaxSum)}, Post-tax: ${_fmtAmount(postTaxSum)})';
+                                        }
+                                        final bool allInclusive = _selectedOrder!.items.isNotEmpty && _selectedOrder!.items.every((item) => item.isTaxInclusive);
 
                                         return [
                                           _metricCard('Sub Total',
-                                              _fmtAmount(displaySubTotal)),
+                                              _fmtAmount(displaySubTotal), subtitle: subTotalNote),
                                           _metricCard('Discount',
                                               _fmtAmount(displayDiscount)),
+                                          if (allInclusive)
+                                            _metricCard('Net Amount (Incl. GST)',
+                                                _fmtAmount((displaySubTotal - displayDiscount).clamp(0.0, double.infinity))),
+                                          _metricCard('Taxable Value',
+                                              _fmtAmount(displayTaxableAmount)),
                                         ];
                                       })(),
                                       _metricCard('Tax',
@@ -1270,9 +1290,9 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     );
   }
 
-  Widget _metricCard(String label, String value) {
+  Widget _metricCard(String label, String value, {String? subtitle}) {
     return Container(
-      width: 120,
+      width: (subtitle != null && subtitle.isNotEmpty) ? 175 : 120,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFFF6F8FC),
@@ -1287,6 +1307,17 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
             value,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
+          if (subtitle != null && subtitle.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 10,
+                fontStyle: FontStyle.italic,
+                color: Colors.black54,
+              ),
+            ),
+          ],
         ],
       ),
     );

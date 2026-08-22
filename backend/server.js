@@ -295,6 +295,13 @@ app.use('/webhooks/whatsapp', require('./routes/whatsappWebhook.routes'));
 app.use('/api/whatsapp', require('./routes/whatsapp.routes'));
 app.use('/api/hrms', require('./routes/hrms.routes'));
 app.use('/api/restaurant', require('./routes/restaurant.routes'));
+app.use('/api/v1/ai', require('./routes/ai_assist.routes'));
+app.use('/api/v1/intelligence', require('./routes/intelligence.routes'));
+app.use('/api/v1/operations', require('./routes/operations.routes'));
+app.use('/api/v1/workflows', require('./routes/workflow.routes'));
+app.use('/api/v1/agent', require('./routes/autonomous_agent.routes'));
+app.use('/api/v1/developer', require('./routes/developer.routes'));
+app.use('/api/v1/plugins', require('./routes/plugin.routes'));
 
 // not found
 app.use((req, res) => {

@@ -2738,7 +2738,7 @@ async function createSaleVersion({
         }
 
         totalQty += qty;
-        subTotal += grossInclusiveAmount;
+        subTotal += isTaxInclusiveRow ? grossInclusiveAmount : amount;
         itemsTaxableTotal += taxableAmount;
         itemsTaxTotal += taxAmount;
         itemsLineTotal += lineTotal;
@@ -2901,9 +2901,18 @@ async function createSaleVersion({
     }
 
     const derivedTaxableAmount = Math.max(0, itemsTaxableTotal - subscriptionTaxableAmount);
-    const derivedCgstAmount = Math.max(0, toAmount(taxSummary.get('CGST|CGST|0')?.taxAmount ?? 0) - subscriptionTaxCgst);
-    const derivedSgstAmount = Math.max(0, toAmount(taxSummary.get('SGST|SGST|0')?.taxAmount ?? 0) - subscriptionTaxSgst);
-    const derivedIgstAmount = Math.max(0, toAmount(taxSummary.get('IGST|IGST|0')?.taxAmount ?? 0) - subscriptionTaxIgst);
+    let rawCgst = 0;
+    let rawSgst = 0;
+    let rawIgst = 0;
+    for (const [_, taxObj] of taxSummary) {
+        const code = String(taxObj.code || taxObj.label || '').toUpperCase();
+        if (code.includes('CGST')) rawCgst += toAmount(taxObj.taxAmount);
+        else if (code.includes('SGST') || code.includes('UTGST')) rawSgst += toAmount(taxObj.taxAmount);
+        else if (code.includes('IGST')) rawIgst += toAmount(taxObj.taxAmount);
+    }
+    const derivedCgstAmount = Math.max(0, rawCgst - subscriptionTaxCgst);
+    const derivedSgstAmount = Math.max(0, rawSgst - subscriptionTaxSgst);
+    const derivedIgstAmount = Math.max(0, rawIgst - subscriptionTaxIgst);
     const derivedTotalTax = Math.max(0, itemsTaxTotal - (subscriptionTaxCgst + subscriptionTaxSgst + subscriptionTaxIgst));
     const derivedTotalDiscount = toAmount(header.total_discount || 0);
 

@@ -9709,53 +9709,43 @@ class _SaleScreenState extends State<SaleScreen> {
           ),
           const SizedBox(height: 14),
           (() {
-            final bool anyInclusiveCart = _invoice.items.isNotEmpty && _invoice.items.any((item) => item.isTaxInclusive);
-            if (anyInclusiveCart) {
-              final double displaySubTotal = _invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100))));
-              final double displayDiscount = _invoice.totalDiscount;
-              final double discountPercent = displaySubTotal > 0 ? (displayDiscount / displaySubTotal) * 100 : 0.0;
-              final double cgst = _invoice.totalTax / 2;
-              final double sgst = _invoice.totalTax / 2;
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _miniInfoCard('Sub Total (Incl. GST)', displaySubTotal),
-                  _miniInfoCard(
-                    displaySubTotal > 0 && displayDiscount > 0
-                        ? 'Discount (${discountPercent.toStringAsFixed(discountPercent % 1 == 0 ? 0 : 1)}%)'
-                        : 'Discount',
-                    displayDiscount,
-                  ),
-                  _miniInfoCard('Net Amount (Incl. GST)', displaySubTotal - displayDiscount),
-                  _miniInfoCard('Taxable Value', _invoice.taxableAmount),
-                  _miniInfoCard('CGST', cgst),
-                  _miniInfoCard('SGST', sgst),
-                  _miniInfoCard('Total Payable', _invoice.netAmount, highlight: true),
-                ],
-              );
-            } else {
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _miniInfoCard('Sub Total', _invoice.subTotal),
-                  _miniInfoCard(
-                    _invoice.subTotal > 0 && _invoice.totalDiscount > 0
-                        ? 'Discount (${((_invoice.totalDiscount / _invoice.subTotal) * 100).toStringAsFixed(((_invoice.totalDiscount / _invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
-                        : 'Discount',
-                    _invoice.totalDiscount,
-                  ),
-                  _miniInfoCard(
-                    _invoice.taxableAmount > 0 && _invoice.totalTax > 0
-                        ? 'Tax (${((_invoice.totalTax / _invoice.taxableAmount) * 100).toStringAsFixed(((_invoice.totalTax / _invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
-                        : 'Tax',
-                    _invoice.totalTax,
-                  ),
-                  _miniInfoCard('Total', _invoice.netAmount, highlight: true),
-                ],
-              );
+            final double preTaxSum = _invoice.items
+                .where((item) => !item.isTaxInclusive)
+                .fold<double>(0, (sum, item) => sum + item.amount);
+            final double postTaxSum = _invoice.items
+                .where((item) => item.isTaxInclusive)
+                .fold<double>(0, (sum, item) => sum + item.amount);
+
+            final bool allInclusive = _invoice.items.isNotEmpty && _invoice.items.every((item) => item.isTaxInclusive);
+            final String subTotalLabel = allInclusive ? 'Sub Total (Incl. GST)' : 'Sub Total';
+
+            String? subTotalNote;
+            if (preTaxSum > 0 && postTaxSum > 0) {
+              subTotalNote = '(Pre-tax: ₹${preTaxSum.toStringAsFixed(2)}, Post-tax: ₹${postTaxSum.toStringAsFixed(2)})';
             }
+
+            final double cgst = _invoice.totalTax / 2;
+            final double sgst = _invoice.totalTax / 2;
+
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _miniInfoCard(subTotalLabel, _invoice.subTotal, subtitle: subTotalNote),
+                _miniInfoCard(
+                  _invoice.subTotal > 0 && _invoice.totalDiscount > 0
+                      ? 'Discount (${((_invoice.totalDiscount / _invoice.subTotal) * 100).toStringAsFixed(((_invoice.totalDiscount / _invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
+                      : 'Discount',
+                  _invoice.totalDiscount,
+                ),
+                if (allInclusive)
+                  _miniInfoCard('Net Amount (Incl. GST)', (_invoice.subTotal - _invoice.totalDiscount).clamp(0.0, double.infinity)),
+                _miniInfoCard('Taxable Value', _invoice.taxableAmount),
+                if (cgst > 0) _miniInfoCard('CGST', cgst),
+                if (sgst > 0) _miniInfoCard('SGST', sgst),
+                _miniInfoCard('Total', _invoice.netAmount, highlight: true),
+              ],
+            );
           })(),
         ],
       ),
@@ -10100,46 +10090,39 @@ class _SaleScreenState extends State<SaleScreen> {
                   ],
                 ),
                 ...(() {
-                  final bool anyInclusiveCart = invoice.items.isNotEmpty && invoice.items.any((item) => item.isTaxInclusive);
-                  if (anyInclusiveCart) {
-                    final double displaySubTotal = invoice.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100))));
-                    final double displayDiscount = invoice.totalDiscount;
-                    final double discountPercent = displaySubTotal > 0 ? (displayDiscount / displaySubTotal) * 100 : 0.0;
-                    final double cgst = invoice.totalTax / 2;
-                    final double sgst = invoice.totalTax / 2;
-                    return [
-                      _summaryRow('Sub Total (Incl. GST)', displaySubTotal),
-                      _summaryRow(
-                        displaySubTotal > 0 && displayDiscount > 0
-                            ? 'Discount (${discountPercent.toStringAsFixed(discountPercent % 1 == 0 ? 0 : 1)}%)'
-                            : 'Discount',
-                        displayDiscount,
-                      ),
-                      _summaryRow('Net Amount (Incl. GST)', displaySubTotal - displayDiscount),
-                      if (invoice.chargeTotal > 0)
-                        _summaryRow('Charges', invoice.chargeTotal),
-                      _summaryRow('Taxable Value', invoice.taxableAmount),
-                      _summaryRow('CGST', cgst),
-                      _summaryRow('SGST', sgst),
-                    ];
-                  } else {
-                    return [
-                      _summaryRow('Sub Total', invoice.subTotal),
-                      _summaryRow(
-                        invoice.subTotal > 0 && invoice.totalDiscount > 0
-                            ? 'Discount (${((invoice.totalDiscount / invoice.subTotal) * 100).toStringAsFixed(((invoice.totalDiscount / invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
-                            : 'Discount',
-                        invoice.totalDiscount,
-                      ),
-                      _summaryRow('Charges', invoice.chargeTotal),
-                      _summaryRow(
-                        invoice.taxableAmount > 0 && invoice.totalTax > 0
-                            ? 'Tax (${((invoice.totalTax / invoice.taxableAmount) * 100).toStringAsFixed(((invoice.totalTax / invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
-                            : 'Tax',
-                        invoice.totalTax,
-                      ),
-                    ];
+                  final double preTaxSum = invoice.items
+                      .where((item) => !item.isTaxInclusive)
+                      .fold<double>(0, (sum, item) => sum + item.amount);
+                  final double postTaxSum = invoice.items
+                      .where((item) => item.isTaxInclusive)
+                      .fold<double>(0, (sum, item) => sum + item.amount);
+
+                  final bool allInclusive = invoice.items.isNotEmpty && invoice.items.every((item) => item.isTaxInclusive);
+                  final String subTotalLabel = allInclusive ? 'Sub Total (Incl. GST)' : 'Sub Total';
+
+                  String? subTotalNote;
+                  if (preTaxSum > 0 && postTaxSum > 0) {
+                    subTotalNote = '(Pre-tax: ₹${preTaxSum.toStringAsFixed(2)}, Post-tax: ₹${postTaxSum.toStringAsFixed(2)})';
                   }
+
+                  final double cgst = invoice.totalTax / 2;
+                  final double sgst = invoice.totalTax / 2;
+                  return [
+                    _summaryRow(subTotalLabel, invoice.subTotal, subtitle: subTotalNote),
+                    _summaryRow(
+                      invoice.subTotal > 0 && invoice.totalDiscount > 0
+                          ? 'Discount (${((invoice.totalDiscount / invoice.subTotal) * 100).toStringAsFixed(((invoice.totalDiscount / invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
+                          : 'Discount',
+                      invoice.totalDiscount,
+                    ),
+                    if (allInclusive)
+                      _summaryRow('Net Amount (Incl. GST)', (invoice.subTotal - invoice.totalDiscount).clamp(0.0, double.infinity)),
+                    _summaryRow('Taxable Value', invoice.taxableAmount),
+                    if (invoice.chargeTotal > 0)
+                      _summaryRow('Charges', invoice.chargeTotal),
+                    if (cgst > 0) _summaryRow('CGST', cgst),
+                    if (sgst > 0) _summaryRow('SGST', sgst),
+                  ];
                 })(),
                 const Divider(height: 18),
                 _summaryRow('Total', _payableInvoiceTotal, emphasized: true),
@@ -11269,7 +11252,7 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   Widget _summaryRow(String label, double value,
-      {bool emphasized = false, Color? labelColor, Color? valueColor}) {
+      {bool emphasized = false, Color? labelColor, Color? valueColor, String? subtitle}) {
     final style = TextStyle(
       fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
       fontSize: emphasized ? 20 : 14,
@@ -11278,11 +11261,28 @@ class _SaleScreenState extends State<SaleScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Text(
-              label,
-              style: style.copyWith(color: labelColor),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: style.copyWith(color: labelColor),
+                ),
+                if (subtitle != null && subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           Text(
@@ -13338,9 +13338,9 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
-  Widget _miniInfoCard(String label, double value, {bool highlight = false}) {
+  Widget _miniInfoCard(String label, double value, {bool highlight = false, String? subtitle}) {
     return Container(
-      width: 132,
+      width: (subtitle != null && subtitle.isNotEmpty) ? 175 : 132,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: highlight ? const Color(0xFF17324D) : Colors.white,
@@ -13365,6 +13365,17 @@ class _SaleScreenState extends State<SaleScreen> {
               color: highlight ? Colors.white : const Color(0xFF0F172A),
             ),
           ),
+          if (subtitle != null && subtitle.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 10,
+                fontStyle: FontStyle.italic,
+                color: highlight ? Colors.white70 : const Color(0xFF64748B),
+              ),
+            ),
+          ],
         ],
       ),
     );

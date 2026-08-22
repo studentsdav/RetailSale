@@ -27,15 +27,15 @@ class AppBrandingModel {
 
   factory AppBrandingModel.defaults() {
     return const AppBrandingModel(
-      companyName: 'Famalth Technologies',
-      productName: 'Famalth Inventory',
+      companyName: 'Famalth Business Solutions',
+      productName: 'FAMALTH LYNX',
       supportEmail: 'support@famalth.com',
       supportWebsite: 'www.famalth.com',
       supportPhone: '+91-00000-00000',
       openSourceNotice:
-          'Famalth Technologies branding is applied across the product. Third-party packages remain available under their respective open-source licenses.',
-      poweredByLabel: 'Powered by Famalth Technologies',
-      themeKey: 'famalth_classic',
+          'Famalth Business Solutions branding is applied across the product. Third-party packages remain available under their respective open-source licenses.',
+      poweredByLabel: 'Powered by FAMALTH LYNX Ecosystem',
+      themeKey: 'famalth_lynx',
       homeBgImagePath: '',
       homeBgImageSize: 'Cover',
       homeThemeStyle: 'Default',

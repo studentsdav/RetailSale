@@ -206,12 +206,15 @@ class SaleItem {
           .map((entry) =>
               TaxBreakdown.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),
-      brand: json['brand'] ?? (json['item'] is Map ? json['item']['brand']?.toString() : null),
       isTaxInclusive: json['is_tax_inclusive'] == true ||
           json['is_tax_inclusive'] == 1 ||
+          json['tax_type']?.toString().toUpperCase() == 'GST_INCLUSIVE' ||
+          json['tax_type']?.toString().toUpperCase() == 'INCLUSIVE' ||
           (json['item'] is Map &&
               (json['item']['is_tax_inclusive'] == true ||
-                  json['item']['is_tax_inclusive'] == 1)),
+                  json['item']['is_tax_inclusive'] == 1 ||
+                  json['item']['tax_type']?.toString().toUpperCase() == 'GST_INCLUSIVE' ||
+                  json['item']['tax_type']?.toString().toUpperCase() == 'INCLUSIVE')),
       originalRate: json['original_rate'] != null ? parseNum(json['original_rate']) : null,
       schemeDiscountPerUnit: json['scheme_discount_per_unit'] != null ? parseNum(json['scheme_discount_per_unit']) : null,
       mrp: json['mrp'] != null ? parseNum(json['mrp']) : (json['item'] is Map ? parseNum(json['item']['mrp']) : 0.0),
