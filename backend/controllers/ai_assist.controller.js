@@ -6,7 +6,7 @@ function resolveOutletId(req) {
 
 exports.chatWithLynxAssist = async (req, res) => {
     try {
-        const { message, history, aiProvider, aiModelName, aiBaseUrl, aiApiKey } = req.body;
+        const { message, history, aiProvider, aiModelName, aiBaseUrl, aiApiKey, maxRows } = req.body;
 
         if (!message || typeof message !== 'string' || message.trim().length === 0) {
             return res.status(400).json({
@@ -16,8 +16,8 @@ exports.chatWithLynxAssist = async (req, res) => {
         }
 
         const outletId = resolveOutletId(req);
-        const aiConfig = { aiProvider, aiModelName, aiBaseUrl, aiApiKey };
-        const result = await aiService.processLynxAssist(message, history || [], aiConfig, req.propertyDb, outletId);
+        const aiConfig = { aiProvider, aiModelName, aiBaseUrl, aiApiKey, maxRows };
+        const result = await aiService.processLynxAssist(message, [], aiConfig, req.propertyDb, outletId);
 
         return res.json({
             success: true,
@@ -34,7 +34,7 @@ exports.chatWithLynxAssist = async (req, res) => {
 
 exports.handleVoiceCommand = async (req, res) => {
     try {
-        const { transcript, history, aiProvider, aiModelName, aiBaseUrl, aiApiKey } = req.body;
+        const { transcript, history, aiProvider, aiModelName, aiBaseUrl, aiApiKey, maxRows } = req.body;
 
         if (!transcript || typeof transcript !== 'string' || transcript.trim().length === 0) {
             return res.status(400).json({
@@ -44,8 +44,8 @@ exports.handleVoiceCommand = async (req, res) => {
         }
 
         const outletId = resolveOutletId(req);
-        const aiConfig = { aiProvider, aiModelName, aiBaseUrl, aiApiKey };
-        const result = await aiService.processLynxAssist(transcript, history || [], aiConfig, req.propertyDb, outletId);
+        const aiConfig = { aiProvider, aiModelName, aiBaseUrl, aiApiKey, maxRows };
+        const result = await aiService.processLynxAssist(transcript, [], aiConfig, req.propertyDb, outletId);
 
         return res.json({
             success: true,

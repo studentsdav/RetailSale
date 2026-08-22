@@ -240,6 +240,43 @@ if (!fs.existsSync(licensePath)) {
             console.warn('⚠️ Failed to dynamically alter table property_info:', colErr.message);
         }
 
+        try {
+            await propertyDb.query(`
+                CREATE TABLE IF NOT EXISTS user_notes (
+                    id SERIAL PRIMARY KEY,
+                    outlet_id INTEGER NOT NULL DEFAULT 0,
+                    user_id INTEGER DEFAULT 1,
+                    title VARCHAR(255) NOT NULL,
+                    content TEXT DEFAULT '',
+                    color_hex VARCHAR(20) DEFAULT '#FEF08A',
+                    is_pinned BOOLEAN DEFAULT FALSE,
+                    is_completed BOOLEAN DEFAULT FALSE,
+                    is_archived BOOLEAN DEFAULT FALSE,
+                    is_trashed BOOLEAN DEFAULT FALSE,
+                    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+                    reminder_type VARCHAR(50) DEFAULT 'NONE',
+                    reminder_date TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+                    reminder_time VARCHAR(30) DEFAULT NULL,
+                    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                ALTER TABLE user_notes
+                ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS is_trashed BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+            `);
+            // Auto purge notes in trash older than 30 days
+            await propertyDb.query(`
+                DELETE FROM user_notes 
+                WHERE is_trashed = true 
+                  AND deleted_at IS NOT NULL 
+                  AND deleted_at < NOW() - INTERVAL '30 days';
+            `);
+            console.log('✅ Verified user_notes table columns and purged notes in Trash older than 30 days');
+        } catch (noteErr) {
+            console.warn('⚠️ Failed to verify user_notes table:', noteErr.message);
+        }
+
         await runMigrations(propertyDb);
 
         console.log('✅ Database migrations complete');
@@ -302,6 +339,7 @@ app.use('/api/v1/workflows', require('./routes/workflow.routes'));
 app.use('/api/v1/agent', require('./routes/autonomous_agent.routes'));
 app.use('/api/v1/developer', require('./routes/developer.routes'));
 app.use('/api/v1/plugins', require('./routes/plugin.routes'));
+app.use('/api/notes', require('./routes/userNote.routes'));
 
 // not found
 app.use((req, res) => {

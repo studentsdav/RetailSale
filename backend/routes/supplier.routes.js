@@ -10,6 +10,7 @@ router.use(auth, license('SUPPLIER'));
 router.post('/', supplierCtrl.createSupplier);
 router.get('/', supplierCtrl.getSuppliers);
 //router.get('/:id', supplierCtrl.getSupplierById);
+router.put('/:id/toggle-status', supplierCtrl.toggleSupplierStatus);
 router.put('/:id', supplierCtrl.updateSupplier);
 router.delete('/:id', supplierCtrl.deleteSupplier);
 

@@ -49,6 +49,39 @@ class SupplierController extends ChangeNotifier {
     await load();
   }
 
+  Future<void> toggleStatus(int id) async {
+    loading = true;
+    notifyListeners();
+
+    final supplier = list.firstWhere(
+      (element) => element.id == id,
+      orElse: () => Supplier(id: 0, supplierCode: '', supplierName: '', address: '', phone: ''),
+    );
+
+    if (supplier.id != 0) {
+      final updated = Supplier(
+        id: supplier.id,
+        supplierCode: supplier.supplierCode,
+        supplierName: supplier.supplierName,
+        address: supplier.address,
+        phone: supplier.phone,
+        email: supplier.email,
+        state: supplier.state,
+        gstin: supplier.gstin,
+        taxCountryCode: supplier.taxCountryCode,
+        isActive: !(supplier.isActive ?? true),
+      );
+      await ApiClient.put(
+        '${ApiEndpoints.suppliers}/$id',
+        updated.toJson(),
+      );
+    } else {
+      await ApiClient.put('${ApiEndpoints.suppliers}/$id/toggle-status', {});
+    }
+
+    await load();
+  }
+
   Future<String> getNextCode() async {
     final res = await ApiClient.get('${ApiEndpoints.suppliers}/next-code');
     return res['data'];

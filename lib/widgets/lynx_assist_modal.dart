@@ -42,7 +42,7 @@ class LynxAssistChatMessage {
 class LynxAssistModal extends StatefulWidget {
   final Function(String actionType, Map<String, dynamic>? payload)? onActionTriggered;
 
-  const LynxAssistModal({Key? key, this.onActionTriggered}) : super(key: key);
+  const LynxAssistModal({super.key, this.onActionTriggered});
 
   static void show(BuildContext context, {Function(String actionType, Map<String, dynamic>? payload)? onActionTriggered}) {
     showModalBottomSheet(
@@ -69,13 +69,30 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
   bool _isLoading = false;
   bool _isListening = false;
 
+  // Theme & Appearance State
+  bool _isDarkMode = true;
+
+  // Dynamic Adaptive Color Palette
+  Color get _modalBgColor => _isDarkMode ? const Color(0xFF1E1E2D) : const Color(0xFFF8FAFC);
+  Color get _headerBgColor => _isDarkMode ? const Color(0xFF151521) : const Color(0xFFEDF2F7);
+  Color get _botMessageBgColor => _isDarkMode ? const Color(0xFF2B2B40) : const Color(0xFFFFFFFF);
+  Color get _botMessageBorderColor => _isDarkMode ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1);
+  Color get _primaryTextColor => _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDarkMode ? Colors.white70 : const Color(0xFF334155);
+  Color get _greyTextColor => _isDarkMode ? Colors.grey : const Color(0xFF64748B);
+  Color get _chipBgColor => _isDarkMode ? const Color(0xFF2B2B40) : const Color(0xFFE2E8F0);
+  Color get _inputFillColor => _isDarkMode ? const Color(0xFF2B2B40) : const Color(0xFFEDF2F7);
+  Color get _dialogBgColor => _isDarkMode ? const Color(0xFF1E1E2D) : Colors.white;
+
   // AI Configuration Settings
   String _aiProvider = 'gemini';
   String _aiModelName = 'gemini-1.5-flash';
   String _aiApiKey = '';
   String _aiBaseUrl = 'https://generativelanguage.googleapis.com';
+  int _maxRows = 100;
 
   final List<String> _defaultChips = [
+    "Daily Subscriptions",
     "Create New Bill",
     "Low Stock Alert",
     "Attendance Logs",
@@ -98,12 +115,16 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     final model = await LocalPreferences.getLynxAiModelName();
     final baseUrl = await LocalPreferences.getLynxAiBaseUrl();
     final savedHistory = await LocalPreferences.getLynxChatHistory();
+    final themeMode = await LocalPreferences.getLynxThemeMode();
+    final maxRows = await LocalPreferences.getLynxMaxRows();
 
     setState(() {
       _aiApiKey = key;
       _aiProvider = provider;
       _aiModelName = model;
       _aiBaseUrl = baseUrl;
+      _isDarkMode = themeMode != 'light';
+      _maxRows = maxRows;
 
       _messages.clear();
       if (savedHistory.isNotEmpty) {
@@ -122,7 +143,19 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
       }
     });
 
-    _scrollToBottom();
+    // Initial scroll & staggered layout passes to ensure landing on the absolute latest chat message
+    _scrollToBottom(animate: false);
+    Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(animate: false));
+    Future.delayed(const Duration(milliseconds: 300), () => _scrollToBottom(animate: true));
+    Future.delayed(const Duration(milliseconds: 500), () => _scrollToBottom(animate: true));
+  }
+
+  Future<void> _toggleThemeMode([bool? forceDark]) async {
+    final newDark = forceDark ?? !_isDarkMode;
+    setState(() {
+      _isDarkMode = newDark;
+    });
+    await LocalPreferences.setLynxThemeMode(newDark ? 'dark' : 'light');
   }
 
   Future<void> _saveHistoryLocally() async {
@@ -134,15 +167,15 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2D),
-        title: const Text("Clear Chat History?", style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: _dialogBgColor,
+        title: Text("Clear Chat History?", style: TextStyle(color: _primaryTextColor)),
+        content: Text(
           "Are you sure you want to clear all stored chat messages from local memory?",
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: _secondaryTextColor),
         ),
         actions: [
           TextButton(
-            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+            child: Text("Cancel", style: TextStyle(color: _greyTextColor)),
             onPressed: () => Navigator.of(ctx).pop(false),
           ),
           ElevatedButton(
@@ -168,6 +201,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
         );
       });
       await _saveHistoryLocally();
+      _scrollToBottom(animate: true);
     }
   }
 
@@ -175,18 +209,20 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     final apiKeyCtrl = TextEditingController(text: _aiApiKey);
     final modelCtrl = TextEditingController(text: _aiModelName);
     final urlCtrl = TextEditingController(text: _aiBaseUrl);
+    final maxRowsCtrl = TextEditingController(text: _maxRows.toString());
     String selectedProvider = _aiProvider;
+    bool isDarkInModal = _isDarkMode;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E2D),
+          backgroundColor: _dialogBgColor,
           title: Row(
-            children: const [
-              Icon(Icons.settings_outlined, color: Color(0xFFE53935)),
-              SizedBox(width: 8),
-              Text("AI Assistant Settings", style: TextStyle(color: Colors.white, fontSize: 18)),
+            children: [
+              const Icon(Icons.settings_outlined, color: Color(0xFFE53935)),
+              const SizedBox(width: 8),
+              Text("AI Assistant Settings", style: TextStyle(color: _primaryTextColor, fontSize: 18)),
             ],
           ),
           content: SingleChildScrollView(
@@ -194,20 +230,66 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("AI Provider", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                // Theme Toggle inside Settings Dialog
+                Text("Theme Mode", style: TextStyle(color: _secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDarkInModal ? const Color(0xFF2B2B40) : const Color(0xFFEDF2F7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isDarkInModal ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isDarkInModal ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                            color: isDarkInModal ? Colors.amberAccent : Colors.amber.shade700,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isDarkInModal ? "Dark Mode" : "Light Mode",
+                            style: TextStyle(
+                              color: isDarkInModal ? Colors.white : const Color(0xFF0F172A),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Switch(
+                        value: isDarkInModal,
+                        activeThumbColor: const Color(0xFFE53935),
+                        onChanged: (val) {
+                          setModalState(() {
+                            isDarkInModal = val;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                Text("AI Provider", style: TextStyle(color: _secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2B2B40),
+                    color: isDarkInModal ? const Color(0xFF2B2B40) : const Color(0xFFEDF2F7),
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isDarkInModal ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1)),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: selectedProvider,
-                      dropdownColor: const Color(0xFF2B2B40),
+                      dropdownColor: isDarkInModal ? const Color(0xFF2B2B40) : Colors.white,
                       isExpanded: true,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: isDarkInModal ? Colors.white : const Color(0xFF0F172A)),
                       items: const [
                         DropdownMenuItem(value: 'gemini', child: Text("Google Gemini AI")),
                         DropdownMenuItem(value: 'openai', child: Text("OpenAI / ChatGPT")),
@@ -235,49 +317,74 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text("API Key", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                Text("API Key", style: TextStyle(color: _secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: apiKeyCtrl,
                   obscureText: true,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  style: TextStyle(color: isDarkInModal ? Colors.white : const Color(0xFF0F172A), fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: "Enter your Gemini API key (AIzaSy...)",
-                    hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                    hintText: "Enter your API key (AIzaSy...)",
+                    hintStyle: TextStyle(color: _greyTextColor, fontSize: 12),
                     filled: true,
-                    fillColor: const Color(0xFF2B2B40),
+                    fillColor: isDarkInModal ? const Color(0xFF2B2B40) : const Color(0xFFEDF2F7),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: isDarkInModal ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1)),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text("Model Name", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                Text("Model ID / Name", style: TextStyle(color: _secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: modelCtrl,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  style: TextStyle(color: isDarkInModal ? Colors.white : const Color(0xFF0F172A), fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: "e.g. gemini-1.5-flash or gemini-1.5-pro",
-                    hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
                     filled: true,
-                    fillColor: const Color(0xFF2B2B40),
+                    fillColor: isDarkInModal ? const Color(0xFF2B2B40) : const Color(0xFFEDF2F7),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: isDarkInModal ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1)),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text("API Base URL", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                Text("Base Endpoint URL", style: TextStyle(color: _secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: urlCtrl,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  style: TextStyle(color: isDarkInModal ? Colors.white : const Color(0xFF0F172A), fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: "Base API URL endpoint",
-                    hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
                     filled: true,
-                    fillColor: const Color(0xFF2B2B40),
+                    fillColor: isDarkInModal ? const Color(0xFF2B2B40) : const Color(0xFFEDF2F7),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: isDarkInModal ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text("Max Query Rows Limit (Max: 1000, Default: 100)", style: TextStyle(color: _secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: maxRowsCtrl,
+                  keyboardType: TextInputType.number,
+                  style: TextStyle(color: isDarkInModal ? Colors.white : const Color(0xFF0F172A), fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: "100",
+                    helperText: "Limits AI output payload & token costs. Max 1000 rows.",
+                    helperStyle: TextStyle(color: _greyTextColor, fontSize: 11),
+                    filled: true,
+                    fillColor: isDarkInModal ? const Color(0xFF2B2B40) : const Color(0xFFEDF2F7),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: isDarkInModal ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1)),
+                    ),
                   ),
                 ),
               ],
@@ -285,32 +392,42 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
           ),
           actions: [
             TextButton(
-              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+              child: Text("Cancel", style: TextStyle(color: _greyTextColor)),
               onPressed: () => Navigator.of(ctx).pop(),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC81E1E)),
               child: const Text("Save Settings", style: TextStyle(color: Colors.white)),
               onPressed: () async {
+                int parsedMax = int.tryParse(maxRowsCtrl.text.trim()) ?? 100;
+                if (parsedMax > 1000) parsedMax = 1000;
+                if (parsedMax < 1) parsedMax = 1;
+
                 await LocalPreferences.setLynxAiProvider(selectedProvider);
                 await LocalPreferences.setLynxAiApiKey(apiKeyCtrl.text.trim());
                 await LocalPreferences.setLynxAiModelName(modelCtrl.text.trim());
                 await LocalPreferences.setLynxAiBaseUrl(urlCtrl.text.trim());
+                await LocalPreferences.setLynxMaxRows(parsedMax);
 
                 setState(() {
                   _aiProvider = selectedProvider;
                   _aiApiKey = apiKeyCtrl.text.trim();
                   _aiModelName = modelCtrl.text.trim();
                   _aiBaseUrl = urlCtrl.text.trim();
+                  _maxRows = parsedMax;
                 });
 
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("✅ AI Configuration saved locally to SharedPreferences."),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                await _toggleThemeMode(isDarkInModal);
+
+                if (ctx.mounted) {
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(
+                      content: Text("✅ AI Configuration & Theme preferences saved successfully."),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
               },
             ),
           ],
@@ -319,14 +436,19 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     );
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        if (animate) {
+          _scrollController.animateTo(
+            maxScroll,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+          );
+        } else {
+          _scrollController.jumpTo(maxScroll);
+        }
       }
     });
   }
@@ -348,13 +470,14 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
 
     _inputController.clear();
     _saveHistoryLocally();
-    _scrollToBottom();
+    _scrollToBottom(animate: true);
 
     try {
       final endpoint = isVoice ? ApiEndpoints.lynxAssistVoice : ApiEndpoints.lynxAssistChat;
       final payload = isVoice
           ? {
               'transcript': trimmed,
+              'maxRows': _maxRows,
               'aiProvider': _aiProvider,
               'aiModelName': _aiModelName,
               'aiApiKey': _aiApiKey,
@@ -362,7 +485,8 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
             }
           : {
               'message': trimmed,
-              'history': _messages.map((m) => {'role': m.isUser ? 'user' : 'assistant', 'content': m.text}).toList(),
+              'maxRows': _maxRows,
+              'history': [],
               'aiProvider': _aiProvider,
               'aiModelName': _aiModelName,
               'aiApiKey': _aiApiKey,
@@ -402,7 +526,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
       setState(() {
         _isLoading = false;
       });
-      _scrollToBottom();
+      _scrollToBottom(animate: true);
     }
   }
 
@@ -418,6 +542,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
       _messages.add(errMessage);
     });
     _saveHistoryLocally();
+    _scrollToBottom(animate: true);
   }
 
   void _toggleVoiceListening() {
@@ -448,25 +573,25 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
   Widget build(BuildContext context) {
     return Container(
       height: MediaQuery.of(context).size.height * 0.82,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E2D),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: _modalBgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         children: [
           // Header Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              color: Color(0xFF151521),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            decoration: BoxDecoration(
+              color: _headerBgColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFC81E1E).withOpacity(0.2),
+                    color: const Color(0xFFC81E1E).withOpacity(0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.smart_toy_rounded, color: Color(0xFFE53935), size: 24),
@@ -478,10 +603,10 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                     children: [
                       Row(
                         children: [
-                          const Text(
+                          Text(
                             "FAMALTH LYNX ASSIST",
                             style: TextStyle(
-                              color: Colors.white,
+                              color: _primaryTextColor,
                               fontWeight: FontWeight.bold,
                               fontSize: 15,
                               letterSpacing: 0.5,
@@ -497,7 +622,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                             child: Text(
                               _aiApiKey.isNotEmpty ? "AI GEMINI" : "AI ONLINE",
                               style: TextStyle(
-                                color: _aiApiKey.isNotEmpty ? Colors.greenAccent : Colors.amberAccent,
+                                color: _aiApiKey.isNotEmpty ? (_isDarkMode ? Colors.greenAccent : Colors.green.shade800) : (_isDarkMode ? Colors.amberAccent : Colors.amber.shade900),
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -505,32 +630,43 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                           ),
                         ],
                       ),
-                      const Text(
+                      Text(
                         "Text-to-SQL Voice & Chat Business Companion",
-                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                        style: TextStyle(color: _greyTextColor, fontSize: 11),
                       ),
                     ],
                   ),
                 ),
 
-                // Settings Button (Configure Gemini API Key & Model)
+                // Quick Theme Mode Toggle Button (Sun / Moon)
                 IconButton(
-                  tooltip: "AI Key & Model Settings",
-                  icon: const Icon(Icons.settings_outlined, color: Colors.white70, size: 20),
+                  tooltip: _isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme",
+                  icon: Icon(
+                    _isDarkMode ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                    color: _isDarkMode ? Colors.amberAccent : const Color(0xFF475569),
+                    size: 20,
+                  ),
+                  onPressed: () => _toggleThemeMode(),
+                ),
+
+                // Settings Button (Configure AI Key, Model & Theme)
+                IconButton(
+                  tooltip: "AI Settings & Preferences",
+                  icon: Icon(Icons.settings_outlined, color: _secondaryTextColor, size: 20),
                   onPressed: _showSettingsDialog,
                 ),
 
-                // Clear Chat Button (Stores locally, clear when user wants)
+                // Clear Chat Button
                 IconButton(
                   tooltip: "Clear Chat History",
-                  icon: const Icon(Icons.cleaning_services_rounded, color: Colors.white70, size: 20),
+                  icon: Icon(Icons.cleaning_services_rounded, color: _secondaryTextColor, size: 20),
                   onPressed: _confirmClearChat,
                 ),
 
                 // Close Button
                 IconButton(
                   tooltip: "Close Assistant",
-                  icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                  icon: Icon(Icons.close, color: _greyTextColor, size: 20),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -539,14 +675,16 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
 
           // Chat Messages List
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return _buildMessageItem(message);
-              },
+            child: SelectionArea(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final message = _messages[index];
+                  return _buildMessageItem(message);
+                },
+              ),
             ),
           ),
 
@@ -554,14 +692,14 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
               child: Row(
-                children: const [
-                  SizedBox(
+                children: [
+                  const SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE53935)),
                   ),
-                  SizedBox(width: 10),
-                  Text("LYNX ASSIST is translating question to SQL & executing query...", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const SizedBox(width: 10),
+                  Text("LYNX ASSIST is executing query...", style: TextStyle(color: _greyTextColor, fontSize: 12)),
                 ],
               ),
             ),
@@ -569,9 +707,9 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
           // Bottom Input Controls
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: Color(0xFF151521),
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+            decoration: BoxDecoration(
+              color: _headerBgColor,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
             ),
             child: SafeArea(
               child: Column(
@@ -585,11 +723,11 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                           return Padding(
                             padding: const EdgeInsets.only(right: 8, bottom: 8),
                             child: ActionChip(
-                              backgroundColor: const Color(0xFF2B2B40),
-                              side: const BorderSide(color: Color(0xFF3F3F5F)),
+                              backgroundColor: _chipBgColor,
+                              side: BorderSide(color: _botMessageBorderColor),
                               label: Text(
                                 chip,
-                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                style: TextStyle(color: _secondaryTextColor, fontSize: 12),
                               ),
                               onPressed: () => _sendMessage(chip),
                             ),
@@ -606,15 +744,16 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                           duration: const Duration(milliseconds: 300),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: _isListening ? Colors.redAccent : const Color(0xFF2B2B40),
+                            color: _isListening ? Colors.redAccent : _inputFillColor,
                             shape: BoxShape.circle,
+                            border: Border.all(color: _botMessageBorderColor),
                             boxShadow: _isListening
                                 ? [BoxShadow(color: Colors.redAccent.withOpacity(0.5), blurRadius: 12, spreadRadius: 2)]
                                 : [],
                           ),
                           child: Icon(
                             _isListening ? Icons.mic : Icons.mic_none,
-                            color: Colors.white,
+                            color: _isListening ? Colors.white : _primaryTextColor,
                             size: 22,
                           ),
                         ),
@@ -624,16 +763,20 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                       Expanded(
                         child: TextField(
                           controller: _inputController,
-                          style: const TextStyle(color: Colors.white),
+                          style: TextStyle(color: _primaryTextColor),
                           decoration: InputDecoration(
                             hintText: _isListening ? "Listening to your voice..." : "Ask LYNX ASSIST or query database...",
-                            hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+                            hintStyle: TextStyle(color: _greyTextColor, fontSize: 14),
                             filled: true,
-                            fillColor: const Color(0xFF2B2B40),
+                            fillColor: _inputFillColor,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
+                              borderSide: BorderSide(color: _botMessageBorderColor),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide(color: _botMessageBorderColor),
                             ),
                           ),
                           onSubmitted: (val) => _sendMessage(val),
@@ -660,25 +803,187 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     );
   }
 
-  Widget _buildFormattedMarkdown(String rawText) {
-    final lines = rawText.split('\n');
-    List<Widget> widgets = [];
+  Widget _buildTableWidget(List<String> tableLines, bool isUser) {
+    if (tableLines.isEmpty) return const SizedBox.shrink();
 
-    const defaultStyle = TextStyle(color: Colors.white, fontSize: 13.5, height: 1.4);
-    const boldStyle = TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold, height: 1.4);
-    const titleStyle = TextStyle(color: Color(0xFF60A5FA), fontSize: 14.5, fontWeight: FontWeight.bold, height: 1.4);
+    List<String> headers = [];
+    List<List<String>> rows = [];
 
-    for (int i = 0; i < lines.length; i++) {
-      String line = lines[i];
-
-      if (line.trim().isEmpty) {
-        widgets.add(const SizedBox(height: 4));
+    for (int i = 0; i < tableLines.length; i++) {
+      final line = tableLines[i].trim();
+      final cleanLine = line.replaceAll('|', '').replaceAll(':', '').replaceAll('-', '').trim();
+      if (cleanLine.isEmpty) {
         continue;
       }
 
-      bool isBullet = line.trim().startsWith('* ') || line.trim().startsWith('- ');
+      final cells = line
+          .split('|')
+          .map((c) => c.trim())
+          .toList();
+
+      if (cells.isNotEmpty && cells.first.isEmpty) cells.removeAt(0);
+      if (cells.isNotEmpty && cells.last.isEmpty) cells.removeLast();
+
+      if (headers.isEmpty) {
+        headers = cells;
+      } else {
+        rows.add(cells);
+      }
+    }
+
+    if (headers.isEmpty) return const SizedBox.shrink();
+
+    final headerBgColor = isUser
+        ? const Color(0xFF801414)
+        : (_isDarkMode ? const Color(0xFF181824) : const Color(0xFFE2E8F0));
+
+    final rowBgColor = isUser
+        ? const Color(0xFFA61818)
+        : (_isDarkMode ? const Color(0xFF222234) : const Color(0xFFF8FAFC));
+
+    final alternateRowBgColor = isUser
+        ? const Color(0xFFC81E1E)
+        : (_isDarkMode ? const Color(0xFF2B2B40) : const Color(0xFFFFFFFF));
+
+    final borderSide = BorderSide(
+      color: isUser
+          ? Colors.white24
+          : (_isDarkMode ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1)),
+      width: 0.8,
+    );
+
+    final cellTextStyle = TextStyle(
+      color: isUser ? Colors.white : _primaryTextColor,
+      fontSize: 12,
+    );
+    final boldCellTextStyle = TextStyle(
+      color: isUser ? Colors.white : _primaryTextColor,
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+    );
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: rowBgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isUser
+              ? Colors.white30
+              : (_isDarkMode ? const Color(0xFF3F3F5F) : const Color(0xFFCBD5E1)),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(headerBgColor),
+            headingRowHeight: 36,
+            dataRowMinHeight: 32,
+            dataRowMaxHeight: 48,
+            horizontalMargin: 12,
+            columnSpacing: 18,
+            border: TableBorder(
+              horizontalInside: borderSide,
+              verticalInside: borderSide,
+            ),
+            columns: headers.map((h) {
+              return DataColumn(
+                label: Text(
+                  h.replaceAll('**', '').trim(),
+                  style: TextStyle(
+                    color: isUser ? Colors.white : _primaryTextColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              );
+            }).toList(),
+            rows: rows.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final r = entry.value;
+
+              return DataRow(
+                color: WidgetStateProperty.all(
+                  idx % 2 == 0 ? rowBgColor : alternateRowBgColor,
+                ),
+                cells: List.generate(headers.length, (colIdx) {
+                  final cellText = colIdx < r.length ? r[colIdx] : '';
+                  return DataCell(
+                    SelectableText.rich(
+                      TextSpan(
+                        children: _parseInlineMarkdown(
+                          cellText,
+                          cellTextStyle,
+                          boldCellTextStyle,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormattedMarkdown(String rawText, bool isUser) {
+    final lines = rawText.split('\n');
+    List<Widget> widgets = [];
+
+    final defaultStyle = TextStyle(
+      color: isUser ? Colors.white : _primaryTextColor,
+      fontSize: 13.5,
+      height: 1.4,
+    );
+    final boldStyle = TextStyle(
+      color: isUser ? Colors.white : _primaryTextColor,
+      fontSize: 13.5,
+      fontWeight: FontWeight.bold,
+      height: 1.4,
+    );
+    final titleStyle = TextStyle(
+      color: isUser ? Colors.white : (_isDarkMode ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8)),
+      fontSize: 14.5,
+      fontWeight: FontWeight.bold,
+      height: 1.4,
+    );
+
+    int i = 0;
+    while (i < lines.length) {
+      String line = lines[i];
+      final trimmedLine = line.trim();
+
+      // Detect markdown table block
+      if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|') && trimmedLine.split('|').length > 2) {
+        List<String> tableLines = [];
+        while (i < lines.length) {
+          final tLine = lines[i].trim();
+          if (tLine.startsWith('|') && tLine.endsWith('|') && tLine.split('|').length > 2) {
+            tableLines.add(lines[i]);
+            i++;
+          } else {
+            break;
+          }
+        }
+        widgets.add(_buildTableWidget(tableLines, isUser));
+        continue;
+      }
+
+      if (trimmedLine.isEmpty) {
+        widgets.add(const SizedBox(height: 4));
+        i++;
+        continue;
+      }
+
+      bool isBullet = trimmedLine.startsWith('* ') || trimmedLine.startsWith('- ');
       if (isBullet) {
-        line = line.trim().substring(2);
+        line = trimmedLine.substring(2);
+      } else {
+        line = trimmedLine;
       }
 
       bool isHeader = line.startsWith('###') || line.startsWith('##') || line.startsWith('#');
@@ -688,17 +993,17 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
 
       final spans = _parseInlineMarkdown(line, isHeader ? titleStyle : defaultStyle, isHeader ? titleStyle : boldStyle);
 
-      Widget lineWidget = RichText(
-        text: TextSpan(children: spans),
+      Widget lineWidget = SelectableText.rich(
+        TextSpan(children: spans),
       );
 
       if (isBullet) {
         lineWidget = Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 6, right: 8),
-              child: Icon(Icons.circle, size: 5, color: Color(0xFFE53935)),
+            Padding(
+              padding: const EdgeInsets.only(top: 6, right: 8),
+              child: Icon(Icons.circle, size: 5, color: isUser ? Colors.white : const Color(0xFFE53935)),
             ),
             Expanded(child: lineWidget),
           ],
@@ -709,6 +1014,8 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
         padding: const EdgeInsets.only(bottom: 3),
         child: lineWidget,
       ));
+
+      i++;
     }
 
     return Column(
@@ -745,18 +1052,22 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: message.isUser ? const Color(0xFFC81E1E) : const Color(0xFF2B2B40),
+          color: message.isUser ? const Color(0xFFC81E1E) : _botMessageBgColor,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
             bottomLeft: Radius.circular(message.isUser ? 16 : 4),
             bottomRight: Radius.circular(message.isUser ? 4 : 16),
           ),
+          border: (!message.isUser) ? Border.all(color: _botMessageBorderColor) : null,
+          boxShadow: (!message.isUser && !_isDarkMode)
+              ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2))]
+              : [],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildFormattedMarkdown(message.text),
+            _buildFormattedMarkdown(message.text, message.isUser),
             if (message.action != null && message.action!['type'] != 'NONE') ...[
               const SizedBox(height: 10),
               ElevatedButton.icon(
@@ -773,10 +1084,18 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                   final actionPayload = message.action;
                   final callback = widget.onActionTriggered;
 
-                  Navigator.of(context).pop();
+                  if (actionType.startsWith('CONFIRM_') || actionType == 'APPROVE') {
+                    // In-chat approval action: Keep chatbot open, trigger API call, and return response in chat
+                    final label = (message.action!['label'] ?? "Approve").toString();
+                    final cleanLabel = label.replaceAll('✅', '').replaceAll('⚡', '').trim();
+                    _sendMessage(cleanLabel.isNotEmpty ? cleanLabel : "Approve");
+                  } else {
+                    // Screen navigation action: Close chatbot modal and open target screen
+                    Navigator.of(context).pop();
 
-                  if (callback != null) {
-                    callback(actionType, actionPayload);
+                    if (callback != null) {
+                      callback(actionType, actionPayload);
+                    }
                   }
                 },
               ),

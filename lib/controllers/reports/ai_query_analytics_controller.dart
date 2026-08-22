@@ -20,6 +20,7 @@ class AiQueryAnalyticsController extends ChangeNotifier {
   String? aiModelName;
   String? aiBaseUrl;
   String? aiApiKey;
+  int maxRows = 100;
 
   Future<void> initPrefs() async {
     try {
@@ -28,6 +29,8 @@ class AiQueryAnalyticsController extends ChangeNotifier {
       aiModelName = prefs.getString('ai_model_name');
       aiBaseUrl = prefs.getString('ai_base_url');
       aiApiKey = prefs.getString('ai_api_key');
+      final storedMax = prefs.getInt('ai_max_rows') ?? 100;
+      maxRows = storedMax.clamp(1, 1000);
       notifyListeners();
     } catch (e) {
       debugPrint('[AI CONTROLLER] Failed to load preferences: $e');
@@ -39,6 +42,7 @@ class AiQueryAnalyticsController extends ChangeNotifier {
     required String modelName,
     required String baseUrl,
     required String apiKey,
+    int? maxRowsLimit,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -47,6 +51,7 @@ class AiQueryAnalyticsController extends ChangeNotifier {
       final cleanModel = modelName.trim();
       final cleanUrl = baseUrl.trim();
       final cleanKey = apiKey.trim();
+      final clampedMax = (maxRowsLimit ?? 100).clamp(1, 1000);
 
       if (cleanProvider.isEmpty) {
         await prefs.remove('ai_provider');
@@ -80,6 +85,9 @@ class AiQueryAnalyticsController extends ChangeNotifier {
         aiApiKey = cleanKey;
       }
 
+      await prefs.setInt('ai_max_rows', clampedMax);
+      maxRows = clampedMax;
+
       notifyListeners();
     } catch (e) {
       debugPrint('[AI CONTROLLER] Failed to save preferences: $e');
@@ -111,6 +119,7 @@ class AiQueryAnalyticsController extends ChangeNotifier {
         },
         body: jsonEncode({
           'question': question.trim(),
+          'maxRows': maxRows,
           if (aiProvider != null && aiProvider!.isNotEmpty) 'aiProvider': aiProvider,
           if (aiModelName != null && aiModelName!.isNotEmpty) 'aiModelName': aiModelName,
           if (aiBaseUrl != null && aiBaseUrl!.isNotEmpty) 'aiBaseUrl': aiBaseUrl,

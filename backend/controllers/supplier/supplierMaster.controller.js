@@ -162,26 +162,39 @@ exports.bulkImportSuppliers = async (req, res) => {
 exports.getSuppliers = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-        const { q } = req.query;
+        const { q, activeOnly } = req.query;
 
         const where = {
-            outlet_id,
-            is_active: true
+            outlet_id
         };
+
+        if (activeOnly === 'true' || activeOnly === true) {
+            where.is_active = true;
+        }
 
         if (q && q.trim() !== '') {
             const search = q.trim();
+            const digits = search.replace(/[^\d]/g, '');
+            const parsedNum = digits ? parseInt(digits, 10) : null;
 
-            where[Op.or] = [
+            const searchConditions = [
                 { supplier_code: { [Op.iLike]: `%${search}%` } },
                 { supplier_name: { [Op.iLike]: `%${search}%` } },
-                { phone: { [Op.iLike]: `%${search}%` } }
+                { phone: { [Op.iLike]: `%${search}%` } },
+                { gstin: { [Op.iLike]: `%${search}%` } }
             ];
+
+            if (parsedNum !== null) {
+                searchConditions.push({ supplier_code: { [Op.iLike]: `%${parsedNum}%` } });
+                searchConditions.push({ supplier_code: { [Op.iLike]: `%sup${parsedNum}%` } });
+            }
+
+            where[Op.or] = searchConditions;
         }
 
         const suppliers = await req.propertyDb.models.supplier_master.findAll({
             where,
-            order: [['supplier_name', 'ASC']]
+            order: [['id', 'DESC']]
         });
 
         res.json({ success: true, data: suppliers });
@@ -220,6 +233,8 @@ exports.updateSupplier = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Address is required' });
         }
 
+        const isActiveVal = req.body.is_active !== undefined ? (req.body.is_active === true || req.body.is_active === 'true') : supplier.is_active;
+
         await supplier.update({
             supplier_code: payload.supplier_code,
             supplier_name: payload.supplier_name,
@@ -229,7 +244,8 @@ exports.updateSupplier = async (req, res) => {
             gstin: payload.gstin,
             tax_id_number: payload.tax_id_number,
             tax_id_type: payload.tax_id_type,
-            tax_country_code: payload.tax_country_code
+            tax_country_code: payload.tax_country_code,
+            is_active: isActiveVal
         });
 
         await audit.log({
@@ -245,6 +261,41 @@ exports.updateSupplier = async (req, res) => {
         });
 
         res.json({ success: true, data: supplier });
+
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.toggleSupplierStatus = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const id = req.params.id;
+
+        const supplier = await req.propertyDb.models.supplier_master.findOne({
+            where: { id, outlet_id }
+        });
+
+        if (!supplier) {
+            return res.status(404).json({ success: false, message: 'Supplier not found' });
+        }
+
+        const newStatus = !supplier.is_active;
+        await supplier.update({ is_active: newStatus });
+
+        await audit.log({
+            req,
+            module: 'SUPPLIER_MASTER',
+            action: newStatus ? 'ACTIVATE' : 'DEACTIVATE',
+            table: 'supplier_master',
+            recordId: supplier.id,
+            old_data: { is_active: !newStatus },
+            new_data: { is_active: newStatus },
+            outlet_id,
+            user_id: req.user.id
+        });
+
+        res.json({ success: true, data: supplier, message: `Supplier status changed to ${newStatus ? 'Active' : 'Inactive'}` });
 
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });

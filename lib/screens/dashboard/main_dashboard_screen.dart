@@ -20,6 +20,9 @@ import '../../controllers/settings/property_info_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
+import '../../core/navigation/ai_navigation_registry.dart';
+import '../../controllers/notes/user_notes_controller.dart';
+import '../../widgets/sticky_notes_modal.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../models/auth/permission_service.dart';
 import '../../core/permissions/module_capability.dart';
@@ -38,7 +41,6 @@ import '../inventory/assembly_screen.dart';
 import '../inventory/return_issue_screen.dart';
 import '../inventory/supplier_return_refund_screen.dart';
 import '../inventory/supplier_return_screen.dart';
-import '../inventory/return_issue_screen.dart';
 import '../hrms/employee_screen.dart';
 import '../hrms/attendance_screen.dart';
 import '../hrms/payroll_screen.dart';
@@ -70,7 +72,6 @@ import '../modify/stock_out_modify.dart';
 import '../recovery/backup_service.dart';
 import '../reports/closing_report_screen.dart';
 import '../reports/cash_ledger_screen.dart';
-import '../reports/closing_report_screen.dart';
 import '../reports/damage_report_screen.dart';
 import '../reports/damage_summary_screen.dart';
 import '../reports/purchase_report_screen.dart';
@@ -180,6 +181,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   String _userRole = '';
   String _drawerSearchQuery = '';
   Set<String> _favoriteDrawerItems = {};
+  final UserNotesController _notesCtrl = UserNotesController();
 
   Future<void> _loadFavorites() async {
     final list = await LocalPreferences.getFavoriteDrawerItems();
@@ -336,6 +338,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
     _loadUserRole();
     _loadFavorites();
+    _notesCtrl.loadNotes();
   }
 
   Future<bool?> _showConfirmSyncDialog() async {
@@ -1077,127 +1080,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   void _handleLynxAction(String actionType, Map<String, dynamic>? payload) {
-    switch (actionType) {
-      case 'CREATE_BILL':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const SaleScreen()));
-        break;
-      case 'SEARCH_ITEM':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ItemMasterScreen()));
-        break;
-      case 'LOW_STOCK_ALERT':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockBalanceScreen()));
-        break;
-      case 'STOCK_TRANSFER':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockTransferScreen()));
-        break;
-      case 'STOCK_ISSUE':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockIssueScreen()));
-        break;
-      case 'STOCK_REQUEST':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockRequestScreen()));
-        break;
-      case 'DAMAGE_ITEMS':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const DamageItemScreen()));
-        break;
-      case 'CREATE_PO':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseOrderScreen()));
-        break;
-      case 'GRN':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const GoodsReceivingScreen()));
-        break;
-      case 'SUPPLIER_MASTER':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const SupplierMasterScreen()));
-        break;
-      case 'SUPPLIER_RETURN':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const SupplierReturnScreen()));
-        break;
-      case 'SALES_RETURN':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ReturnIssueScreen()));
-        break;
-      case 'ASSEMBLY_BOM':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AssemblyScreen()));
-        break;
-      case 'VIEW_REPORTS':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReportScreen()));
-        break;
-      case 'CLOSING_REPORT':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ClosingReportScreen()));
-        break;
-      case 'CASH_LEDGER':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const CashLedgerScreen()));
-        break;
-      case 'STOCK_LEDGER':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const StockLedgerReportScreen()));
-        break;
-      case 'EMPLOYEES':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const EmployeeScreen()));
-        break;
-      case 'ATTENDANCE':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AttendanceScreen()));
-        break;
-      case 'PAYROLL':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const PayrollScreen()));
-        break;
-      case 'HRMS_MASTERS':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const HrmsMastersScreen()));
-        break;
-      case 'CAPTAIN_POS':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const CaptainDashboardScreen()));
-        break;
-      case 'RESTAURANT_SETUP':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const RestaurantSetupScreen()));
-        break;
-      case 'KDS':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const KdsScreen()));
-        break;
-      case 'DELIVERY_CHALLAN':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const DeliveryChallanScreen()));
-        break;
-      case 'RECURRING_EXPENSES':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const RecurringExpensesScreen()));
-        break;
-      case 'WHATSAPP':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const WhatsAppDashboardScreen()));
-        break;
-      case 'USER_MANAGEMENT':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const UserManagementScreen()));
-        break;
-      case 'SYSTEM_SETTINGS':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
-        break;
-      case 'PROPERTY_INFO':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyInfoScreen(outletid: 0)));
-        break;
-      case 'AI_ANALYTICS':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AiQueryAnalyticsScreen()));
-        break;
-      case 'OPERATIONS_INTELLIGENCE':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const OperationsIntelligenceScreen()));
-        break;
-      case 'WORKFLOW_AUTOMATION':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const WorkflowAutomationScreen()));
-        break;
-      case 'AUTONOMOUS_AGENT':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AutonomousAgentScreen()));
-        break;
-      case 'DEVELOPER_ECOSYSTEM':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const DeveloperEcosystemScreen()));
-        break;
-      case 'PLUGIN_MARKETPLACE':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const PluginMarketplaceScreen()));
-        break;
-      case 'FEATURE_TESTING_HUB':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const LynxFeatureTestingScreen()));
-        break;
-      case 'CUSTOMER_LOOKUP':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const CustomerAppScreen()));
-        break;
-      case 'HELP_SUPPORT':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const HelpScreen()));
-        break;
-      default:
-        break;
+    if (actionType == 'OPEN_NOTES') {
+      StickyNotesModal.show(context, _notesCtrl);
+      return;
     }
+    AiNavigationRegistry.navigate(context, actionType, payload);
   }
 
   // ================= UI =================
@@ -1261,6 +1148,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     ),
             ),
           IconButton(
+              tooltip: 'Sticky Notes & Reminders',
+              onPressed: () {
+                StickyNotesModal.show(context, _notesCtrl);
+              },
+              icon: const Icon(Icons.sticky_note_2_rounded, color: Color(0xFFD97706))),
+          IconButton(
               tooltip: 'LYNX ASSIST (AI Companion)',
               onPressed: () {
                 LynxAssistModal.show(context, onActionTriggered: _handleLynxAction);
@@ -1275,16 +1168,19 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                         builder: (context) => const MainDashboardScreen()));
               },
               icon: const Icon(Icons.refresh)),
-          if (_showNotifications)
-            IconButton(
-                tooltip: 'Notifications',
-                onPressed: () {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const NotificationScreen()));
-                },
-                icon: const Icon(Icons.notifications_none)),
+          IconButton(
+              tooltip: _showNotifications ? 'Notifications (Enabled)' : 'Notifications (Disabled)',
+              onPressed: () async {
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const NotificationScreen()));
+                _loadNotificationPreference();
+              },
+              icon: Icon(
+                _showNotifications ? Icons.notifications_active_rounded : Icons.notifications_off_outlined,
+                color: _showNotifications ? const Color(0xFF2563EB) : Colors.grey,
+              )),
           IconButton(
               tooltip: 'Logout',
               onPressed: () async {
@@ -1298,14 +1194,61 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               icon: const Icon(Icons.logout)),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFFC81E1E),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.smart_toy_rounded),
-        label: const Text('LYNX ASSIST', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-        onPressed: () {
-          LynxAssistModal.show(context, onActionTriggered: _handleLynxAction);
-        },
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Sticky Notes & Reminders Floating Button (Positioned right above LYNX ASSIST)
+          FloatingActionButton.extended(
+            heroTag: 'sticky_notes_fab',
+            backgroundColor: const Color(0xFFD97706),
+            foregroundColor: Colors.white,
+            elevation: 4,
+            icon: const Icon(Icons.sticky_note_2_rounded, size: 20),
+            label: AnimatedBuilder(
+              animation: _notesCtrl,
+              builder: (context, _) {
+                final count = _notesCtrl.activeRemindersCount;
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Sticky Notes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    if (count > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: const TextStyle(color: Color(0xFFD97706), fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
+            onPressed: () {
+              StickyNotesModal.show(context, _notesCtrl);
+            },
+          ),
+          const SizedBox(height: 12),
+          // LYNX ASSIST Floating AI Button
+          FloatingActionButton.extended(
+            heroTag: 'lynx_assist_fab',
+            backgroundColor: const Color(0xFFC81E1E),
+            foregroundColor: Colors.white,
+            elevation: 6,
+            icon: const Icon(Icons.smart_toy_rounded),
+            label: const Text('LYNX ASSIST', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+            onPressed: () {
+              LynxAssistModal.show(context, onActionTriggered: _handleLynxAction);
+            },
+          ),
+        ],
       ),
       body: property == null
           ? Center(
@@ -2717,7 +2660,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamageReportSumScreen())),
       },
 
-      // LYNX Innovation Hub
+      /*
+      // LYNX Innovation Hub (Hidden for future release)
       {
         'category': 'LYNX Innovation Hub',
         'icon': Icons.science_rounded,
@@ -2766,6 +2710,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'isNew': true,
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PluginMarketplaceScreen())),
       },
+      */
 
       // System
       {

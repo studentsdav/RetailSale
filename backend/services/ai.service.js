@@ -1,4 +1,6 @@
 const https = require('https');
+const { DATABASE_SCHEMA_REGISTRY, getActionMappingList, matchActionFromQuery } = require('./ai_registry.service');
+const supplierMasterController = require('../controllers/supplier/supplierMaster.controller');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -6,42 +8,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 // System Prompt definitions as requested in instructions
 const TEXT_TO_SQL_SYSTEM = `You are a precise Text-to-SQL/Query translator. Your only task is to convert the user's natural language question into a clean PostgreSQL database query based on the provided schema.
 
-Schema definitions:
-- Table "sales_headers"
-  Columns: id (INTEGER, PK), outlet_id (INTEGER), sale_no (VARCHAR), sale_date (TIMESTAMP), customer_name (VARCHAR), customer_phone (VARCHAR), customer_address (TEXT), customer_gstin (VARCHAR), payment_mode (VARCHAR), net_amount (DECIMAL), status (VARCHAR)
-  Info: Contains sales transaction bills. Status can be 'COMPLETED', 'CUSTOMER', 'DRAFT'.
-
-- Table "sales_items"
-  Columns: id (INTEGER, PK), sale_id (INTEGER, FK), item_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), qty (DECIMAL), rate (DECIMAL), line_total (DECIMAL), net_amount (DECIMAL)
-  Info: Contains items sold per transaction bill. Connects to "sales_headers" via sale_id (sales_headers.id) and to "item_master" via item_id (item_master.id).
-
-- Table "item_master"
-  Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), barcode (VARCHAR), unit (VARCHAR), rate (DECIMAL), retail_sale_price (DECIMAL), item_group (VARCHAR), sub_category (VARCHAR), brand (VARCHAR), opening_balance (DECIMAL), is_active (BOOLEAN)
-  Info: Contains the products and inventory items database list. "rate" is the cost/purchase price, "retail_sale_price" is the selling price, "item_group" is the product category/group, and "brand" is the brand.
-
-- Table "stock_ledger"
-  Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), qty_in (DECIMAL), qty_out (DECIMAL), balance (DECIMAL), txn_date (DATEONLY), txn_type (VARCHAR)
-  Info: Tracks movements of items. Current stock quantity (qty) for an item in "item_master" is calculated as: (COALESCE(item_master.opening_balance, 0) + COALESCE((SELECT SUM(qty_in - qty_out) FROM stock_ledger WHERE stock_ledger.item_code = item_master.item_code AND stock_ledger.outlet_id = item_master.outlet_id), 0)).
-
-- Table "goods_receipts"
-  Columns: id (INTEGER, PK), outlet_id (INTEGER), grn_no (VARCHAR), supplier_id (INTEGER), receipt_date (DATEONLY), total_amount (DECIMAL), net_amount (DECIMAL), status (VARCHAR)
-  Info: Purchase bills / goods receipt notes received from suppliers.
-
-- Table "goods_receipt_items"
-  Columns: id (INTEGER, PK), grn_id (INTEGER, FK), item_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), brand (VARCHAR), unit (VARCHAR), qty (DECIMAL), rate (DECIMAL), amount (DECIMAL), expiry_date (DATEONLY)
-  Info: Items inside a goods receipt (GRN) which contain item expiry dates (expiry_date). Connects to "goods_receipts" via grn_id (goods_receipts.id).
-
-- Table "supplier_master"
-  Columns: id (INTEGER, PK), outlet_id (INTEGER), supplier_code (VARCHAR), supplier_name (VARCHAR), phone (VARCHAR), gstin (VARCHAR), is_active (BOOLEAN)
-  Info: Database of vendors / suppliers. Connects to "goods_receipts" via supplier_id (supplier_master.id).
-
-- Table "delivery_customers"
-  Columns: id (INTEGER, PK), outlet_id (INTEGER), first_name (VARCHAR), last_name (VARCHAR), phone (VARCHAR), email (VARCHAR), address (TEXT)
-  Info: Contains customer records.
-
-- Table "whatsapp_logs"
-  Columns: id (INTEGER, PK), outlet_id (INTEGER), recipient_phone (VARCHAR), message_type (VARCHAR), delivery_status (VARCHAR), cost (DECIMAL), created_at (TIMESTAMP)
-  Info: Contains WhatsApp message log dispatches history (message_type can be 'UTILITY' or 'MARKETING').
+${DATABASE_SCHEMA_REGISTRY}
 
 CRITICAL RULES:
 1. The database dialect is PostgreSQL. You must generate PostgreSQL-compatible SQL.
@@ -57,21 +24,31 @@ CRITICAL RULES:
 2. You must ALWAYS filter all queries by "outlet_id = :outletId" or map the filter constraints accordingly to prevent cross-tenant leaks.
    - Make sure that when joining multiple tables, the query uses "outlet_id = :outletId" on the appropriate tables.
 3. Use parameter binding replacements syntax like ":outletId" for binding parameters.
-4. Return nothing but the executable query code wrapped in a clean JSON object like: {"query": "SELECT * FROM sales_headers WHERE outlet_id = :outletId"}.
-5. Return raw JSON ONLY. Do not wrap the JSON object in markdown formatting or quotes.`;
+4. STRICT READ-ONLY SAFETY RULE: Text-to-SQL is strictly restricted to SELECT queries for reading and analytics. You MUST NEVER generate INSERT, UPDATE, DELETE, ALTER, DROP, or TRUNCATE SQL statements. Data modifications must be handled through official backend REST API controllers.
+5. PERFORMANCE & ROW LIMIT RULE: You must ALWAYS append a "LIMIT <maxRows>" clause (default 100, maximum 1000) to optimize AI token costs, memory, and payload size. Never omit the LIMIT clause.
+6. AGGREGATION & SUM RULE: When calculating sums, totals, counts, or quarterly breakdowns (e.g. SUM(net_amount), COUNT(*), GROUP BY EXTRACT(QUARTER FROM sale_date)), PostgreSQL ALWAYS evaluates aggregate functions (SUM, COUNT) over ALL matching records in the entire database table BEFORE applying the LIMIT clause. The result returns summary rows (e.g. 4 rows for 4 quarters) containing 100% accurate sums of all database transactions.
+7. GROUP BY & BREAKDOWN RULE: When the user asks for breakdowns, mode distributions, category totals, payment breakdowns, or grouped summaries (e.g. "payment mode breakdown", "sales by category", "monthly revenue"), NEVER generate "LIMIT 1". ALWAYS use "LIMIT 100" or the configured maxRows limit so all grouped categories (e.g. CASH, CARD, UPI, CREDIT) are returned together in the output.
+8. Return nothing but the executable query code wrapped in a clean JSON object like: {"query": "SELECT payment_mode, SUM(net_amount) AS total_sales FROM sales_headers WHERE outlet_id = :outletId GROUP BY payment_mode ORDER BY total_sales DESC LIMIT 100"}.
+9. Return raw JSON ONLY. Do not wrap the JSON object in markdown formatting or quotes.`;
 
-const NARRATIVE_ANALYST_SYSTEM = `You are an expert data analyst. You will receive a JSON dataset containing up to 100 sample rows from a user's database execution, alongside the original question they asked.
+const NARRATIVE_ANALYST_SYSTEM = `You are an expert data analyst. You will receive a JSON dataset containing sample rows (limited by user setting up to 1000 max, default 100) from a user's database execution, alongside the original question they asked.
 
-Analyze the data patterns, trends, and anomalies within these 100 rows and output a structured executive summary highlighting the key answers to the user's question. Be concise and professional. Use markdown list items and bullet points for readability.`;
+Analyze the data patterns, trends, and anomalies within these sample rows and output a structured executive summary highlighting the key answers to the user's question. Be concise and professional. Use markdown list items and bullet points for readability.`;
 
 const LYNX_ASSIST_SYSTEM = `You are LYNX ASSIST, the intelligent AI business assistant for FAMALTH LYNX (All-in-One AI-Powered Business Operating System).
 Your goal is to assist store owners, managers, cashiers, kitchen staff, and accountants with ALL software features, modules, navigation, and data queries.
 
+ROW LIMIT & AI COST SAVING RULE:
+- AI Query row outputs are strictly limited to the user's configured Max Rows setting (default 100 rows, maximum 1000 rows) to optimize token costs, response speed, and payload size.
+- If presenting a table, list, or dataset, show the top rows up to the limit.
+- If the dataset contains more records than the limit or if the user asks for a complete list, inform the user: "Showing top X rows (limited for fast loading & AI token cost optimization). To view, search, or export the full dataset, click the action button below."
+- ALWAYS attach the matching action button so the user can navigate to the full screen.
+
 FAMALTH LYNX SOFTWARE MODULES & FEATURES:
 1. POS & Billing: Fast barcode scanning, multi-pay (Cash, Card, UPI QR, Credit), customer discounts, draft sales, invoice reprint.
-2. Inventory & Stock: Item Master, Stock Balance, Low Stock Alerts, Stock Transfer, Stock Issue, Stock Request, Assembly/BOM, Damage/Waste items.
+2. Inventory & Stock: Item Master, Stock Balance, Low Stock Alerts, Stock Transfer, Stock Issue, Stock Request, Assembly/BOM, Damage/Waste items, Barcode Generator, Approvals.
 3. Purchasing & Suppliers: Purchase Orders (PO), Goods Receiving Notes (GRN), Supplier Directory, Supplier Payments, Supplier Returns.
-4. Sales & Customer Management: Sales Reports, Customer Ledger, Subscriptions (Milk/Daily delivery), Loyalty Points & Rewards, Refunds.
+4. Sales & Customer Management: Sales Reports, Customer Ledger, Subscriptions (Milk/Daily delivery), Loyalty Points & Rewards, Customer Credit Ledger, Refunds.
 5. HRMS & Payroll: Employee Master, Attendance Punch Logs, Shifts & Leaves, Salary Components & Payroll Processing.
 6. Restaurant & Dining: Captain POS Table Billing, Floor & Table Setup, Kitchen Display System (KDS), Kitchen Order Tickets (KOT), Delivery Challans.
 7. WhatsApp & Marketing: Automatic Invoice dispatches, Payment reminders, Promotional campaigns, WhatsApp logs & billing dashboard.
@@ -79,39 +56,7 @@ FAMALTH LYNX SOFTWARE MODULES & FEATURES:
 9. Settings & Admin: Business Profile (Bank/UPI details), Stock Warehouses/Locations, Invoice Document Sequences, User Role & Permissions.
 
 ACTION MAPPINGS (Set "action" type to match the user's intent):
-- "CREATE_BILL" (POS Billing)
-- "SEARCH_ITEM" (Products & Inventory)
-- "LOW_STOCK_ALERT" (Stock Balance & Reorder)
-- "STOCK_TRANSFER" (Stock Transfer between locations)
-- "STOCK_ISSUE" (Stock Issue to departments)
-- "STOCK_REQUEST" (Store Stock Requests)
-- "DAMAGE_ITEMS" (Damage & Waste Log)
-- "CREATE_PO" (Purchase Orders)
-- "GRN" (Goods Receiving Notes)
-- "SUPPLIER_MASTER" (Supplier Directory)
-- "SUPPLIER_RETURN" (Supplier Returns)
-- "SALES_RETURN" (Customer Sales Returns)
-- "ASSEMBLY_BOM" (Bill of Materials / Assembly)
-- "VIEW_REPORTS" (Sales & Revenue Reports)
-- "CLOSING_REPORT" (Daily Closing Report)
-- "CASH_LEDGER" (Cash Ledger & Cash Drawer)
-- "STOCK_LEDGER" (Item Stock Ledger Movement)
-- "EMPLOYEES" (HRMS Employee Directory)
-- "ATTENDANCE" (HRMS Attendance Logs)
-- "PAYROLL" (HRMS Salary & Payroll)
-- "HRMS_MASTERS" (Shifts, Leaves & Designations)
-- "CAPTAIN_POS" (Restaurant Captain Table POS)
-- "RESTAURANT_SETUP" (Floor Plan & Table Config)
-- "KDS" (Kitchen Display System)
-- "DELIVERY_CHALLAN" (Restaurant Delivery Challans)
-- "RECURRING_EXPENSES" (Recurring Business Expenses)
-- "WHATSAPP" (WhatsApp Dashboard & Campaigns)
-- "USER_MANAGEMENT" (Users & Security Permissions)
-- "SYSTEM_SETTINGS" (Settings Hub)
-- "PROPERTY_INFO" (Business Profile & UPI/Bank)
-- "AI_ANALYTICS" (AI Text-to-SQL Analytics)
-- "CUSTOMER_LOOKUP" (Customer Directory & App)
-- "HELP_SUPPORT" (User Manual & Help)
+${getActionMappingList()}
 - "NONE"
 
 Respond with a JSON object containing:
@@ -356,6 +301,13 @@ async function analyzeDatasetSummary(originalQuestion, datasetJson, config = {})
 
 function getMockQuery(question) {
     const q = question.toLowerCase();
+    if (q.includes('subscribe') || q.includes('subscription') || q.includes('daily milk') || q.includes('daily base')) {
+        return `SELECT ms.id, ms.customer_name, ms.phone, ms.status, ms.frequency, msi.item_name, msi.qty 
+                FROM milk_subscriptions ms 
+                LEFT JOIN milk_subscription_items msi ON ms.id = msi.subscription_id 
+                WHERE ms.outlet_id = :outletId AND ms.status = 'ACTIVE' 
+                ORDER BY ms.id DESC LIMIT 50`;
+    }
     if (q.includes('sale') || q.includes('transaction') || q.includes('billing') || q.includes('spent') || q.includes('revenue')) {
         return `SELECT id, sale_no, customer_name, customer_phone, payment_mode, net_amount, sale_date 
                 FROM sales_headers 
@@ -432,6 +384,7 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
         todaySales: 0,
         todayOrders: 0,
         cashSales: 0,
+        cardSales: 0,
         upiSales: 0,
         yesterdaySales: 0,
         yesterdayOrders: 0,
@@ -457,6 +410,7 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
                 COALESCE(SUM(net_amount), 0) AS today_sales,
                 COUNT(id) AS today_orders,
                 COALESCE(SUM(CASE WHEN payment_mode ILIKE '%cash%' THEN net_amount ELSE 0 END), 0) AS cash_sales,
+                COALESCE(SUM(CASE WHEN payment_mode ILIKE '%card%' OR payment_mode ILIKE '%credit%' OR payment_mode ILIKE '%debit%' THEN net_amount ELSE 0 END), 0) AS card_sales,
                 COALESCE(SUM(CASE WHEN payment_mode ILIKE '%upi%' OR payment_mode ILIKE '%qr%' THEN net_amount ELSE 0 END), 0) AS upi_sales
             FROM sales_headers
             WHERE (:outletId = 0 OR outlet_id = :outletId)
@@ -471,6 +425,7 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
             context.todaySales = parseFloat(salesRes[0].today_sales || 0);
             context.todayOrders = parseInt(salesRes[0].today_orders || 0);
             context.cashSales = parseFloat(salesRes[0].cash_sales || 0);
+            context.cardSales = parseFloat(salesRes[0].card_sales || 0);
             context.upiSales = parseFloat(salesRes[0].upi_sales || 0);
         }
 
@@ -555,6 +510,15 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
 
 function getMockLynxAssist(prompt, liveContext = {}) {
     const q = (prompt || '').toLowerCase();
+
+    // 0. Customer Subscriptions (Milk / Daily consumables)
+    if (q.includes('subscribe') || q.includes('subscription') || q.includes('daily milk') || q.includes('daily item') || q.includes('daily base')) {
+        return {
+            reply: "🥛 **FAMALTH LYNX Daily Subscriptions**: Manage customer recurring subscriptions for milk, bread, and daily store items. Track delivery schedules, active/paused statuses, and monthly billing.",
+            action: { type: "MANAGE_SUBSCRIPTIONS", label: "Manage Subscriptions" },
+            quickReplies: ["View Delivery Challans", "Send WhatsApp Reminder", "Export Subscription Report"]
+        };
+    }
 
     // 1. POS & Billing
     if (q.includes('bill') || q.includes('invoice') || q.includes('pos') || q.includes('checkout') || q.includes('counter') || q.includes('cashier')) {
@@ -737,11 +701,12 @@ function getMockLynxAssist(prompt, liveContext = {}) {
         };
     }
 
-    if (q.includes('today') && (q.includes('sale') || q.includes('revenue') || q.includes('total') || q.includes('order'))) {
+    if (q.includes('today') && (q.includes('sale') || q.includes('revenue') || q.includes('total') || q.includes('order') || q.includes('payment') || q.includes('collection'))) {
         const todayDateStr = liveContext.currentIstDate || 'Today';
         const sales = (liveContext.todaySales || 0).toLocaleString('en-IN');
         const orders = liveContext.todayOrders || 0;
         const cash = (liveContext.cashSales || 0).toLocaleString('en-IN');
+        const card = (liveContext.cardSales || 0).toLocaleString('en-IN');
         const upi = (liveContext.upiSales || 0).toLocaleString('en-IN');
 
         const ySales = (liveContext.yesterdaySales || 0).toLocaleString('en-IN');
@@ -754,7 +719,7 @@ function getMockLynxAssist(prompt, liveContext = {}) {
         }
 
         return {
-            reply: `📊 **Today's Sales Summary (${todayDateStr})**:\n* Total Net Sales: **₹${sales}**\n* Total Transactions: **${orders} Completed Orders**\n* Cash Collected: **₹${cash}**\n* UPI / QR Collected: **₹${upi}**${midnightNote}`,
+            reply: `📊 **Today's Payment Collections & Sales Breakdown (${todayDateStr})**:\n* Total Net Sales: **₹${sales}**\n* Total Transactions: **${orders} Completed Orders**\n* Cash Collected: **₹${cash}**\n* Card Collected: **₹${card}**\n* UPI / QR Collected: **₹${upi}**${midnightNote}`,
             action: { type: "VIEW_REPORTS", label: "Open Sales Reports" },
             quickReplies: ["Day Closing Report", "Cash Ledger", "Top Categories"]
         };
@@ -814,8 +779,615 @@ function getMockLynxAssist(prompt, liveContext = {}) {
     };
 }
 
+async function handlePurchaseOrderDraft(prompt, history = [], propertyDb = null, outletId = 0, config = {}) {
+    if (!prompt || typeof prompt !== 'string') return null;
+
+    const q = prompt.toLowerCase();
+    const isPoPrompt = q.includes('purchase order') || 
+                       q.includes('po draft') || 
+                       q.includes('create po') || 
+                       q.includes('draft po') || 
+                       q.includes('order from supplier') || 
+                       q.includes('buy from vendor') ||
+                       (q.includes('po') && (q.includes('draft') || q.includes('create') || q.includes('make')));
+
+    if (!isPoPrompt) return null;
+
+    let supplierName = '';
+    let items = [];
+    let note = '';
+
+    const apiKeyExists = GEMINI_API_KEY || OPENAI_API_KEY || config.aiApiKey;
+    if (apiKeyExists) {
+        try {
+            const nlpPrompt = `Extract purchase order drafting details from user query: "${prompt}".
+Output ONLY a raw JSON object with schema:
+{
+  "supplierName": "Supplier / Vendor Name or empty string",
+  "items": [
+    { "itemName": "Item / Product name", "qty": 100, "rate": 250 }
+  ],
+  "note": "Any additional note"
+}`;
+            const systemInst = `You are a precise NLP purchase order parser. Output ONLY a valid JSON object without extra text or backticks.`;
+
+            const rawNlp = await executeLLMCall(nlpPrompt, systemInst, config);
+            let cleanJson = rawNlp.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanJson);
+
+            if (parsed) {
+                supplierName = parsed.supplierName || '';
+                items = Array.isArray(parsed.items) ? parsed.items : [];
+                note = parsed.note || '';
+            }
+        } catch (llmErr) {
+            console.warn('[AI SERVICE] LLM PO Draft NLP warning:', llmErr.message);
+        }
+    }
+
+    if (!supplierName && items.length === 0) {
+        const suppMatch = prompt.match(/(?:for|from)\s+([A-Za-z0-9\s]+?)(?=\s*(?:\d+|units|pcs|items|rate|at|$))/i);
+        if (suppMatch) supplierName = suppMatch[1].trim();
+
+        const itemMatch = prompt.match(/(\d+)\s*(?:units|pcs|items|packets)?\s*(?:of)?\s*([A-Za-z0-9\s]+?)\s*(?:at|@)\s*(\d+)/i);
+        if (itemMatch) {
+            items.push({
+                itemName: itemMatch[2].trim(),
+                qty: parseInt(itemMatch[1]),
+                rate: parseFloat(itemMatch[3])
+            });
+        }
+    }
+
+    if (!supplierName && items.length === 0) {
+        return {
+            reply: `📦 **Purchase Order Draft Intent Detected**\n\nPlease provide supplier name, items, quantities, and rates.\n\n*Example:* "Create PO draft for Sunrise Traders 500 units A4 Paper at 250 rate"`,
+            action: { type: "NONE" },
+            quickReplies: ["Draft PO Sunrise Traders", "View Suppliers"]
+        };
+    }
+
+    let totalVal = 0;
+    const itemLines = items.map(it => {
+        const lineTotal = (it.qty || 1) * (it.rate || 0);
+        totalVal += lineTotal;
+        return `* 📦 **${it.itemName || 'Product'}**: ${it.qty || 1} units @ ₹${it.rate || 0} = **₹${lineTotal.toLocaleString('en-IN')}**`;
+    });
+
+    return {
+        reply: `📝 **Purchase Order Draft Ready!**\n\n` +
+               `* 🏭 **Supplier**: ${supplierName || 'Pending Selection'}\n` +
+               (itemLines.length > 0 ? itemLines.join('\n') + '\n' : '') +
+               `* 💰 **Total Draft Value**: ₹${totalVal.toLocaleString('en-IN')}\n\n` +
+               `*Click the button below to review and submit this purchase order in your outlet dashboard.*`,
+        action: { type: "OPEN_PURCHASE_ORDER_DRAFT", label: "Review & Submit Purchase Order", payload: { supplierName, items, totalVal } },
+        quickReplies: ["Review & Submit Purchase Order", "Cancel Draft"]
+    };
+}
+
+async function handleSupplierCreation(prompt, history = [], propertyDb = null, outletId = 0, config = {}) {
+    if (!propertyDb) return null;
+
+    const promptTrim = (prompt || '').trim();
+    const promptLower = promptTrim.toLowerCase();
+
+    // 0. Filter out non-supplier-creation feature prompts
+    const nonSupplierCreationKeywords = [
+        'purchase order', 'create po', 'draft po', 'po', 'directory', 'list supplier', 'show supplier',
+        'view supplier', 'sales', 'stock', 'inventory', 'report', 'bill', 'invoice', 'product', 'item', 'analytics'
+    ];
+    if (nonSupplierCreationKeywords.some(k => promptLower.includes(k)) &&
+        !promptLower.includes('add supplier') && !promptLower.includes('create supplier') && !promptLower.includes('register supplier') && !promptLower.includes('new supplier')) {
+        return null;
+    }
+
+    // 1. Check if user prompt is an explicit APPROVAL or CANCEL command
+    const isApprovalCommand = promptLower.includes('approve') || promptLower.includes('confirm') || promptLower.includes('yes') || promptLower.includes('proceed') || promptLower.includes('save');
+    const isCancelledCommand = promptLower.includes('cancel') || promptLower.includes('stop') || promptLower.includes('reject');
+
+    // 2. Look for existing pending approval preview in conversation history
+    let pendingData = null;
+    let isPendingIncompleteState = false;
+    const historyText = Array.isArray(history) ? history.slice(-4).map(h => h.content || h.text || '').join(' ') : '';
+
+    if (Array.isArray(history)) {
+        for (let i = history.length - 1; i >= 0; i--) {
+            const text = history[i].content || history[i].text || '';
+            if (text.includes('Vendor Details Incomplete')) {
+                isPendingIncompleteState = true;
+            }
+            if (text.includes('Vendor Registration Pending Approval') || text.includes('Generated Code:')) {
+                const nameM = text.match(/\* ✏️ \*\*Vendor Name\*\*: (.*)/) || text.match(/\* \*\*Name\*\*: (.*)/);
+                const phoneM = text.match(/\* 📞 \*\*Phone\*\*: (.*)/) || text.match(/\* \*\*Phone\*\*: (.*)/);
+                const emailM = text.match(/\* 📧 \*\*Email\*\*: (.*)/) || text.match(/\* \*\*Email\*\*: (.*)/);
+                const addrM = text.match(/\* 📍 \*\*Address\*\*: (.*)/) || text.match(/\* \*\*Address\*\*: (.*)/);
+                const stateM = text.match(/\* 🏛️ \*\*State\*\*: (.*)/) || text.match(/\* \*\*State\*\*: (.*)/);
+                const gstinM = text.match(/\* 🧾 \*\*GSTIN\*\*: (.*)/) || text.match(/\* \*\*GSTIN\*\*: (.*)/);
+
+                if (nameM && addrM && stateM) {
+                    pendingData = {
+                        supplierName: nameM[1].trim(),
+                        phone: phoneM && phoneM[1].trim() !== 'N/A' ? phoneM[1].trim() : '',
+                        email: emailM && emailM[1].trim() !== 'N/A' ? emailM[1].trim() : '',
+                        address: addrM[1].trim(),
+                        state: stateM[1].trim(),
+                        gstin: gstinM && gstinM[1].trim() !== 'N/A' ? gstinM[1].trim() : ''
+                    };
+                    break;
+                }
+            }
+        }
+    }
+
+    // 3. Handle Cancel Command
+    if (isCancelledCommand && (pendingData || isPendingIncompleteState || promptLower.includes('supplier') || promptLower.includes('vendor'))) {
+        return {
+            reply: `❌ **Vendor Registration Cancelled**\n\nSupplier creation was cancelled. No records were added or modified in your database.`,
+            action: { type: "SUPPLIER_MASTER", label: "View Supplier Directory" },
+            quickReplies: ["View Supplier Directory", "Add New Supplier"]
+        };
+    }
+
+    // 4. Handle Approval Command when pending data exists in history
+    if (isApprovalCommand && pendingData) {
+        let count = 0;
+        try {
+            const [res] = await propertyDb.query(`SELECT COUNT(id) AS cnt FROM supplier_master WHERE outlet_id = :outletId`, {
+                replacements: { outletId },
+                type: propertyDb.QueryTypes.SELECT
+            });
+            count = res ? parseInt(res.cnt || 0) : 0;
+        } catch (e) {
+            count = 0;
+        }
+
+        const nextCode = `SUP${count + 1}`;
+
+        return new Promise((resolve) => {
+            const reqMock = {
+                user: { outlet_id: outletId, id: 1 },
+                propertyDb,
+                body: {
+                    supplier_code: nextCode,
+                    supplier_name: pendingData.supplierName,
+                    phone: pendingData.phone || '',
+                    address: pendingData.address,
+                    state: pendingData.state,
+                    email: pendingData.email,
+                    gstin: pendingData.gstin,
+                    tax_country_code: 'IN'
+                }
+            };
+
+            const resMock = {
+                status: function(code) {
+                    this.statusCode = code;
+                    return this;
+                },
+                json: function(payload) {
+                    if (payload && payload.success && payload.data) {
+                        const supplier = payload.data;
+                        console.log(`[AI SERVICE] Supplier registered via API Controller: ${supplier.supplier_name} (${supplier.supplier_code})`);
+                        resolve({
+                            reply: `✅ **New Supplier Registered Successfully**\n\nVendor **${supplier.supplier_name}** (${supplier.supplier_code}) has been validated, approved, and created in your live outlet database via the official REST API.\n\n* **Supplier Code**: ${supplier.supplier_code}\n* **Name**: ${supplier.supplier_name}\n* **Phone**: ${supplier.phone || 'N/A'}\n* **Email**: ${supplier.email || 'N/A'}\n* **Address**: ${supplier.address}\n* **State**: ${supplier.state || 'N/A'}\n* **GSTIN**: ${supplier.gstin || 'N/A'}\n* **Status**: Active\n\nYour supplier directory is now synchronized and ready for Purchase Orders and Supplier Payments.`,
+                            action: { type: "SUPPLIER_MASTER", label: "View Supplier Directory" },
+                            quickReplies: ["Create Purchase Order", "View Supplier Directory", "Add Another Supplier"]
+                        });
+                    } else {
+                        resolve({
+                            reply: `⚠️ **Supplier Creation API Validation Warning**: ${payload?.message || payload?.error || 'Vendor validation failed.'}`,
+                            action: { type: "SUPPLIER_MASTER", label: "Open Supplier Directory" },
+                            quickReplies: ["View Supplier Directory"]
+                        });
+                    }
+                }
+            };
+
+            supplierMasterController.createSupplier(reqMock, resMock).catch(err => {
+                resolve({
+                    reply: `⚠️ **Supplier Creation API Error**: ${err.message}`,
+                    action: { type: "SUPPLIER_MASTER", label: "Open Supplier Directory" },
+                    quickReplies: ["View Supplier Directory"]
+                });
+            });
+        });
+    }
+
+    let supplierName = null;
+    let phone = null;
+    let email = null;
+    let address = null;
+    let state = null;
+    let gstin = null;
+
+    const apiKeyExists = GEMINI_API_KEY || OPENAI_API_KEY || config.aiApiKey;
+    if (apiKeyExists) {
+        try {
+            const nlpPrompt = `Extract vendor / supplier registration details from user query and context:
+Context: "${historyText}"
+Query: "${prompt}"
+
+Output ONLY a raw JSON object with schema:
+{
+  "supplierName": "Vendor Company / Person Name or null",
+  "phone": "10-12 digit phone number or null",
+  "email": "email address or null",
+  "address": "Street address / City / Location or null",
+  "state": "Indian State e.g. Uttarakhand, Delhi, Punjab or null",
+  "gstin": "GSTIN number or null"
+}`;
+            const systemInst = `You are a precise NLP supplier registration parser. Output ONLY a valid JSON object without extra text or backticks.`;
+
+            const rawNlp = await executeLLMCall(nlpPrompt, systemInst, config);
+            let cleanJson = rawNlp.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanJson);
+
+            if (parsed) {
+                supplierName = parsed.supplierName || null;
+                phone = parsed.phone || null;
+                email = parsed.email || null;
+                address = parsed.address || null;
+                state = parsed.state || null;
+                gstin = parsed.gstin || null;
+            }
+        } catch (llmErr) {
+            console.warn('[AI SERVICE] LLM Supplier Creation NLP warning:', llmErr.message);
+        }
+    }
+
+    if (!supplierName || !address || !state) {
+        const indianStates = [
+            'Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar',
+            'Chandigarh', 'Chhattisgarh', 'Dadra and Nagar Haveli', 'Daman and Diu', 'Delhi', 'Goa',
+            'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka',
+            'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+            'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+            'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal'
+        ];
+
+        const historyText = Array.isArray(history) ? history.slice(-4).map(h => h.content || h.text || '').join(' ') : '';
+        const combinedText = `${historyText} ${prompt}`.trim();
+        const combinedLower = combinedText.toLowerCase();
+
+        if (!email) {
+            const emailMatch = combinedText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+            email = emailMatch ? emailMatch[0] : null;
+        }
+
+        if (!phone) {
+            const phoneMatch = combinedText.match(/\b\d{10,12}\b/);
+            phone = phoneMatch ? phoneMatch[0] : null;
+        }
+
+        if (!gstin) {
+            const gstinDirectMatch = combinedText.match(/gstin[:\s]*([0-9a-z]+)/i);
+            if (gstinDirectMatch && gstinDirectMatch[1]) {
+                const rawGstin = gstinDirectMatch[1].toUpperCase();
+                gstin = rawGstin.startsWith('GSTIN') ? rawGstin : `GSTIN${rawGstin}`;
+            } else {
+                const stdGstinMatch = combinedText.match(/\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b/i);
+                if (stdGstinMatch) gstin = stdGstinMatch[0].toUpperCase();
+            }
+        }
+
+        if (!state) {
+            for (const st of indianStates) {
+                if (combinedLower.includes(st.toLowerCase())) {
+                    state = st;
+                    break;
+                }
+            }
+        }
+
+        const parts = prompt.split(',').map(s => s.trim()).filter(Boolean);
+        const textParts = parts.filter(p => {
+            const pLow = p.toLowerCase();
+            if (email && p.includes(email)) return false;
+            if (phone && p.includes(phone)) return false;
+            if (gstin && pLow.includes(gstin.toLowerCase())) return false;
+            if (pLow.startsWith('gstin')) return false;
+            if (state && pLow.includes(state.toLowerCase())) return false;
+            if (pLow.includes('add supplier') || pLow.includes('create vendor') || pLow.includes('register supplier')) return false;
+            return true;
+        });
+
+        if (!supplierName && textParts.length > 0) supplierName = textParts[0];
+        if (!address && textParts.length > 1) address = textParts[1];
+    }
+
+    // CHECK MISSING MANDATORY FIELDS (Name, Address, State)
+    const missingFields = [];
+    if (!supplierName || supplierName.toLowerCase() === 'new supplier') missingFields.push('Vendor Name');
+    if (!address) missingFields.push('Address / City');
+    if (!state) missingFields.push('State (e.g. Uttarakhand, Delhi, Punjab)');
+
+    // IF MANDATORY DETAILS ARE MISSING -> DO NOT CALL API / DO NOT CREATE DATABASE RECORD! ASK USER FOR MISSING DETAILS!
+    if (missingFields.length > 0) {
+        return {
+            reply: `📝 **Vendor Details Incomplete**\n\nBefore I can create this supplier in your database, please provide the missing required information:\n\n` +
+                   missingFields.map(f => `* ⚠️ **${f}**: *(Required)*`).join('\n') +
+                   `\n\n*Details Captured So Far:*` +
+                   (supplierName ? `\n* **Name**: ${supplierName}` : '') +
+                   (phone ? `\n* **Phone**: ${phone}` : '') +
+                   (email ? `\n* **Email**: ${email}` : '') +
+                   (gstin ? `\n* **GSTIN**: ${gstin}` : '') +
+                   `\n\n*Please reply with the missing details (e.g., "${missingFields.join(', ')}") to complete vendor registration.*`,
+            action: { type: "NONE" },
+            quickReplies: ["Provide State & Address", "View Supplier Directory"]
+        };
+    }
+
+    let count = 0;
+    try {
+        const [res] = await propertyDb.query(`SELECT COUNT(id) AS cnt FROM supplier_master WHERE outlet_id = :outletId`, {
+            replacements: { outletId },
+            type: propertyDb.QueryTypes.SELECT
+        });
+        count = res ? parseInt(res.cnt || 0) : 0;
+    } catch (err) {
+        console.error('[AI SERVICE] Supplier creation execution error:', err.message);
+        return null;
+    }
+
+    const nextCode = `SUP${count + 1}`;
+
+    // IF NOT CONFIRMED YET -> SHOW APPROVAL PREVIEW CARD & ASK FOR EXPLICIT USER APPROVAL!
+    return {
+        reply: `📋 **Vendor Registration Pending Approval**\n\nPlease review the vendor details below before confirming creation into your live outlet database:\n\n` +
+               `* ✏️ **Vendor Name**: ${supplierName}\n` +
+               `* 📞 **Phone**: ${phone || 'N/A'}\n` +
+               `* 📧 **Email**: ${email || 'N/A'}\n` +
+               `* 📍 **Address**: ${address}\n` +
+               `* 🏛️ **State**: ${state}\n` +
+               `* 🧾 **GSTIN**: ${gstin || 'N/A'}\n` +
+               `* 🏷️ **Generated Code**: ${nextCode}\n` +
+               `* 🟢 **Status**: Active\n\n` +
+               `*Click the approval button below or reply "Approve" to save this supplier into your database.*`,
+        action: { type: "CONFIRM_CREATE_SUPPLIER", label: "Approve & Register Supplier" },
+        quickReplies: ["Approve & Register Supplier", "Cancel Registration"]
+    };
+}
+
+async function handleTaskScheduling(prompt, history = [], propertyDb = null, outletId = 0, config = {}) {
+    if (!prompt || typeof prompt !== 'string') return null;
+
+    const q = prompt.toLowerCase();
+    const isSchedulePrompt = q.includes('remind me') || 
+                             q.includes('schedule task') || 
+                             q.includes('shedule task') || 
+                             q.includes('schedule reminder') || 
+                             q.includes('shedule reminder') || 
+                             q.includes('task scheduler') || 
+                             q.includes('set reminder') || 
+                             q.includes('create reminder') ||
+                             q.includes('task for') ||
+                             q.includes('alarm for') ||
+                             (q.includes('note') && (q.includes('add') || q.includes('create') || q.includes('save') || q.includes('write')));
+
+    if (!isSchedulePrompt) return null;
+
+    let llmSuccess = false;
+    let title = '';
+    let reminderType = 'SPECIFIC_DATE';
+    let targetDateObj = new Date();
+    let reminderTime = '09:00 AM';
+
+    const apiKeyExists = GEMINI_API_KEY || OPENAI_API_KEY || config.aiApiKey;
+    if (apiKeyExists) {
+        try {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const nlpPrompt = `Extract task scheduling details from user query: "${prompt}".
+Today's date is ${todayStr}.
+Output ONLY a raw JSON object with schema:
+{
+  "title": "Clean task title without date or time words",
+  "frequency": "DAILY | WEEKLY | MONTHLY | SPECIFIC_DATE",
+  "startDate": "YYYY-MM-DD",
+  "time": "HH:MM AM/PM"
+}`;
+            const systemInst = `You are a precise NLP task scheduler parser. Output ONLY a valid JSON object without extra text or backticks.`;
+
+            const rawNlp = await executeLLMCall(nlpPrompt, systemInst, config);
+            let cleanJson = rawNlp.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanJson);
+
+            if (parsed && parsed.title && parsed.startDate && parsed.time) {
+                title = parsed.title.charAt(0).toUpperCase() + parsed.title.slice(1);
+                reminderType = (parsed.frequency || 'SPECIFIC_DATE').toUpperCase();
+                reminderTime = parsed.time;
+
+                const [sYear, sMonth, sDay] = parsed.startDate.split('-').map(Number);
+                let pHour = 9, pMin = 0;
+                const tMatch = parsed.time.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)/i);
+                if (tMatch) {
+                    pHour = parseInt(tMatch[1]);
+                    pMin = tMatch[2] ? parseInt(tMatch[2]) : 0;
+                    const sub = tMatch[3].toLowerCase();
+                    if (sub === 'pm' && pHour < 12) pHour += 12;
+                    if (sub === 'am' && pHour === 12) pHour = 0;
+                }
+                targetDateObj = new Date(sYear, sMonth - 1, sDay, pHour, pMin, 0);
+                llmSuccess = true;
+            }
+        } catch (llmErr) {
+            console.warn('[AI SERVICE] LLM Task NLP warning, using local NLP rules:', llmErr.message);
+        }
+    }
+
+    if (!llmSuccess) {
+        // 1. Determine Frequency
+        reminderType = 'SPECIFIC_DATE';
+        if (q.includes('daily') || q.includes('everyday') || q.includes('every day')) {
+            reminderType = 'DAILY';
+        } else if (q.includes('weekly') || q.includes('every week') || q.includes('every monday') || q.includes('every friday')) {
+            reminderType = 'WEEKLY';
+        } else if (q.includes('monthly') || q.includes('every month')) {
+            reminderType = 'MONTHLY';
+        }
+
+        // 2. Parse Start Date
+        const now = new Date();
+        let targetYear = now.getFullYear();
+        let targetMonth = now.getMonth();
+        let targetDay = now.getDate() + 1;
+
+        const monthMap = {
+            jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
+            may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, september: 8,
+            oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11
+        };
+
+        const dateMatch = q.match(/(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s*(\d{4})?/i);
+        if (dateMatch) {
+            const dVal = parseInt(dateMatch[1]);
+            const mStr = dateMatch[2].toLowerCase();
+            const yVal = dateMatch[3] ? parseInt(dateMatch[3]) : targetYear;
+
+            if (monthMap[mStr] !== undefined && dVal >= 1 && dVal <= 31) {
+                targetDay = dVal;
+                targetMonth = monthMap[mStr];
+                targetYear = yVal;
+            }
+        } else if (q.includes('today')) {
+            targetDay = now.getDate();
+            targetMonth = now.getMonth();
+            targetYear = now.getFullYear();
+        }
+
+        // 3. Parse Time
+        let hour = 9;
+        let minute = 0;
+        let ampmStr = 'AM';
+
+        if (q.includes('morning')) { hour = 9; minute = 0; ampmStr = 'AM'; }
+        if (q.includes('afternoon')) { hour = 14; minute = 0; ampmStr = 'PM'; }
+        if (q.includes('evening')) { hour = 18; minute = 0; ampmStr = 'PM'; }
+        if (q.includes('night')) { hour = 21; minute = 0; ampmStr = 'PM'; }
+
+        const allTimeMatches = [...q.matchAll(/(\d{1,2}):?(\d{2})?\s*(am|pm)/gi)];
+        if (allTimeMatches.length > 0) {
+            const lastMatch = allTimeMatches[allTimeMatches.length - 1];
+            let pVal = parseInt(lastMatch[1]);
+            let mVal = lastMatch[2] ? parseInt(lastMatch[2]) : 0;
+            const subStr = lastMatch[3].toLowerCase();
+            if (subStr === 'pm' && pVal < 12) pVal += 12;
+            if (subStr === 'am' && pVal === 12) pVal = 0;
+            hour = pVal;
+            minute = mVal;
+            ampmStr = hour >= 12 ? 'PM' : 'AM';
+        }
+
+        const displayH = (hour % 12 === 0 ? 12 : hour % 12).toString().padStart(2, '0');
+        const displayM = minute.toString().padStart(2, '0');
+        reminderTime = `${displayH}:${displayM} ${ampmStr}`;
+
+        targetDateObj = new Date(targetYear, targetMonth, targetDay, hour, minute, 0);
+
+        // 4. Extract Clean Title
+        title = prompt
+            .replace(/shedule task for/i, '')
+            .replace(/schedule task for/i, '')
+            .replace(/shedule task/i, '')
+            .replace(/schedule task/i, '')
+            .replace(/schedule reminder/i, '')
+            .replace(/shedule reminder/i, '')
+            .replace(/remind me to/i, '')
+            .replace(/remind me/i, '')
+            .replace(/set reminder for/i, '')
+            .replace(/set reminder/i, '')
+            .replace(/create reminder/i, '')
+            .replace(/task scheduler/i, '')
+            .replace(/start from \d{1,2}\s+[a-z]+\s*\d*/i, '')
+            .replace(/start from [^0-9]*/i, '')
+            .replace(/starting from [^0-9]*/i, '')
+            .replace(/at morning/i, '')
+            .replace(/at evening/i, '')
+            .replace(/\d{1,2}:?\d{0,2}\s*(am|pm)/gi, '')
+            .replace(/every day/i, '')
+            .replace(/every week/i, '')
+            .replace(/every month/i, '')
+            .replace(/daily/i, '')
+            .replace(/weekly/i, '')
+            .replace(/monthly/i, '')
+            .replace(/tomorrow/i, '')
+            .replace(/today/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (!title || title.length === 0) {
+            title = 'Business Reminder';
+        }
+        title = title.charAt(0).toUpperCase() + title.slice(1);
+    }
+
+    const reminderDate = targetDateObj.toISOString();
+
+    try {
+        if (propertyDb) {
+            if (propertyDb.models?.user_notes) {
+                await propertyDb.models.user_notes.create({
+                    outlet_id: outletId,
+                    user_id: 1,
+                    title,
+                    content: `Scheduled via LYNX ASSIST AI Assistant on ${new Date().toLocaleDateString('en-IN')}`,
+                    color_hex: '#FEF08A',
+                    is_pinned: true,
+                    is_completed: false,
+                    reminder_type: reminderType,
+                    reminder_date: reminderDate,
+                    reminder_time: reminderTime
+                });
+            } else {
+                await propertyDb.query(`
+                    INSERT INTO user_notes (outlet_id, user_id, title, content, color_hex, is_pinned, is_completed, reminder_type, reminder_date, reminder_time, "createdAt", "updatedAt")
+                    VALUES (:outletId, 1, :title, :content, '#FEF08A', true, false, :reminderType, :reminderDate, :reminderTime, NOW(), NOW())
+                `, {
+                    replacements: {
+                        outletId,
+                        title,
+                        content: `Scheduled via LYNX ASSIST AI Assistant on ${new Date().toLocaleDateString('en-IN')}`,
+                        reminderType,
+                        reminderDate,
+                        reminderTime
+                    },
+                    type: propertyDb.QueryTypes.INSERT
+                });
+            }
+        }
+    } catch (dbErr) {
+        console.warn('[AI SERVICE] Task scheduling DB warning:', dbErr.message);
+    }
+
+    let freqLabel = 'Specific Date & Time';
+    if (reminderType === 'DAILY') freqLabel = 'Daily (Everyday)';
+    if (reminderType === 'WEEKLY') freqLabel = 'Weekly (Every Week)';
+    if (reminderType === 'MONTHLY') freqLabel = 'Monthly (Every Month)';
+
+    const dateFormatted = targetDateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    return {
+        reply: `📅 **Task & Reminder Scheduled Successfully!**\n\n` +
+               `* ✏️ **Task Title**: ${title}\n` +
+               `* 🔁 **Schedule Frequency**: ${freqLabel}\n` +
+               `* 🗓️ **Start Date**: ${dateFormatted}\n` +
+               `* ⏰ **Time**: ${reminderTime}\n` +
+               `* 🟢 **Status**: Active Alarm\n\n` +
+               `📌 *This reminder has been saved persistently to your database and pinned to your Sticky Notes board.*`,
+        action: { type: "OPEN_NOTES", label: "Open Sticky Notes Board" },
+        quickReplies: ["Open Sticky Notes", "Schedule Daily Reminder", "Today's Sales"]
+    };
+}
+
 async function processLynxAssist(prompt, history = [], config = {}, propertyDb = null, outletId = 0) {
+    // 1. Task Scheduling & Sticky Notes Reminders (ALLOWED)
+    const scheduledTaskResult = await handleTaskScheduling(prompt, history, propertyDb, outletId, config);
+    if (scheduledTaskResult) {
+        return scheduledTaskResult;
+    }
+
+    // 2. Data Analysis & Live Store Context (SELECT ONLY)
     const liveContext = await fetchLiveStoreContext(propertyDb, outletId);
+    const maxRows = Math.min(Math.max(parseInt(config.maxRows) || 100, 1), 1000);
 
     const provider = (config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : null)));
     const apiKey = config.aiApiKey || (provider === 'gemini' ? GEMINI_API_KEY : OPENAI_API_KEY);
@@ -826,22 +1398,28 @@ async function processLynxAssist(prompt, history = [], config = {}, propertyDb =
     // Execute dynamic Text-to-SQL if propertyDb is available and LLM key is configured
     if (propertyDb && apiKey) {
         try {
-            sqlQueryString = await translateTextToQuery(prompt, config);
+            sqlQueryString = await translateTextToQuery(prompt, { ...config, maxRows });
             if (sqlQueryString) {
-                const t = await propertyDb.transaction();
-                try {
-                    await propertyDb.query("SET TRANSACTION READ ONLY", { transaction: t });
-                    await propertyDb.query("SET TIME ZONE 'Asia/Kolkata'", { transaction: t });
-                    const rows = await propertyDb.query(sqlQueryString, {
-                        replacements: { outletId },
-                        type: propertyDb.QueryTypes.SELECT,
-                        transaction: t
-                    });
-                    await t.commit();
-                    sqlQueryResult = rows ? rows.slice(0, 50) : [];
-                } catch (dbErr) {
-                    await t.rollback();
-                    console.warn('[LYNX ASSIST SQL EXECUTION WARNING]:', dbErr.message);
+                // Enforce Strict Read-Only SELECT Safety for Data Analysis
+                if (!sqlQueryString.trim().toLowerCase().startsWith('select')) {
+                    console.warn('[AI SERVICE] Blocked non-SELECT SQL query for safety:', sqlQueryString);
+                    sqlQueryString = null;
+                } else {
+                    const t = await propertyDb.transaction();
+                    try {
+                        await propertyDb.query("SET TRANSACTION READ ONLY", { transaction: t });
+                        await propertyDb.query("SET TIME ZONE 'Asia/Kolkata'", { transaction: t });
+                        const rows = await propertyDb.query(sqlQueryString, {
+                            replacements: { outletId },
+                            type: propertyDb.QueryTypes.SELECT,
+                            transaction: t
+                        });
+                        await t.commit();
+                        sqlQueryResult = rows ? rows.slice(0, maxRows) : [];
+                    } catch (dbErr) {
+                        await t.rollback();
+                        console.warn('[LYNX ASSIST SQL EXECUTION WARNING]:', dbErr.message);
+                    }
                 }
             }
         } catch (sqlErr) {
@@ -858,7 +1436,7 @@ async function processLynxAssist(prompt, history = [], config = {}, propertyDb =
 ${JSON.stringify(liveContext, null, 2)}
 
 DYNAMIC SQL QUERY EXECUTED: ${sqlQueryString || 'N/A'}
-QUERY EXECUTED DATASET (Top 50 Rows): ${sqlQueryResult ? JSON.stringify(sqlQueryResult, null, 2) : 'None'}
+QUERY EXECUTED DATASET (Top ${maxRows} Rows): ${sqlQueryResult ? JSON.stringify(sqlQueryResult, null, 2) : 'None'}
 
 Conversation History:
 ${JSON.stringify(history.slice(-6))}
@@ -868,9 +1446,18 @@ User Question / Command: ${prompt}`;
         const rawRes = await executeLLMCall(fullPrompt, LYNX_ASSIST_SYSTEM, config);
         let clean = rawRes.replace(/```json/g, '').replace(/```/g, '').trim();
         const parsed = JSON.parse(clean);
+        
+        let action = parsed.action || { type: "NONE" };
+        if (!action || action.type === 'NONE') {
+            const matched = matchActionFromQuery(prompt);
+            if (matched) {
+                action = matched;
+            }
+        }
+
         return {
             reply: parsed.reply || "I am processing your request.",
-            action: parsed.action || { type: "NONE" },
+            action: action,
             quickReplies: parsed.quickReplies || ["Create New Bill", "Low Stock Alert", "Today's Total Sales"]
         };
     } catch (err) {

@@ -10,6 +10,8 @@ class Supplier {
   final String? taxIdNumber;
   final String? taxIdType;
   final String? taxCountryCode;
+  final bool? isActive;
+
   Supplier({
     required this.id,
     required this.supplierCode,
@@ -22,6 +24,7 @@ class Supplier {
     this.taxIdNumber,
     this.taxIdType,
     this.taxCountryCode,
+    this.isActive = true,
   });
 
   factory Supplier.fromJson(Map<String, dynamic> json) {
@@ -37,6 +40,7 @@ class Supplier {
       taxIdNumber: json['tax_id_number'] ?? json['gstin'],
       taxIdType: json['tax_id_type'],
       taxCountryCode: json['tax_country_code'],
+      isActive: json['is_active'] == true || json['is_active'] == null,
     );
   }
 
@@ -52,6 +56,7 @@ class Supplier {
       'tax_id_number': taxIdNumber ?? gstin,
       'tax_id_type': taxIdType,
       'tax_country_code': taxCountryCode,
+      'is_active': isActive ?? true,
     };
   }
 }

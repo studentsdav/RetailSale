@@ -7,17 +7,20 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static Future<void> init() async {
-    const WindowsInitializationSettings windowsSettings =
+    final branding = await LocalPreferences.getAppBranding();
+    final appName = branding.productName.isNotEmpty ? branding.productName : branding.companyName;
+
+    final WindowsInitializationSettings windowsSettings =
         WindowsInitializationSettings(
-      appName: 'Inventory INV',
-      appUserModelId: 'com.Studentsdev.inventory',
-      guid: '12345678-1234-1234-1234-123456789012',
+      appName: appName,
+      appUserModelId: 'com.famalth.retailpos.v2',
+      guid: '87654321-4321-4321-4321-210987654321',
     );
 
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings settings =
+    final InitializationSettings settings =
         InitializationSettings(
       windows: windowsSettings,
       android: androidSettings,
@@ -34,9 +37,6 @@ class NotificationService {
       },
     );
 
-    // Request notification permission on Android 13+ (API 33+).
-    // This shows the OS permission dialog on first launch for all apps
-    // that use this service (retail, customer, rider).
     final androidImpl = _notifications
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
@@ -48,6 +48,9 @@ class NotificationService {
   static Future<void> show(int id, String title, String body) async {
     final showNotif = await LocalPreferences.getShowNotifications();
     if (!showNotif) return;
+
+    final branding = await LocalPreferences.getAppBranding();
+    final appName = branding.productName.isNotEmpty ? branding.productName : branding.companyName;
 
     const WindowsNotificationDetails windowsDetails =
         WindowsNotificationDetails();
@@ -67,13 +70,14 @@ class NotificationService {
       android: androidDetails,
     );
 
+    final notificationTitle = title.contains(appName) ? title : '[$appName] $title';
+
     await _notifications.show(
       id: id,
-      title: title,
+      title: notificationTitle,
       body: body,
       notificationDetails: details,
       payload: id.toString(),
     );
   }
 }
-

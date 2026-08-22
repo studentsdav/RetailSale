@@ -230,6 +230,7 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
       text: _controller.aiBaseUrl ?? (_getDefaultUrlForProvider(_controller.aiProvider ?? 'gemini')),
     );
     final keyCtrl = TextEditingController(text: _controller.aiApiKey ?? '');
+    final maxRowsCtrl = TextEditingController(text: _controller.maxRows.toString());
 
     showDialog(
       context: context,
@@ -330,6 +331,17 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
                           helperText: 'Keys are stored locally on this terminal.',
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: maxRowsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'AI Query Max Rows Limit (Default: 100, Max: 1000)',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.format_list_numbered),
+                          helperText: 'Caps query execution & AI token payload. Max allowed: 1000 rows.',
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -341,11 +353,16 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
                 ),
                 FilledButton(
                   onPressed: () async {
+                    int parsedMax = int.tryParse(maxRowsCtrl.text.trim()) ?? 100;
+                    if (parsedMax > 1000) parsedMax = 1000;
+                    if (parsedMax < 1) parsedMax = 1;
+
                     await _controller.savePrefs(
                       provider: selectedProvider,
                       modelName: modelCtrl.text,
                       baseUrl: urlCtrl.text,
                       apiKey: keyCtrl.text,
+                      maxRowsLimit: parsedMax,
                     );
                     if (context.mounted) {
                       Navigator.pop(context);
@@ -537,8 +554,8 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
       ));
     }
 
-    return RichText(
-      text: TextSpan(children: spans),
+    return SelectableText.rich(
+      TextSpan(children: spans),
     );
   }
 
@@ -573,40 +590,42 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 1. AI Questioning Console Card
-                _buildQuestionConsole(),
-                const SizedBox(height: 16),
-
-                // 2. Loading State
-                if (_controller.loading) _buildLoadingCard(),
-
-                // 3. Error Card
-                if (!_controller.loading && _controller.error != null)
-                  _buildErrorCard(),
-
-                // 4. Results Section
-                if (!_controller.loading && _controller.cacheId != null) ...[
-                  _buildSummaryCard(),
+          return SelectionArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. AI Questioning Console Card
+                  _buildQuestionConsole(),
                   const SizedBox(height: 16),
-                  
-                  // View Toggles (Table vs Chart)
-                  _buildViewToggler(),
-                  const SizedBox(height: 12),
 
-                  if (_showChartView)
-                    _buildChartView()
-                  else
-                    _buildDataGridSection(),
+                  // 2. Loading State
+                  if (_controller.loading) _buildLoadingCard(),
 
-                  const SizedBox(height: 16),
-                  _buildSQLDebugCard(),
+                  // 3. Error Card
+                  if (!_controller.loading && _controller.error != null)
+                    _buildErrorCard(),
+
+                  // 4. Results Section
+                  if (!_controller.loading && _controller.cacheId != null) ...[
+                    _buildSummaryCard(),
+                    const SizedBox(height: 16),
+                    
+                    // View Toggles (Table vs Chart)
+                    _buildViewToggler(),
+                    const SizedBox(height: 12),
+
+                    if (_showChartView)
+                      _buildChartView()
+                    else
+                      _buildDataGridSection(),
+
+                    const SizedBox(height: 16),
+                    _buildSQLDebugCard(),
+                  ],
                 ],
-              ],
+              ),
             ),
           );
         }

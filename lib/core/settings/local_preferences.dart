@@ -247,4 +247,34 @@ class LocalPreferences {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_lynxChatHistoryKey);
   }
+
+  static const _lynxThemeModeKey = 'lynx_theme_mode';
+
+  static Future<String> getLynxThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lynxThemeModeKey) ?? 'dark';
+  }
+
+  static Future<void> setLynxThemeMode(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lynxThemeModeKey, value);
+  }
+
+  static const _lynxMaxRowsKey = 'lynx_max_rows';
+
+  static Future<int> getLynxMaxRows() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rows = prefs.getInt(_lynxMaxRowsKey) ?? 100;
+    if (rows > 1000) return 1000;
+    if (rows < 1) return 1;
+    return rows;
+  }
+
+  static Future<void> setLynxMaxRows(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    int clamped = value;
+    if (clamped > 1000) clamped = 1000;
+    if (clamped < 1) clamped = 1;
+    await prefs.setInt(_lynxMaxRowsKey, clamped);
+  }
 }

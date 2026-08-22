@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,6 +36,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
   List<Supplier> _suppliers = [];
   List<Supplier> _filtered = [];
   final _taxCountryCode = TextEditingController(text: "IN");
+  bool _isActive = true;
 
   // ================= INDIAN STATES LIST =================
   final List<String> _indianStates = [
@@ -150,6 +151,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       taxCountryCode: _taxCountryCode.text.trim().isEmpty
           ? null
           : _taxCountryCode.text.trim(),
+      isActive: _isActive,
     );
 
     if (_editIndex == null) {
@@ -167,14 +169,17 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     final s = _filtered[i];
     _editIndex = _suppliers.indexWhere((e) => e.id == s.id);
 
-    _code.text = s.supplierCode;
-    _name.text = s.supplierName;
-    _address.text = s.address;
-    _phone.text = s.phone;
-    _email.text = s.email ?? '';
-    _state.text = s.state ?? '';
-    _gstin.text = s.gstin ?? '';
-    _taxCountryCode.text = s.taxCountryCode ?? '';
+    setState(() {
+      _code.text = s.supplierCode;
+      _name.text = s.supplierName;
+      _address.text = s.address;
+      _phone.text = s.phone;
+      _email.text = s.email ?? '';
+      _state.text = s.state ?? '';
+      _gstin.text = s.gstin ?? '';
+      _taxCountryCode.text = s.taxCountryCode ?? '';
+      _isActive = s.isActive ?? true;
+    });
   }
 
   Future<void> _deleteSupplier(int i) async {
@@ -184,14 +189,17 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
 
   // ================= CLEAR =================
   void _clearForm() {
-    _name.clear();
-    _address.clear();
-    _phone.clear();
-    _email.clear();
-    _editIndex = null;
-    _state.clear();
-    _gstin.clear();
-    _taxCountryCode.text = "IN";
+    setState(() {
+      _name.clear();
+      _address.clear();
+      _phone.clear();
+      _email.clear();
+      _editIndex = null;
+      _state.clear();
+      _gstin.clear();
+      _taxCountryCode.text = "IN";
+      _isActive = true;
+    });
     _generateCode();
   }
 
@@ -364,6 +372,38 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _isActive ? Colors.green.shade50 : Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _isActive ? Colors.green.shade300 : Colors.red.shade300),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _isActive ? 'Status: Active' : 'Status: Inactive',
+                        style: TextStyle(
+                          color: _isActive ? Colors.green.shade800 : Colors.red.shade800,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Switch(
+                        value: _isActive,
+                        activeThumbColor: Colors.green,
+                        onChanged: (val) {
+                          setState(() {
+                            _isActive = val;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
                 FilledButton.icon(
                   icon: const Icon(Icons.save),
                   label: Text(_editIndex == null ? 'Save' : 'Update'),
@@ -466,10 +506,12 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                   DataColumn(label: Text('Address')),
                   DataColumn(label: Text('State')),
                   DataColumn(label: Text('GSTIN')),
+                  DataColumn(label: Text('Status')),
                   DataColumn(label: Text('Action')),
                 ],
                 rows: List.generate(_filtered.length, (i) {
                   final s = _filtered[i];
+                  final isActive = s.isActive ?? true;
                   return DataRow(
                     color: WidgetStateProperty.all(
                         i.isEven ? Colors.grey.shade50 : Colors.white),
@@ -481,6 +523,62 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                       DataCell(Text(s.address ?? '')),
                       DataCell(Text(s.state ?? '')),
                       DataCell(Text(s.gstin ?? '')),
+                      DataCell(
+                        InkWell(
+                          onTap: () async {
+                            await supplierCtrl.toggleStatus(s.id);
+                            await _loadSuppliers();
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Supplier ${s.supplierName} (${s.supplierCode}) marked as ${!isActive ? 'Active' : 'Inactive'}'),
+                                  duration: const Duration(seconds: 2),
+                                  backgroundColor: !isActive ? Colors.green : Colors.orange,
+                                ),
+                              );
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Tooltip(
+                            message: "Click to toggle between Active and Inactive",
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isActive ? Colors.green.shade50 : Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isActive ? Colors.green.shade300 : Colors.red.shade300,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isActive ? Icons.check_circle : Icons.cancel,
+                                    size: 13,
+                                    color: isActive ? Colors.green.shade700 : Colors.red.shade700,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isActive ? 'Active' : 'Inactive',
+                                    style: TextStyle(
+                                      color: isActive ? Colors.green.shade800 : Colors.red.shade800,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.swap_horiz,
+                                    size: 13,
+                                    color: isActive ? Colors.green.shade600 : Colors.red.shade600,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                       DataCell(Row(
                         children: [
                           IconButton(

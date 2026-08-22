@@ -6,8 +6,8 @@ const license = require('../middlewares/license.middleware');
 
 router.use(auth, license('INVENTORY'));
 
-
 router.get('/', notifyCtrl.getNotifications);
+router.post('/', notifyCtrl.createNotification);
 router.put('/:id/read', notifyCtrl.markNotificationRead);
 
 module.exports = router;
