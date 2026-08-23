@@ -295,30 +295,54 @@ class _SaleScreenState extends State<SaleScreen> {
         _pendingAdvanceCreated = 0;
 
         for (final preload in widget.preloadedItems!) {
-          final int itemId = preload['item_id'];
-          final double qty = double.tryParse(preload['qty'].toString()) ?? 1.0;
-          final double rate = double.tryParse(preload['rate']?.toString() ?? '') ?? 0.0;
+          final int itemId = int.tryParse((preload['item_id'] ?? preload['itemId'] ?? preload['id'] ?? 0).toString()) ?? 0;
+          final String itemCode = (preload['item_code'] ?? preload['itemCode'] ?? preload['code'] ?? '').toString().trim();
+          final String itemName = (preload['item_name'] ?? preload['itemName'] ?? preload['name'] ?? preload['title'] ?? '').toString().trim();
+          final double qty = double.tryParse((preload['qty'] ?? preload['quantity'] ?? 1.0).toString()) ?? 1.0;
+          final double rate = double.tryParse((preload['rate'] ?? preload['price'] ?? preload['cost'] ?? preload['mrp'] ?? '').toString()) ?? 0.0;
 
           // Find this item in ctrl.items
           Item? matched;
-          try {
-            matched = ctrl.items.firstWhere((i) => i.id == itemId);
-          } catch (_) {
-            matched = null;
+          if (itemId > 0) {
+            try {
+              matched = ctrl.items.firstWhere((i) => i.id == itemId);
+            } catch (_) {}
+          }
+          if (matched == null && itemCode.isNotEmpty) {
+            try {
+              matched = ctrl.items.firstWhere((i) => i.itemCode.toLowerCase() == itemCode.toLowerCase());
+            } catch (_) {}
+          }
+          if (matched == null && itemName.isNotEmpty) {
+            final nameLow = itemName.toLowerCase();
+            try {
+              matched = ctrl.items.firstWhere((i) => i.itemName.toLowerCase().contains(nameLow) || nameLow.contains(i.itemName.toLowerCase()));
+            } catch (_) {}
+
+            if (matched == null) {
+              final tokens = nameLow.split(RegExp(r'\s+')).where((t) => t.length >= 3);
+              for (final token in tokens) {
+                try {
+                  matched = ctrl.items.firstWhere((i) => i.itemName.toLowerCase().contains(token));
+                  break;
+                } catch (_) {}
+              }
+            }
           }
 
+          final finalItemId = matched?.id ?? (itemId > 0 ? itemId : (ctrl.items.isNotEmpty ? ctrl.items.first.id : 0));
           double resolvedRate = rate;
           if (matched != null) {
             final baseRate = matched.retailSalePrice > 0
                 ? matched.retailSalePrice
-                : (matched.rate > 0 ? matched.rate : rate);
+                : (matched.rate > 0 ? matched.rate : matched.mrp);
             resolvedRate = (rate > 0) ? rate : baseRate;
           }
 
           final saleItem = SaleItem(
-            itemId: itemId,
-            itemCode: matched?.itemCode ?? 'ITEM-$itemId',
-            itemName: matched?.itemName ?? preload['item_name'] ?? 'Unknown Item',
+            itemId: finalItemId,
+            itemCode: matched?.itemCode ?? (itemCode.isNotEmpty ? itemCode : 'ITEM-$finalItemId'),
+            itemName: matched?.itemName ?? (itemName.isNotEmpty ? itemName : 'Unknown Item'),
             barcode: matched?.barcode ?? '',
             unit: matched?.unit ?? 'PCS',
             qty: qty,

@@ -26,7 +26,16 @@ import '../../utils/inclusive_rate_helper.dart';
 import '../../utils/date_picker_helper.dart';
 
 class PurchaseOrderScreen extends StatefulWidget {
-  const PurchaseOrderScreen({super.key});
+  final List<dynamic>? draftItems;
+  final String? supplierName;
+  final int? supplierId;
+
+  const PurchaseOrderScreen({
+    super.key,
+    this.draftItems,
+    this.supplierName,
+    this.supplierId,
+  });
 
   @override
   State<PurchaseOrderScreen> createState() => _PurchaseOrderScreenState();
@@ -140,8 +149,147 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     await itemCtrl.load();
     await depctrl.getdepartment();
     final no = await numberingCtrl.getNextPoNo(_date);
+
+    int? prefilledSupplierId;
+    String suppSearchStr = (widget.supplierName ?? '').trim();
+    if (suppSearchStr.isEmpty && widget.draftItems != null) {
+      for (final raw in widget.draftItems!) {
+        if (raw is Map) {
+          final sName = (raw['Supplier'] ?? raw['supplier'] ?? raw['Vendor'] ?? raw['vendor'] ?? '').toString().trim();
+          if (sName.isNotEmpty) {
+            suppSearchStr = sName;
+            break;
+          }
+        }
+      }
+    }
+
+    if (widget.supplierId != null) {
+      prefilledSupplierId = widget.supplierId;
+    } else if (suppSearchStr.isNotEmpty) {
+      final suppSearchLow = suppSearchStr.toLowerCase();
+      try {
+        final supp = supplierCtrl.list.firstWhere(
+          (s) => s.supplierName.toLowerCase().contains(suppSearchLow) || suppSearchLow.contains(s.supplierName.toLowerCase()),
+        );
+        prefilledSupplierId = supp.id;
+      } catch (_) {}
+
+      if (prefilledSupplierId == null) {
+        final tokens = suppSearchLow.split(RegExp(r'\s+')).where((t) => t.length >= 3);
+        for (final token in tokens) {
+          try {
+            final supp = supplierCtrl.list.firstWhere(
+              (s) => s.supplierName.toLowerCase().contains(token),
+            );
+            prefilledSupplierId = supp.id;
+            break;
+          } catch (_) {}
+        }
+      }
+    }
+
+    if (prefilledSupplierId == null && suppSearchStr.isEmpty && supplierCtrl.list.isNotEmpty) {
+      prefilledSupplierId = supplierCtrl.list.first.id;
+    }
+
+    String cleanNumStr(dynamic val) {
+      if (val == null) return '';
+      final s = val.toString();
+      final match = RegExp(r'[\d.]+').firstMatch(s);
+      return match != null ? match.group(0)! : '';
+    }
+
+    final List<PurchaseItem> prefilledItems = [];
+    if (widget.draftItems != null && widget.draftItems!.isNotEmpty) {
+      for (final raw in widget.draftItems!) {
+        if (raw is Map) {
+          final itemCodeStr = (raw['Item Code'] ?? raw['Code'] ?? raw['code'] ?? raw['itemCode'] ?? raw['item_code'] ?? raw['ITEM_CODE'] ?? '').toString().trim();
+          final itemNameStr = (raw['Item Name'] ?? raw['ItemName'] ?? raw['itemName'] ?? raw['item_name'] ?? raw['name'] ?? raw['title'] ?? raw['ITEM_NAME'] ?? '').toString().trim();
+          final qtyRaw = raw['Quantity'] ?? raw['Quantity (Units)'] ?? raw['Quantity (Pcs)'] ?? raw['Qty'] ?? raw['qty'] ?? raw['quantity'] ?? raw['reorderQty'] ?? raw['count'] ?? raw['units'] ?? raw['Current Stock'] ?? raw['stock'] ?? 10;
+          final rateRaw = raw['Rate'] ?? raw['rate'] ?? raw['price'] ?? raw['cost'] ?? raw['purchase_rate'] ?? raw['mrp'] ?? 0;
+          final taxRaw = raw['Tax %'] ?? raw['Tax'] ?? raw['tax'] ?? raw['tax_percent'] ?? 0;
+
+          final qtyVal = double.tryParse(cleanNumStr(qtyRaw)) ?? 10.0;
+          final rateVal = double.tryParse(cleanNumStr(rateRaw)) ?? 0.0;
+          final taxVal = double.tryParse(cleanNumStr(taxRaw)) ?? 0.0;
+
+          Item? matchedItem;
+          if (itemCodeStr.isNotEmpty) {
+            try {
+              matchedItem = itemCtrl.list.firstWhere(
+                (i) => i.itemCode.toLowerCase() == itemCodeStr.toLowerCase(),
+              );
+            } catch (_) {}
+          }
+          if (matchedItem == null && itemNameStr.isNotEmpty) {
+            final nameLow = itemNameStr.toLowerCase();
+            try {
+              matchedItem = itemCtrl.list.firstWhere(
+                (i) => i.itemName.toLowerCase().contains(nameLow) || nameLow.contains(i.itemName.toLowerCase()),
+              );
+            } catch (_) {}
+
+            if (matchedItem == null) {
+              final tokens = nameLow.split(RegExp(r'\s+')).where((t) => t.length >= 3);
+              for (final token in tokens) {
+                try {
+                  matchedItem = itemCtrl.list.firstWhere(
+                    (i) => i.itemName.toLowerCase().contains(token),
+                  );
+                  break;
+                } catch (_) {}
+              }
+            }
+          }
+
+          final effectiveRate = rateVal > 0 
+              ? rateVal 
+              : (matchedItem != null 
+                  ? (matchedItem.rate > 0 ? matchedItem.rate : (matchedItem.retailSalePrice > 0 ? matchedItem.retailSalePrice : matchedItem.mrp)) 
+                  : 0.0);
+
+          final effectiveTax = taxVal > 0 
+              ? taxVal 
+              : (matchedItem != null ? matchedItem.taxPercent : 0.0);
+
+          if (matchedItem != null) {
+            prefilledItems.add(PurchaseItem(
+              itemId: matchedItem.id,
+              itemCode: matchedItem.itemCode,
+              itemName: matchedItem.itemName,
+              brand: matchedItem.brand.isNotEmpty ? matchedItem.brand : 'General',
+              unit: matchedItem.unit.isNotEmpty ? matchedItem.unit : 'PCS',
+              qty: qtyVal > 0 ? qtyVal : 10.0,
+              rate: effectiveRate,
+              tax: effectiveTax,
+              department: '',
+            ));
+          } else if (itemNameStr.isNotEmpty || itemCodeStr.isNotEmpty) {
+            prefilledItems.add(PurchaseItem(
+              itemId: 0,
+              itemCode: itemCodeStr.isNotEmpty ? itemCodeStr : 'ITEM-DRAFT',
+              itemName: itemNameStr.isNotEmpty ? itemNameStr : 'Draft Item',
+              brand: 'General',
+              unit: 'PCS',
+              qty: qtyVal > 0 ? qtyVal : 10.0,
+              rate: effectiveRate,
+              tax: effectiveTax,
+              department: '',
+            ));
+          }
+        }
+      }
+    }
+
     setState(() {
       _poNo.text = no;
+      if (prefilledSupplierId != null) {
+        _supplierId = prefilledSupplierId;
+      }
+      if (prefilledItems.isNotEmpty) {
+        _items.addAll(prefilledItems);
+      }
     });
   }
 

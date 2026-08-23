@@ -687,6 +687,13 @@ function getMockLynxAssist(prompt, liveContext = {}) {
     if (q.includes('low stock') || q.includes('reorder') || (q.includes('stock') && q.includes('alert'))) {
         const count = liveContext.lowStockCount || 0;
         let itemsList = '';
+        const itemsPayload = liveContext.lowStockItems ? liveContext.lowStockItems.map(i => ({
+            item_code: i.item_code,
+            item_name: i.item_name,
+            qty: Math.max(parseFloat((i.reorder_level || 10) - (i.stock || 0)), 10),
+            rate: i.purchase_rate || i.mrp || 0
+        })) : [];
+
         if (liveContext.lowStockItems && liveContext.lowStockItems.length > 0) {
             itemsList = "\n\n**Low Stock Products (Live Database):**\n" + 
                 liveContext.lowStockItems.map(i => `* **${i.item_name}** (${i.item_code}) — Current Stock: **${i.stock}**`).join('\n');
@@ -695,8 +702,8 @@ function getMockLynxAssist(prompt, liveContext = {}) {
         }
 
         return {
-            reply: `📦 **FAMALTH LYNX Live Low Stock Analysis**: Found **${count} items** requiring reorder attention.${itemsList}`,
-            action: { type: "LOW_STOCK_ALERT", label: "View Low Stock Items" },
+            reply: `📦 **FAMALTH LYNX Live Low Stock Analysis**: Found **${count} items** requiring reorder attention.${itemsList}\n\n*Click the button below to pre-fill a Purchase Order with these low stock items.*`,
+            action: { type: "PURCHASE_ORDER", label: "⚡ Create Purchase Order", items: itemsPayload },
             quickReplies: ["Create Purchase Order", "Search Product Stock", "Stock Transfer"]
         };
     }
@@ -779,46 +786,314 @@ function getMockLynxAssist(prompt, liveContext = {}) {
     };
 }
 
-async function handlePurchaseOrderDraft(prompt, history = [], propertyDb = null, outletId = 0, config = {}) {
+async function handleKotOrderDraft(prompt, history = [], propertyDb = null, outletId = 0, config = {}) {
     if (!prompt || typeof prompt !== 'string') return null;
 
     const q = prompt.toLowerCase();
-    const isPoPrompt = q.includes('purchase order') || 
-                       q.includes('po draft') || 
-                       q.includes('create po') || 
-                       q.includes('draft po') || 
-                       q.includes('order from supplier') || 
-                       q.includes('buy from vendor') ||
-                       (q.includes('po') && (q.includes('draft') || q.includes('create') || q.includes('make')));
+    const isKotPrompt = q.includes('table') ||
+                        q.includes('restaurant') ||
+                        q.includes('pax') ||
+                        q.includes('kot') ||
+                        q.includes('captain') ||
+                        q.includes('dine in') ||
+                        q.includes('dining');
 
-    if (!isPoPrompt) return null;
+    if (!isKotPrompt) return null;
 
-    let supplierName = '';
+    let dbItems = [];
+    if (propertyDb) {
+        try {
+            const itemsRes = await propertyDb.query(
+                `SELECT id, item_code, item_name, brand, unit, rate, retail_sale_price, mrp, tax_percent FROM item_master WHERE outlet_id = :outletId LIMIT 100`,
+                { replacements: { outletId }, type: propertyDb.QueryTypes.SELECT }
+            );
+            dbItems = Array.isArray(itemsRes) ? itemsRes : (itemsRes ? [itemsRes] : []);
+        } catch (_) {}
+    }
+
+    let tableNo = "1";
+    let pax = 2;
     let items = [];
-    let note = '';
+
+    const tableMatch = q.match(/(?:table|tbl)\s*(?:no|number|\.)?\s*(\d+)/i);
+    if (tableMatch) {
+        tableNo = tableMatch[1];
+    }
+
+    const paxMatch = q.match(/(\d+)\s*(?:pax|guest|person|people)/i);
+    if (paxMatch) {
+        pax = parseInt(paxMatch[1]);
+    }
 
     const apiKeyExists = GEMINI_API_KEY || OPENAI_API_KEY || config.aiApiKey;
     if (apiKeyExists) {
         try {
-            const nlpPrompt = `Extract purchase order drafting details from user query: "${prompt}".
+            const nlpPrompt = `Extract restaurant KOT dine-in order details from user query against real database records.
+
+REAL DATABASE ITEMS:
+${JSON.stringify(dbItems.slice(0, 50).map(i => ({ id: i.id, code: i.item_code, name: i.item_name, rate: i.retail_sale_price || i.rate || i.mrp })), null, 2)}
+
+USER QUERY: "${prompt}"
+
+Instructions:
+1. Extract tableNo (e.g. "1") and pax (e.g. 2).
+2. Match requested order items (e.g. "a4 paper", "adidas") against REAL DATABASE ITEMS. Use exact item_id, item_code, item_name, rate from real database.
+3. Extract quantity (e.g. "2 a4 paper" -> qty = 2). Default qty is 1.
+
 Output ONLY a raw JSON object with schema:
 {
-  "supplierName": "Supplier / Vendor Name or empty string",
+  "tableNo": "1",
+  "pax": 2,
   "items": [
-    { "itemName": "Item / Product name", "qty": 100, "rate": 250 }
-  ],
-  "note": "Any additional note"
+    { "item_id": 1, "item_code": "ITEM01", "item_name": "Exact Item Name", "qty": 2, "rate": 250 }
+  ]
 }`;
-            const systemInst = `You are a precise NLP purchase order parser. Output ONLY a valid JSON object without extra text or backticks.`;
+            const systemInst = `You are an expert Restaurant KOT Captain POS order parser connected to a live database. Output ONLY a valid JSON object matching real database records.`;
 
             const rawNlp = await executeLLMCall(nlpPrompt, systemInst, config);
             let cleanJson = rawNlp.replace(/```json/gi, '').replace(/```/g, '').trim();
             const parsed = JSON.parse(cleanJson);
 
             if (parsed) {
+                if (parsed.tableNo) tableNo = String(parsed.tableNo);
+                if (parsed.pax) pax = parseInt(parsed.pax);
+                if (Array.isArray(parsed.items)) items = parsed.items;
+            }
+        } catch (llmErr) {
+            console.warn('[AI SERVICE] LLM KOT Draft NLP warning:', llmErr.message);
+        }
+    }
+
+    if (items.length === 0 && dbItems.length > 0) {
+        const qtyMatch = q.match(/(\d+)\s*(?:qty|quantity|units|pcs)/i) || q.match(/(\d+)\s+[a-zA-Z]/i);
+        const qtyVal = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+
+        const words = q.split(/\s+/).filter(w => w.length >= 3 && !['draft', 'order', 'for', 'table', 'restuarant', 'restaurant', 'with', 'pax', 'and', 'a4', 'paper'].includes(w));
+        for (const w of words) {
+            const matched = dbItems.find(i => i.item_name.toLowerCase().includes(w) || i.item_code.toLowerCase().includes(w));
+            if (matched && !items.some(it => it.item_id === matched.id)) {
+                items.push({
+                    item_id: matched.id,
+                    item_code: matched.item_code,
+                    item_name: matched.item_name,
+                    qty: qtyVal,
+                    rate: matched.retail_sale_price || matched.rate || matched.mrp || 0
+                });
+            }
+        }
+    }
+
+    let totalVal = 0;
+    const itemLines = items.map(it => {
+        const lineTotal = (it.qty || 1) * (it.rate || 0);
+        totalVal += lineTotal;
+        return `* 🍽️ **${it.item_name || 'Item'}**: ${it.qty || 1} units @ ₹${it.rate || 0} = **₹${lineTotal.toLocaleString('en-IN')}**`;
+    });
+
+    return {
+        reply: `🍽️ **Restaurant KOT Order Ready for Table ${tableNo}!**\n\n` +
+               `* 🪑 **Table Number**: Table ${tableNo} (${pax} Pax)\n` +
+               (itemLines.length > 0 ? itemLines.join('\n') + '\n' : '') +
+               `* 💰 **Estimated Order Value**: ₹${totalVal.toLocaleString('en-IN')}\n\n` +
+               `*Click the button below to open Table ${tableNo} KOT Order Basket directly.*`,
+        action: { type: "KOT_BUILDER", label: `Open Table ${tableNo} Order Basket`, tableNo, pax, items, payload: { tableNo, pax, items, totalVal } },
+        quickReplies: [`Open Table ${tableNo} Order Basket`, "View Kitchen Display (KDS)"]
+    };
+}
+
+async function handleSalesOrderDraft(prompt, history = [], propertyDb = null, outletId = 0, config = {}) {
+    if (!prompt || typeof prompt !== 'string') return null;
+
+    const q = prompt.toLowerCase();
+    const isSalePrompt = q.includes('draft for sale') ||
+                         q.includes('sale items') ||
+                         q.includes('create sale') ||
+                         q.includes('create bill') ||
+                         q.includes('sale draft') ||
+                         q.includes('bill draft') ||
+                         q.includes('add to cart') ||
+                         q.includes('pos bill') ||
+                         (q.includes('sale') && (q.includes('draft') || q.includes('item') || q.includes('cart') || q.includes('bill')));
+
+    if (!isSalePrompt) return null;
+
+    let dbItems = [];
+
+    if (propertyDb) {
+        try {
+            const itemsRes = await propertyDb.query(
+                `SELECT id, item_code, item_name, brand, unit, rate, retail_sale_price, mrp, tax_percent FROM item_master WHERE outlet_id = :outletId LIMIT 100`,
+                { replacements: { outletId }, type: propertyDb.QueryTypes.SELECT }
+            );
+            dbItems = Array.isArray(itemsRes) ? itemsRes : (itemsRes ? [itemsRes] : []);
+        } catch (_) {}
+    }
+
+    let items = [];
+
+    const apiKeyExists = GEMINI_API_KEY || OPENAI_API_KEY || config.aiApiKey;
+    if (apiKeyExists) {
+        try {
+            const nlpPrompt = `Extract sales billing / add to cart items from user query against real database records.
+
+REAL DATABASE ITEMS:
+${JSON.stringify(dbItems.slice(0, 50).map(i => ({ id: i.id, code: i.item_code, name: i.item_name, brand: i.brand, rate: i.retail_sale_price || i.rate || i.mrp, tax: i.tax_percent })), null, 2)}
+
+USER QUERY: "${prompt}"
+
+Instructions:
+1. Match requested sale items (e.g. "a4paper rim", "adidas", "american tourister") against REAL DATABASE ITEMS. Use exact item_id, item_code, item_name, rate, tax from the real database items above.
+2. Extract quantity (e.g. "2 qty each"). Default qty is 1.
+3. Output REAL item names, item ids, and rates from database.
+
+Output ONLY a raw JSON object with schema:
+{
+  "items": [
+    { "item_id": 1, "item_code": "ITEM01", "item_name": "Exact Item Name", "qty": 2, "rate": 250, "tax_percent": 18 }
+  ]
+}`;
+            const systemInst = `You are an expert POS Sales billing parser connected to a live retail database. Output ONLY a valid JSON object matching real database records.`;
+
+            const rawNlp = await executeLLMCall(nlpPrompt, systemInst, config);
+            let cleanJson = rawNlp.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanJson);
+
+            if (parsed && Array.isArray(parsed.items)) {
+                items = parsed.items;
+            }
+        } catch (llmErr) {
+            console.warn('[AI SERVICE] LLM Sale Draft NLP warning:', llmErr.message);
+        }
+    }
+
+    if (items.length === 0 && dbItems.length > 0) {
+        const qtyMatch = q.match(/(\d+)\s*(?:qty|quantity|units|pcs)/i);
+        const qtyVal = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+
+        const words = q.split(/\s+/).filter(w => w.length >= 3 && !['draft', 'for', 'sale', 'items', 'each', 'qty', 'and'].includes(w));
+        for (const w of words) {
+            const matched = dbItems.find(i => i.item_name.toLowerCase().includes(w) || i.item_code.toLowerCase().includes(w));
+            if (matched && !items.some(it => it.item_id === matched.id)) {
+                items.push({
+                    item_id: matched.id,
+                    item_code: matched.item_code,
+                    item_name: matched.item_name,
+                    qty: qtyVal,
+                    rate: matched.retail_sale_price || matched.rate || matched.mrp || 0,
+                    tax_percent: matched.tax_percent || 0
+                });
+            }
+        }
+    }
+
+    if (items.length === 0) {
+        return {
+            reply: `🛒 **POS Sale Draft Intent Detected**\n\nPlease specify items and quantities to add to the POS cart.\n\n*Example:* "Draft for sale items A4 Paper Rim 2 qty"`,
+            action: { type: "CREATE_BILL", label: "Open Sales Billing Cart" },
+            quickReplies: ["Create New Bill", "Today's Sales"]
+        };
+    }
+
+    let totalVal = 0;
+    const itemLines = items.map(it => {
+        const lineTotal = (it.qty || 1) * (it.rate || 0);
+        totalVal += lineTotal;
+        return `* 🛒 **${it.item_name || 'Product'}** (${it.item_code || 'ITEM'}): ${it.qty || 1} units @ ₹${it.rate || 0} = **₹${lineTotal.toLocaleString('en-IN')}**`;
+    });
+
+    return {
+        reply: `🛒 **POS Sale Draft Ready!**\n\n` +
+               `Selected items added to POS Billing Cart:\n` +
+               itemLines.join('\n') + '\n\n' +
+               `* 💰 **Estimated Cart Total**: ₹${totalVal.toLocaleString('en-IN')}\n\n` +
+               `*Click the button below to open POS Billing with cart pre-filled.*`,
+        action: { type: "CREATE_BILL", label: "Proceed to POS Sales Cart", items, payload: { items, totalVal } },
+        quickReplies: ["Proceed to POS Sales Cart", "Create New Bill"]
+    };
+}
+
+async function handlePurchaseOrderDraft(prompt, history = [], propertyDb = null, outletId = 0, config = {}) {
+    if (!prompt || typeof prompt !== 'string') return null;
+
+    const q = prompt.toLowerCase();
+    const isSaleKeywords = q.includes('sale') || q.includes('sell') || q.includes('bill') || q.includes('customer') || q.includes('pos') || q.includes('cart');
+    if (isSaleKeywords) return null;
+
+    const isPoPrompt = q.includes('purchase order') || 
+                       q.includes('po draft') || 
+                       q.includes('create po') || 
+                       q.includes('draft po') || 
+                       q.includes('order from supplier') || 
+                       q.includes('buy from vendor') ||
+                       (q.includes('draft') && (q.includes('item') || q.includes('qty') || q.includes('quantity') || q.includes('supplier') || q.includes('vendor') || q.includes('top selling') || q.includes('po'))) ||
+                       (q.includes('po') && (q.includes('draft') || q.includes('create') || q.includes('make')));
+
+    if (!isPoPrompt) return null;
+
+    let dbSuppliers = [];
+    let dbItems = [];
+
+    // Fetch real suppliers and items from live outlet database if propertyDb is connected
+    if (propertyDb) {
+        try {
+            const suppliers = await propertyDb.query(
+                `SELECT id, supplier_code, supplier_name FROM supplier_master WHERE outlet_id = :outletId LIMIT 50`,
+                { replacements: { outletId }, type: propertyDb.QueryTypes.SELECT }
+            );
+            dbSuppliers = Array.isArray(suppliers) ? suppliers : (suppliers ? [suppliers] : []);
+        } catch (_) {}
+
+        try {
+            const itemsRes = await propertyDb.query(
+                `SELECT id, item_code, item_name, brand, unit, rate, mrp, tax_percent FROM item_master WHERE outlet_id = :outletId LIMIT 100`,
+                { replacements: { outletId }, type: propertyDb.QueryTypes.SELECT }
+            );
+            dbItems = Array.isArray(itemsRes) ? itemsRes : (itemsRes ? [itemsRes] : []);
+        } catch (_) {}
+    }
+
+    let supplierName = '';
+    let supplierId = null;
+    let items = [];
+    let note = '';
+
+    const apiKeyExists = GEMINI_API_KEY || OPENAI_API_KEY || config.aiApiKey;
+    if (apiKeyExists) {
+        try {
+            const nlpPrompt = `Match and extract purchase order drafting details from user query against real database records.
+
+REAL DATABASE SUPPLIERS:
+${JSON.stringify(dbSuppliers, null, 2)}
+
+REAL DATABASE ITEMS:
+${JSON.stringify(dbItems.slice(0, 50).map(i => ({ id: i.id, code: i.item_code, name: i.item_name, brand: i.brand, rate: i.rate || i.mrp, tax: i.tax_percent })), null, 2)}
+
+USER QUERY: "${prompt}"
+
+Instructions:
+1. Match the supplier requested in query (e.g. "gold tarders") against REAL DATABASE SUPPLIERS. Return exact supplier_name and id from the database.
+2. Match requested items or "top selling items" or "low stock items" against REAL DATABASE ITEMS. Use exact item_code, item_name, rate, tax from the real database items above.
+3. If quantity is specified (e.g. "100 qty each"), set qty = 100 for each item. Default qty is 10.
+4. Output REAL item names, item codes, and rates from database (DO NOT output generic placeholders like "top selling item 1").
+
+Output ONLY a raw JSON object with schema:
+{
+  "supplierId": 1 or null,
+  "supplierName": "Exact matched supplier_name or empty string",
+  "items": [
+    { "itemId": 1, "itemCode": "ITEM01", "itemName": "Exact Item Name", "brand": "Brand", "unit": "PCS", "qty": 100, "rate": 250, "tax": 18 }
+  ]
+}`;
+            const systemInst = `You are an expert purchase order parser connected to a live retail database. Output ONLY a valid JSON object matching real database records.`;
+
+            const rawNlp = await executeLLMCall(nlpPrompt, systemInst, config);
+            let cleanJson = rawNlp.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanJson);
+
+            if (parsed) {
+                supplierId = parsed.supplierId || null;
                 supplierName = parsed.supplierName || '';
                 items = Array.isArray(parsed.items) ? parsed.items : [];
-                note = parsed.note || '';
             }
         } catch (llmErr) {
             console.warn('[AI SERVICE] LLM PO Draft NLP warning:', llmErr.message);
@@ -829,14 +1104,53 @@ Output ONLY a raw JSON object with schema:
         const suppMatch = prompt.match(/(?:for|from)\s+([A-Za-z0-9\s]+?)(?=\s*(?:\d+|units|pcs|items|rate|at|$))/i);
         if (suppMatch) supplierName = suppMatch[1].trim();
 
+        if (dbSuppliers.length > 0 && supplierName) {
+            const matchedSupp = dbSuppliers.find(s => s.supplier_name.toLowerCase().includes(supplierName.toLowerCase()) || supplierName.toLowerCase().includes(s.supplier_name.toLowerCase()));
+            if (matchedSupp) {
+                supplierId = matchedSupp.id;
+                supplierName = matchedSupp.supplier_name;
+            }
+        }
+
         const itemMatch = prompt.match(/(\d+)\s*(?:units|pcs|items|packets)?\s*(?:of)?\s*([A-Za-z0-9\s]+?)\s*(?:at|@)\s*(\d+)/i);
         if (itemMatch) {
+            const rawName = itemMatch[2].trim();
+            const matchedDbItem = dbItems.find(i => i.item_name.toLowerCase().includes(rawName.toLowerCase()) || rawName.toLowerCase().includes(i.item_name.toLowerCase()));
+
             items.push({
-                itemName: itemMatch[2].trim(),
+                itemId: matchedDbItem ? matchedDbItem.id : 0,
+                itemCode: matchedDbItem ? matchedDbItem.item_code : 'ITEM-DRAFT',
+                itemName: matchedDbItem ? matchedDbItem.item_name : rawName,
+                brand: matchedDbItem ? matchedDbItem.brand : 'General',
+                unit: matchedDbItem ? matchedDbItem.unit : 'PCS',
                 qty: parseInt(itemMatch[1]),
-                rate: parseFloat(itemMatch[3])
+                rate: matchedDbItem ? (matchedDbItem.rate || matchedDbItem.mrp) : parseFloat(itemMatch[3]),
+                tax: matchedDbItem ? matchedDbItem.tax_percent : 0
             });
         }
+    }
+
+    if (items.length === 0 && dbItems.length > 0) {
+        // Pick top items from live database if query requested items
+        const numItems = q.includes('3') ? 3 : (q.includes('5') ? 5 : 3);
+        const qtyMatch = q.match(/(\d+)\s*(?:qty|quantity|units|pcs)/i);
+        const qtyVal = qtyMatch ? parseInt(qtyMatch[1]) : 100;
+
+        items = dbItems.slice(0, numItems).map(i => ({
+            itemId: i.id,
+            itemCode: i.item_code,
+            itemName: i.item_name,
+            brand: i.brand || 'General',
+            unit: i.unit || 'PCS',
+            qty: qtyVal,
+            rate: i.rate || i.mrp || 0,
+            tax: i.tax_percent || 0
+        }));
+    }
+
+    if (!supplierName && dbSuppliers.length > 0) {
+        supplierId = dbSuppliers[0].id;
+        supplierName = dbSuppliers[0].supplier_name;
     }
 
     if (!supplierName && items.length === 0) {
@@ -851,7 +1165,7 @@ Output ONLY a raw JSON object with schema:
     const itemLines = items.map(it => {
         const lineTotal = (it.qty || 1) * (it.rate || 0);
         totalVal += lineTotal;
-        return `* 📦 **${it.itemName || 'Product'}**: ${it.qty || 1} units @ ₹${it.rate || 0} = **₹${lineTotal.toLocaleString('en-IN')}**`;
+        return `* 📦 **${it.itemName || 'Product'}** (${it.itemCode || 'ITEM'}): ${it.qty || 1} units @ ₹${it.rate || 0} = **₹${lineTotal.toLocaleString('en-IN')}**`;
     });
 
     return {
@@ -860,7 +1174,7 @@ Output ONLY a raw JSON object with schema:
                (itemLines.length > 0 ? itemLines.join('\n') + '\n' : '') +
                `* 💰 **Total Draft Value**: ₹${totalVal.toLocaleString('en-IN')}\n\n` +
                `*Click the button below to review and submit this purchase order in your outlet dashboard.*`,
-        action: { type: "OPEN_PURCHASE_ORDER_DRAFT", label: "Review & Submit Purchase Order", payload: { supplierName, items, totalVal } },
+        action: { type: "OPEN_PURCHASE_ORDER_DRAFT", label: "Review & Submit Purchase Order", supplierId, supplierName, items, payload: { supplierId, supplierName, items, totalVal } },
         quickReplies: ["Review & Submit Purchase Order", "Cancel Draft"]
     };
 }
@@ -1385,7 +1699,25 @@ async function processLynxAssist(prompt, history = [], config = {}, propertyDb =
         return scheduledTaskResult;
     }
 
-    // 2. Data Analysis & Live Store Context (SELECT ONLY)
+    // 2. Intercept Restaurant KOT Dine-In Order Draft (Direct Jump to Table KOT Basket)
+    const kotDraftResult = await handleKotOrderDraft(prompt, history, propertyDb, outletId, config);
+    if (kotDraftResult) {
+        return kotDraftResult;
+    }
+
+    // 3. Intercept Sales Order / Billing Draft (Pre-fills POS Sales Cart)
+    const saleDraftResult = await handleSalesOrderDraft(prompt, history, propertyDb, outletId, config);
+    if (saleDraftResult) {
+        return saleDraftResult;
+    }
+
+    // 3. Intercept Purchase Order Draft (Pre-fills PO screen on navigation without DB mutation)
+    const poDraftResult = await handlePurchaseOrderDraft(prompt, history, propertyDb, outletId, config);
+    if (poDraftResult) {
+        return poDraftResult;
+    }
+
+    // 3. Data Analysis & Live Store Context (SELECT ONLY)
     const liveContext = await fetchLiveStoreContext(propertyDb, outletId);
     const maxRows = Math.min(Math.max(parseInt(config.maxRows) || 100, 1), 1000);
 
@@ -1452,6 +1784,25 @@ User Question / Command: ${prompt}`;
             const matched = matchActionFromQuery(prompt);
             if (matched) {
                 action = matched;
+            }
+        }
+
+        if (action && (action.type === 'CREATE_PO' || action.type === 'PURCHASE_ORDER' || action.type === 'OPEN_PURCHASE_ORDER_DRAFT')) {
+            if (!action.items && !action.rows) {
+                if (parsed.items && Array.isArray(parsed.items)) {
+                    action.items = parsed.items;
+                } else if (parsed.payload && parsed.payload.items && Array.isArray(parsed.payload.items)) {
+                    action.items = parsed.payload.items;
+                } else if (sqlQueryResult && Array.isArray(sqlQueryResult)) {
+                    action.items = sqlQueryResult;
+                }
+            }
+            if (!action.supplierName) {
+                if (parsed.supplierName) {
+                    action.supplierName = parsed.supplierName;
+                } else if (parsed.payload && parsed.payload.supplierName) {
+                    action.supplierName = parsed.payload.supplierName;
+                }
             }
         }
 

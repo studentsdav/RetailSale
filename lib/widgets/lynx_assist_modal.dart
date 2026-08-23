@@ -1090,9 +1090,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                     final cleanLabel = label.replaceAll('✅', '').replaceAll('⚡', '').trim();
                     _sendMessage(cleanLabel.isNotEmpty ? cleanLabel : "Approve");
                   } else {
-                    // Screen navigation action: Close chatbot modal and open target screen
-                    Navigator.of(context).pop();
-
+                    // Screen navigation action: Open target screen while preserving AI assistant context when returning back
                     if (callback != null) {
                       callback(actionType, actionPayload);
                     }

@@ -282,12 +282,19 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     return name;
   }
 
+  String get _displayTableName {
+    final raw = widget.table['table_name'] ?? widget.table['table_no'] ?? widget.table['name'] ?? widget.table['table_id'] ?? widget.table['id'];
+    if (raw == null || raw.toString().trim().isEmpty) return '1';
+    final s = raw.toString().trim();
+    return s.toLowerCase().startsWith('table') ? s.substring(5).trim() : s;
+  }
+
   Future<Uint8List> _generateKot80mmPdf(PdfPageFormat format) async {
     final pdf = pw.Document();
 
-    final String tableName = widget.table['table_name']?.toString() ?? '101';
+    final String tableName = _displayTableName;
     final String floorName = widget.table['floor_name']?.toString() ?? 'Main Floor';
-    final int guestCount = widget.table['current_guest_count'] ?? 2;
+    final int guestCount = widget.table['current_guest_count'] ?? widget.table['pax'] ?? 2;
     final String nowStr = DateTime.now().toString().substring(0, 16);
     final String kotNo = widget.editKotId != null
         ? '#${widget.editKotId}'
@@ -440,30 +447,73 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   void _prefillCartIfAny() {
     if (widget.prefilledItems != null) {
       for (final item in widget.prefilledItems!) {
+        if (item is! Map) continue;
         final String itemStat = (item['status'] ?? '').toString().toLowerCase();
         if (itemStat == 'cancelled' || itemStat == 'rejected') continue;
-        final int itemId = item['item_id'] ?? 0;
-        if (itemId <= 0) continue;
-        final double qty = double.tryParse(item['qty']?.toString() ?? item['quantity']?.toString() ?? '0') ?? 0.0;
-        final double rate = double.tryParse(item['rate']?.toString() ?? item['item_rate']?.toString() ?? '0') ?? 0.0;
-        final int kotItemId = item['id'] ?? 0;
+        int itemId = int.tryParse((item['item_id'] ?? item['itemId'] ?? item['id'] ?? 0).toString()) ?? 0;
+        final String itemCode = (item['item_code'] ?? item['itemCode'] ?? item['code'] ?? '').toString().trim();
+        final String itemName = (item['item_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().trim();
+        final double qty = double.tryParse(item['qty']?.toString() ?? item['quantity']?.toString() ?? '1.0') ?? 1.0;
+        final double rate = double.tryParse(item['rate']?.toString() ?? item['item_rate']?.toString() ?? item['price']?.toString() ?? '0') ?? 0.0;
+        final int kotItemId = int.tryParse((item['id'] ?? 0).toString()) ?? 0;
+
+        dynamic matched;
+        if (itemId > 0 && allItems.isNotEmpty) {
+          try {
+            matched = allItems.firstWhere((i) => (i is Map ? i['id'] : i.id) == itemId);
+          } catch (_) {}
+        }
+        if (matched == null && itemCode.isNotEmpty && allItems.isNotEmpty) {
+          try {
+            matched = allItems.firstWhere((i) => ((i is Map ? i['item_code'] ?? i['itemCode'] : i.itemCode) ?? '').toString().toLowerCase() == itemCode.toLowerCase());
+          } catch (_) {}
+        }
+        if (matched == null && itemName.isNotEmpty && allItems.isNotEmpty) {
+          final nameLow = itemName.toLowerCase();
+          try {
+            matched = allItems.firstWhere((i) => ((i is Map ? i['item_name'] ?? i['itemName'] : i.itemName) ?? '').toString().toLowerCase().contains(nameLow) || nameLow.contains(((i is Map ? i['item_name'] ?? i['itemName'] : i.itemName) ?? '').toString().toLowerCase()));
+          } catch (_) {}
+
+          if (matched == null) {
+            final tokens = nameLow.split(RegExp(r'\s+')).where((t) => t.length >= 3);
+            for (final token in tokens) {
+              try {
+                matched = allItems.firstWhere((i) => ((i is Map ? i['item_name'] ?? i['itemName'] : i.itemName) ?? '').toString().toLowerCase().contains(token));
+                break;
+              } catch (_) {}
+            }
+          }
+        }
+
+        if (matched != null) {
+          itemId = matched is Map ? (matched['id'] ?? itemId) : matched.id;
+        }
+        if (itemId <= 0) {
+          itemId = DateTime.now().millisecondsSinceEpoch % 1000000;
+        }
+
+        final double resolvedRate = rate > 0
+            ? rate
+            : (matched != null
+                ? (matched is Map ? double.tryParse((matched['retail_sale_price'] ?? matched['rate'] ?? matched['mrp'] ?? '0').toString()) ?? 0.0 : (matched.retailSalePrice > 0 ? matched.retailSalePrice : matched.rate))
+                : 0.0);
 
         _cart[itemId] = {
           'item_id': itemId,
-          'item_name': item['item_name'] ?? '',
-          'qty': qty,
-          'original_qty': qty,
+          'item_name': matched != null ? (matched is Map ? (matched['item_name'] ?? matched['itemName'] ?? itemName) : matched.itemName) : (itemName.isNotEmpty ? itemName : 'Item'),
+          'qty': qty > 0 ? qty : 1.0,
+          'original_qty': qty > 0 ? qty : 1.0,
           'item_remark': item['item_remark'] ?? '',
           'modifier_details': List<String>.from(item['modifier_details'] ?? []),
-          'rate': rate,
+          'rate': resolvedRate,
           'location': item['location'] ?? item['station']?['station_name'] ?? 'Kitchen',
           'brand': item['brand'] ?? item['item']?['brand'] ?? '',
           'kot_item_ids': kotItemId > 0 ? <int>[kotItemId] : <int>[],
         };
         _initialActiveItems[itemId] = {
           'item_id': itemId,
-          'item_name': item['item_name'] ?? '',
-          'qty': qty,
+          'item_name': _cart[itemId]!['item_name'],
+          'qty': qty > 0 ? qty : 1.0,
           'kot_item_ids': kotItemId > 0 ? <int>[kotItemId] : <int>[],
         };
       }
@@ -1117,12 +1167,12 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
       return 'NC Order (Complimentary) - $dept$guest';
     }
     if (widget.editKotId != null) {
-      return 'Edit KOT #${widget.editKotId} - Table ${widget.table['table_name']}';
+      return 'Edit KOT #${widget.editKotId} - Table $_displayTableName';
     }
     if (widget.isFreshOrder) {
-      return 'Add Fresh Order - Table ${widget.table['table_name']}';
+      return 'Add Fresh Order - Table $_displayTableName';
     }
-    return 'Captain Console - Table ${widget.table['table_name']}';
+    return 'Captain Console - Table $_displayTableName';
   }
 
   @override
@@ -2125,7 +2175,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                 const Icon(Icons.table_restaurant, size: 14, color: Colors.white),
                 const SizedBox(width: 4),
                 Text(
-                  'Table ${widget.table['table_name']}',
+                  'Table $_displayTableName',
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -2202,9 +2252,9 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items) async {
     final pdf = pw.Document();
     
-    final String tableName = widget.isTakeaway ? 'Takeaway' : (widget.table['table_name']?.toString() ?? 'Table');
-    final String floorName = widget.isTakeaway ? '' : (widget.table['floor_name']?.toString() ?? '');
-    final int guestCount = widget.isTakeaway ? 1 : (widget.table['current_guest_count'] ?? 2);
+    final String tableName = widget.isTakeaway ? 'Takeaway' : _displayTableName;
+    final String floorName = widget.isTakeaway ? '' : (widget.table['floor_name']?.toString() ?? 'Main Floor');
+    final int guestCount = widget.isTakeaway ? 1 : (widget.table['current_guest_count'] ?? widget.table['pax'] ?? 2);
     final String nowStr = DateTime.now().toString().substring(0, 16);
     final String kotNo = kot['kot_no'] ?? kot['kot_number'] ?? '#KOT-${kot['id']}';
     

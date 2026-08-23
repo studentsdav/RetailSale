@@ -43,6 +43,7 @@ import '../../screens/hrms/hrms_masters_screen.dart';
 
 // Restaurant Screens
 import '../../screens/restaurant/captain_dashboard_screen.dart';
+import '../../screens/restaurant/kot_builder_screen.dart';
 import '../../screens/restaurant/restaurant_setup_screen.dart';
 import '../../screens/restaurant/kds_screen.dart';
 import '../../screens/restaurant/delivery_challan_screen.dart';
@@ -87,7 +88,35 @@ class AiNavigationRegistry {
       // 1. POS & Billing Counter
       case 'CREATE_BILL':
       case 'POS':
-        targetScreen = const SaleScreen();
+      case 'CREATE_SALE':
+      case 'ADD_TO_CART':
+      case 'OPEN_SALE_DRAFT':
+      case 'SALE_DRAFT':
+        List<Map<String, dynamic>>? preloadedItems;
+        if (payload != null) {
+          List<dynamic>? rawItems;
+          if (payload['items'] is List) {
+            rawItems = payload['items'] as List<dynamic>;
+          } else if (payload['payload'] != null && payload['payload']['items'] is List) {
+            rawItems = payload['payload']['items'] as List<dynamic>;
+          } else if (payload['rows'] is List) {
+            rawItems = payload['rows'] as List<dynamic>;
+          } else if (payload['dataset'] is List) {
+            rawItems = payload['dataset'] as List<dynamic>;
+          }
+
+          if (rawItems != null && rawItems.isNotEmpty) {
+            preloadedItems = rawItems.map<Map<String, dynamic>>((e) {
+              if (e is Map) {
+                return Map<String, dynamic>.from(e);
+              }
+              return {'item_name': e.toString(), 'qty': 1};
+            }).toList();
+          }
+        }
+        targetScreen = SaleScreen(
+          preloadedItems: preloadedItems,
+        );
         break;
 
       case 'ENTERPRISE_POS':
@@ -146,7 +175,35 @@ class AiNavigationRegistry {
       // 3. Purchasing & Supplier Management
       case 'CREATE_PO':
       case 'PURCHASE_ORDER':
-        targetScreen = const PurchaseOrderScreen();
+      case 'OPEN_PURCHASE_ORDER_DRAFT':
+        List<dynamic>? draftItems;
+        String? supplierName;
+        int? supplierId;
+        if (payload != null) {
+          if (payload['items'] is List) {
+            draftItems = payload['items'] as List<dynamic>;
+          } else if (payload['payload'] != null && payload['payload']['items'] is List) {
+            draftItems = payload['payload']['items'] as List<dynamic>;
+          } else if (payload['rows'] is List) {
+            draftItems = payload['rows'] as List<dynamic>;
+          } else if (payload['dataset'] is List) {
+            draftItems = payload['dataset'] as List<dynamic>;
+          }
+
+          if (payload['supplierName'] != null) {
+            supplierName = payload['supplierName'].toString();
+          } else if (payload['payload'] != null && payload['payload']['supplierName'] != null) {
+            supplierName = payload['payload']['supplierName'].toString();
+          }
+          if (payload['supplierId'] != null) {
+            supplierId = int.tryParse(payload['supplierId'].toString());
+          }
+        }
+        targetScreen = PurchaseOrderScreen(
+          draftItems: draftItems,
+          supplierName: supplierName,
+          supplierId: supplierId,
+        );
         break;
 
       case 'GRN':
@@ -220,7 +277,50 @@ class AiNavigationRegistry {
 
       // 6. Restaurant & Dining POS
       case 'CAPTAIN_POS':
-        targetScreen = const CaptainDashboardScreen();
+      case 'KOT_BUILDER':
+      case 'OPEN_KOT':
+      case 'RESTAURANT_POS':
+        Map<String, dynamic>? targetTable;
+        List<dynamic>? prefilledItems;
+
+        if (payload != null) {
+          final tableNoStr = (payload['tableNo'] ?? payload['table_no'] ?? payload['table'] ?? payload['table_id'] ?? payload['tableId'] ?? '').toString().trim();
+          final int paxVal = int.tryParse((payload['pax'] ?? payload['guests'] ?? payload['paxCount'] ?? 2).toString()) ?? 2;
+          final String guestName = (payload['customerName'] ?? payload['customer'] ?? payload['guestName'] ?? payload['guest_name'] ?? 'Guest').toString();
+
+          if (payload['items'] is List) {
+            prefilledItems = payload['items'] as List<dynamic>;
+          } else if (payload['payload'] != null && payload['payload']['items'] is List) {
+            prefilledItems = payload['payload']['items'] as List<dynamic>;
+          }
+
+          if (tableNoStr.isNotEmpty) {
+            final cleanTableNo = tableNoStr.replaceAll(RegExp(r'[^\d]'), '');
+            final finalTableNo = cleanTableNo.isNotEmpty ? cleanTableNo : tableNoStr;
+            targetTable = {
+              'id': int.tryParse(finalTableNo) ?? 1,
+              'table_id': int.tryParse(finalTableNo) ?? 1,
+              'table_name': finalTableNo,
+              'table_no': finalTableNo,
+              'name': 'Table $finalTableNo',
+              'floor_name': 'Main Floor',
+              'current_guest_count': paxVal,
+              'pax': paxVal,
+              'capacity': paxVal,
+              'status': 'occupied',
+              'guest_name': guestName,
+            };
+          }
+        }
+
+        if (targetTable != null) {
+          targetScreen = KotBuilderScreen(
+            table: targetTable,
+            prefilledItems: prefilledItems,
+          );
+        } else {
+          targetScreen = const CaptainDashboardScreen();
+        }
         break;
 
       case 'RESTAURANT_SETUP':
