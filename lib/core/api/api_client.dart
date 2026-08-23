@@ -21,11 +21,17 @@ class ApiClient {
   // ---------------- COMMON HEADERS ----------------
   static Future<Map<String, String>> _headers() async {
     final token = await TokenStorage.read();
-    final outletCode = AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '';
+    final userMap = await TokenStorage.getUser();
+    final int activeOutletId = int.tryParse((userMap?['outlet_id'] ?? userMap?['outletId'] ?? userMap?['property_id'] ?? userMap?['propertyId'] ?? 1).toString()) ?? 1;
+    final String outletCode = (userMap?['outlet_code'] ?? userMap?['outletCode'] ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '')).toString().trim();
+
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
+      'x-outlet-id': activeOutletId.toString(),
+      'outlet_id': activeOutletId.toString(),
       if (outletCode.isNotEmpty) 'x-outlet-code': outletCode,
+      if (outletCode.isNotEmpty) 'outlet_code': outletCode,
     };
   }
 

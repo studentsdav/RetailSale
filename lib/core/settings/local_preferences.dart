@@ -226,9 +226,14 @@ class LocalPreferences {
     await prefs.setString(_lynxAiBaseUrlKey, value);
   }
 
-  static Future<List<Map<String, dynamic>>> getLynxChatHistory() async {
+  static String _historyKeyForOutlet(int outletId) {
+    return outletId > 0 ? '${_lynxChatHistoryKey}_$outletId' : _lynxChatHistoryKey;
+  }
+
+  static Future<List<Map<String, dynamic>>> getLynxChatHistory([int outletId = 0]) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_lynxChatHistoryKey);
+    final key = _historyKeyForOutlet(outletId);
+    final raw = prefs.getString(key);
     if (raw == null || raw.trim().isEmpty) return [];
     try {
       final List decoded = jsonDecode(raw) as List;
@@ -238,14 +243,16 @@ class LocalPreferences {
     }
   }
 
-  static Future<void> setLynxChatHistory(List<Map<String, dynamic>> messages) async {
+  static Future<void> setLynxChatHistory(List<Map<String, dynamic>> messages, [int outletId = 0]) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lynxChatHistoryKey, jsonEncode(messages));
+    final key = _historyKeyForOutlet(outletId);
+    await prefs.setString(key, jsonEncode(messages));
   }
 
-  static Future<void> clearLynxChatHistory() async {
+  static Future<void> clearLynxChatHistory([int outletId = 0]) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_lynxChatHistoryKey);
+    final key = _historyKeyForOutlet(outletId);
+    await prefs.remove(key);
   }
 
   static const _lynxThemeModeKey = 'lynx_theme_mode';

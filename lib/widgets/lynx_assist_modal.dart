@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../core/api/api_client.dart';
 import '../core/api/endpoints.dart';
 import '../core/settings/local_preferences.dart';
+import '../core/auth/token_storage.dart';
+import '../core/config/app_config.dart';
 
 class LynxAssistChatMessage {
   final String text;
@@ -109,12 +111,17 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     _loadSettingsAndHistory();
   }
 
+  int _activeOutletId = 1;
+
   Future<void> _loadSettingsAndHistory() async {
+    final userMap = await TokenStorage.getUser();
+    _activeOutletId = int.tryParse((userMap?['outlet_id'] ?? userMap?['outletId'] ?? userMap?['property_id'] ?? userMap?['propertyId'] ?? 1).toString()) ?? 1;
+
     final key = await LocalPreferences.getLynxAiApiKey();
     final provider = await LocalPreferences.getLynxAiProvider();
     final model = await LocalPreferences.getLynxAiModelName();
     final baseUrl = await LocalPreferences.getLynxAiBaseUrl();
-    final savedHistory = await LocalPreferences.getLynxChatHistory();
+    final savedHistory = await LocalPreferences.getLynxChatHistory(_activeOutletId);
     final themeMode = await LocalPreferences.getLynxThemeMode();
     final maxRows = await LocalPreferences.getLynxMaxRows();
 
@@ -160,7 +167,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
 
   Future<void> _saveHistoryLocally() async {
     final list = _messages.map((m) => m.toJson()).toList();
-    await LocalPreferences.setLynxChatHistory(list);
+    await LocalPreferences.setLynxChatHistory(list, _activeOutletId);
   }
 
   Future<void> _confirmClearChat() async {
@@ -188,7 +195,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     );
 
     if (confirm == true) {
-      await LocalPreferences.clearLynxChatHistory();
+      await LocalPreferences.clearLynxChatHistory(_activeOutletId);
       setState(() {
         _messages.clear();
         _messages.add(
@@ -473,10 +480,18 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     _scrollToBottom(animate: true);
 
     try {
+      final userMap = await TokenStorage.getUser();
+      final String activeOutletCode = (userMap?['outlet_code'] ?? userMap?['outletCode'] ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '')).toString().trim();
+      final int activeOutletId = int.tryParse((userMap?['outlet_id'] ?? userMap?['outletId'] ?? userMap?['property_id'] ?? userMap?['propertyId'] ?? 0).toString()) ?? 0;
+
       final endpoint = isVoice ? ApiEndpoints.lynxAssistVoice : ApiEndpoints.lynxAssistChat;
       final payload = isVoice
           ? {
               'transcript': trimmed,
+              'outletId': activeOutletId,
+              'outlet_id': activeOutletId,
+              'outletCode': activeOutletCode,
+              'outlet_code': activeOutletCode,
               'maxRows': _maxRows,
               'aiProvider': _aiProvider,
               'aiModelName': _aiModelName,
@@ -485,6 +500,10 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
             }
           : {
               'message': trimmed,
+              'outletId': activeOutletId,
+              'outlet_id': activeOutletId,
+              'outletCode': activeOutletCode,
+              'outlet_code': activeOutletCode,
               'maxRows': _maxRows,
               'history': [],
               'aiProvider': _aiProvider,

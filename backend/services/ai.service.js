@@ -309,10 +309,11 @@ function getMockQuery(question) {
                 ORDER BY ms.id DESC LIMIT 50`;
     }
     if (q.includes('sale') || q.includes('transaction') || q.includes('billing') || q.includes('spent') || q.includes('revenue')) {
+        const todayFilter = q.includes('today') ? "AND sale_date::date = CURRENT_DATE " : "";
         return `SELECT id, sale_no, customer_name, customer_phone, payment_mode, net_amount, sale_date 
                 FROM sales_headers 
-                WHERE outlet_id = :outletId AND status = 'COMPLETED' 
-                ORDER BY net_amount DESC LIMIT 50`;
+                WHERE outlet_id = :outletId AND status = 'COMPLETED' ${todayFilter}
+                ORDER BY id DESC LIMIT 50`;
     }
     if (q.includes('item') || q.includes('product') || q.includes('inventory') || q.includes('stock')) {
         return `SELECT item_code, item_name, barcode, unit, is_active 
@@ -392,12 +393,89 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
         lowStockCount: 0,
         totalProducts: 0,
         stockValue: 0,
-        topProducts: []
+        topProducts: [],
+        storeProfile: {
+            outletId: outletId || 1,
+            outletCode: `OUTLET-${outletId || 1}`,
+            propertyName: 'Famalth Retail Outlet',
+            address: '',
+            phone: '',
+            email: ''
+        }
     };
 
     if (!propertyDb) return context;
 
     try {
+        // Multi-source store profile resolution (property_info -> outlets -> system_settings)
+        let foundCode = null;
+        let foundName = null;
+        let foundAddr = null;
+        let foundPhone = null;
+        let foundEmail = null;
+
+        try {
+            const propRes = await propertyDb.query(`
+                SELECT id, property_name, legal_name, outlet_code, address, city, state, pin_code, pincode, mobile, phone, email
+                FROM property_info
+                WHERE outlet_id = :outletId
+                LIMIT 1
+            `, { replacements: { outletId }, type: propertyDb.QueryTypes.SELECT });
+
+            if (propRes && propRes.length > 0) {
+                const p = propRes[0];
+                if (p.outlet_code) foundCode = p.outlet_code;
+                if (p.property_name || p.legal_name) foundName = p.property_name || p.legal_name;
+                const addrParts = [p.address, p.city, p.state, p.pin_code || p.pincode].filter(Boolean);
+                if (addrParts.length > 0) foundAddr = addrParts.join(', ');
+                if (p.mobile || p.phone) foundPhone = p.mobile || p.phone;
+                if (p.email) foundEmail = p.email;
+            }
+        } catch (_) {}
+
+        try {
+            const outRes = await propertyDb.query(`
+                SELECT id, outlet_code, outlet_name, contact_phone, contact_email
+                FROM outlets
+                WHERE id = :outletId
+                LIMIT 1
+            `, { replacements: { outletId }, type: propertyDb.QueryTypes.SELECT });
+
+            if (outRes && outRes.length > 0) {
+                const o = outRes[0];
+                if (!foundCode && o.outlet_code) foundCode = o.outlet_code;
+                if (!foundName && o.outlet_name) foundName = o.outlet_name;
+                if (!foundPhone && o.contact_phone) foundPhone = o.contact_phone;
+                if (!foundEmail && o.contact_email) foundEmail = o.contact_email;
+            }
+        } catch (_) {}
+
+        try {
+            const sysRes = await propertyDb.query(`
+                SELECT store_name, outlet_code, address, phone
+                FROM system_settings
+                WHERE outlet_id = :outletId
+                LIMIT 1
+            `, { replacements: { outletId }, type: propertyDb.QueryTypes.SELECT });
+
+            if (sysRes && sysRes.length > 0) {
+                const s = sysRes[0];
+                if (!foundName && s.store_name) foundName = s.store_name;
+                if (!foundCode && s.outlet_code) foundCode = s.outlet_code;
+                if (!foundAddr && s.address) foundAddr = s.address;
+                if (!foundPhone && s.phone) foundPhone = s.phone;
+            }
+        } catch (_) {}
+
+        context.storeProfile = {
+            outletId: outletId,
+            outletCode: foundCode || `OUTLET-${outletId}`,
+            propertyName: foundName || `Registered Outlet ${outletId}`,
+            address: foundAddr || `Main Store Premises (Outlet ${outletId})`,
+            phone: foundPhone || '',
+            email: foundEmail || ''
+        };
+
         const todayStart = new Date(`${istCtx.istDateString}T00:00:00+05:30`);
         const todayEnd = new Date(`${istCtx.istDateString}T23:59:59+05:30`);
 
@@ -413,11 +491,11 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
                 COALESCE(SUM(CASE WHEN payment_mode ILIKE '%card%' OR payment_mode ILIKE '%credit%' OR payment_mode ILIKE '%debit%' THEN net_amount ELSE 0 END), 0) AS card_sales,
                 COALESCE(SUM(CASE WHEN payment_mode ILIKE '%upi%' OR payment_mode ILIKE '%qr%' THEN net_amount ELSE 0 END), 0) AS upi_sales
             FROM sales_headers
-            WHERE (:outletId = 0 OR outlet_id = :outletId)
+            WHERE outlet_id = :outletId
               AND status = 'COMPLETED'
               AND sale_date >= :todayStart AND sale_date <= :todayEnd
         `, {
-            replacements: { outletId, todayStart, todayEnd },
+            replacements: { outletId },
             type: propertyDb.QueryTypes.SELECT
         });
 
@@ -435,11 +513,11 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
                 COALESCE(SUM(net_amount), 0) AS yesterday_sales,
                 COUNT(id) AS yesterday_orders
             FROM sales_headers
-            WHERE (:outletId = 0 OR outlet_id = :outletId)
+            WHERE outlet_id = :outletId
               AND status = 'COMPLETED'
               AND sale_date >= :yesterdayStart AND sale_date <= :yesterdayEnd
         `, {
-            replacements: { outletId, yesterdayStart, yesterdayEnd },
+            replacements: { outletId },
             type: propertyDb.QueryTypes.SELECT
         });
 
@@ -452,7 +530,7 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
         const lowStockRes = await propertyDb.query(`
             SELECT item_code, item_name, item_group, COALESCE(opening_balance, 0) AS stock
             FROM item_master
-            WHERE (:outletId = 0 OR outlet_id = :outletId)
+            WHERE outlet_id = :outletId
               AND is_active = true
               AND COALESCE(opening_balance, 0) <= 10
             ORDER BY opening_balance ASC
@@ -471,7 +549,7 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
                 COUNT(id) AS total_products,
                 COALESCE(SUM(COALESCE(opening_balance, 0) * COALESCE(retail_sale_price, 0)), 0) AS stock_value
             FROM item_master
-            WHERE (:outletId = 0 OR outlet_id = :outletId)
+            WHERE outlet_id = :outletId
               AND is_active = true
         `, {
             replacements: { outletId },
@@ -489,7 +567,7 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
             FROM sales_items
             WHERE sale_id IN (
                 SELECT id FROM sales_headers 
-                WHERE (:outletId = 0 OR outlet_id = :outletId) AND status = 'COMPLETED'
+                WHERE outlet_id = :outletId AND status = 'COMPLETED'
             )
             GROUP BY item_name
             ORDER BY total_qty DESC
@@ -709,6 +787,8 @@ function getMockLynxAssist(prompt, liveContext = {}) {
     }
 
     if (q.includes('today') && (q.includes('sale') || q.includes('revenue') || q.includes('total') || q.includes('order') || q.includes('payment') || q.includes('collection'))) {
+        const storeName = liveContext.storeProfile?.propertyName || 'Your Store';
+        const storeCode = liveContext.storeProfile?.outletCode || `Outlet-${liveContext.storeProfile?.outletId || 1}`;
         const todayDateStr = liveContext.currentIstDate || 'Today';
         const sales = (liveContext.todaySales || 0).toLocaleString('en-IN');
         const orders = liveContext.todayOrders || 0;
@@ -716,17 +796,29 @@ function getMockLynxAssist(prompt, liveContext = {}) {
         const card = (liveContext.cardSales || 0).toLocaleString('en-IN');
         const upi = (liveContext.upiSales || 0).toLocaleString('en-IN');
 
-        const ySales = (liveContext.yesterdaySales || 0).toLocaleString('en-IN');
-        const yOrders = liveContext.yesterdayOrders || 0;
-        const yDateStr = liveContext.yesterdayIstDate || 'Yesterday';
-
-        let midnightNote = '';
-        if (orders === 0 && liveContext.yesterdayOrders > 0) {
-            midnightNote = `\n\n📌 **Late Shift / Midnight Notice**: Today is **${todayDateStr}** (${liveContext.currentIstTime || ''}). No bills have been registered yet for today's shift. Yesterday (${yDateStr}), total sales were **₹${ySales}** across **${yOrders} completed orders**.`;
+        if (orders === 0 && (liveContext.todaySales || 0) === 0) {
+            return {
+                reply: `📊 **Daily Sales Overview - ${todayDateStr}**\n\n` +
+                       `For **${storeName} (${storeCode})**, no sales transactions have been logged today (${todayDateStr}).\n\n` +
+                       `* 💰 **Total Sales**: ₹0.00\n` +
+                       `* 🛍️ **Total Orders**: 0\n` +
+                       `* 💵 **Cash Sales**: ₹0.00\n` +
+                       `* 💳 **Card Sales**: ₹0.00\n` +
+                       `* 📱 **UPI Sales**: ₹0.00\n\n` +
+                       `ℹ️ *Your connected outlet holds 0 sales today.*`,
+                action: { type: "VIEW_REPORTS", label: "Open Sales Reports" },
+                quickReplies: ["Create New Bill", "View Low Stock Items", "Generate Closing Report"]
+            };
         }
 
         return {
-            reply: `📊 **Today's Payment Collections & Sales Breakdown (${todayDateStr})**:\n* Total Net Sales: **₹${sales}**\n* Total Transactions: **${orders} Completed Orders**\n* Cash Collected: **₹${cash}**\n* Card Collected: **₹${card}**\n* UPI / QR Collected: **₹${upi}**${midnightNote}`,
+            reply: `📊 **Daily Sales Overview - ${todayDateStr}**\n\n` +
+                   `For **${storeName} (${storeCode})**, today's performance summary is as follows:\n\n` +
+                   `* 💰 **Total Sales**: ₹${sales}\n` +
+                   `* 🛍️ **Total Orders**: ${orders}\n` +
+                   `* 💵 **Cash Sales**: ₹${cash}\n` +
+                   `* 💳 **Card Sales**: ₹${card}\n` +
+                   `* 📱 **UPI Sales**: ₹${upi}`,
             action: { type: "VIEW_REPORTS", label: "Open Sales Reports" },
             quickReplies: ["Day Closing Report", "Cash Ledger", "Top Categories"]
         };
@@ -783,6 +875,42 @@ function getMockLynxAssist(prompt, liveContext = {}) {
         reply: "🤖 **FAMALTH LYNX ASSIST**: I am trained on **ALL software features** and connected directly to your live database (Sales, Stock Values, Low Stock Alerts, HRMS, Restaurant POS, WhatsApp, Suppliers, and Finance). How can I assist you right now?",
         action: { type: "NONE" },
         quickReplies: ["Create New Bill", "Low Stock Alert", "Attendance Logs", "Captain POS"]
+    };
+}
+
+async function handleOutletVerification(prompt, history = [], propertyDb = null, outletId = 0, config = {}) {
+    if (!prompt || typeof prompt !== 'string') return null;
+
+    const q = prompt.toLowerCase();
+    const isOutletInfoPrompt = q.includes('connected outlet') ||
+                               q.includes('which outlet') ||
+                               q.includes('registered property') ||
+                               q.includes('property name') ||
+                               q.includes('outlet code') ||
+                               q.includes('outlet address') ||
+                               q.includes('my outlet') ||
+                               q.includes('connected store') ||
+                               q.includes('verify outlet') ||
+                               q.includes('my store info') ||
+                               q.includes('registration info') ||
+                               (q.includes('outlet') && (q.includes('info') || q.includes('detail') || q.includes('name') || q.includes('address') || q.includes('code') || q.includes('check') || q.includes('connected')));
+
+    if (!isOutletInfoPrompt) return null;
+
+    const liveContext = await fetchLiveStoreContext(propertyDb, outletId);
+    const prof = liveContext.storeProfile || { outletId, outletCode: `OUTLET-${outletId}`, propertyName: 'Famalth Outlet', address: 'Registered Address' };
+
+    return {
+        reply: `🏢 **ACTIVE CONNECTED OUTLET VERIFICATION**\n\n` +
+               `* 🆔 **Outlet ID**: ${prof.outletId}\n` +
+               `* 🏷️ **Outlet Code**: ${prof.outletCode}\n` +
+               `* 🏪 **Registered Property Name**: ${prof.propertyName}\n` +
+               `* 📍 **Registered Store Address**: ${prof.address || 'Address Configured in Store Settings'}\n` +
+               (prof.phone ? `* 📞 **Phone**: ${prof.phone}\n` : '') +
+               (prof.email ? `* ✉️ **Email**: ${prof.email}\n` : '') +
+               `\n🔒 *LYNX ASSIST is strictly isolated and running only against your logged-in outlet data.*`,
+        action: { type: "NONE" },
+        quickReplies: ["Today's Total Sales", "Low Stock Alert", "View Full Sales Analytics"]
     };
 }
 
@@ -1693,6 +1821,12 @@ Output ONLY a raw JSON object with schema:
 }
 
 async function processLynxAssist(prompt, history = [], config = {}, propertyDb = null, outletId = 0) {
+    // 0. Intercept Active Outlet & Registered Property Verification Prompt
+    const outletInfoResult = await handleOutletVerification(prompt, history, propertyDb, outletId, config);
+    if (outletInfoResult) {
+        return outletInfoResult;
+    }
+
     // 1. Task Scheduling & Sticky Notes Reminders (ALLOWED)
     const scheduledTaskResult = await handleTaskScheduling(prompt, history, propertyDb, outletId, config);
     if (scheduledTaskResult) {
@@ -1737,6 +1871,24 @@ async function processLynxAssist(prompt, history = [], config = {}, propertyDb =
                     console.warn('[AI SERVICE] Blocked non-SELECT SQL query for safety:', sqlQueryString);
                     sqlQueryString = null;
                 } else {
+                    // Enforce Multi-Tenant SQL Isolation: replace any hardcoded outlet_id = <num> with outlet_id = :outletId
+                    sqlQueryString = sqlQueryString.replace(/outlet_id\s*=\s*\d+/gi, 'outlet_id = :outletId');
+
+                    // If query is missing :outletId placeholder, inject WHERE outlet_id = :outletId
+                    if (!sqlQueryString.includes(':outletId')) {
+                        if (sqlQueryString.toLowerCase().includes('where')) {
+                            sqlQueryString = sqlQueryString.replace(/where\s+/i, 'WHERE outlet_id = :outletId AND ');
+                        } else if (sqlQueryString.toLowerCase().includes('group by')) {
+                            sqlQueryString = sqlQueryString.replace(/group by\s+/i, 'WHERE outlet_id = :outletId GROUP BY ');
+                        } else if (sqlQueryString.toLowerCase().includes('order by')) {
+                            sqlQueryString = sqlQueryString.replace(/order by\s+/i, 'WHERE outlet_id = :outletId ORDER BY ');
+                        } else if (sqlQueryString.toLowerCase().includes('limit')) {
+                            sqlQueryString = sqlQueryString.replace(/limit\s+/i, 'WHERE outlet_id = :outletId LIMIT ');
+                        } else {
+                            sqlQueryString += ' WHERE outlet_id = :outletId';
+                        }
+                    }
+
                     const t = await propertyDb.transaction();
                     try {
                         await propertyDb.query("SET TRANSACTION READ ONLY", { transaction: t });
