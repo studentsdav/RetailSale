@@ -1053,6 +1053,16 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                 _fmtAmount((displaySubTotal - displayDiscount).clamp(0.0, double.infinity))),
                                           _metricCard('Taxable Value',
                                               _fmtAmount(displayTaxableAmount)),
+                                          _metricCard('Charges',
+                                              _fmtAmount(_selectedOrder!.chargeTotal)),
+                                          _metricCard(
+                                              'Charges GST',
+                                              _fmtAmount(_selectedOrder!.chargeTaxTotal > 0
+                                                  ? _selectedOrder!.chargeTaxTotal
+                                                  : _selectedOrder!.charges.fold<double>(0, (sum, c) {
+                                                      if (!c.taxable || c.taxPercent <= 0 || c.amount <= 0) return sum;
+                                                      return sum + (c.amount * c.taxPercent / 100);
+                                                    }))),
                                         ];
                                       })(),
                                       _metricCard('Tax',

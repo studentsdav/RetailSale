@@ -7226,3 +7226,30 @@ SyntaxError: Missing catch or finally after try
 2026-08-23T18:33:35.508Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
 2026-08-23T18:33:35.512Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-23T18:33:35.533Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T14:53:54.668Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T14:53:54.848Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T14:53:54.859Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T15:08:52.910Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T15:08:52.989Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T15:08:53.006Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T15:17:18.254Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T15:17:18.308Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T15:17:18.319Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T15:30:00.070Z [INFO] Hourly backup job started.
+2026-08-24T15:30:00.206Z [INFO] Hourly backup job started.
+2026-08-24T15:30:00.228Z [INFO] Hourly backup job started.
+2026-08-24T15:30:01.054Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T15:30:01.055Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T15:30:01.071Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T15:30:01.074Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T15:30:01.083Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T15:30:01.085Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T15:30:01.179Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-24T15:30:01.191Z [INFO] Hourly backup job execution finished.
+2026-08-24T15:30:01.209Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-24T15:30:01.216Z [INFO] Hourly backup job execution finished.
+2026-08-24T15:30:01.225Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-24T15:30:14.682Z [ERROR] Backup job failed: HTTP 404: Not Found
+2026-08-24T16:01:09.782Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:01:09.856Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:01:09.867Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

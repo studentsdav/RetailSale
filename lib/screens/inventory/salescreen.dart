@@ -9765,6 +9765,10 @@ class _SaleScreenState extends State<SaleScreen> {
                 if (allInclusive)
                   _miniInfoCard('Net Amount (Incl. GST)', (_invoice.subTotal - _invoice.totalDiscount).clamp(0.0, double.infinity)),
                 _miniInfoCard('Taxable Value', _invoice.taxableAmount),
+                if (_invoice.chargeTotal > 0)
+                  _miniInfoCard('Charges', _invoice.chargeTotal),
+                if (_invoice.chargeTaxTotal > 0)
+                  _miniInfoCard('Charges GST', _invoice.chargeTaxTotal),
                 if (cgst > 0) _miniInfoCard('CGST', cgst),
                 if (sgst > 0) _miniInfoCard('SGST', sgst),
                 _miniInfoCard('Total', _invoice.netAmount, highlight: true),

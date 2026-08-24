@@ -18,13 +18,20 @@ class SalesReportCharge {
   });
 
   factory SalesReportCharge.fromJson(Map<String, dynamic> json) {
+    final amt = _toDouble(json['amount']);
+    final taxPct = _toDouble(json['tax_percent'] ?? json['taxPercent']);
+    var taxAmt = _toDouble(json['tax_amount'] ?? json['taxAmount']);
+    final isTaxable = json['taxable'] ?? false;
+    if (taxAmt == 0 && isTaxable && taxPct > 0 && amt != 0) {
+      taxAmt = amt * (taxPct / 100);
+    }
     return SalesReportCharge(
       name: json['name'] ?? '',
       code: json['code'] ?? '',
-      amount: _toDouble(json['amount']),
-      taxPercent: _toDouble(json['tax_percent'] ?? json['taxPercent']),
-      taxAmount: _toDouble(json['tax_amount'] ?? json['taxAmount']),
-      taxable: json['taxable'] ?? false,
+      amount: amt,
+      taxPercent: taxPct,
+      taxAmount: taxAmt,
+      taxable: isTaxable,
     );
   }
 }
@@ -260,6 +267,9 @@ class SalesReport {
           .toList(),
     );
   }
+
+  double get chargeTaxTotal =>
+      charges.fold<double>(0, (sum, ch) => sum + ch.taxAmount);
 }
 
 class SalesSummary {

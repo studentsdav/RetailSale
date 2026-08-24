@@ -470,7 +470,16 @@ class SaleOrder {
               BillingCharge.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),
       chargeTotal: parseNum(json['charge_total']),
-      chargeTaxTotal: parseNum(json['charge_tax_total']),
+      chargeTaxTotal: parseNum(json['charge_tax_total']) > 0
+          ? parseNum(json['charge_tax_total'])
+          : (json['charges'] as List? ?? const []).fold<double>(0, (sum, c) {
+              final map = Map<String, dynamic>.from(c);
+              final amt = parseNum(map['amount']);
+              final taxable = map['taxable'] == true || map['taxable'].toString() == '1';
+              final taxPct = parseNum(map['tax_percent'] ?? map['taxPercent']);
+              if (!taxable || taxPct <= 0 || amt <= 0) return sum;
+              return sum + (amt * taxPct / 100);
+            }),
       totalDiscount: parseNum(json['total_discount']),
       couponDiscountAmount: couponDiscountAmount,
       paymentGatewayDetails: parsedGatewayDetails,

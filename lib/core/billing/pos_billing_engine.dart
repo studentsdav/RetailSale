@@ -157,9 +157,17 @@ class PosBillingEngine {
         )
         .toList(growable: false);
 
+    final double itemsNetTaxable = computedItems.fold<double>(
+      0,
+      (sum, item) => sum + item.taxableAmount,
+    );
+
     final computedCharges = <ComputedCharge>[];
     for (final charge in activeCharges) {
-      final effectiveAmount = charge.effectiveAmount(subTotal);
+      final double chargeBase = charge.calculationType == 'PERCENT'
+          ? itemsNetTaxable
+          : subTotal;
+      final effectiveAmount = charge.effectiveAmount(chargeBase);
       if (effectiveAmount <= 0) continue;
       final resolvedCharge = charge.copyWith(amount: effectiveAmount);
       final chargeTaxes = resolvedCharge.taxable

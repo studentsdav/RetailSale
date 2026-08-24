@@ -333,7 +333,26 @@ exports.getSalesReport = async (req, res) => {
                 sale.net_amount = toNumber(sale.net_amount) + subscriptionNet;
 
                 const saleDate = normalizeDate(sale.sale_date);
-                const charges = safeArray(sale.charges);
+                const rawCharges = safeArray(sale.charges);
+                let computedChargeTaxTotal = 0;
+                const charges = rawCharges.map(ch => {
+                    const amt = toNumber(ch.amount);
+                    const taxPct = toNumber(ch.tax_percent || ch.taxPercent);
+                    let taxAmt = toNumber(ch.tax_amount || ch.taxAmount);
+                    const isTaxable = !!(ch.taxable);
+                    if (taxAmt === 0 && isTaxable && taxPct > 0 && amt !== 0) {
+                        taxAmt = roundAmount(amt * (taxPct / 100));
+                    }
+                    computedChargeTaxTotal += taxAmt;
+                    return {
+                        ...ch,
+                        amount: amt,
+                        tax_percent: taxPct,
+                        tax_amount: taxAmt,
+                        taxable: isTaxable
+                    };
+                });
+                const saleChargeTaxTotal = toNumber(sale.charge_tax_total) || roundAmount(computedChargeTaxTotal);
                 const saleTaxBreakup = safeArray(sale.tax_breakup);
                 const zone = resolveSaleZone(saleDate);
                 const chargeSplit = sumChargeTotals(charges);
@@ -440,7 +459,8 @@ exports.getSalesReport = async (req, res) => {
                 const saleTaxable = toNumber(sale.taxable_amount);
                 const saleDiscount = toNumber(sale.total_discount);
                 const saleChargeTotal = chargeSplit.packingCharges + chargeSplit.otherCharges;
-                const saleTotalTax = toNumber(sale.total_tax);
+                const saleItemTax = lineItems.reduce((sum, item) => sum + toNumber(item.tax_amount), 0);
+                const saleTotalTax = roundAmount(Math.max(toNumber(sale.total_tax), saleItemTax + saleChargeTaxTotal));
                 const saleNetRevenue = toNumber(sale.net_amount);
                 const saleEstimatedCost = lineItems.reduce((sum, item) => sum + item.estimated_cost, 0);
                 const saleProfit = saleNetRevenue - saleEstimatedCost;
@@ -605,7 +625,7 @@ exports.getSalesReport = async (req, res) => {
                     igst_amount: roundAmount(billIgst),
                     total_tax: saleTotalTax,
                     charge_total: saleChargeTotal,
-                    charge_tax_total: toNumber(sale.charge_tax_total),
+                    charge_tax_total: saleChargeTaxTotal,
                     total_discount: saleDiscount,
                     net_amount: saleNetRevenue,
                     estimated_cost: saleEstimatedCost,
