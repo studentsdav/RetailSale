@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../core/api/api_client.dart';
 import '../core/api/endpoints.dart';
 import '../core/settings/local_preferences.dart';
@@ -460,12 +464,52 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     });
   }
 
+  Uint8List? _attachedImageBytes;
+  String? _attachedImageName;
+
+  Future<void> _pickImageFromSystem() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        Uint8List? bytes = file.bytes;
+        if (bytes == null && file.path != null) {
+          bytes = await File(file.path!).readAsBytes();
+        }
+
+        if (bytes != null) {
+          setState(() {
+            _attachedImageBytes = bytes;
+            _attachedImageName = file.name;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
+  }
+
   Future<void> _sendMessage(String text, {bool isVoice = false}) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty || _isLoading) return;
+    final hasImage = _attachedImageBytes != null;
+    if ((trimmed.isEmpty && !hasImage) || _isLoading) return;
+
+    String? base64Image;
+    if (_attachedImageBytes != null) {
+      base64Image = base64Encode(_attachedImageBytes!);
+    }
+
+    final displayMsg = trimmed.isNotEmpty
+        ? trimmed
+        : (hasImage ? "📷 Image Attached: ${_attachedImageName ?? 'Bill/Invoice'}" : "");
 
     final userMsg = LynxAssistChatMessage(
-      text: trimmed,
+      text: displayMsg,
       isUser: true,
       timestamp: DateTime.now(),
     );
@@ -473,6 +517,8 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     setState(() {
       _messages.add(userMsg);
       _isLoading = true;
+      _attachedImageBytes = null;
+      _attachedImageName = null;
     });
 
     _inputController.clear();
@@ -487,7 +533,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
       final endpoint = isVoice ? ApiEndpoints.lynxAssistVoice : ApiEndpoints.lynxAssistChat;
       final payload = isVoice
           ? {
-              'transcript': trimmed,
+              'transcript': trimmed.isNotEmpty ? trimmed : "Extract invoice from image",
               'outletId': activeOutletId,
               'outlet_id': activeOutletId,
               'outletCode': activeOutletCode,
@@ -497,9 +543,10 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
               'aiModelName': _aiModelName,
               'aiApiKey': _aiApiKey,
               'aiBaseUrl': _aiBaseUrl,
+              if (base64Image != null) 'imageBase64': base64Image,
             }
           : {
-              'message': trimmed,
+              'message': trimmed.isNotEmpty ? trimmed : "Analyze attached image",
               'outletId': activeOutletId,
               'outlet_id': activeOutletId,
               'outletCode': activeOutletCode,
@@ -510,14 +557,25 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
               'aiModelName': _aiModelName,
               'aiApiKey': _aiApiKey,
               'aiBaseUrl': _aiBaseUrl,
+              if (base64Image != null) 'imageBase64': base64Image,
             };
 
       final response = await ApiClient.post(endpoint, payload);
 
       if (response != null && response['success'] == true) {
         final data = response['data'] ?? {};
-        final replyText = data['reply'] ?? "Processed successfully.";
-        final actionMap = data['action'] is Map<String, dynamic> ? data['action'] as Map<String, dynamic> : null;
+        final String replyText = data['reply']?.toString() ?? "Processed successfully.";
+        Map<String, dynamic>? actionMap = data['action'] is Map<String, dynamic> ? Map<String, dynamic>.from(data['action'] as Map<String, dynamic>) : null;
+        final payloadMap = data['payload'] is Map<String, dynamic> ? data['payload'] as Map<String, dynamic> : null;
+
+        if (payloadMap != null) {
+          if (actionMap == null) {
+            actionMap = Map<String, dynamic>.from(payloadMap);
+          } else {
+            actionMap.addAll(payloadMap);
+          }
+        }
+
         final rawQuick = data['quickReplies'];
         List<String> replies = [];
         if (rawQuick is List) {
@@ -754,6 +812,59 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                         }).toList(),
                       ),
                     ),
+                  if (_attachedImageBytes != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _inputFillColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _botMessageBorderColor),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.memory(
+                              _attachedImageBytes!,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _attachedImageName ?? 'Attached Image',
+                                  style: TextStyle(
+                                    color: _primaryTextColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  'AI will process invoice items & answer questions',
+                                  style: TextStyle(color: _greyTextColor, fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () {
+                              setState(() {
+                                _attachedImageBytes = null;
+                                _attachedImageName = null;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   Row(
                     children: [
                       // Voice Listening Button
@@ -777,7 +888,22 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 6),
+                      // System Image Picker Button
+                      IconButton(
+                        tooltip: "Upload bill/invoice or image to AI",
+                        style: IconButton.styleFrom(
+                          backgroundColor: _attachedImageBytes != null ? const Color(0xFFC81E1E) : _inputFillColor,
+                          padding: const EdgeInsets.all(10),
+                        ),
+                        icon: Icon(
+                          _attachedImageBytes != null ? Icons.image_rounded : Icons.add_photo_alternate_outlined,
+                          color: _attachedImageBytes != null ? Colors.white : _primaryTextColor,
+                          size: 20,
+                        ),
+                        onPressed: _pickImageFromSystem,
+                      ),
+                      const SizedBox(width: 6),
                       // Text input field
                       Expanded(
                         child: TextField(

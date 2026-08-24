@@ -102,7 +102,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
   }
 
   Future<void> _loadSuppliers() async {
-    await supplierCtrl.load();
+    await supplierCtrl.load(activeOnly: false);
     setState(() {
       _suppliers = supplierCtrl.list;
       _filtered = _suppliers;
@@ -205,7 +205,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
 
   // ================= SEARCH =================
   void _searchSupplier(String q) async {
-    await supplierCtrl.load(q: q);
+    await supplierCtrl.load(q: q, activeOnly: false);
     setState(() => _filtered = supplierCtrl.list);
   }
 

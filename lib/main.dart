@@ -19,6 +19,7 @@ import 'controllers/security/user_controller.dart';
 import 'controllers/security/recovery_controller.dart';
 import 'controllers/inventory/bom_controller.dart';
 import 'controllers/restaurant/restaurant_controller.dart';
+import 'controllers/reports/night_audit_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/config/app_brand.dart';
 import 'core/config/date_time_service.dart';
@@ -71,6 +72,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => RecoveryController()),
         ChangeNotifierProvider(create: (_) => BOMController()),
         ChangeNotifierProvider(create: (_) => RestaurantController()),
+        ChangeNotifierProvider(create: (_) => NightAuditController()),
       ],
       child: const MyApp(),
     ),

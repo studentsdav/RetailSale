@@ -301,6 +301,10 @@ if (!fs.existsSync(licensePath)) {
         const { startRecurringExpensesJob } = require('./jobs/recurringExpensesJob');
         startRecurringExpensesJob(propertyDb);
 
+        // Start background Night Audit worker
+        const { startNightAuditJob } = require('./jobs/nightAuditJob');
+        startNightAuditJob(propertyDb);
+
     } catch (err) {
         console.error('❌ Database connection failed', err);
         process.exit(1);
@@ -328,6 +332,7 @@ app.use('/api/finance', require('./routes/finance.routes'));
 app.use('/api/notifications', require('./routes/notification.routes'));
 app.use('/api/delivery', require('./routes/delivery.routes'));
 app.use('/api/audit', require('./routes/audit.routes'));
+app.use('/api/night-audit', require('./routes/nightAudit.routes'));
 app.use('/webhooks/whatsapp', require('./routes/whatsappWebhook.routes'));
 app.use('/api/whatsapp', require('./routes/whatsapp.routes'));
 app.use('/api/hrms', require('./routes/hrms.routes'));

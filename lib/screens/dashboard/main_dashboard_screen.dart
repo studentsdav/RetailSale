@@ -3,10 +3,13 @@ import 'package:intl/intl.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../controllers/reports/night_audit_controller.dart';
 import 'dart:io';
 import 'package:retailpos/models/security/app_user_model.dart';
 import 'package:retailpos/screens/dashboard/system_update_screen.dart';
 import 'package:retailpos/screens/reports/return_report_screen.dart';
+import 'package:retailpos/screens/reports/cashier_handover_report_screen.dart';
 import 'package:retailpos/screens/settings/settings_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -61,6 +64,7 @@ import 'autonomous_agent_screen.dart';
 import 'retailer_console_screen.dart';
 import 'rider_console_screen.dart';
 import '../reports/operations_intelligence_screen.dart';
+import '../reports/night_audit_screen.dart';
 import '../settings/workflow_automation_screen.dart';
 import '../settings/developer_ecosystem_screen.dart';
 import '../settings/plugin_marketplace_screen.dart';
@@ -339,6 +343,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     _loadUserRole();
     _loadFavorites();
     _notesCtrl.loadNotes();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<NightAuditController>().fetchStatus();
+      }
+    });
   }
 
   Future<bool?> _showConfirmSyncDialog() async {
@@ -550,6 +560,94 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     ),
                   ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNightAuditPendingBanner(NightAuditController nightAuditCtrl) {
+    final validation = nightAuditCtrl.validationData;
+    final bool isOverdue = validation?['isOverdue'] == true;
+    final String businessDate = nightAuditCtrl.currentBusinessDay?['business_date'] ?? '';
+
+    if (!isOverdue) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF59E0B),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.nightlight_round,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '⚠️ Night Audit Overdue (Business Date: $businessDate)',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Color(0xFF92400E),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'End of Day audit for yesterday was not executed. Please run Night Audit now to close the date & open today.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF78350F),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7A1A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NightAuditScreen()),
+              );
+            },
+            icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+            label: const Text(
+              'Run Now',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
         ],
       ),
     );
@@ -1336,6 +1434,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
+                    Consumer<NightAuditController>(
+                      builder: (context, nightAuditCtrl, _) {
+                        return _buildNightAuditPendingBanner(nightAuditCtrl);
+                      },
+                    ),
                     _buildBackupStatusBanner(),
                     if (_hasPendingDraw) ...[
                       _buildLuckyDrawPendingBanner(),
@@ -2612,6 +2715,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
       {
         'category': 'Reports',
+        'icon': Icons.nightlight_round,
+        'label': 'Night Audit (EOD)',
+        'permission': 'NIGHT_AUDIT',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NightAuditScreen())),
+      },
+      {
+        'category': 'Reports',
         'icon': Icons.receipt_long_outlined,
         'label': 'Stock Ledger Report',
         'permission': 'STOCK_LEDGER_REPORT',
@@ -3006,6 +3116,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'permission': 'SCHEME_REPORT',
         'keywords': ['scheme report', 'discount list', 'promotions summary', 'active coupons', 'special rates list'],
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SchemeReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.badge_outlined,
+        'label': 'Cashier Shift Handover Analytics',
+        'subLabel': 'Handover Report ➜ day-wise physical cash count, cashier variance, shortage alerts',
+        'permission': 'REPORTS',
+        'keywords': ['cashier handover', 'shift handover report', 'cashier cash count', 'cashier report', 'cashier variance', 'handover analytics'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashierHandoverReportScreen())),
       },
       {
         'category': 'Reports',

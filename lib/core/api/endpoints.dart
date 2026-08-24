@@ -53,6 +53,10 @@ class ApiEndpoints {
   static const returns = '/api/inventory/returns';
 
   static const closingReport = '/api/reports/closing';
+  static const nightAuditStatus = '/api/night-audit/status';
+  static const nightAuditValidate = '/api/night-audit/validate';
+  static const nightAuditExecute = '/api/night-audit/execute';
+  static const nightAuditHistory = '/api/night-audit/history';
 
   static const stockBalance = '/api/reports/stock-balance';
 

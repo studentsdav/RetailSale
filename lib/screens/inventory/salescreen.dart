@@ -6958,6 +6958,142 @@ class _SaleScreenState extends State<SaleScreen> {
     });
   }
 
+  Future<void> _showCashierShiftCloseDialog() async {
+    final Map<String, int> denoms = {
+      '2000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, 'coins': 0
+    };
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            double totalCash = 0;
+            denoms.forEach((k, v) {
+              if (k == 'coins') {
+                totalCash += v * 1.0;
+              } else {
+                totalCash += (double.tryParse(k) ?? 0) * v;
+              }
+            });
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.point_of_sale_outlined, color: Color(0xFFFF7A1A)),
+                  SizedBox(width: 10),
+                  Text('Close Shift / Cashier Handover', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Perform end-of-shift physical cash count for date: $todayStr',
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: denoms.keys.map((k) {
+                          final label = k == 'coins' ? 'Coins' : '₹$k';
+                          return SizedBox(
+                            width: 105,
+                            child: TextFormField(
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: label,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              initialValue: denoms[k].toString(),
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  denoms[k] = int.tryParse(val) ?? 0;
+                                });
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF7ED),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFFEDD5)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Physical Cash Total:', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('₹${totalCash.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFFF7A1A))),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A1A),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    try {
+                      final userMap = await TokenStorage.getUser();
+                      final cashierId = userMap?['id'] ?? 1;
+
+                      await ApiClient.post(ApiEndpoints.hrmsHandover, {
+                        'cashier_id': cashierId,
+                        'handover_date': todayStr,
+                        'physical_cash': totalCash,
+                        'denominations': denoms,
+                      });
+
+                      if (mounted) {
+                        Navigator.pop(dialogCtx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('✅ Shift Handover submitted successfully!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('❌ Error submitting shift handover: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.check_circle_outline, size: 16),
+                  label: const Text('Submit Shift Handover'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _showDraftsDialog() async {
     var drafts = await ctrl.listSales(status: 'DRAFT');
     if (!mounted) return;
@@ -8711,6 +8847,11 @@ class _SaleScreenState extends State<SaleScreen> {
                     },
                     tooltip: 'Draft bills',
                     count: _totalDraftCount,
+                  ),
+                  _sidebarButton(
+                    Icons.point_of_sale_outlined,
+                    onTap: _showCashierShiftCloseDialog,
+                    tooltip: 'Close Shift / Cashier Handover',
                   ),
                   _sidebarButton(Icons.inventory_2_outlined,
                       onTap: _openItemMaster, tooltip: 'Item master'),

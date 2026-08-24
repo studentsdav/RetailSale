@@ -78,8 +78,29 @@ function callGemini(prompt, systemInstruction, config = {}) {
         const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
         const url = `${cleanBaseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
         
+        const parts = [{ text: `${systemInstruction}\n\nUser Question: ${prompt}` }];
+
+        const rawBase64 = config.imageBase64 || config.image_base64;
+        if (rawBase64 && typeof rawBase64 === 'string' && rawBase64.length > 0) {
+            let cleanBase64 = rawBase64;
+            let mimeType = 'image/png';
+            if (rawBase64.startsWith('data:image/')) {
+                const match = rawBase64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+                if (match) {
+                    mimeType = match[1];
+                    cleanBase64 = match[2];
+                }
+            }
+            parts.push({
+                inlineData: {
+                    mimeType: mimeType,
+                    data: cleanBase64
+                }
+            });
+        }
+
         const payload = {
-            contents: [{ parts: [{ text: `${systemInstruction}\n\nUser Question: ${prompt}` }] }]
+            contents: [{ parts: parts }]
         };
 
         const parsedUrl = new URL(url);
@@ -131,11 +152,22 @@ function callOpenAICompatible(prompt, systemInstruction, config = {}, defaultMod
         : (cleanBase.endsWith('/v1') ? `${cleanBase}/chat/completions` : `${cleanBase}/v1/chat/completions`);
 
     return new Promise((resolve, reject) => {
+        const rawBase64 = config.imageBase64 || config.image_base64;
+        let userContent = prompt;
+
+        if (rawBase64 && typeof rawBase64 === 'string' && rawBase64.length > 0) {
+            let formattedUrl = rawBase64.startsWith('data:') ? rawBase64 : `data:image/png;base64,${rawBase64}`;
+            userContent = [
+                { type: "text", text: prompt },
+                { type: "image_url", image_url: { url: formattedUrl } }
+            ];
+        }
+
         const payload = {
             model: model,
             messages: [
                 { role: 'system', content: systemInstruction },
-                { role: 'user', content: prompt }
+                { role: 'user', content: userContent }
             ]
         };
 
@@ -254,6 +286,39 @@ async function executeLLMCall(prompt, systemInstruction, config = {}) {
  * Translate natural language question into SQL query
  */
 async function translateTextToQuery(question, config = {}) {
+    const qLow = (question || '').toLowerCase();
+    if (qLow.includes('low stock') || qLow.includes('reorder') || qLow.includes('shortfall') || qLow.includes('out of stock') || qLow.includes('zero stock')) {
+        return `SELECT im.item_code, im.item_name, im.brand, im.item_group, COALESCE(im.min_level, 10) AS reorder_level,
+                (COALESCE(im.opening_balance, 0) + COALESCE(SUM(sl.qty_in - sl.qty_out), 0)) AS current_stock
+                FROM item_master im
+                LEFT JOIN stock_ledger sl ON sl.item_code = im.item_code AND sl.outlet_id = im.outlet_id
+                WHERE im.outlet_id = :outletId AND im.is_active = true
+                GROUP BY im.id, im.item_code, im.item_name, im.brand, im.item_group, im.min_level, im.opening_balance
+                HAVING (COALESCE(im.opening_balance, 0) + COALESCE(SUM(sl.qty_in - sl.qty_out), 0)) <= COALESCE(im.min_level, 10)
+                ORDER BY current_stock ASC LIMIT 50`;
+    }
+    if (qLow.includes('payment collection') || qLow.includes('payment mode') || qLow.includes('collection mode') || qLow.includes('payment method') || (qLow.includes('collection') && qLow.includes('mode'))) {
+        return `SELECT UPPER(COALESCE(payment_method, 'CASH')) AS payment_mode,
+                COALESCE(SUM(amount_in), 0) AS total_collection,
+                COUNT(id) AS transaction_count
+                FROM cash_ledger
+                WHERE outlet_id = :outletId AND amount_in > 0
+                GROUP BY UPPER(COALESCE(payment_method, 'CASH'))
+                ORDER BY total_collection DESC`;
+    }
+    if (qLow.includes('ledger') || qLow.includes('cash ledger') || qLow.includes('financial ledger') || qLow.includes('finecial ledger')) {
+        return `SELECT id, txn_date, transaction_type, reference_no, party_name, payment_method, amount_in, amount_out, balance, notes
+                FROM cash_ledger
+                WHERE outlet_id = :outletId
+                ORDER BY id DESC LIMIT 50`;
+    }
+    if (qLow.includes('pending') || qLow.includes('credit') || qLow.includes('collect') || qLow.includes('udhar') || qLow.includes('unpaid') || qLow.includes('due')) {
+        return `SELECT id, sale_no, customer_name, customer_phone, net_amount, amount_paid, balance_due, sale_date, payment_mode
+                FROM sales_headers
+                WHERE outlet_id = :outletId AND is_deleted = false AND status != 'CANCELLED' AND balance_due > 0
+                ORDER BY balance_due DESC LIMIT 50`;
+    }
+
     const provider = (config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : null)));
     const apiKey = config.aiApiKey || (provider === 'gemini' ? GEMINI_API_KEY : OPENAI_API_KEY);
 
@@ -308,15 +373,93 @@ function getMockQuery(question) {
                 WHERE ms.outlet_id = :outletId AND ms.status = 'ACTIVE' 
                 ORDER BY ms.id DESC LIMIT 50`;
     }
-    if (q.includes('sale') || q.includes('transaction') || q.includes('billing') || q.includes('spent') || q.includes('revenue')) {
+    if (q.includes('expense') || q.includes('spending') || q.includes('cost analysis') || q.includes('operating cost')) {
+        return `SELECT id, category_name, amount, payment_mode, expense_date, remarks 
+                FROM expenses 
+                WHERE outlet_id = :outletId 
+                ORDER BY expense_date DESC LIMIT 50`;
+    }
+    if (q.includes('payment collection') || q.includes('payment mode') || q.includes('collection mode') || q.includes('payment method')) {
+        return `SELECT UPPER(COALESCE(payment_method, 'CASH')) AS payment_mode, COALESCE(SUM(amount_in), 0) AS total_collection
+                FROM cash_ledger 
+                WHERE outlet_id = :outletId AND amount_in > 0 
+                GROUP BY UPPER(COALESCE(payment_method, 'CASH')) 
+                ORDER BY total_collection DESC`;
+    }
+    if (q.includes('cash ledger') || q.includes('cash flow') || q.includes('petty cash') || q.includes('ledger') || q.includes('finecial')) {
+        return `SELECT id, txn_date, transaction_type, reference_no, party_name, payment_method, amount_in, amount_out, balance, notes 
+                FROM cash_ledger 
+                WHERE outlet_id = :outletId 
+                ORDER BY id DESC LIMIT 50`;
+    }
+    if (q.includes('credit') || q.includes('pending') || q.includes('due') || q.includes('udhar') || q.includes('unpaid') || q.includes('collect')) {
+        return `SELECT id, sale_no, customer_name, customer_phone, net_amount, amount_paid, balance_due, sale_date, payment_mode 
+                FROM sales_headers 
+                WHERE outlet_id = :outletId AND is_deleted = false AND status != 'CANCELLED' AND balance_due > 0 
+                ORDER BY balance_due DESC LIMIT 50`;
+    }
+    if (q.includes('attendance') || q.includes('punch') || q.includes('clock-in') || q.includes('check-in')) {
+        return `SELECT p.id, e.first_name, e.last_name, e.designation, p.punch_time, p.punch_type 
+                FROM hr_attendance_punches p 
+                JOIN hr_employees e ON p.emp_id = e.id 
+                WHERE e.outlet_id = :outletId 
+                ORDER BY p.punch_time DESC LIMIT 50`;
+    }
+    if (q.includes('payroll') || q.includes('salary') || q.includes('wage') || q.includes('payslip')) {
+        return `SELECT id, emp_name, month, year, basic_salary, allowances, deductions, net_salary, payment_status 
+                FROM hr_payrolls 
+                WHERE outlet_id = :outletId 
+                ORDER BY id DESC LIMIT 50`;
+    }
+    if (q.includes('employee') || q.includes('staff') || q.includes('worker') || q.includes('hrms')) {
+        return `SELECT id, emp_code, first_name, last_name, phone, designation, department, is_active 
+                FROM hr_employees 
+                WHERE outlet_id = :outletId 
+                ORDER BY first_name ASC LIMIT 50`;
+    }
+    if (q.includes('damage') || q.includes('waste') || q.includes('spoilage') || q.includes('expired')) {
+        return `SELECT id, item_code, item_name, qty, rate, total_loss, reason, damage_date 
+                FROM damage_items 
+                WHERE outlet_id = :outletId 
+                ORDER BY damage_date DESC LIMIT 50`;
+    }
+    if (q.includes('receiving') || q.includes('grn') || q.includes('goods receipt') || q.includes('vendor bill')) {
+        return `SELECT id, grn_no, supplier_id, receipt_date, total_amount, net_amount, status 
+                FROM goods_receipts 
+                WHERE outlet_id = :outletId 
+                ORDER BY receipt_date DESC LIMIT 50`;
+    }
+    if (q.includes('kot') || q.includes('kds') || q.includes('kitchen') || q.includes('table billing')) {
+        return `SELECT id, kot_no, table_no, captain_name, status, created_at 
+                FROM kot_headers 
+                WHERE outlet_id = :outletId 
+                ORDER BY id DESC LIMIT 50`;
+    }
+    if (q.includes('supplier') || q.includes('vendor') || q.includes('distributor')) {
+        return `SELECT id, supplier_code, supplier_name, phone, gstin, is_active 
+                FROM supplier_master 
+                WHERE outlet_id = :outletId 
+                ORDER BY supplier_name ASC LIMIT 50`;
+    }
+    if (q.includes('sale') || q.includes('transaction') || q.includes('billing') || q.includes('revenue')) {
         const todayFilter = q.includes('today') ? "AND sale_date::date = CURRENT_DATE " : "";
         return `SELECT id, sale_no, customer_name, customer_phone, payment_mode, net_amount, sale_date 
                 FROM sales_headers 
                 WHERE outlet_id = :outletId AND status = 'COMPLETED' ${todayFilter}
                 ORDER BY id DESC LIMIT 50`;
     }
+    if (q.includes('low stock') || q.includes('reorder') || (q.includes('stock') && q.includes('alert')) || q.includes('shortfall')) {
+        return `SELECT im.item_code, im.item_name, im.brand, im.item_group, COALESCE(im.min_level, 10) AS reorder_level,
+                (COALESCE(im.opening_balance, 0) + COALESCE(SUM(sl.qty_in - sl.qty_out), 0)) AS current_stock
+                FROM item_master im
+                LEFT JOIN stock_ledger sl ON sl.item_code = im.item_code AND sl.outlet_id = im.outlet_id
+                WHERE im.outlet_id = :outletId AND im.is_active = true
+                GROUP BY im.id, im.item_code, im.item_name, im.brand, im.item_group, im.min_level, im.opening_balance
+                HAVING (COALESCE(im.opening_balance, 0) + COALESCE(SUM(sl.qty_in - sl.qty_out), 0)) <= COALESCE(im.min_level, 10)
+                ORDER BY current_stock ASC LIMIT 50`;
+    }
     if (q.includes('item') || q.includes('product') || q.includes('inventory') || q.includes('stock')) {
-        return `SELECT item_code, item_name, barcode, unit, is_active 
+        return `SELECT item_code, item_name, barcode, unit, rate, retail_sale_price, opening_balance, is_active 
                 FROM item_master 
                 WHERE outlet_id = :outletId 
                 ORDER BY item_name ASC LIMIT 50`;
@@ -495,7 +638,7 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
               AND status = 'COMPLETED'
               AND sale_date >= :todayStart AND sale_date <= :todayEnd
         `, {
-            replacements: { outletId },
+            replacements: { outletId, todayStart, todayEnd },
             type: propertyDb.QueryTypes.SELECT
         });
 
@@ -517,7 +660,7 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
               AND status = 'COMPLETED'
               AND sale_date >= :yesterdayStart AND sale_date <= :yesterdayEnd
         `, {
-            replacements: { outletId },
+            replacements: { outletId, yesterdayStart, yesterdayEnd },
             type: propertyDb.QueryTypes.SELECT
         });
 
@@ -526,15 +669,32 @@ async function fetchLiveStoreContext(propertyDb, outletId = 0) {
             context.yesterdayOrders = parseInt(ySalesRes[0].yesterday_orders || 0);
         }
 
-        // 2. Low stock items (stock <= 10)
+        // 2. Low stock & reorder items (joining stock_ledger for real-time balance)
         const lowStockRes = await propertyDb.query(`
-            SELECT item_code, item_name, item_group, COALESCE(opening_balance, 0) AS stock
-            FROM item_master
-            WHERE outlet_id = :outletId
-              AND is_active = true
-              AND COALESCE(opening_balance, 0) <= 10
-            ORDER BY opening_balance ASC
-            LIMIT 10
+            SELECT 
+                im.id,
+                im.item_code,
+                im.item_name,
+                im.brand,
+                im.item_group,
+                COALESCE(im.min_level, 10) AS reorder_level,
+                COALESCE(im.rate, 0) AS purchase_rate,
+                COALESCE(im.retail_sale_price, 0) AS mrp,
+                (
+                    COALESCE(im.opening_balance, 0)
+                    + COALESCE(SUM(sl.qty_in - sl.qty_out), 0)
+                ) AS stock
+            FROM item_master im
+            LEFT JOIN stock_ledger sl
+              ON sl.item_code = im.item_code
+             AND sl.outlet_id = im.outlet_id
+            WHERE im.outlet_id = :outletId
+              AND im.is_active = true
+            GROUP BY 
+                im.id, im.item_code, im.item_name, im.brand, im.item_group, im.min_level, im.rate, im.retail_sale_price, im.opening_balance
+            HAVING (COALESCE(im.opening_balance, 0) + COALESCE(SUM(sl.qty_in - sl.qty_out), 0)) <= COALESCE(im.min_level, 10)
+            ORDER BY stock ASC
+            LIMIT 50
         `, {
             replacements: { outletId },
             type: propertyDb.QueryTypes.SELECT
@@ -1820,7 +1980,107 @@ Output ONLY a raw JSON object with schema:
     };
 }
 
+async function handleImageInvoiceExtraction(prompt, history = [], config = {}, propertyDb = null, outletId = 0) {
+    const imageBase64 = config.imageBase64 || config.image_base64;
+    if (!imageBase64) return null;
+
+    try {
+        const provider = (config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : null)));
+        const apiKey = config.aiApiKey || (provider === 'gemini' ? GEMINI_API_KEY : OPENAI_API_KEY);
+        
+        if (!apiKey) {
+            return {
+                reply: "⚠️ **Image Received**: AI API Key is required to perform multimodal bill/invoice OCR extraction. Please configure your AI Key in Settings.",
+                action: { type: "NONE" },
+                quickReplies: ["Open System Settings", "Create Purchase Order"]
+            };
+        }
+
+        const visionSystemPrompt = `You are an expert OCR document & invoice parser. Analyze the uploaded bill/invoice image.
+Extract all details and return a strict JSON object with this structure:
+{
+  "supplierName": "<Supplier/Vendor Name>",
+  "supplierCode": "<Supplier Code if present>",
+  "invoiceNo": "<Invoice/PO Number>",
+  "poDate": "<Date if present>",
+  "items": [
+    {
+      "item_code": "<Product Code/HSN if present>",
+      "item_name": "<Product Name>",
+      "hsn_code": "<HSN code if present>",
+      "qty": <Numeric Quantity>,
+      "unit": "<Unit e.g. nos, pcs, kg>",
+      "rate": <Unit Rate/Cost>,
+      "tax_percent": <Tax % e.g. 5, 18>,
+      "amount": <Line Total Amount>
+    }
+  ]
+}
+STRICT RULE: Return valid JSON ONLY without markdown formatting.`;
+
+        let parsedData = null;
+        try {
+            let rawResp = "";
+            if (provider === 'openai' || provider === 'deepseek' || provider === 'custom') {
+                rawResp = await callOpenAICompatible(prompt || "Extract invoice items", visionSystemPrompt, config);
+            } else {
+                rawResp = await callGemini(prompt || "Extract invoice items", visionSystemPrompt, config);
+            }
+
+            const cleanJson = rawResp.replace(/```json/gi, '').replace(/```/gi, '').trim();
+            parsedData = JSON.parse(cleanJson);
+        } catch (ocrErr) {
+            console.error('[OCR PARSE ERROR]:', ocrErr.message);
+        }
+
+        if (!parsedData || !parsedData.items || !Array.isArray(parsedData.items) || parsedData.items.length === 0) {
+            return {
+                reply: "🧾 **Invoice Image Analyzed**: Could not read itemized lines cleanly. Click below to draft a Purchase Order manually.",
+                action: { type: "CREATE_PO", label: "Draft Purchase Order" },
+                quickReplies: ["Draft Purchase Order", "View Suppliers"]
+            };
+        }
+
+        const supplier = parsedData.supplierName || "Extracted Vendor";
+        const items = parsedData.items;
+
+        let itemsSummary = items.map((it, idx) => 
+            `  ${idx + 1}. **${it.item_name}** — Qty: **${it.qty} ${it.unit || 'nos'}** @ ₹${it.rate} (Amt: ₹${it.amount})`
+        ).join('\n');
+
+        return {
+            reply: `🧾 **Invoice OCR Auto-Extraction Successful!**\n\n` +
+                   `* 🏬 **Supplier**: **${supplier}** ${parsedData.supplierCode ? `(${parsedData.supplierCode})` : ''}\n` +
+                   `* 📅 **Date**: ${parsedData.poDate || 'Latest Invoice'}\n` +
+                   `* 📦 **Extracted Items (${items.length} lines)**:\n${itemsSummary}\n\n` +
+                   `Click below to open the Purchase Order screen with all ${items.length} items prefilled for instant drafting.`,
+            action: {
+                type: "CREATE_PO",
+                label: `Open Draft PO (${items.length} Items)`,
+                supplierName: supplier,
+                supplierCode: parsedData.supplierCode || '',
+                items: items
+            },
+            payload: {
+                supplierName: supplier,
+                supplierCode: parsedData.supplierCode || '',
+                items: items
+            },
+            quickReplies: ["Draft Purchase Order", "Goods Receiving (GRN)", "View Suppliers"]
+        };
+    } catch (err) {
+        console.error('[AI INVOICE OCR ERROR]:', err);
+        return null;
+    }
+}
+
 async function processLynxAssist(prompt, history = [], config = {}, propertyDb = null, outletId = 0) {
+    // 0. Intercept Multimodal Image OCR Invoice Uploads
+    const imageOcrResult = await handleImageInvoiceExtraction(prompt, history, config, propertyDb, outletId);
+    if (imageOcrResult) {
+        return imageOcrResult;
+    }
+
     // 0. Intercept Active Outlet & Registered Property Verification Prompt
     const outletInfoResult = await handleOutletVerification(prompt, history, propertyDb, outletId, config);
     if (outletInfoResult) {

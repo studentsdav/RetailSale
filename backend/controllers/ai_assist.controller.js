@@ -45,18 +45,22 @@ async function resolveOutletIdAsync(req) {
 
 exports.chatWithLynxAssist = async (req, res) => {
     try {
-        const { message, history, aiProvider, aiModelName, aiBaseUrl, aiApiKey, maxRows } = req.body;
+        const { message, history, aiProvider, aiModelName, aiBaseUrl, aiApiKey, maxRows, imageBase64, image_base64 } = req.body;
 
-        if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        const effectiveMsg = (message && typeof message === 'string' && message.trim().length > 0)
+            ? message.trim()
+            : (imageBase64 || image_base64 ? 'Extract invoice items from image' : '');
+
+        if (!effectiveMsg) {
             return res.status(400).json({
                 success: false,
-                message: 'User message is required.'
+                message: 'User message or image is required.'
             });
         }
 
         const outletId = await resolveOutletIdAsync(req);
-        const aiConfig = { aiProvider, aiModelName, aiBaseUrl, aiApiKey, maxRows };
-        const result = await aiService.processLynxAssist(message, [], aiConfig, req.propertyDb, outletId);
+        const aiConfig = { aiProvider, aiModelName, aiBaseUrl, aiApiKey, maxRows, imageBase64: imageBase64 || image_base64 };
+        const result = await aiService.processLynxAssist(effectiveMsg, [], aiConfig, req.propertyDb, outletId);
 
         return res.json({
             success: true,

@@ -91,6 +91,29 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
     return found.isNotEmpty ? (found.first['full_name'] ?? '—').toString() : 'Employee #$id';
   }
 
+  double _getEmployeeShiftDuration(dynamic empId) {
+    if (empId == null) return 8.0;
+    final found = _employeesList.where((e) => e['id'].toString() == empId.toString()).toList();
+    if (found.isEmpty) return 8.0;
+    final emp = found.first;
+    final shift = emp['shift'] ?? {};
+    final startStr = shift['start_time']?.toString() ?? '09:00:00';
+    final endStr = shift['end_time']?.toString() ?? '17:00:00';
+    try {
+      final sParts = startStr.split(':');
+      final eParts = endStr.split(':');
+      final sH = int.parse(sParts[0]);
+      final sM = int.parse(sParts[1]);
+      final eH = int.parse(eParts[0]);
+      final eM = int.parse(eParts[1]);
+      int diff = (eH * 60 + eM) - (sH * 60 + sM);
+      if (diff <= 0) diff += 1440;
+      return diff / 60.0;
+    } catch (_) {
+      return 8.0;
+    }
+  }
+
   String _fmtTimeOnly(String? dateTimeStr) {
     if (dateTimeStr == null || dateTimeStr.isEmpty) return '—';
     try {
@@ -522,9 +545,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                                 final empName = _lookupEmployeeName(punch['employee_id']);
                                 final empId = punch['employee_id'] as int;
                                 final dateStr = punch['punch_date']?.toString() ?? '';
-                                final bool hasIn = punch['punch_in'] != null;
-                                final bool hasOut = punch['punch_out'] != null;
-                                final bool isBothAdded = hasIn && hasOut;
 
                                 return DataRow(
                                   onSelectChanged: (selected) {
@@ -538,7 +558,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                                     DataCell(_buildStatusChip(punch['status']?.toString() ?? 'Present')),
                                     DataCell(Text(punch['punch_in'] != null ? _fmtTimeOnly(punch['punch_in']) : '—')),
                                     DataCell(Text(punch['punch_out'] != null ? _fmtTimeOnly(punch['punch_out']) : '—')),
-                                    DataCell(const Text('8.00 hrs')),
+                                    DataCell(Builder(builder: (context) {
+                                       final reqHrs = _getEmployeeShiftDuration(empId);
+                                       return Text('${reqHrs.toStringAsFixed(2)} hrs');
+                                    })),
                                     DataCell(Builder(builder: (context) {
                                       double hrs = 0.0;
                                       if (punch['punch_in'] != null && punch['punch_out'] != null) {
@@ -563,7 +586,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                                       } else {
                                         hrs = double.tryParse(punch['hours_worked']?.toString() ?? '0') ?? 0.0;
                                       }
-                                      final ot = hrs > 8.0 ? (hrs - 8.0) : 0.0;
+                                      final reqHrs = _getEmployeeShiftDuration(empId);
+                                      final savedOt = punch['overtime_hours'] != null ? double.tryParse(punch['overtime_hours'].toString()) : null;
+                                      final ot = savedOt ?? (hrs > reqHrs ? (hrs - reqHrs) : 0.0);
                                       return Text(
                                         '${ot.toStringAsFixed(2)} hrs',
                                         style: TextStyle(
@@ -583,9 +608,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                                       } else {
                                         hrs = double.tryParse(punch['hours_worked']?.toString() ?? '0') ?? 0.0;
                                       }
+                                      final reqHrs = _getEmployeeShiftDuration(empId);
                                       final statusLower = punch['status']?.toString().toLowerCase() ?? '';
                                       final isWorkedDay = statusLower == 'present' || statusLower == 'half day' || statusLower == 'half-day';
-                                      final less = (isWorkedDay && hrs < 8.0) ? (8.0 - hrs) : 0.0;
+                                      final less = (isWorkedDay && hrs < reqHrs) ? (reqHrs - hrs) : 0.0;
                                       return Text(
                                         '${less.toStringAsFixed(2)} hrs',
                                         style: TextStyle(
@@ -1275,6 +1301,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
       return emp['shift'] ?? {};
     }
 
+    double getShiftDurationHours() {
+      final activeShift = getSelectedShift();
+      final startStr = activeShift['start_time']?.toString() ?? '09:00:00';
+      final endStr = activeShift['end_time']?.toString() ?? '17:00:00';
+      final sTime = parseTimeStr(startStr, const TimeOfDay(hour: 9, minute: 0));
+      final eTime = parseTimeStr(endStr, const TimeOfDay(hour: 17, minute: 0));
+      final sMins = sTime.hour * 60 + sTime.minute;
+      final eMins = eTime.hour * 60 + eTime.minute;
+      int diffMins = eMins - sMins;
+      if (diffMins <= 0) diffMins += 1440;
+      return diffMins / 60.0;
+    }
+
     final activeShift = getSelectedShift();
     final shiftStartTimeStr = activeShift['start_time']?.toString() ?? '09:00:00';
     final shiftEndTimeStr = activeShift['end_time']?.toString() ?? '17:00:00';
@@ -1326,10 +1365,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
     }
 
     void runCalculations(TimeOfDay inTime, TimeOfDay outTime, StateSetter setDs, {bool isInit = false}) {
+      final shiftDurationHours = getShiftDurationHours();
+
       if (!isTimeEnabled(status)) {
         hoursWorkedCtrl.text = '0.00';
         overtimeCtrl.text = '0.00';
-        lessTimeCtrl.text = '8.00';
+        lessTimeCtrl.text = shiftDurationHours.toStringAsFixed(2);
         latenessCtrl.text = '0';
         return;
       }
@@ -1361,17 +1402,17 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
 
       hoursWorkedCtrl.text = diffHours.toStringAsFixed(2);
 
-      // Overtime & Less Time
-      if (diffHours > 8.0) {
-        overtimeCtrl.text = (diffHours - 8.0).toStringAsFixed(2);
+      // Overtime & Less Time calculated based on active shift duration
+      if (diffHours > shiftDurationHours) {
+        overtimeCtrl.text = (diffHours - shiftDurationHours).toStringAsFixed(2);
         lessTimeCtrl.text = '0.00';
       } else {
         overtimeCtrl.text = '0.00';
-        lessTimeCtrl.text = (8.0 - diffHours).toStringAsFixed(2);
+        lessTimeCtrl.text = (shiftDurationHours - diffHours).toStringAsFixed(2);
       }
 
-      // Auto Half Day
-      if (diffHours < 4.0 && status == 'Present') {
+      // Auto Half Day (if worked less than half shift duration)
+      if (diffHours < (shiftDurationHours / 2.0) && status == 'Present') {
         status = 'Half Day';
       }
 

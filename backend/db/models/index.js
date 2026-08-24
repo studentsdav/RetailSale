@@ -180,6 +180,13 @@ propertyDb.models.item_groups =
     require('../../models/property/group.model')(propertyDb, DataTypes);
 
 // AUDIT & STOCK
+propertyDb.models.business_day_status =
+    require('../../models/property/businessDay.model')(propertyDb, DataTypes);
+propertyDb.models.night_audit_runs =
+    require('../../models/property/nightAuditRun.model')(propertyDb, DataTypes);
+propertyDb.models.night_audit_details =
+    require('../../models/property/nightAuditDetail.model')(propertyDb, DataTypes);
+
 propertyDb.models.audit_logs =
     require('../../models/property/auditLog.model')(propertyDb, DataTypes);
 

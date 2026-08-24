@@ -189,7 +189,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
       }
     }
 
-    if (prefilledSupplierId == null && suppSearchStr.isEmpty && supplierCtrl.list.isNotEmpty) {
+    if (prefilledSupplierId == null && supplierCtrl.list.isNotEmpty) {
       prefilledSupplierId = supplierCtrl.list.first.id;
     }
 
@@ -336,8 +336,10 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     final item = PurchaseItem(
       itemCode: _code.text,
       itemName: _selectedItemName!,
-      brand:
-          _filteredBrands.firstWhere((e) => e.id == _selectedBrandItemId).brand,
+      brand: _filteredBrands.cast<Item?>().firstWhere(
+            (e) => e?.id == _selectedBrandItemId,
+            orElse: () => null,
+          )?.brand ?? 'General',
       unit: _unit.text,
       qty: double.parse(_qty.text),
       rate: baseRate,
@@ -607,9 +609,11 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                 items: (filter, infiniteScrollProps) =>
                     supplierCtrl.list.map((s) => s.id).toList(),
                 itemAsString: (id) {
-                  final supplier =
-                      supplierCtrl.list.firstWhere((e) => e.id == id);
-                  return supplier.supplierName;
+                  final supplier = supplierCtrl.list.cast<Supplier?>().firstWhere(
+                    (e) => e?.id == id,
+                    orElse: () => null,
+                  );
+                  return supplier?.supplierName ?? 'Select Vendor';
                 },
                 popupProps: const PopupProps.menu(
                   showSearchBox: true,
@@ -759,19 +763,24 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                         ))
                     .toList(),
                 onChanged: (v) {
-                  final selected = _filteredBrands.firstWhere((e) => e.id == v);
-                  setState(() {
-                    _selectedBrandItemId = v;
-                    _code.text = selected.itemCode;
-                    _unit.text = selected.unit;
-                    _rate.text = selected.rate.toString();
-                    _tax.text = selected.taxPercent.toString();
-                    _isStockable = selected.stockable;
-                    _rateInclusive = false;
-                    if (_isStockable) {
-                      _selectedDepartment = null;
-                    }
-                  });
+                  Item? selected;
+                  try {
+                    selected = _filteredBrands.firstWhere((e) => e.id == v);
+                  } catch (_) {}
+                  if (selected != null) {
+                    setState(() {
+                      _selectedBrandItemId = v;
+                      _code.text = selected!.itemCode;
+                      _unit.text = selected.unit;
+                      _rate.text = selected.rate.toString();
+                      _tax.text = selected.taxPercent.toString();
+                      _isStockable = selected.stockable;
+                      _rateInclusive = false;
+                      if (_isStockable) {
+                        _selectedDepartment = null;
+                      }
+                    });
+                  }
                   _qtyFocus.requestFocus();
                 },
                 decoration: const InputDecoration(labelText: 'Brand'),
@@ -1293,7 +1302,10 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
   Future<void> _printPurchaseOrder() async {
     final pdf = pw.Document();
 
-    final supplier = supplierCtrl.list.firstWhere((e) => e.id == _supplierId);
+    final Supplier? supplier = supplierCtrl.list.cast<Supplier?>().firstWhere(
+      (e) => e?.id == _supplierId,
+      orElse: () => null,
+    );
 
     final totalGST = _items.fold<double>(
         0, (sum, item) => sum + ((item.qty * item.rate) * (item.tax / 100)));
@@ -1308,67 +1320,81 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
-          /// ================= HEADER =================
-
-          PosInvoicePrinter.buildStandardA4Header(
-            property: property,
-            logo: logo,
-            rightWidget: pw.Container(
-              padding: const pw.EdgeInsets.all(8),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(),
+          // Header Row
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  if (logo != null) ...[
+                    pw.Container(
+                      height: 40,
+                      child: pw.Image(logo, fit: pw.BoxFit.contain),
+                    ),
+                    pw.SizedBox(height: 6),
+                  ],
+                  pw.Text(
+                    property?.propertyName ?? 'Famalth Retail Outlet',
+                    style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blueGrey900),
+                  ),
+                  if ((property?.address ?? '').trim().isNotEmpty)
+                    pw.Text(property!.address.trim(),
+                        style: const pw.TextStyle(
+                            fontSize: 8, color: PdfColors.grey700)),
+                  if ((property?.gstNo ?? '').trim().isNotEmpty)
+                    pw.Text("GSTIN: ${property!.gstNo.trim()}",
+                        style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.blueGrey800)),
+                ],
               ),
-              child: pw.Text(
-                "PURCHASE ORDER",
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("PURCHASE ORDER",
+                      style: pw.TextStyle(
+                          fontSize: 18,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.deepOrange700)),
+                  pw.SizedBox(height: 4),
+                  _metaRow("PO No", _poNo.text),
+                  _metaRow("Date", DateFormat('dd-MMM-yyyy').format(_date)),
+                ],
               ),
-            ),
+            ],
           ),
+          pw.SizedBox(height: 14),
 
-          pw.SizedBox(height: 20),
-
-          /// ================= SUPPLIER & PO INFO =================
+          // Vendor Box
           pw.Container(
-            padding: const pw.EdgeInsets.all(10),
+            padding: const pw.EdgeInsets.all(8),
             decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-              color: PdfColors.grey50,
+              color: PdfColors.grey100,
+              borderRadius: pw.BorderRadius.circular(4),
             ),
-            child: pw.Row(
+            child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Expanded(
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text("VENDOR / BILL TO", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
-                      pw.SizedBox(height: 4),
-                      pw.Text(supplier.supplierName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
-                      if ((supplier.address ?? '').trim().isNotEmpty)
-                        pw.Text(supplier.address!.trim(), style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
-                      if ((supplier.gstin ?? '').trim().isNotEmpty)
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.only(top: 2),
-                          child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
-                        ),
-                    ],
+                pw.Text("Vendor Information:",
+                    style: pw.TextStyle(
+                        fontSize: 8,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey700)),
+                pw.SizedBox(height: 2),
+                pw.Text(supplier?.supplierName ?? 'Vendor', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
+                if (supplier != null && (supplier.address ?? '').trim().isNotEmpty)
+                  pw.Text(supplier.address!.trim(), style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                if (supplier != null && (supplier.gstin ?? '').trim().isNotEmpty)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(top: 2),
+                    child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
                   ),
-                ),
-                pw.Container(width: 0.5, height: 45, color: PdfColors.grey300, margin: const pw.EdgeInsets.symmetric(horizontal: 16)),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("PURCHASE ORDER DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
-                    pw.SizedBox(height: 4),
-                    _metaRow("PO No", _poNo.text),
-                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(_date)),
-                    _metaRow("Time", DateFormat('hh:mm a').format(DateTime.now())),
-                  ],
-                ),
               ],
             ),
           ),

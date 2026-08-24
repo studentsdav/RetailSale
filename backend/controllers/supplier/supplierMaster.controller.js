@@ -162,13 +162,14 @@ exports.bulkImportSuppliers = async (req, res) => {
 exports.getSuppliers = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-        const { q, activeOnly } = req.query;
+        const { q, activeOnly, active_only, all } = req.query;
 
         const where = {
             outlet_id
         };
 
-        if (activeOnly === 'true' || activeOnly === true) {
+        const fetchAll = all === 'true' || all === true || activeOnly === 'false' || activeOnly === false || active_only === 'false' || active_only === false;
+        if (!fetchAll) {
             where.is_active = true;
         }
 

@@ -7253,3 +7253,157 @@ SyntaxError: Missing catch or finally after try
 2026-08-24T16:01:09.782Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-24T16:01:09.856Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-08-24T16:01:09.867Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:30:00.058Z [INFO] Hourly backup job started.
+2026-08-24T16:30:00.238Z [INFO] Hourly backup job started.
+2026-08-24T16:30:00.257Z [INFO] Hourly backup job started.
+2026-08-24T16:30:01.140Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T16:30:01.142Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T16:30:01.157Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T16:30:01.158Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T16:30:01.171Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T16:30:01.172Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T16:30:01.240Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-24T16:30:01.249Z [INFO] Hourly backup job execution finished.
+2026-08-24T16:30:01.259Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-24T16:30:01.344Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-24T16:30:01.362Z [INFO] Hourly backup job execution finished.
+2026-08-24T16:30:08.192Z [INFO] Cloud upload sequence completed successfully.
+2026-08-24T16:30:08.204Z [INFO] Hourly backup job execution finished.
+2026-08-24T16:33:55.468Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:33:55.535Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:33:55.546Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:42:08.302Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:42:08.378Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:42:08.392Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:53:34.925Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:53:34.986Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:53:34.996Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:57:15.151Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:57:15.226Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T16:57:15.252Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:03:39.077Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:03:39.124Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:03:39.134Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:09:58.770Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:09:58.797Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:09:58.813Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:13:59.344Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:13:59.368Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:13:59.392Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:22:00.192Z [ERROR] [FATAL] Uncaught Exception: Unexpected end of input
+D:\inventorynew\RetailSale new\RetailSale\backend\services\ai.service.js:2229
+
+
+
+SyntaxError: Unexpected end of input
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\report\analytics.controller.js:66:19)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-24T17:22:04.455Z [ERROR] [FATAL] Uncaught Exception: Unexpected end of input
+D:\inventorynew\RetailSale new\RetailSale\backend\services\ai.service.js:2236
+
+
+
+SyntaxError: Unexpected end of input
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\report\analytics.controller.js:66:19)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-24T17:24:38.674Z [ERROR] [FATAL] Uncaught Exception: Unexpected end of input
+D:\inventorynew\RetailSale new\RetailSale\backend\services\ai.service.js:2236
+
+
+
+SyntaxError: Unexpected end of input
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\report\analytics.controller.js:66:19)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-24T17:27:56.513Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:27:56.549Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:27:56.569Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:30:00.062Z [INFO] Hourly backup job started.
+2026-08-24T17:30:00.262Z [INFO] Hourly backup job started.
+2026-08-24T17:30:00.282Z [INFO] Hourly backup job started.
+2026-08-24T17:30:00.965Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T17:30:00.967Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T17:30:00.987Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T17:30:00.989Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T17:30:00.995Z [INFO] Backup created. File size: 0.08 MB
+2026-08-24T17:30:00.996Z [INFO] Verifying backup integrity before local retention and upload.
+2026-08-24T17:30:01.062Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-08-24T17:30:01.090Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-08-24T17:30:01.102Z [INFO] Hourly backup job execution finished.
+2026-08-24T17:30:01.110Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-08-24T17:30:01.119Z [INFO] Hourly backup job execution finished.
+2026-08-24T17:30:07.675Z [INFO] Cloud upload sequence completed successfully.
+2026-08-24T17:30:07.695Z [INFO] Hourly backup job execution finished.
+2026-08-24T17:31:13.775Z [ERROR] [FATAL] Uncaught Exception: Missing initializer in const declaration
+D:\inventorynew\RetailSale new\RetailSale\backend\services\nightAudit.service.js:140
+        const payment Breakdown = {
+              ^^^^^^^
+
+SyntaxError: Missing initializer in const declaration
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\report\nightAudit.controller.js:1:27)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-24T17:33:56.999Z [ERROR] [FATAL] Uncaught Exception: Unexpected token '}'
+D:\inventorynew\RetailSale new\RetailSale\backend\services\nightAudit.service.js:115
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at internalCompileFunction (node:internal/vm:128:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1280:20)
+    at Module._compile (node:internal/modules/cjs/loader:1332:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\controllers\report\nightAudit.controller.js:1:27)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-08-24T17:37:01.822Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:37:01.880Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:37:01.894Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:40:02.685Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:40:02.751Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:40:02.770Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:50:08.850Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:50:08.883Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:50:08.902Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:56:27.945Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:56:28.020Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T17:56:28.036Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T18:00:09.782Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T18:00:09.854Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T18:00:09.871Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T18:05:32.152Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T18:05:32.239Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-08-24T18:05:32.268Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

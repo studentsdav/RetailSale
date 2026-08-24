@@ -1702,14 +1702,19 @@ exports.getPayrollDashboardStats = async (req, res) => {
 exports.createHandover = async (req, res) => {
   try {
     const { hr_cashier_handovers, sales_headers } = req.propertyDb.models;
+    const { Op } = req.propertyDb.Sequelize;
     const { cashier_id, handover_date, physical_cash, denominations } = req.body;
     
     let expected_cash = 0;
     if (sales_headers) {
+      const dateStr = handover_date || new Date().toISOString().split('T')[0];
+      const startDate = new Date(`${dateStr}T00:00:00.000Z`);
+      const endDate = new Date(`${dateStr}T23:59:59.999Z`);
+
       const sales = await sales_headers.findAll({
         where: { 
           created_by: cashier_id, 
-          sales_date: handover_date, 
+          sale_date: { [Op.gte]: startDate, [Op.lte]: endDate }, 
           outlet_id: req.user.outlet_id,
           status: { [Op.ne]: 'Cancelled' }
         }
@@ -1735,16 +1740,92 @@ exports.createHandover = async (req, res) => {
 
 exports.getHandovers = async (req, res) => {
   try {
-    const { hr_cashier_handovers, hr_employees } = req.propertyDb.models;
-    const { cashier_id } = req.query;
+    const { hr_cashier_handovers, users } = req.propertyDb.models;
+    const { Op } = req.propertyDb.Sequelize;
+    const { cashier_id, from_date, to_date } = req.query;
     const where = { outlet_id: req.user.outlet_id };
-    if (cashier_id) where.cashier_id = cashier_id;
     
-    const data = await hr_cashier_handovers.findAll({
+    if (cashier_id) where.cashier_id = cashier_id;
+    if (from_date && to_date) {
+      where.handover_date = { [Op.between]: [from_date, to_date] };
+    } else if (from_date) {
+      where.handover_date = { [Op.gte]: from_date };
+    } else if (to_date) {
+      where.handover_date = { [Op.lte]: to_date };
+    }
+    
+    const handovers = await hr_cashier_handovers.findAll({
       where,
-      include: [{ model: hr_employees, as: 'cashier' }]
+      include: [
+        { 
+          model: users, 
+          as: 'cashier', 
+          attributes: ['id', 'username', 'full_name', 'contact_email'],
+          required: false
+        }
+      ],
+      order: [['handover_date', 'DESC'], ['created_at', 'DESC']]
     });
-    return res.json({ success: true, data });
+
+    // Summary calculations
+    let totalExpectedCash = 0;
+    let totalPhysicalCash = 0;
+    let totalVariance = 0;
+    let shortageCount = 0;
+    let surplusCount = 0;
+    let matchedCount = 0;
+
+    const cashierSummaryMap = {};
+
+    handovers.forEach(h => {
+      const exp = parseFloat(h.expected_cash || 0);
+      const phy = parseFloat(h.physical_cash || 0);
+      const vrc = parseFloat(h.variance || 0);
+
+      totalExpectedCash += exp;
+      totalPhysicalCash += phy;
+      totalVariance += vrc;
+
+      if (vrc < 0) shortageCount++;
+      else if (vrc > 0) surplusCount++;
+      else matchedCount++;
+
+      const cId = h.cashier_id || 0;
+      const cName = h.cashier?.full_name || h.cashier?.username || `Cashier #${cId}`;
+
+      if (!cashierSummaryMap[cId]) {
+        cashierSummaryMap[cId] = {
+          cashier_id: cId,
+          cashier_name: cName,
+          total_handovers: 0,
+          total_expected: 0,
+          total_physical: 0,
+          total_variance: 0,
+          shortage_count: 0,
+        };
+      }
+
+      cashierSummaryMap[cId].total_handovers += 1;
+      cashierSummaryMap[cId].total_expected += exp;
+      cashierSummaryMap[cId].total_physical += phy;
+      cashierSummaryMap[cId].total_variance += vrc;
+      if (vrc < 0) cashierSummaryMap[cId].shortage_count += 1;
+    });
+
+    return res.json({ 
+      success: true, 
+      data: handovers,
+      summary: {
+        total_handovers: handovers.length,
+        total_expected_cash: totalExpectedCash,
+        total_physical_cash: totalPhysicalCash,
+        total_variance: totalVariance,
+        shortage_count: shortageCount,
+        surplus_count: surplusCount,
+        matched_count: matchedCount,
+        cashier_breakdown: Object.values(cashierSummaryMap)
+      }
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

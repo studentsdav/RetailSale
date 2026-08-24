@@ -295,8 +295,8 @@ Schema definitions for Text-to-SQL translation:
    Info: Bill items. Connects sales_headers.id = sales_items.sale_id and item_master.id = sales_items.item_id.
 
 3. Table "item_master"
-   Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), barcode (VARCHAR), unit (VARCHAR), rate (DECIMAL), retail_sale_price (DECIMAL), item_group (VARCHAR), sub_category (VARCHAR), brand (VARCHAR), opening_balance (DECIMAL), is_active (BOOLEAN)
-   Info: Catalog products list. "rate" is purchase cost, "retail_sale_price" is selling price, "is_active" is active flag (true/false).
+   Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), barcode (VARCHAR), unit (VARCHAR), rate (DECIMAL), retail_sale_price (DECIMAL), item_group (VARCHAR), sub_category (VARCHAR), brand (VARCHAR), min_level (DECIMAL), opening_balance (DECIMAL), is_active (BOOLEAN)
+   Info: Catalog products list. "min_level" is reorder stock threshold, "rate" is purchase cost, "retail_sale_price" is selling price, "is_active" is active flag (true/false).
 
 4. Table "milk_subscriptions" (Daily Customer Subscriptions)
    Columns: id (INTEGER, PK), outlet_id (INTEGER), customer_id (INTEGER, FK), customer_name (VARCHAR), phone (VARCHAR), address (TEXT), status (VARCHAR), frequency (VARCHAR), start_date (DATEONLY), end_date (DATEONLY), created_at (TIMESTAMP)
@@ -312,7 +312,7 @@ Schema definitions for Text-to-SQL translation:
 
 7. Table "stock_ledger"
    Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), qty_in (DECIMAL), qty_out (DECIMAL), balance (DECIMAL), txn_date (DATEONLY), txn_type (VARCHAR)
-   Info: Stock movements. Stock quantity = (COALESCE(item_master.opening_balance, 0) + SUM(qty_in - qty_out)).
+   Info: Stock movements audit ledger. Real-time current stock quantity = (COALESCE(item_master.opening_balance, 0) + COALESCE(SUM(sl.qty_in - sl.qty_out), 0)). Low stock / reorder items MUST be queried by joining stock_ledger sl ON sl.item_code = im.item_code AND sl.outlet_id = im.outlet_id and checking HAVING net_balance <= COALESCE(im.min_level, 10).
 
 8. Table "goods_receipts" (GRN Purchase Receipts)
    Columns: id (INTEGER, PK), outlet_id (INTEGER), grn_no (VARCHAR), supplier_id (INTEGER, FK), receipt_date (DATEONLY), total_amount (DECIMAL), net_amount (DECIMAL), status (VARCHAR)
@@ -349,6 +349,22 @@ Schema definitions for Text-to-SQL translation:
 16. Table "expenses"
     Columns: id (INTEGER, PK), outlet_id (INTEGER), category_name (VARCHAR), amount (DECIMAL), payment_mode (VARCHAR), expense_date (DATEONLY), remarks (TEXT)
     Info: Operating expenses log.
+
+17. Table "damage_items" / "damaged_stock"
+    Columns: id (INTEGER, PK), outlet_id (INTEGER), item_code (VARCHAR), item_name (VARCHAR), qty (DECIMAL), rate (DECIMAL), total_loss (DECIMAL), reason (VARCHAR), damage_date (DATEONLY)
+    Info: Damaged, broken, expired, or spoiled inventory items tracking.
+
+18. Table "hr_payrolls" / "salary_dispatches"
+    Columns: id (INTEGER, PK), outlet_id (INTEGER), emp_id (INTEGER, FK), emp_name (VARCHAR), month (VARCHAR), year (INTEGER), basic_salary (DECIMAL), allowances (DECIMAL), deductions (DECIMAL), net_salary (DECIMAL), payment_status (VARCHAR)
+    Info: Staff monthly salary dispatches and payroll records (payment_status: 'PAID', 'PENDING').
+
+19. Table "cash_ledger" / "cash_entries"
+    Columns: id (INTEGER, PK), outlet_id (INTEGER), txn_date (TIMESTAMP), amount_in (DECIMAL), amount_out (DECIMAL), balance (DECIMAL), category (VARCHAR), notes (TEXT)
+    Info: Daily cash register transactions, petty cash, and drawer balance entries.
+
+20. Table "kot_headers" / "kitchen_orders"
+    Columns: id (INTEGER, PK), outlet_id (INTEGER), kot_no (VARCHAR), table_no (VARCHAR), captain_name (VARCHAR), status (VARCHAR), created_at (TIMESTAMP)
+    Info: Restaurant Kitchen Order Tickets (status: 'PENDING', 'COOKING', 'READY', 'SERVED', 'CANCELLED').
 `;
 
 function getActionMappingList() {

@@ -8,12 +8,12 @@ class SupplierController extends ChangeNotifier {
   bool loading = false;
   List<Supplier> list = [];
 
-  Future<void> load({String q = ''}) async {
+  Future<void> load({String q = '', bool activeOnly = true}) async {
     loading = true;
     notifyListeners();
 
     final res = await ApiClient.get(
-      '${ApiEndpoints.suppliers}?q=$q',
+      '${ApiEndpoints.suppliers}?q=$q&activeOnly=$activeOnly',
     );
 
     list = (res['data'] as List).map((e) => Supplier.fromJson(e)).toList();
