@@ -43,37 +43,49 @@ async function getCurrentBusinessDay(propertyDb, outletId, userId = null) {
 async function validatePreAuditConditions(propertyDb, outletId, businessDate) {
     const warnings = [];
 
-    // 1. Check open KOTs (aligned strictly with KDS Active Order filtering)
-    let openKotCount = 0;
+    // Check if outlet has restaurant features
+    let isRestaurantModule = true;
     try {
-        const kots = await propertyDb.models.kot_headers.findAll({
-            where: {
-                outlet_id: outletId,
-                sales_header_id: null,
-                kds_dismissed: { [Op.ne]: true },
-                status: { [Op.notIn]: ['BILLED', 'CANCELLED', 'CLOSED', 'SERVED', 'DELIVERED', 'COMPLETED', 'DISMISSED'] }
-            },
-            include: [
-                { model: propertyDb.models.restaurant_tables, as: 'table', attributes: ['status'], required: false }
-            ],
-            raw: true,
-            nest: true,
-            bypassOutletFilter: true
-        });
+        const sysSettings = await propertyDb.models.system_settings.findOne({ where: { outlet_id: outletId }, bypassOutletFilter: true });
+        const modType = String(sysSettings?.module_type || sysSettings?.business_type || sysSettings?.active_module || '').toUpperCase();
+        if (modType.includes('RETAIL') || modType.includes('SUPERMARKET') || modType.includes('GROCERY') || modType.includes('STORE')) {
+            isRestaurantModule = false;
+        }
+    } catch (_) {}
 
-        const activeKots = kots.filter(kot => {
-            if (kot.table && kot.table.status) {
-                const tableStatus = kot.table.status.toLowerCase();
-                if (['billed', 'available', 'dirty', 'cleaning', 'needs cleaning'].includes(tableStatus)) {
-                    return false;
+    // 1. Check open KOTs (aligned strictly with KDS Active Order filtering for Restaurant outlets)
+    let openKotCount = 0;
+    if (isRestaurantModule && propertyDb.models.kot_headers) {
+        try {
+            const kots = await propertyDb.models.kot_headers.findAll({
+                where: {
+                    outlet_id: outletId,
+                    sales_header_id: null,
+                    kds_dismissed: { [Op.ne]: true },
+                    status: { [Op.notIn]: ['BILLED', 'CANCELLED', 'CLOSED', 'SERVED', 'DELIVERED', 'COMPLETED', 'DISMISSED'] }
+                },
+                include: [
+                    { model: propertyDb.models.restaurant_tables, as: 'table', attributes: ['status'], required: false }
+                ],
+                raw: true,
+                nest: true,
+                bypassOutletFilter: true
+            });
+
+            const activeKots = kots.filter(kot => {
+                if (kot.table && kot.table.status) {
+                    const tableStatus = kot.table.status.toLowerCase();
+                    if (['billed', 'available', 'dirty', 'cleaning', 'needs cleaning'].includes(tableStatus)) {
+                        return false;
+                    }
                 }
-            }
-            return true;
-        });
+                return true;
+            });
 
-        openKotCount = activeKots.length;
-    } catch (e) {
-        openKotCount = 0;
+            openKotCount = activeKots.length;
+        } catch (e) {
+            openKotCount = 0;
+        }
     }
 
     if (openKotCount > 0) {

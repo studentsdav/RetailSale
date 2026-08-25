@@ -104,14 +104,38 @@ exports.savePropertyInfo = async (req, res) => {
             user_id: req.user.id
         });
 
+        if (req.propertyDb.models.outlets) {
+            const outletObj = await req.propertyDb.models.outlets.findOne({
+                where: { id: outlet_id },
+                transaction: t
+            });
+            if (outletObj) {
+                const outletUpdates = {};
+                if (req.body.property_name) outletUpdates.property_name = req.body.property_name;
+                if (req.body.business_type) outletUpdates.business_type = req.body.business_type;
+                if (req.body.outlet_module) outletUpdates.outlet_module = req.body.outlet_module;
+                if (req.body.recovery_pin) outletUpdates.recovery_pin = req.body.recovery_pin;
+                if (req.body.mobile) outletUpdates.contact_phone = req.body.mobile;
+                if (req.body.email) outletUpdates.contact_email = req.body.email;
+                if (Object.keys(outletUpdates).length > 0) {
+                    await outletObj.update(outletUpdates, { transaction: t }).catch(() => {});
+                }
+            }
+        }
+
         await upsertClient({
             outlet_id: req.user.outlet_id,
+            outlet_code: req.user.outlet_code || req.body.outlet_code || "",
             property_name: req.body.property_name,
             db_name: loadConfig().db_database,
             machine_id: require("os").hostname(),
             created_at: oldData?.created_at || new Date().toISOString(),
             expiry_date: oldData?.expiry_date || "",
-            status: "ACTIVE"
+            status: "ACTIVE",
+            contact_email: req.body.email || "",
+            contact_phone: req.body.mobile || "",
+            tax_id: req.body.gst_no || req.body.pan_no || "",
+            pin: req.body.recovery_pin || ""
         });
 
         await t.commit();

@@ -58,6 +58,8 @@ import '../restaurant/recurring_expenses_screen.dart';
 import '../restaurant/restaurant_analytics_reports_screen.dart';
 import '../inventory/approval_center_screen.dart';
 import '../inventory/submitted_status_screen.dart';
+import '../settings/property_info_screen.dart';
+import '../settings/outlet_detail_modification_screen.dart';
 import 'customer_app_screen.dart';
 import 'lynx_feature_testing_screen.dart';
 import 'autonomous_agent_screen.dart';
@@ -2321,6 +2323,20 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
       {
         'category': 'Operations',
+        'icon': Icons.shopping_cart_checkout,
+        'label': 'Vendor Purchase Order (PO)',
+        'permission': 'PURCHASE_ORDER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseOrderScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.download_rounded,
+        'label': 'Vendor Receive Order (GRN)',
+        'permission': 'STOCK_IN',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GoodsReceivingScreen())),
+      },
+      {
+        'category': 'Operations',
         'icon': Icons.upload,
         'label': 'Stock Dispatch',
         'permission': 'STOCK_OUT',
@@ -2462,6 +2478,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'Property Information',
         'permission': 'PROPERTY_INFORMATION',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PropertyInfoScreen(outletid: 0))),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.edit_location_alt_outlined,
+        'label': 'Outlet Detail Modification',
+        'permission': 'PROPERTY_INFORMATION',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OutletDetailModificationScreen())),
       },
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
@@ -2988,10 +3011,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       {
         'category': 'Operations',
         'icon': Icons.download,
-        'label': 'Receive Goods from Vendor (GRN)',
-        'subLabel': 'Receive from Vendor ➜ inbound inventory receiving logs',
+        'label': 'Vendor Receive Order (GRN)',
+        'subLabel': 'Vendor Receive Order ➜ inbound inventory receiving logs',
         'permission': 'STOCK_IN',
-        'keywords': ['grn', 'goods receiving', 'receive vendor stock', 'goods receipt note', 'stock in', 'vendor invoice'],
+        'keywords': ['vendor receive order', 'vendor receive', 'vendor order', 'vendor received order', 'grn', 'goods receiving', 'receive vendor stock', 'goods receipt note', 'stock in', 'vendor invoice', 'receive goods from vendor'],
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GoodsReceivingScreen())),
       },
       {

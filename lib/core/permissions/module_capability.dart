@@ -20,16 +20,16 @@ class ModuleCapability {
   }
 
   /// Checks if Inventory feature is supported
-  static bool hasInventory(String? module) => true;
+  static bool hasInventory([String? module]) => true;
 
   /// Checks if Retail feature is supported
-  static bool hasRetail(String? module) {
+  static bool hasRetail([String? module]) {
     final mod = normalize(module);
     return mod == retail || mod == all;
   }
 
   /// Checks if Restaurant feature is supported
-  static bool hasRestaurant(String? module) {
+  static bool hasRestaurant([String? module]) {
     final mod = normalize(module);
     return mod == restaurant || mod == all;
   }
@@ -161,8 +161,6 @@ class ModuleCapability {
       'RESTAURANT_FLOOR_DESIGN',
       'RESTAURANT_KDS',
       'RESTAURANT_SETUP',
-      'DELIVERY_CHALLANS',
-      'RECURRING_EXPENSES',
     };
 
     if (retailPermissions.contains(key) && !hasRetail(mod)) {

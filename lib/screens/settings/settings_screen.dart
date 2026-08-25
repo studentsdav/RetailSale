@@ -18,6 +18,8 @@ import '../../controllers/sales/sales_controller.dart';
 import 'commission_rules_screen.dart';
 import 'happy_hour_config_screen.dart';
 import 'bill_value_promo_config_screen.dart';
+import 'property_info_screen.dart';
+import 'outlet_detail_modification_screen.dart';
 import '../../controllers/public/outlet_controller.dart';
 import '../../core/auth/token_storage.dart';
 import 'package:file_picker/file_picker.dart';
@@ -508,6 +510,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 // 1. OPERATIONS TAB
                 buildTabBody([
+                  _customSection(
+                    'Store Registration & Business Profile',
+                    'Update store name, legal name, address, GSTIN, FSSAI, mobile, and thermal receipt notes.',
+                    [
+                      _settingRow(
+                        title: 'Update Registration Info',
+                        description: 'Edit store registration details, logo, contact, tax numbers, and receipt footer note',
+                        isLast: true,
+                        control: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7A1A),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const OutletDetailModificationScreen()),
+                          ),
+                          icon: const Icon(Icons.edit_note_rounded, size: 18),
+                          label: const Text('Update Registration Info', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
                   _customSection(
                     'Inventory Settings',
                     'Configure behaviors and triggers for product inventory management.',

@@ -4,6 +4,7 @@ import '../../controllers/reports/night_audit_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/permissions/module_capability.dart';
 
 class NightAuditScreen extends StatefulWidget {
   const NightAuditScreen({super.key});
@@ -372,13 +373,15 @@ class _NightAuditScreenState extends State<NightAuditScreen>
             ),
             child: Column(
               children: [
-                _buildChecklistItem(
-                  title: 'Open Kitchen Orders (KOTs)',
-                  count: validation?['openKotCount'] ?? 0,
-                  icon: Icons.restaurant,
-                  onTap: () => _showOpenKotsResolveDialog(context),
-                ),
-                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                if (ModuleCapability.hasRestaurant()) ...[
+                  _buildChecklistItem(
+                    title: 'Open Kitchen Orders (KOTs)',
+                    count: validation?['openKotCount'] ?? 0,
+                    icon: Icons.restaurant,
+                    onTap: () => _showOpenKotsResolveDialog(context),
+                  ),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                ],
                 _buildChecklistItem(
                   title: 'Unclosed Cashier Shifts',
                   count: validation?['unclosedShiftCount'] ?? 0,

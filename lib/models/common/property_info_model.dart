@@ -28,6 +28,9 @@ class PropertyInfo {
   final bool printBankDetails;
   final bool printUpiQr;
   final bool printDigitalSignature;
+  final String businessType;
+  final String outletModule;
+  final String recoveryPin;
 
   PropertyInfo({
     required this.propertyName,
@@ -59,6 +62,9 @@ class PropertyInfo {
     this.printBankDetails = false,
     this.printUpiQr = false,
     this.printDigitalSignature = false,
+    this.businessType = 'Retail Store',
+    this.outletModule = 'RETAIL',
+    this.recoveryPin = '',
   });
 
   factory PropertyInfo.fromJson(Map<String, dynamic> json) {
@@ -94,6 +100,9 @@ class PropertyInfo {
       printBankDetails: json['print_bank_details'] ?? json['printBankDetails'] ?? false,
       printUpiQr: json['print_upi_qr'] ?? json['printUpiQr'] ?? false,
       printDigitalSignature: json['print_digital_signature'] ?? json['printDigitalSignature'] ?? false,
+      businessType: json['business_type'] ?? json['businessType'] ?? 'Retail Store',
+      outletModule: json['outlet_module'] ?? json['outletModule'] ?? 'RETAIL',
+      recoveryPin: (json['recovery_pin'] ?? json['recoveryPin'] ?? '').toString(),
     );
   }
 
@@ -128,6 +137,9 @@ class PropertyInfo {
       'print_bank_details': printBankDetails,
       'print_upi_qr': printUpiQr,
       'print_digital_signature': printDigitalSignature,
+      'business_type': businessType,
+      'outlet_module': outletModule,
+      'recovery_pin': recoveryPin,
     };
   }
 }
