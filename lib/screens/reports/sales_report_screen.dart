@@ -225,9 +225,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         final cgst = _taxAmountFor(item, 'CGST');
         final sgst = _taxAmountFor(item, 'SGST');
         final igst = _taxAmountFor(item, 'IGST');
+        final itemNetVal = item.netAmount > 0.009
+            ? item.netAmount
+            : (itemTaxable + cgst + sgst + igst > 0
+                ? (itemTaxable + cgst + sgst + igst)
+                : item.amount);
         final lineVal = _isTaxedItem(item)
             ? (itemTaxable + cgst + sgst + igst)
-            : item.netAmount;
+            : itemNetVal;
 
         flattened.add(
           _GstSalesRow(
@@ -253,13 +258,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             quantity: item.qty,
             unit: item.unit.trim(),
             taxableValue: itemTaxable,
-            taxSaleValue: _isTaxedItem(item) ? item.netAmount : 0,
-            nonTaxSaleValue: _isTaxedItem(item) ? 0 : item.netAmount,
+            taxSaleValue: _isTaxedItem(item) ? itemNetVal : 0,
+            nonTaxSaleValue: _isTaxedItem(item) ? 0 : itemNetVal,
             cgstAmount: cgst,
             sgstAmount: sgst,
             igstAmount: igst,
             totalLineValue: lineVal,
-            totalInvoiceValue: sale.netAmount,
+            totalInvoiceValue: itemNetVal,
             saleDateTime: sale.saleDate,
             paymentMode: sale.paymentMode,
             discount: item.lineDiscount,
@@ -637,7 +642,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       0,
       (sum, sale) => sum + sale.items.fold<double>(
             0,
-            (itemSum, item) => itemSum + (_isTaxedItem(item) ? 0 : item.netAmount),
+            (itemSum, item) => itemSum + (_isTaxedItem(item) ? 0 : (item.netAmount > 0.009 ? item.netAmount : (item.taxableAmount > 0.009 ? item.taxableAmount : item.amount))),
           ));
 
   // Taxed Sales After GST = Net Sales (Standard) − Non-Tax Sales
@@ -767,9 +772,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       ctrl.paymentModes.fold<double>(0, (sum, entry) => sum + entry.amount);
   List<Map<String, dynamic>> _extractPaymentSplits(SalesReport sale) {
     final List<Map<String, dynamic>> splits = [];
-    if (sale.paymentReference != null && sale.paymentReference!.startsWith('POSPAY:')) {
+    if (sale.paymentReference.startsWith('POSPAY:')) {
       try {
-        final decoded = jsonDecode(sale.paymentReference!.substring(7));
+        final decoded = jsonDecode(sale.paymentReference.substring(7));
         if (decoded is List) {
           for (final row in decoded) {
             final mode = (row['method'] ?? 'CASH').toString().toUpperCase();
@@ -1035,18 +1040,29 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       double u = sale.upiAmount;
       double o = sale.otherAmount;
       final adv = sale.advanceAmount;
-      final advAdj = sale.advanceAdjustmentAmount;
+      double advAdj = sale.advanceAdjustmentAmount;
 
-      if (c == 0 && cr == 0 && u == 0 && o == 0) {
+      if (advAdj == 0 && sale.subscription > 0) {
+        advAdj = sale.subscription;
+      }
+
+      final nonSubNet = (sale.netAmount - sale.subscription) > 0.009
+          ? (sale.netAmount - sale.subscription)
+          : 0.0;
+
+      if (c == 0 && cr == 0 && u == 0 && o == 0 && adv == 0 && (advAdj == 0 || nonSubNet > 0)) {
+        final rem = nonSubNet > 0 ? nonSubNet : sale.netAmount;
         final pm = sale.paymentMode.toUpperCase();
         if (pm.contains('CASH')) {
-          c = sale.netAmount;
+          c = rem;
         } else if (pm.contains('CARD')) {
-          cr = sale.netAmount;
+          cr = rem;
         } else if (pm.contains('UPI')) {
-          u = sale.netAmount;
+          u = rem;
+        } else if (pm.contains('SUBSCRIPTION') || pm.contains('ADVANCE')) {
+          advAdj = sale.netAmount;
         } else {
-          o = sale.netAmount;
+          o = rem;
         }
       }
 
@@ -1306,6 +1322,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'IGST',
           'Tax',
           'Net Amount',
+          'Sub Sale',
+          'Net Revenue',
         ].map(exc.TextCellValue.new).toList(),
       );
       for (final sale in _billWiseSales) {
@@ -1332,6 +1350,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           exc.DoubleCellValue(_saleIgstAmount(sale)),
           exc.DoubleCellValue(_saleTotalTax(sale)),
           exc.DoubleCellValue(sale.netAmount),
+          exc.DoubleCellValue(sale.subscription),
+          exc.DoubleCellValue(sale.netAmount - sale.subscription),
         ]);
       }
       sheet.appendRow([
@@ -1357,6 +1377,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.DoubleCellValue(_billWiseIgstTotal),
         exc.DoubleCellValue(_headerTaxTotal),
         exc.DoubleCellValue(_billWiseNetTotal),
+        exc.DoubleCellValue(_billWiseSales.fold<double>(0, (sum, s) => sum + s.subscription)),
+        exc.DoubleCellValue(_billWiseSales.fold<double>(0, (sum, s) => sum + (s.netAmount - s.subscription))),
       ]);
     } else if (_reportTabIndex == 2) {
       sheet.appendRow(
@@ -1410,6 +1432,90 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.DoubleCellValue(_itemWiseSgstTotal),
         exc.DoubleCellValue(_itemWiseIgstTotal),
         exc.DoubleCellValue(_itemWiseSalesTotal),
+      ]);
+    } else if (_reportTabIndex == 3) {
+      sheet.appendRow(
+        [
+          'Date',
+          'Bills',
+          'Qty',
+          'Cash',
+          'Card',
+          'UPI',
+          'Other',
+          'Adv Deposit',
+          'Adv Adjusted',
+          'Subtotal',
+          'Discount',
+          'Charges',
+          'Charges GST',
+          ...taxRates.expand(
+            (rate) => [
+              '${_formatTaxPercent(rate)}% Sale',
+              if (rate > 0.009) '${_formatTaxPercent(rate)}% GST',
+            ],
+          ),
+          'IGST',
+          'Tax',
+          'Net Amount',
+          'Sub Sale',
+          'Net Revenue',
+        ].map(exc.TextCellValue.new).toList(),
+      );
+      for (final row in _dateWiseSalesRows) {
+        sheet.appendRow([
+          exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.date)),
+          exc.IntCellValue(row.bills),
+          exc.DoubleCellValue(row.qty),
+          exc.DoubleCellValue(row.cashAmount),
+          exc.DoubleCellValue(row.cardAmount),
+          exc.DoubleCellValue(row.upiAmount),
+          exc.DoubleCellValue(row.otherAmount),
+          exc.DoubleCellValue(row.advanceAmount),
+          exc.DoubleCellValue(row.advanceAdjustmentAmount),
+          exc.DoubleCellValue(row.subTotal),
+          exc.DoubleCellValue(row.discount),
+          exc.DoubleCellValue(row.chargeTotal),
+          exc.DoubleCellValue(row.chargeTaxTotal),
+          ...taxRates.expand(
+            (rate) => [
+              exc.DoubleCellValue(_bandTaxable(row.taxBands, rate)),
+              if (rate > 0.009) exc.DoubleCellValue(_bandTax(row.taxBands, rate)),
+            ],
+          ),
+          exc.DoubleCellValue(row.igstAmount),
+          exc.DoubleCellValue(row.taxAmount),
+          exc.DoubleCellValue(row.netAmount),
+          exc.DoubleCellValue(row.subscription),
+          exc.DoubleCellValue(row.netAmount - row.subscription),
+        ]);
+      }
+      sheet.appendRow([
+        exc.TextCellValue('TOTAL'),
+        exc.IntCellValue(_dateWiseBillsTotal),
+        exc.DoubleCellValue(_dateWiseQtyTotal),
+        exc.DoubleCellValue(_dateWiseCashTotal),
+        exc.DoubleCellValue(_dateWiseCardTotal),
+        exc.DoubleCellValue(_dateWiseUpiTotal),
+        exc.DoubleCellValue(_dateWiseOtherTotal),
+        exc.DoubleCellValue(_dateWiseAdvDepositTotal),
+        exc.DoubleCellValue(_dateWiseAdvAdjustedTotal),
+        exc.DoubleCellValue(_dateWiseSubTotalTotal),
+        exc.DoubleCellValue(_dateWiseDiscountTotal),
+        exc.DoubleCellValue(_dateWiseChargeTotalTotal),
+        exc.DoubleCellValue(_dateWiseChargeTaxTotal),
+        ...taxRates.expand(
+          (rate) => [
+            exc.DoubleCellValue(_dateWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
+            if (rate > 0.009)
+              exc.DoubleCellValue(_dateWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+          ],
+        ),
+        exc.DoubleCellValue(_dateWiseIgstTotal),
+        exc.DoubleCellValue(_dateWiseTaxTotal),
+        exc.DoubleCellValue(_dateWiseNetTotal),
+        exc.DoubleCellValue(_dateWiseSalesRows.fold<double>(0, (sum, r) => sum + r.subscription)),
+        exc.DoubleCellValue(_dateWiseSalesRows.fold<double>(0, (sum, r) => sum + (r.netAmount - r.subscription))),
       ]);
     } else if (_reportTabIndex == 4) {
       // 1. b2b Sheet (GST Portal Table 4)
@@ -1726,7 +1832,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           ),
           'IGST',
           'Tax',
-          'Net Amount'
+          'Net Amount',
+          'Sub Sale',
+          'Net Revenue',
         ],
       2 => [
           'Label',
@@ -1766,7 +1874,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           ),
           'IGST',
           'Tax',
-          'Net Amount'
+          'Net Amount',
+          'Sub Sale',
+          'Net Revenue',
         ],
       4 => _gstHeaders,
       _ => [
@@ -1834,6 +1944,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               _money(_saleIgstAmount(sale)),
               _money(_saleTotalTax(sale)),
               _money(sale.netAmount),
+              _money(sale.subscription),
+              _money(sale.netAmount - sale.subscription),
             ];
           },
         ).toList()
@@ -1859,6 +1971,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             _money(_billWiseIgstTotal),
             _money(_headerTaxTotal),
             _money(_billWiseNetTotal),
+            _money(_billWiseSales.fold<double>(0, (sum, s) => sum + s.subscription)),
+            _money(_billWiseSales.fold<double>(0, (sum, s) => sum + (s.netAmount - s.subscription))),
           ]),
       2 => _groupedRows
           .map(
@@ -1921,6 +2035,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               _money(row.igstAmount),
               _money(row.taxAmount),
               _money(row.netAmount),
+              _money(row.subscription),
+              _money(row.netAmount - row.subscription),
             ],
           )
           .toList()
@@ -1947,6 +2063,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           _money(_dateWiseIgstTotal),
           _money(_dateWiseTaxTotal),
           _money(_dateWiseNetTotal),
+          _money(_dateWiseSalesRows.fold<double>(0, (sum, r) => sum + r.subscription)),
+          _money(_dateWiseSalesRows.fold<double>(0, (sum, r) => sum + (r.netAmount - r.subscription))),
         ]),
       4 => _rows
           .map(

@@ -7056,10 +7056,10 @@ class _SaleScreenState extends State<SaleScreen> {
                   onPressed: () async {
                     try {
                       final userMap = await TokenStorage.getUser();
-                      final cashierId = userMap?['id'] ?? 1;
+                      final int? cashierId = userMap?['id'] != null ? int.tryParse(userMap!['id'].toString()) : null;
 
                       await ApiClient.post(ApiEndpoints.hrmsHandover, {
-                        'cashier_id': cashierId,
+                        if (cashierId != null) 'cashier_id': cashierId,
                         'handover_date': todayStr,
                         'physical_cash': totalCash,
                         'denominations': denoms,

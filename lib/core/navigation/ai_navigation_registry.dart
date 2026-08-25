@@ -69,7 +69,8 @@ import '../../screens/dashboard/customer_app_screen.dart';
 /// Authoritative AI Navigation Registry for FAMALTH LYNX.
 /// Maps every AI action type code to its target Flutter screen.
 class AiNavigationRegistry {
-  static bool navigate(BuildContext context, String actionType, Map<String, dynamic>? payload) {
+  static bool navigate(
+      BuildContext context, String actionType, Map<String, dynamic>? payload) {
     Widget? targetScreen;
 
     switch (actionType.toUpperCase()) {
@@ -97,7 +98,8 @@ class AiNavigationRegistry {
           List<dynamic>? rawItems;
           if (payload['items'] is List) {
             rawItems = payload['items'] as List<dynamic>;
-          } else if (payload['payload'] != null && payload['payload']['items'] is List) {
+          } else if (payload['payload'] != null &&
+              payload['payload']['items'] is List) {
             rawItems = payload['payload']['items'] as List<dynamic>;
           } else if (payload['rows'] is List) {
             rawItems = payload['rows'] as List<dynamic>;
@@ -120,7 +122,7 @@ class AiNavigationRegistry {
         break;
 
       case 'ENTERPRISE_POS':
-        targetScreen = const EnterprisePosDemoScreen();
+        targetScreen = const SaleScreen();
         break;
 
       // 2. Inventory & Stock Management
@@ -182,7 +184,8 @@ class AiNavigationRegistry {
         if (payload != null) {
           if (payload['items'] is List) {
             draftItems = payload['items'] as List<dynamic>;
-          } else if (payload['payload'] != null && payload['payload']['items'] is List) {
+          } else if (payload['payload'] != null &&
+              payload['payload']['items'] is List) {
             draftItems = payload['payload']['items'] as List<dynamic>;
           } else if (payload['rows'] is List) {
             draftItems = payload['rows'] as List<dynamic>;
@@ -192,7 +195,8 @@ class AiNavigationRegistry {
 
           if (payload['supplierName'] != null) {
             supplierName = payload['supplierName'].toString();
-          } else if (payload['payload'] != null && payload['payload']['supplierName'] != null) {
+          } else if (payload['payload'] != null &&
+              payload['payload']['supplierName'] != null) {
             supplierName = payload['payload']['supplierName'].toString();
           }
           if (payload['supplierId'] != null) {
@@ -284,19 +288,38 @@ class AiNavigationRegistry {
         List<dynamic>? prefilledItems;
 
         if (payload != null) {
-          final tableNoStr = (payload['tableNo'] ?? payload['table_no'] ?? payload['table'] ?? payload['table_id'] ?? payload['tableId'] ?? '').toString().trim();
-          final int paxVal = int.tryParse((payload['pax'] ?? payload['guests'] ?? payload['paxCount'] ?? 2).toString()) ?? 2;
-          final String guestName = (payload['customerName'] ?? payload['customer'] ?? payload['guestName'] ?? payload['guest_name'] ?? 'Guest').toString();
+          final tableNoStr = (payload['tableNo'] ??
+                  payload['table_no'] ??
+                  payload['table'] ??
+                  payload['table_id'] ??
+                  payload['tableId'] ??
+                  '')
+              .toString()
+              .trim();
+          final int paxVal = int.tryParse((payload['pax'] ??
+                      payload['guests'] ??
+                      payload['paxCount'] ??
+                      2)
+                  .toString()) ??
+              2;
+          final String guestName = (payload['customerName'] ??
+                  payload['customer'] ??
+                  payload['guestName'] ??
+                  payload['guest_name'] ??
+                  'Guest')
+              .toString();
 
           if (payload['items'] is List) {
             prefilledItems = payload['items'] as List<dynamic>;
-          } else if (payload['payload'] != null && payload['payload']['items'] is List) {
+          } else if (payload['payload'] != null &&
+              payload['payload']['items'] is List) {
             prefilledItems = payload['payload']['items'] as List<dynamic>;
           }
 
           if (tableNoStr.isNotEmpty) {
             final cleanTableNo = tableNoStr.replaceAll(RegExp(r'[^\d]'), '');
-            final finalTableNo = cleanTableNo.isNotEmpty ? cleanTableNo : tableNoStr;
+            final finalTableNo =
+                cleanTableNo.isNotEmpty ? cleanTableNo : tableNoStr;
             targetTable = {
               'id': int.tryParse(finalTableNo) ?? 1,
               'table_id': int.tryParse(finalTableNo) ?? 1,

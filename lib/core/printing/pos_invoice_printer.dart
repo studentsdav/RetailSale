@@ -468,13 +468,6 @@ class PosInvoicePrinter {
                 tax.taxAmount,
               ),
             ),
-            if (subscriptionAdjustment > 0) ...[
-              _thermalTaxSummaryRow(
-                'Subscription Adjustment',
-                -_appSubscriptionDiscountAmount(order),
-                -_appSubscriptionTaxAdjustmentAmount(order),
-              ),
-            ],
           ],
           if (hasChargeTaxData) ...[
             pw.SizedBox(height: 4),
@@ -493,14 +486,8 @@ class PosInvoicePrinter {
               'Round Off',
               roundOff,
             ),
-          if (_showSubscriptionAdjustmentRow(order, subscriptionAdjustment))
-            _thermalAmountRow('Subscription Adjustment', subscriptionAdjustment),
-          if (order.paymentMode.trim().toUpperCase() != 'SUBSCRIPTION') ...[
-            if (_appSubscriptionDiscountAmount(order) > 0.0009)
-              _thermalAmountRow('Subscription Adjustment', _appSubscriptionDiscountAmount(order)),
-            if (_appSubscriptionTaxAdjustmentAmount(order) > 0.0009)
-              _thermalAmountRow('Subscription Tax Adjustment', _appSubscriptionTaxAdjustmentAmount(order)),
-          ],
+          if (subscriptionAdjustment > 0.0009)
+            _thermalAmountRow('Subscription Adjustment', -subscriptionAdjustment),
           _dashedDivider(),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1247,14 +1234,8 @@ class PosInvoicePrinter {
               'Round Off',
               roundOff,
             ),
-          if (_showSubscriptionAdjustmentRow(order, subscriptionAdjustment))
-            _a4AmountRow('Subscription Adjustment', _appSubscriptionDiscountAmount(order)),
-          if (order.paymentMode.trim().toUpperCase() != 'SUBSCRIPTION') ...[
-            if (_appSubscriptionDiscountAmount(order) > 0.0009)
-              _a4AmountRow('Subscription Adjustment', _appSubscriptionDiscountAmount(order)),
-            if (_appSubscriptionTaxAdjustmentAmount(order) > 0.0009)
-              _a4AmountRow('Subscription Tax Adjustment', _appSubscriptionTaxAdjustmentAmount(order)),
-          ],
+          if (subscriptionAdjustment > 0.0009)
+            _a4AmountRow('Subscription Adjustment', -subscriptionAdjustment),
           pw.Divider(height: 10),
           _a4AmountRow('Grand Total', displayNetPayable, bold: true),
           if (_isRefundedOrder(order)) ...[
@@ -1295,10 +1276,6 @@ class PosInvoicePrinter {
     }
     if (order.schemeDiscount > 0.0009) {
       return 'Scheme Discount';
-    }
-    final mode = order.paymentMode.toUpperCase();
-    if (mode == 'SUBSCRIPTION') {
-      return 'Subscription Adjusted Amount';
     }
     return 'Total Savings';
   }
@@ -1851,13 +1828,27 @@ class PosInvoicePrinter {
     return value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
   }
 
-  static double _subscriptionAdjustmentAmount(SaleOrder order) {
-    if (order.paymentMode.trim().toUpperCase() != 'SUBSCRIPTION') {
-      return 0.0;
+  static double _itemGrossValueWithTax(SaleItem item) {
+    if (item.lineTotal > 0.0009 && item.lineTotal > item.taxableAmount) {
+      return item.lineTotal;
     }
+    final tax = item.taxAmount > 0.0009
+        ? item.taxAmount
+        : (item.taxableAmount > 0.0009 ? (item.taxableAmount * item.taxPercent / 100.0) : 0.0);
+    if (item.taxableAmount > 0.0009) {
+      return item.taxableAmount + tax;
+    }
+    final baseRate = (item.originalRate != null && item.originalRate! > 0)
+        ? item.originalRate!
+        : ((item.referenceRate > 0) ? item.referenceRate : item.rate);
+    final baseAmount = baseRate * item.qty;
+    return item.isTaxInclusive ? baseAmount : baseAmount * (1.0 + item.taxPercent / 100.0);
+  }
+
+  static double _subscriptionAdjustmentAmount(SaleOrder order) {
     return order.items.fold<double>(
       0,
-      (sum, item) => item.isAdvanceFree ? sum + item.netAmount : sum,
+      (sum, item) => item.isAdvanceFree ? sum + _itemGrossValueWithTax(item) : sum,
     );
   }
 
@@ -1926,13 +1917,15 @@ class PosInvoicePrinter {
     }
     final lineDiscount = order.items.fold<double>(
       0,
-      (sum, item) => sum + item.lineDiscount,
+      (sum, item) => item.isAdvanceFree ? sum : sum + item.lineDiscount,
     );
     if (lineDiscount > 0.0009) {
       return lineDiscount;
     }
-    if (order.manualDiscountAmount > 0.0009) {
-      return order.manualDiscountAmount;
+    final subAdj = _subscriptionAdjustmentAmount(order);
+    final realManualDiscount = (order.manualDiscountAmount - subAdj).clamp(0.0, double.infinity);
+    if (realManualDiscount > 0.0009) {
+      return realManualDiscount;
     }
     return 0.0;
   }

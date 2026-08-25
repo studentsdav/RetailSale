@@ -744,10 +744,10 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                     final auditCtrl = context.read<NightAuditController>();
                     try {
                       final userMap = await TokenStorage.getUser();
-                      final cashierId = userMap?['id'] ?? 1;
+                      final int? cashierId = userMap?['id'] != null ? int.tryParse(userMap!['id'].toString()) : null;
 
                       await ApiClient.post(ApiEndpoints.hrmsHandover, {
-                        'cashier_id': cashierId,
+                        if (cashierId != null) 'cashier_id': cashierId,
                         'handover_date': businessDate,
                         'physical_cash': totalCash,
                         'denominations': denoms,

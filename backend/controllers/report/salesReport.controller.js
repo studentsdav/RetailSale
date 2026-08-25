@@ -323,7 +323,14 @@ exports.getSalesReport = async (req, res) => {
                 const subscriptionSubtotal = subItems.reduce((sum, i) => sum + toNumber(i.amount), 0);
                 const subscriptionTax = subItems.reduce((sum, i) => sum + toNumber(i.tax_amount), 0);
                 const subscriptionTaxable = subItems.reduce((sum, i) => sum + toNumber(i.taxable_amount), 0);
-                const subscriptionNet = subItems.reduce((sum, i) => sum + toNumber(i.net_amount), 0);
+                const subscriptionNet = subItems.reduce((sum, i) => {
+                    const dbNet = toNumber(i.net_amount);
+                    if (dbNet > 0) return sum + dbNet;
+                    const taxPct = toNumber(i.tax_percent || i.taxPercent);
+                    const taxAmt = toNumber(i.tax_amount) > 0 ? toNumber(i.tax_amount) : (toNumber(i.taxable_amount) * (taxPct / 100));
+                    const calcNet = toNumber(i.taxable_amount) + taxAmt;
+                    return sum + (calcNet > 0 ? calcNet : (toNumber(i.amount) * (1 + taxPct / 100)));
+                }, 0);
 
                 // Add subscription back to taxable, GST, and net_amount, and subtract subtotal from discount
                 const isFullSubscriptionSale = sale.payment_mode === 'SUBSCRIPTION';
@@ -381,7 +388,8 @@ exports.getSalesReport = async (req, res) => {
 
                     if (item.is_advance_free) {
                         effectiveDiscount = 0; // Subscription is not a discount!
-                        effectiveNetAmount = dbNetAmount;
+                        const calculatedItemNet = toNumber(item.taxable_amount) + toNumber(item.tax_amount);
+                        effectiveNetAmount = dbNetAmount > 0 ? dbNetAmount : (calculatedItemNet > 0 ? calculatedItemNet : lineAmount);
                         effectiveTaxableAmount = toNumber(item.taxable_amount);
                         effectiveTaxAmount = toNumber(item.tax_amount);
                     } else {
@@ -504,9 +512,12 @@ exports.getSalesReport = async (req, res) => {
                     store[key].loss = roundAmount(store[key].loss + saleLoss);
                 }
 
-                const subscriptionAmount = (sale.consumptions || [])
+                let subscriptionAmount = (sale.consumptions || [])
                     .filter(c => !(c.status === 'PENDING' && toNumber(c.excess_qty) > 0 && sale.payment_mode !== 'SUBSCRIPTION'))
                     .reduce((sum, c) => sum + toNumber(c.covered_amount), 0);
+                if (subscriptionAmount === 0 && subscriptionNet > 0) {
+                    subscriptionAmount = subscriptionNet;
+                }
 
                 let cashAmount = 0;
                 let cardAmount = 0;
@@ -534,15 +545,19 @@ exports.getSalesReport = async (req, res) => {
                     } catch (_) {}
                 }
 
+                if (subscriptionNet > 0 && advanceAdjustmentAmount === 0) {
+                    advanceAdjustmentAmount = subscriptionNet;
+                }
                 const totalParsed = cashAmount + cardAmount + upiAmount + otherAmount + advanceAmount + advanceAdjustmentAmount;
                 if (totalParsed === 0 && saleNetRevenue > 0) {
+                    const nonSubNetRevenue = Math.max(saleNetRevenue - subscriptionNet, 0);
                     const mode = String(effectivePaymentMode || 'CASH').toUpperCase();
-                    if (mode === 'CASH') cashAmount = saleNetRevenue;
-                    else if (mode === 'CARD') cardAmount = saleNetRevenue;
-                    else if (mode === 'UPI') upiAmount = saleNetRevenue;
+                    if (mode === 'CASH') cashAmount = nonSubNetRevenue;
+                    else if (mode === 'CARD') cardAmount = nonSubNetRevenue;
+                    else if (mode === 'UPI') upiAmount = nonSubNetRevenue;
                     else if (mode === 'ADVANCE' || mode === 'ADVANCE_ADJUSTMENT' || mode === 'SUBSCRIPTION') advanceAdjustmentAmount = saleNetRevenue;
-                    else if (mode === 'ADVANCE_ADDED') advanceAmount = saleNetRevenue;
-                    else otherAmount = saleNetRevenue;
+                    else if (mode === 'ADVANCE_ADDED') advanceAmount = nonSubNetRevenue;
+                    else otherAmount = nonSubNetRevenue;
                 }
 
                 // Accumulate accurate payment mode breakdown from actual split breakdown:

@@ -6,6 +6,7 @@ import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
@@ -33,10 +34,11 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
-  // Retail POS Theme Palette
+  // Retail POS Design Palette
   static const Color posBgColor = Color(0xFFF4EEE8);
   static const Color posOrange = Color(0xFFFF7A1A);
   static const Color posCardBg = Colors.white;
+  static const Color posHeaderBg = Color(0xFFF8F1EB);
   static const Color posTextDark = Color(0xFF1E293B);
   static const Color posTextMuted = Color(0xFF64748B);
 
@@ -119,6 +121,16 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
     }).toList();
   }
 
+  void _clearFilters() {
+    _searchCtrl.clear();
+    setState(() {
+      _searchQuery = '';
+      _fromDate = DateTime.now().subtract(const Duration(days: 30));
+      _toDate = DateTime.now();
+    });
+    _loadReport();
+  }
+
   void _showDenominationsModal(Map<String, dynamic> item) {
     final Map<String, dynamic> denoms = Map<String, dynamic>.from(item['denominations'] ?? {});
     final cashierName = item['cashier']?['full_name'] ?? item['cashier']?['username'] ?? 'Cashier #${item['cashier_id']}';
@@ -199,9 +211,15 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
   Future<void> _exportExcel() async {
     try {
       var excel = exc.Excel.createExcel();
-      exc.Sheet sheet = excel['Cashier Handovers'];
-      excel.setDefaultSheet('Cashier Handovers');
+      exc.Sheet sheet = excel['Cashier Shift Handovers'];
+      excel.setDefaultSheet('Cashier Shift Handovers');
 
+      // Title & Date Header
+      sheet.appendRow([exc.TextCellValue('CASHIER SHIFT HANDOVER ANALYTICS REPORT')]);
+      sheet.appendRow([exc.TextCellValue('Period: ${_df.format(_fromDate)} to ${_df.format(_toDate)}')]);
+      sheet.appendRow([exc.TextCellValue('')]); // Blank line
+
+      // Table Column Headers
       sheet.appendRow([
         exc.TextCellValue('Handover Date'),
         exc.TextCellValue('Cashier Name'),
@@ -211,17 +229,40 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
         exc.TextCellValue('Status'),
       ]);
 
+      double totalExp = 0;
+      double totalPhy = 0;
+      double totalVrc = 0;
+
       for (var h in _filteredHandovers) {
         final cName = h['cashier']?['full_name'] ?? h['cashier']?['username'] ?? 'Cashier #${h['cashier_id']}';
+        final exp = double.tryParse(h['expected_cash']?.toString() ?? '') ?? 0;
+        final phy = double.tryParse(h['physical_cash']?.toString() ?? '') ?? 0;
+        final vrc = double.tryParse(h['variance']?.toString() ?? '') ?? 0;
+
+        totalExp += exp;
+        totalPhy += phy;
+        totalVrc += vrc;
+
         sheet.appendRow([
           exc.TextCellValue((h['handover_date'] ?? '').toString()),
           exc.TextCellValue(cName.toString()),
-          exc.DoubleCellValue(double.tryParse(h['expected_cash']?.toString() ?? '') ?? 0),
-          exc.DoubleCellValue(double.tryParse(h['physical_cash']?.toString() ?? '') ?? 0),
-          exc.DoubleCellValue(double.tryParse(h['variance']?.toString() ?? '') ?? 0),
+          exc.DoubleCellValue(exp),
+          exc.DoubleCellValue(phy),
+          exc.DoubleCellValue(vrc),
           exc.TextCellValue((h['shortage_status'] ?? '').toString()),
         ]);
       }
+
+      // Summary Total Row
+      sheet.appendRow([exc.TextCellValue('')]);
+      sheet.appendRow([
+        exc.TextCellValue('TOTAL'),
+        exc.TextCellValue(''),
+        exc.DoubleCellValue(totalExp),
+        exc.DoubleCellValue(totalPhy),
+        exc.DoubleCellValue(totalVrc),
+        exc.TextCellValue(totalVrc < 0 ? 'Shortage' : (totalVrc > 0 ? 'Surplus' : 'Matched')),
+      ]);
 
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/Cashier_Handover_Report_${_df.format(DateTime.now())}.xlsx');
@@ -236,59 +277,86 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
     }
   }
 
+  Future<pw.Document> _buildPdfDocument() async {
+    final pdf = pw.Document();
+    double totalExp = 0;
+    double totalPhy = 0;
+    double totalVrc = 0;
+
+    final rowsData = _filteredHandovers.map((h) {
+      final cName = h['cashier']?['full_name'] ?? h['cashier']?['username'] ?? 'Cashier #${h['cashier_id']}';
+      final exp = double.tryParse(h['expected_cash']?.toString() ?? '') ?? 0;
+      final phy = double.tryParse(h['physical_cash']?.toString() ?? '') ?? 0;
+      final vrc = double.tryParse(h['variance']?.toString() ?? '') ?? 0;
+
+      totalExp += exp;
+      totalPhy += phy;
+      totalVrc += vrc;
+
+      return [
+        (h['handover_date'] ?? '').toString(),
+        cName.toString(),
+        exp.toStringAsFixed(2),
+        phy.toStringAsFixed(2),
+        vrc.toStringAsFixed(2),
+        (h['shortage_status'] ?? '').toString(),
+      ];
+    }).toList();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Cashier Shift Handover Analytics Report', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
+                pw.Text('Period: ${_df.format(_fromDate)} to ${_df.format(_toDate)}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            pw.Divider(color: PdfColors.orange400, thickness: 1.5),
+            pw.SizedBox(height: 12),
+            pw.TableHelper.fromTextArray(
+              headers: ['Date', 'Cashier Name', 'Expected Cash (₹)', 'Physical Cash (₹)', 'Variance (₹)', 'Status'],
+              data: [
+                ...rowsData,
+                [
+                  'GRAND TOTAL',
+                  '',
+                  totalExp.toStringAsFixed(2),
+                  totalPhy.toStringAsFixed(2),
+                  totalVrc.toStringAsFixed(2),
+                  totalVrc < 0 ? 'Shortage' : (totalVrc > 0 ? 'Surplus' : 'Matched'),
+                ],
+              ],
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.orange800),
+              cellHeight: 24,
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.center,
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
   Future<void> _exportPdf() async {
     try {
-      final pdf = pw.Document();
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(32),
-          build: (pw.Context context) {
-            return [
-              pw.Header(
-                level: 0,
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Cashier Handover Day-Wise Report', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('Period: ${_df.format(_fromDate)} to ${_df.format(_toDate)}', style: const pw.TextStyle(fontSize: 10)),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 16),
-              pw.Table.fromTextArray(
-                headers: ['Date', 'Cashier Name', 'Expected (₹)', 'Physical (₹)', 'Variance (₹)', 'Status'],
-                data: _filteredHandovers.map((h) {
-                  final cName = h['cashier']?['full_name'] ?? h['cashier']?['username'] ?? 'Cashier #${h['cashier_id']}';
-                  final exp = double.tryParse(h['expected_cash']?.toString() ?? '') ?? 0;
-                  final phy = double.tryParse(h['physical_cash']?.toString() ?? '') ?? 0;
-                  final vrc = double.tryParse(h['variance']?.toString() ?? '') ?? 0;
-                  return [
-                    h['handover_date'] ?? '',
-                    cName,
-                    exp.toStringAsFixed(2),
-                    phy.toStringAsFixed(2),
-                    vrc.toStringAsFixed(2),
-                    h['shortage_status'] ?? '',
-                  ];
-                }).toList(),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.orange800),
-                cellHeight: 25,
-                cellAlignments: {
-                  0: pw.Alignment.centerLeft,
-                  1: pw.Alignment.centerLeft,
-                  2: pw.Alignment.centerRight,
-                  3: pw.Alignment.centerRight,
-                  4: pw.Alignment.centerRight,
-                  5: pw.Alignment.center,
-                },
-              ),
-            ];
-          },
-        ),
-      );
-
+      final pdf = await _buildPdfDocument();
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/Cashier_Handover_Report_${_df.format(DateTime.now())}.pdf');
       await file.writeAsBytes(await pdf.save());
@@ -297,6 +365,21 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('PDF Export Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _printReport() async {
+    try {
+      final pdf = await _buildPdfDocument();
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Print Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -321,16 +404,6 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf_outlined, color: Color(0xFFDC2626)),
-            tooltip: 'Export PDF Report',
-            onPressed: _exportPdf,
-          ),
-          IconButton(
-            icon: const Icon(Icons.table_chart_outlined, color: Color(0xFF16A34A)),
-            tooltip: 'Export Excel Spreadsheet',
-            onPressed: _exportExcel,
-          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: posOrange),
             tooltip: 'Refresh Data',
@@ -362,7 +435,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
                   _buildKpiMetricsGrid(),
                   const SizedBox(height: 20),
                   SizedBox(
-                    height: 600,
+                    height: 620,
                     child: TabBarView(
                       controller: _tabController,
                       children: [
@@ -382,43 +455,91 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: posCardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
-          BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, 4)),
+          BoxShadow(
+            color: Color(0x140F172A),
+            blurRadius: 16,
+            offset: Offset(0, 10),
+          ),
         ],
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Expanded(
+          SizedBox(
+            width: 280,
             child: TextField(
               controller: _searchCtrl,
               decoration: InputDecoration(
-                hintText: 'Search cashier name or date...',
+                hintText: 'Search cashier or date...',
                 prefixIcon: const Icon(Icons.search, color: posTextMuted),
                 isDense: true,
                 filled: true,
                 fillColor: const Color(0xFFF8FAFC),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: const BorderSide(color: posOrange, width: 1.5)),
               ),
               onChanged: (val) {
                 setState(() => _searchQuery = val);
               },
             ),
           ),
-          const SizedBox(width: 14),
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              side: const BorderSide(color: posOrange),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () => _selectDateRange(context),
             icon: const Icon(Icons.date_range, color: posOrange, size: 18),
             label: Text(
-              '${_df.format(_fromDate)}  ➜  ${_df.format(_toDate)}',
+              '${_df.format(_fromDate)} ➜ ${_df.format(_toDate)}',
               style: const TextStyle(color: posTextDark, fontWeight: FontWeight.bold, fontSize: 13),
             ),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _clearFilters,
+            icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+            label: const Text('Clear All', style: TextStyle(color: posTextDark)),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              side: const BorderSide(color: Color(0xFF16A34A)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _filteredHandovers.isEmpty ? null : _exportExcel,
+            icon: const Icon(Icons.file_download_outlined, color: Color(0xFF16A34A), size: 18),
+            label: const Text('Excel', style: TextStyle(color: Color(0xFF16A34A), fontWeight: FontWeight.bold)),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              side: const BorderSide(color: Color(0xFFDC2626)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _filteredHandovers.isEmpty ? null : _exportPdf,
+            icon: const Icon(Icons.picture_as_pdf_outlined, color: Color(0xFFDC2626), size: 18),
+            label: const Text('PDF', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              side: const BorderSide(color: Color(0xFF2563EB)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _filteredHandovers.isEmpty ? null : _printReport,
+            icon: const Icon(Icons.print_outlined, color: Color(0xFF2563EB), size: 18),
+            label: const Text('Print', style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -492,9 +613,9 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: posCardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
-          BoxShadow(color: Color(0x0A000000), blurRadius: 12, offset: Offset(0, 6)),
+          BoxShadow(color: Color(0x140F172A), blurRadius: 16, offset: Offset(0, 10)),
         ],
       ),
       child: Row(
@@ -527,7 +648,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
     if (list.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(40),
-        decoration: BoxDecoration(color: posCardBg, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(color: posCardBg, borderRadius: BorderRadius.circular(20)),
         child: const Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -544,19 +665,19 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
     return Container(
       decoration: BoxDecoration(
         color: posCardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
-          BoxShadow(color: Color(0x0A000000), blurRadius: 12, offset: Offset(0, 6)),
+          BoxShadow(color: Color(0x140F172A), blurRadius: 22, offset: Offset(0, 12)),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         child: SingleChildScrollView(
           scrollDirection: Axis.vertical,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-              headingRowColor: WidgetStateProperty.all(const Color(0xFFF8F1EB)),
+              headingRowColor: WidgetStateProperty.all(posHeaderBg),
               headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: posTextDark, fontSize: 13),
               dataRowMaxHeight: 56,
               columns: const [
@@ -566,18 +687,25 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
                 DataColumn(label: Text('Physical Cash (Drawer)')),
                 DataColumn(label: Text('Variance')),
                 DataColumn(label: Text('Status')),
-                DataColumn(label: Text('Denominations Breakdown')),
+                DataColumn(label: Text('Action')),
               ],
-              rows: list.map((item) {
+              rows: list.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+
                 final cName = item['cashier']?['full_name'] ?? item['cashier']?['username'] ?? 'Cashier #${item['cashier_id']}';
                 final exp = double.tryParse(item['expected_cash']?.toString() ?? '') ?? 0;
                 final phy = double.tryParse(item['physical_cash']?.toString() ?? '') ?? 0;
                 final vrc = double.tryParse(item['variance']?.toString() ?? '') ?? 0;
                 final isShortage = vrc < 0;
 
+                // Alternating Row Styling (Even = White, Odd = Soft Cream)
+                final rowBgColor = index % 2 == 0 ? Colors.white : const Color(0xFFFFFBF7);
+
                 return DataRow(
+                  color: WidgetStateProperty.all(rowBgColor),
                   cells: [
-                    DataCell(Text(item['handover_date'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600))),
+                    DataCell(Text(item['handover_date'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, color: posTextDark))),
                     DataCell(
                       Row(
                         children: [
@@ -586,8 +714,8 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
                             backgroundColor: const Color(0xFFFFEAD5),
                             child: Text(cName.substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: posOrange)),
                           ),
-                          const SizedBox(width: 8),
-                          Text(cName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 10),
+                          Text(cName, style: const TextStyle(fontWeight: FontWeight.bold, color: posTextDark)),
                         ],
                       ),
                     ),
@@ -604,17 +732,17 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
                     ),
                     DataCell(
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isShortage ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
-                          borderRadius: BorderRadius.circular(12),
+                          color: isShortage ? const Color(0xFFFEE2E2) : (vrc > 0 ? const Color(0xFFEFF6FF) : const Color(0xFFDCFCE7)),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           isShortage ? 'Shortage' : (vrc > 0 ? 'Surplus' : 'Matched'),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
-                            color: isShortage ? const Color(0xFFB91C1C) : const Color(0xFF15803D),
+                            color: isShortage ? const Color(0xFFB91C1C) : (vrc > 0 ? const Color(0xFF1D4ED8) : const Color(0xFF15803D)),
                           ),
                         ),
                       ),
@@ -630,7 +758,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
                         ),
                         onPressed: () => _showDenominationsModal(item),
                         icon: const Icon(Icons.remove_red_eye_outlined, size: 14),
-                        label: const Text('View Breakdown', style: TextStyle(fontSize: 12)),
+                        label: const Text('View Breakdown', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -648,7 +776,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
     if (breakdown.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(40),
-        decoration: BoxDecoration(color: posCardBg, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(color: posCardBg, borderRadius: BorderRadius.circular(20)),
         child: const Center(
           child: Text('No cashier performance summary data available.', style: TextStyle(color: posTextMuted, fontSize: 14)),
         ),
@@ -658,13 +786,13 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
     return Container(
       decoration: BoxDecoration(
         color: posCardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
-          BoxShadow(color: Color(0x0A000000), blurRadius: 12, offset: Offset(0, 6)),
+          BoxShadow(color: Color(0x140F172A), blurRadius: 22, offset: Offset(0, 12)),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: breakdown.length,
@@ -673,41 +801,45 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
             final c = breakdown[index];
             final cName = c['cashier_name'] ?? 'Cashier #${c['cashier_id']}';
             final int handoversCount = c['total_handovers'] ?? 0;
-            final double expTotal = double.tryParse(c['total_expected']?.toString() ?? '') ?? 0;
             final double phyTotal = double.tryParse(c['total_physical']?.toString() ?? '') ?? 0;
             final double vrcTotal = double.tryParse(c['total_variance']?.toString() ?? '') ?? 0;
             final int shortages = c['shortage_count'] ?? 0;
 
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: CircleAvatar(
-                radius: 22,
-                backgroundColor: const Color(0xFFFFEAD5),
-                child: Text(
-                  cName.substring(0, 1).toUpperCase(),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: posOrange),
-                ),
-              ),
-              title: Text(cName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: posTextDark)),
-              subtitle: Text(
-                'Total Handovers: $handoversCount  •  Shortage Incidents: $shortages',
-                style: const TextStyle(fontSize: 12, color: posTextMuted),
-              ),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(_inr.format(phyTotal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Variance: ${_inr.format(vrcTotal)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: vrcTotal < 0 ? Colors.red : (vrcTotal > 0 ? Colors.blue : posTextMuted),
-                    ),
+            final rowBgColor = index % 2 == 0 ? Colors.white : const Color(0xFFFFFBF7);
+
+            return Container(
+              color: rowBgColor,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                leading: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: const Color(0xFFFFEAD5),
+                  child: Text(
+                    cName.substring(0, 1).toUpperCase(),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: posOrange),
                   ),
-                ],
+                ),
+                title: Text(cName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: posTextDark)),
+                subtitle: Text(
+                  'Total Handovers: $handoversCount  •  Shortage Incidents: $shortages',
+                  style: const TextStyle(fontSize: 12, color: posTextMuted),
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(_inr.format(phyTotal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Variance: ${_inr.format(vrcTotal)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: vrcTotal < 0 ? Colors.red : (vrcTotal > 0 ? Colors.blue : posTextMuted),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },

@@ -227,9 +227,35 @@ async function executeNightAudit(propertyDb, outletId, userId, options = {}) {
             netSales += net;
 
             const mode = (sale.payment_mode || 'CASH').toUpperCase();
+            const paymentRef = String(sale.payment_reference || '').trim();
+            const changeAmount = parseFloat(sale.change_amount || 0);
+
+            if (paymentRef.startsWith('POSPAY:')) {
+                try {
+                    const parsed = JSON.parse(paymentRef.substring(7));
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        for (const line of parsed) {
+                            const m = String(line?.method || '').trim().toUpperCase();
+                            const amt = parseFloat(line?.amount || 0);
+                            if (m === 'CASH') {
+                                const netCash = changeAmount > 0 ? Math.max(0, amt - changeAmount) : amt;
+                                paymentBreakdown.CASH += netCash;
+                                cashExpected += netCash;
+                            } else if (m === 'CARD') paymentBreakdown.CARD += amt;
+                            else if (m === 'UPI' || m === 'ONLINE' || m === 'PAYTM' || m === 'GPAY' || m === 'PHONEPE') paymentBreakdown.UPI += amt;
+                            else if (m === 'ROOM') paymentBreakdown.ROOM_POSTING += amt;
+                            else if (m === 'CREDIT') paymentBreakdown.CREDIT += amt;
+                            else paymentBreakdown.OTHER += amt;
+                        }
+                        return;
+                    }
+                } catch (_) {}
+            }
+
             if (mode.includes('CASH')) {
-                paymentBreakdown.CASH += net;
-                cashExpected += net;
+                const netCash = net > 0 ? net : Math.max(0, parseFloat(sale.amount_paid || 0) - changeAmount);
+                paymentBreakdown.CASH += netCash;
+                cashExpected += netCash;
             } else if (mode.includes('CARD')) {
                 paymentBreakdown.CARD += net;
             } else if (mode.includes('UPI') || mode.includes('ONLINE') || mode.includes('PAYTM') || mode.includes('GPAY')) {

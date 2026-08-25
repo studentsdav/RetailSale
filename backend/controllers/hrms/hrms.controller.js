@@ -1699,35 +1699,83 @@ exports.getPayrollDashboardStats = async (req, res) => {
 
 // ==================== CASHIER HANDOVER ====================
 
+function extractCashFromSaleHeader(s) {
+  const status = String(s.status || '').trim().toUpperCase();
+  if (status === 'CANCELLED' || status === 'DRAFT') return 0;
+
+  const paymentMode = String(s.payment_mode || '').trim().toUpperCase();
+  const netAmount = parseFloat(s.net_amount || 0);
+  const amountPaid = parseFloat(s.amount_paid || 0);
+  const changeAmount = parseFloat(s.change_amount || 0);
+  const paymentRef = String(s.payment_reference || '').trim();
+
+  if (paymentRef.startsWith('POSPAY:')) {
+    try {
+      const parsed = JSON.parse(paymentRef.substring(7));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        let cashSum = 0;
+        for (const line of parsed) {
+          const method = String(line?.method || '').trim().toUpperCase();
+          const amt = parseFloat(line?.amount || 0);
+          if (method === 'CASH') {
+            cashSum += amt;
+          }
+        }
+        if (changeAmount > 0 && cashSum > 0) {
+          cashSum = Math.max(0, cashSum - changeAmount);
+        }
+        return cashSum;
+      }
+    } catch (_) {}
+  }
+
+  if (paymentMode === 'CASH') {
+    if (netAmount > 0) return netAmount;
+    return Math.max(0, amountPaid - changeAmount);
+  }
+
+  return 0;
+}
+
 exports.createHandover = async (req, res) => {
   try {
     const { hr_cashier_handovers, sales_headers } = req.propertyDb.models;
     const { Op } = req.propertyDb.Sequelize;
     const { cashier_id, handover_date, physical_cash, denominations } = req.body;
     
+    const targetCashierId = cashier_id ? parseInt(cashier_id, 10) : req.user.id;
+    const dateStr = handover_date || new Date().toISOString().split('T')[0];
+    const startDate = new Date(`${dateStr}T00:00:00.000Z`);
+    const endDate = new Date(`${dateStr}T23:59:59.999Z`);
+
     let expected_cash = 0;
     if (sales_headers) {
-      const dateStr = handover_date || new Date().toISOString().split('T')[0];
-      const startDate = new Date(`${dateStr}T00:00:00.000Z`);
-      const endDate = new Date(`${dateStr}T23:59:59.999Z`);
-
       const sales = await sales_headers.findAll({
         where: { 
-          created_by: cashier_id, 
+          created_by: targetCashierId, 
           sale_date: { [Op.gte]: startDate, [Op.lte]: endDate }, 
           outlet_id: req.user.outlet_id,
           status: { [Op.ne]: 'Cancelled' }
         }
       });
-      expected_cash = sales.reduce((sum, s) => sum + parseFloat(s.net_amount || 0), 0);
+
+      expected_cash = sales.reduce((sum, s) => sum + extractCashFromSaleHeader(s), 0);
     }
     
-    const variance = parseFloat(physical_cash) - expected_cash;
+    const physicalCashNum = parseFloat(physical_cash || 0);
+    const variance = physicalCashNum - expected_cash;
     let shortage_status = 'Matched';
-    if (variance < 0) shortage_status = 'Pending';
+    if (variance < -0.01) shortage_status = 'Pending';
+    else if (variance > 0.01) shortage_status = 'Surplus';
     
     const handover = await hr_cashier_handovers.create({
-      cashier_id, handover_date, expected_cash, physical_cash, variance, denominations, shortage_status,
+      cashier_id: targetCashierId,
+      handover_date: dateStr,
+      expected_cash,
+      physical_cash: physicalCashNum,
+      variance,
+      denominations,
+      shortage_status,
       outlet_id: req.user.outlet_id,
       created_by: req.user.id
     });
