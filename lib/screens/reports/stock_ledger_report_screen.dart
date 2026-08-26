@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/stock_ledger_report_controller.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class StockLedgerReportScreen extends StatefulWidget {
   const StockLedgerReportScreen({super.key});
@@ -155,58 +156,58 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
     final rows = _filteredTransactions;
+    double totalIn = 0;
+    double totalOut = 0;
+    for (final row in rows) {
+      totalIn += (double.tryParse('${row['qtyIn'] ?? 0}') ?? 0);
+      totalOut += (double.tryParse('${row['qtyOut'] ?? 0}') ?? 0);
+    }
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        build: (_) => [
-          pw.Text(
-            'Stock Ledger Report',
-            style: pw.TextStyle(
-              fontSize: 18,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(
-            'From: ${fromDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(fromDate!)}'
-            '  To: ${toDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(toDate!)}',
-          ),
-          pw.Table.fromTextArray(
-            headers: const [
-              'Date',
-              'Type',
-              'Item',
-              'Brand',
-              'Ref No',
-              'Qty In',
-              'Qty Out',
-              'Balance',
-            ],
-            data: rows.map((row) {
-              final rawDate = DateTime.tryParse('${row['txnDate'] ?? ''}')
-                  ?.toLocal();
-              return [
-                rawDate == null
-                    ? '--'
-                    : DateFormat('dd-MMM-yyyy').format(rawDate),
-                '${row['txnType'] ?? ''}',
-                '${row['itemName'] ?? row['itemCode'] ?? ''}',
-                '${row['brand'] ?? ''}',
-                '${row['refNo'] ?? ''}',
-                _fmt(row['qtyIn']),
-                _fmt(row['qtyOut']),
-                _fmt(row['balance']),
-              ];
-            }).toList(),
-          ),
-        ],
-      ),
+    await PdfReportBuilder.generateAndPrintReport(
+      title: 'Stock Ledger Report',
+      subtitle: 'From: ${fromDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(fromDate!)}  To: ${toDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(toDate!)}',
+      headers: ['Date', 'Type', 'Item', 'Brand', 'Ref No', 'Qty In', 'Qty Out', 'Balance'],
+      data: rows.map((row) {
+        final rawDate = DateTime.tryParse('${row['txnDate'] ?? ''}')?.toLocal();
+        return [
+          rawDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(rawDate),
+          '${row['txnType'] ?? ''}',
+          '${row['itemName'] ?? row['itemCode'] ?? ''}',
+          '${row['brand'] ?? ''}',
+          '${row['refNo'] ?? ''}',
+          _fmt(row['qtyIn']),
+          _fmt(row['qtyOut']),
+          _fmt(row['balance']),
+        ];
+      }).toList(),
+      kpis: [
+        PdfKpiItem(label: 'Total Qty In', value: _fmt(totalIn), color: PdfColor.fromHex('#166534')),
+        PdfKpiItem(label: 'Total Qty Out', value: _fmt(totalOut), color: PdfColor.fromHex('#DC2626')),
+        PdfKpiItem(label: 'Net Balance Delta', value: _fmt(totalIn - totalOut), color: PdfColor.fromHex('#1E40AF')),
+      ],
+      cellAlignments: {
+        0: pw.Alignment.center,
+        1: pw.Alignment.center,
+        2: pw.Alignment.centerLeft,
+        3: pw.Alignment.centerLeft,
+        4: pw.Alignment.centerLeft,
+        5: pw.Alignment.centerRight,
+        6: pw.Alignment.centerRight,
+        7: pw.Alignment.centerRight,
+      },
+      columnWidths: {
+        0: const pw.FlexColumnWidth(1.0),
+        1: const pw.FlexColumnWidth(1.2),
+        2: const pw.FlexColumnWidth(2.2),
+        3: const pw.FlexColumnWidth(1.2),
+        4: const pw.FlexColumnWidth(1.4),
+        5: const pw.FlexColumnWidth(0.9),
+        6: const pw.FlexColumnWidth(0.9),
+        7: const pw.FlexColumnWidth(1.0),
+      },
+      pdfFileName: 'Stock_Ledger_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
-
-    await Printing.layoutPdf(name: 'Stock_Ledger_Report', onLayout: (_) async => pdf.save());
   }
 
   @override

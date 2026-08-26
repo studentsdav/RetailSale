@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/reports/scheme_report_controller.dart';
 import '../../models/inventory/sale_scheme_model.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class SchemeReportScreen extends StatefulWidget {
   const SchemeReportScreen({super.key});
@@ -534,61 +535,67 @@ class _SchemeReportScreenState extends State<SchemeReportScreen> {
 
   Future<void> exportToPdf() async {
     if (ctrl.selectedScheme == null || ctrl.rows.isEmpty) return;
-    final pdf = pw.Document();
     final schemeName = ctrl.selectedScheme!.schemeName;
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        build: (context) => [
-          pw.Text(
-            'Scheme Report: $schemeName',
-            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 10),
-          pw.TableHelper.fromTextArray(
-            headers: const [
-              'Customer',
-              'Phone',
-              'Start',
-              'Cycle Start',
-              'Cycle End',
-              'Consumed',
-              'Left',
-              'Qualified Days',
-              'Days Left',
-              'Missing',
-            ],
-            data: ctrl.rows.map((r) {
-              final e = r.enrollment;
-              final p = r.progress ?? const {};
-              return [
-                (e['customer_name'] ?? '').toString(),
-                (e['customer_phone'] ?? '').toString(),
-                (e['start_date'] ?? '').toString(),
-                (p['cycle_start'] ?? '').toString(),
-                (p['cycle_end'] ?? '').toString(),
-                (p['consumed_qty'] ?? p['total_qty'] ?? 0).toString(),
-                (p['remaining_qty'] ?? 0).toString(),
-                (p['qualified_days'] ?? p['days_elapsed'] ?? 0).toString(),
-                (p['days_left'] ?? 0).toString(),
-                ((p['missing_days'] as List? ?? const []).length).toString(),
-              ];
-            }).toList(),
-            headerStyle:
-                pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
-            cellStyle: const pw.TextStyle(fontSize: 7.5),
-            border: pw.TableBorder.all(color: PdfColors.grey600, width: 0.5),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey100),
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          ),
-        ],
-      ),
-    );
-
-    await Printing.layoutPdf(
-      name: 'Scheme_Report',
-      onLayout: (format) async => pdf.save(),
+    await PdfReportBuilder.generateAndPrintReport(
+      title: 'Scheme Performance Report',
+      subtitle: 'Scheme Name: $schemeName',
+      headers: [
+        'Customer',
+        'Phone',
+        'Start',
+        'Cycle Start',
+        'Cycle End',
+        'Consumed',
+        'Left',
+        'Qualified Days',
+        'Days Left',
+        'Missing',
+      ],
+      data: ctrl.rows.map((r) {
+        final e = r.enrollment;
+        final p = r.progress ?? const {};
+        return [
+          (e['customer_name'] ?? '').toString(),
+          (e['customer_phone'] ?? '').toString(),
+          (e['start_date'] ?? '').toString(),
+          (p['cycle_start'] ?? '').toString(),
+          (p['cycle_end'] ?? '').toString(),
+          (p['consumed_qty'] ?? p['total_qty'] ?? 0).toString(),
+          (p['remaining_qty'] ?? 0).toString(),
+          (p['qualified_days'] ?? p['days_elapsed'] ?? 0).toString(),
+          (p['days_left'] ?? 0).toString(),
+          ((p['missing_days'] as List? ?? const []).length).toString(),
+        ];
+      }).toList(),
+      kpis: [
+        PdfKpiItem(label: 'Enrolled Customers', value: ctrl.rows.length.toString(), color: PdfColor.fromHex('#1E40AF')),
+      ],
+      cellAlignments: {
+        0: pw.Alignment.centerLeft,
+        1: pw.Alignment.center,
+        2: pw.Alignment.center,
+        3: pw.Alignment.center,
+        4: pw.Alignment.center,
+        5: pw.Alignment.centerRight,
+        6: pw.Alignment.centerRight,
+        7: pw.Alignment.centerRight,
+        8: pw.Alignment.centerRight,
+        9: pw.Alignment.centerRight,
+      },
+      columnWidths: {
+        0: const pw.FlexColumnWidth(1.8),
+        1: const pw.FlexColumnWidth(1.2),
+        2: const pw.FlexColumnWidth(1.0),
+        3: const pw.FlexColumnWidth(1.0),
+        4: const pw.FlexColumnWidth(1.0),
+        5: const pw.FlexColumnWidth(0.9),
+        6: const pw.FlexColumnWidth(0.8),
+        7: const pw.FlexColumnWidth(1.1),
+        8: const pw.FlexColumnWidth(0.9),
+        9: const pw.FlexColumnWidth(0.8),
+      },
+      pdfFileName: 'Scheme_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 }

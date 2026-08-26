@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/stock_out_report_controller.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class StockOutReportScreen extends StatefulWidget {
   const StockOutReportScreen({super.key});
@@ -89,13 +90,6 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        // boxShadow: [
-        //   BoxShadow(
-        //     color: Colors.black.withOpacity(.05),
-        //     blurRadius: 18,
-        //     offset: const Offset(0, 6),
-        //   ),
-        // ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,6 +336,10 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
   }
 
   DataRow _buildRow(dynamic e, int index) {
+    final qty = e['total_qty'] ?? e['qty'] ?? 0;
+    final rate = double.tryParse((e['avg_rate'] ?? e['rate'] ?? 0).toString()) ?? 0.0;
+    final amt = double.tryParse((e['total_amount'] ?? e['amount'] ?? e['net_amount'] ?? 0).toString()) ?? 0.0;
+
     return DataRow(
       color: WidgetStateProperty.all(
           index.isEven ? Colors.grey.shade50 : Colors.white),
@@ -350,11 +348,10 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
               DataCell(Text('${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}')),
               DataCell(Text(e['brand'] ?? '')),
               DataCell(Text(e['unit'] ?? '')),
-              DataCell(Text(e['total_qty'].toString())),
+              DataCell(Text(qty.toString())),
+              DataCell(Text(rate.toStringAsFixed(2))),
               DataCell(Text(
-                  double.parse(e['avg_rate'].toString()).toStringAsFixed(2))),
-              DataCell(Text(
-                double.parse(e['total_amount'].toString()).toStringAsFixed(2),
+                amt.toStringAsFixed(2),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               )),
             ]
@@ -362,11 +359,10 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
               DataCell(Text('${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}')),
               DataCell(Text(e['brand'] ?? '')),
               DataCell(Text(e['unit'] ?? '')),
-              DataCell(Text(e['qty'].toString())),
-              DataCell(
-                  Text(double.parse(e['rate'].toString()).toStringAsFixed(2))),
+              DataCell(Text(qty.toString())),
+              DataCell(Text(rate.toStringAsFixed(2))),
               DataCell(Text(
-                double.parse(e['amount'].toString()).toStringAsFixed(2),
+                amt.toStringAsFixed(2),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               )),
               DataCell(Text(e['department'] ?? '')),
@@ -486,23 +482,24 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
         cell.cellStyle = exc.CellStyle(backgroundColorHex: bgColor);
       }
 
+      final qty = double.tryParse((e['total_qty'] ?? e['qty'] ?? 0).toString()) ?? 0.0;
+      final rate = double.tryParse((e['avg_rate'] ?? e['rate'] ?? 0).toString()) ?? 0.0;
+      final amt = double.tryParse((e['total_amount'] ?? e['amount'] ?? e['net_amount'] ?? 0).toString()) ?? 0.0;
+
       if (ctrl.reportType == 'summary') {
         setCell(0, exc.TextCellValue('${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}'));
         setCell(1, exc.TextCellValue(e['brand'] ?? ''));
         setCell(2, exc.TextCellValue(e['unit'] ?? ''));
-        setCell(
-            3, exc.DoubleCellValue(double.parse(e['total_qty'].toString())));
-        setCell(4, exc.DoubleCellValue(double.parse(e['avg_rate'].toString())));
-        setCell(
-            5, exc.DoubleCellValue(double.parse(e['net_amount'].toString())));
+        setCell(3, exc.DoubleCellValue(qty));
+        setCell(4, exc.DoubleCellValue(rate));
+        setCell(5, exc.DoubleCellValue(amt));
       } else {
         setCell(0, exc.TextCellValue('${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}'));
         setCell(1, exc.TextCellValue(e['brand'] ?? ''));
         setCell(2, exc.TextCellValue(e['unit'] ?? ''));
-        setCell(3, exc.DoubleCellValue(double.parse(e['qty'].toString())));
-        setCell(4, exc.DoubleCellValue(double.parse(e['rate'].toString())));
-        setCell(
-            5, exc.DoubleCellValue(double.parse(e['net_amount'].toString())));
+        setCell(3, exc.DoubleCellValue(qty));
+        setCell(4, exc.DoubleCellValue(rate));
+        setCell(5, exc.DoubleCellValue(amt));
         setCell(6, exc.TextCellValue(e['department'] ?? ''));
       }
 
@@ -532,82 +529,83 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final isSummary = ctrl.reportType == 'summary';
+    final headers = isSummary
+        ? ["Item", "Brand", "Unit", "Total Qty", "Avg Rate", "Net Amount (Rs)"]
+        : ["Item", "Brand", "Unit", "Qty", "Rate", "Net Amount (Rs)", "Department"];
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.portrait,
-        margin: const pw.EdgeInsets.all(24),
-        header: (context) => pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text('Stock Dispatch Report',
-                style:
-                    pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-            pw.Text('From: ${DateFormat('dd-MMM-yyyy').format(fromDate)} '
-                'To: ${DateFormat('dd-MMM-yyyy').format(toDate)}'),
-          ],
-        ),
-        footer: (context) => pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text(
-            'Page ${context.pageNumber} of ${context.pagesCount}',
-            style: const pw.TextStyle(fontSize: 10),
-          ),
-        ),
-        build: (context) {
-          final columns = ctrl.reportType == 'summary'
-              ? ["Item", "Brand", "Unit", "Total Qty", "Avg Rate", "Net"]
-              : ["Item", "Brand", "Unit", "Qty", "Rate", "Net", "Department"];
+    await PdfReportBuilder.generateAndPrintReport(
+      title: 'Stock Dispatch / Out Report',
+      subtitle: 'From: ${DateFormat('dd-MMM-yyyy').format(fromDate)}  To: ${DateFormat('dd-MMM-yyyy').format(toDate)}',
+      headers: headers,
+      data: ctrl.data.map<List<String>>((e) {
+        final qty = e['total_qty'] ?? e['qty'] ?? 0;
+        final rate = double.tryParse((e['avg_rate'] ?? e['rate'] ?? 0).toString()) ?? 0.0;
+        final amt = double.tryParse((e['total_amount'] ?? e['amount'] ?? e['net_amount'] ?? 0).toString()) ?? 0.0;
 
+        if (isSummary) {
           return [
-            pw.Table.fromTextArray(
-              headers: columns,
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.blueGrey700),
-              headerStyle: pw.TextStyle(
-                color: PdfColors.white,
-                fontWeight: pw.FontWeight.bold,
-                fontSize: 9,
-              ),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              data: ctrl.data.map((e) {
-                if (ctrl.reportType == 'summary') {
-                  return [
-                    '${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}',
-                    e['brand'] ?? '',
-                    e['unit'] ?? '',
-                    e['total_qty'].toString(),
-                    double.parse(e['avg_rate'].toString()).toStringAsFixed(2),
-                    double.parse(e['net_amount'].toString()).toStringAsFixed(2),
-                  ];
-                } else {
-                  return [
-                    '${e['item_name'] ?? ''}${e['brand'] != null && e['brand'].toString().isNotEmpty ? ' (${e['brand']})' : ''}',
-                    e['brand'] ?? '',
-                    e['unit'] ?? '',
-                    e['qty'].toString(),
-                    double.parse(e['rate'].toString()).toStringAsFixed(2),
-                    double.parse(e['net_amount'].toString()).toStringAsFixed(2),
-                    e['department'] ?? '',
-                  ];
-                }
-              }).toList(),
-            ),
-            pw.SizedBox(height: 12),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Text(
-                'Total Net : ${ctrl.totalNet.toStringAsFixed(2)}',
-                style:
-                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
-              ),
-            ),
+            '${e['item_name'] ?? ''}',
+            '${e['brand'] ?? ''}',
+            '${e['unit'] ?? ''}',
+            qty.toString(),
+            rate.toStringAsFixed(2),
+            currency.format(amt),
           ];
-        },
-      ),
+        } else {
+          return [
+            '${e['item_name'] ?? ''}',
+            '${e['brand'] ?? ''}',
+            '${e['unit'] ?? ''}',
+            qty.toString(),
+            rate.toStringAsFixed(2),
+            currency.format(amt),
+            '${e['department'] ?? ''}',
+          ];
+        }
+      }).toList(),
+      kpis: [
+        PdfKpiItem(label: 'Total Records', value: ctrl.data.length.toString(), color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Total Net Value', value: currency.format(ctrl.totalNet), color: PdfColor.fromHex('#166534')),
+      ],
+      cellAlignments: isSummary
+          ? {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.center,
+              3: pw.Alignment.centerRight,
+              4: pw.Alignment.centerRight,
+              5: pw.Alignment.centerRight,
+            }
+          : {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.center,
+              3: pw.Alignment.centerRight,
+              4: pw.Alignment.centerRight,
+              5: pw.Alignment.centerRight,
+              6: pw.Alignment.centerLeft,
+            },
+      columnWidths: isSummary
+          ? {
+              0: const pw.FlexColumnWidth(2.5),
+              1: const pw.FlexColumnWidth(1.5),
+              2: const pw.FlexColumnWidth(0.8),
+              3: const pw.FlexColumnWidth(1.0),
+              4: const pw.FlexColumnWidth(1.2),
+              5: const pw.FlexColumnWidth(1.5),
+            }
+          : {
+              0: const pw.FlexColumnWidth(2.2),
+              1: const pw.FlexColumnWidth(1.3),
+              2: const pw.FlexColumnWidth(0.7),
+              3: const pw.FlexColumnWidth(0.9),
+              4: const pw.FlexColumnWidth(1.0),
+              5: const pw.FlexColumnWidth(1.3),
+              6: const pw.FlexColumnWidth(1.5),
+            },
+      pdfFileName: 'Stock_Out_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
-
-    await Printing.layoutPdf(name: 'Stock_Out_Report', onLayout: (format) async => pdf.save());
   }
 }

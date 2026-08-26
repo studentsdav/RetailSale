@@ -13,6 +13,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/reports/purchase_report_controller.dart';
 import '../../utils/branding_storage.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class PurchaseReportScreen extends StatefulWidget {
   const PurchaseReportScreen({super.key});
@@ -621,97 +622,39 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
-    final branding = await BrandingStorage.getCurrentBrandingContext();
-    final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(24),
-        header: (context) => pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Row(children: [
-              if (logo != null)
-                pw.Container(
-                  width: 42,
-                  height: 42,
-                  margin: const pw.EdgeInsets.only(right: 10),
-                  child: pw.Image(logo, fit: pw.BoxFit.contain),
-                ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  if ((branding?.businessName ?? '').isNotEmpty)
-                    pw.Text(
-                      branding!.businessName,
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  pw.Text(
-                    'Purchase Order Report',
-                    style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ]),
-            pw.Text(
-              'From: ${DateFormat('dd-MMM-yyyy').format(ctrl.fromDate)}  '
-              'To: ${DateFormat('dd-MMM-yyyy').format(ctrl.toDate)}',
-            ),
-          ],
-        ),
-        footer: (context) => pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text(
-            'Page ${context.pageNumber} of ${context.pagesCount}',
-            style: const pw.TextStyle(fontSize: 10),
-          ),
-        ),
-        build: (context) {
-          return [
-            pw.Table.fromTextArray(
-              headers: const ['PO No', 'Date', 'Supplier', 'Status', 'Total'],
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.blueGrey700),
-              headerStyle: pw.TextStyle(
-                color: PdfColors.white,
-                fontWeight: pw.FontWeight.bold,
-                fontSize: 9,
-              ),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              data: ctrl.list.map((po) {
-                return [
-                  po.poNo,
-                  DateFormat('dd-MMM-yyyy').format(po.poDate),
-                  po.supplierName,
-                  po.status,
-                  po.totalAmount.toStringAsFixed(2),
-                ];
-              }).toList(),
-            ),
-            pw.SizedBox(height: 12),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Text(
-                'Total Orders: ${ctrl.totalOrders}     '
-                'Total Amount: ${ctrl.totalAmount.toStringAsFixed(2)}',
-                style:
-                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
-              ),
-            ),
-          ];
-        },
-      ),
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    await PdfReportBuilder.generateAndPrintReport(
+      title: 'Purchase Order Report',
+      subtitle: 'From: ${DateFormat('dd-MMM-yyyy').format(ctrl.fromDate)}  To: ${DateFormat('dd-MMM-yyyy').format(ctrl.toDate)}',
+      headers: ['PO No', 'Date', 'Supplier', 'Status', 'Total (Rs)'],
+      data: ctrl.list.map((po) {
+        return [
+          po.poNo,
+          DateFormat('dd-MMM-yyyy').format(po.poDate),
+          po.supplierName,
+          po.status,
+          currency.format(po.totalAmount),
+        ];
+      }).toList(),
+      kpis: [
+        PdfKpiItem(label: 'Total Orders', value: ctrl.totalOrders.toString(), color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Total Amount', value: currency.format(ctrl.totalAmount), color: PdfColor.fromHex('#166534')),
+      ],
+      cellAlignments: {
+        0: pw.Alignment.centerLeft,
+        1: pw.Alignment.center,
+        2: pw.Alignment.centerLeft,
+        3: pw.Alignment.center,
+        4: pw.Alignment.centerRight,
+      },
+      columnWidths: {
+        0: const pw.FlexColumnWidth(1.2),
+        1: const pw.FlexColumnWidth(1.0),
+        2: const pw.FlexColumnWidth(2.5),
+        3: const pw.FlexColumnWidth(1.0),
+        4: const pw.FlexColumnWidth(1.3),
+      },
+      pdfFileName: 'Purchase_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
-
-    await Printing.layoutPdf(name: 'Purchase_Report', onLayout: (format) async => pdf.save());
   }
 }

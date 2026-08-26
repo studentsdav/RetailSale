@@ -779,97 +779,191 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
 
   Future<void> exportToPdf() async {
     final pdf = pw.Document();
-    double grandTotal = 0;
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
+    final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+
+    double grandTotal = 0;
+    for (final header in ctrl.list) {
+      grandTotal += header.totalAmount;
+    }
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(24),
-        header: (context) => pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        margin: const pw.EdgeInsets.all(20),
+        header: (context) => pw.Column(
           children: [
-            pw.Row(children: [
-              if (logo != null)
-                pw.Container(
-                  width: 42,
-                  height: 42,
-                  margin: const pw.EdgeInsets.only(right: 10),
-                  child: pw.Image(logo, fit: pw.BoxFit.contain),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    if (logo != null)
+                      pw.Container(
+                        width: 45,
+                        height: 45,
+                        margin: const pw.EdgeInsets.only(right: 12),
+                        child: pw.Image(logo, fit: pw.BoxFit.contain),
+                      ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        if ((branding?.businessName ?? '').isNotEmpty)
+                          pw.Text(
+                            branding!.businessName,
+                            style: pw.TextStyle(
+                              fontSize: 13,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColor.fromHex('#1E293B'),
+                            ),
+                          ),
+                        pw.Text(
+                          'STOCK REQUEST REPORT',
+                          style: pw.TextStyle(
+                            fontSize: 15,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColor.fromHex('#2563EB'),
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'From: ${DateFormat('dd-MMM-yyyy').format(ctrl.fromDate)}  To: ${DateFormat('dd-MMM-yyyy').format(ctrl.toDate)}',
+                          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  if ((branding?.businessName ?? '').isNotEmpty)
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
                     pw.Text(
-                      branding!.businessName,
+                      'Generated: $nowStr',
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                    ),
+                    pw.Text(
+                      'Total Requests: ${ctrl.list.length}',
                       style: pw.TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: pw.FontWeight.bold,
+                        color: PdfColor.fromHex('#475569'),
                       ),
                     ),
-                  pw.Text(
-                    'Request Report',
-                    style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ]),
-            pw.Text('From: ${DateFormat('dd-MMM-yyyy').format(ctrl.fromDate)}  '
-                'To: ${DateFormat('dd-MMM-yyyy').format(ctrl.toDate)}'),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Divider(color: PdfColor.fromHex('#CBD5E1'), thickness: 1),
+            pw.SizedBox(height: 8),
           ],
         ),
-        footer: (context) => pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text(
-            'Page ${context.pageNumber} of ${context.pagesCount}',
-            style: const pw.TextStyle(fontSize: 10),
+        footer: (context) => pw.Container(
+          margin: const pw.EdgeInsets.only(top: 8),
+          padding: const pw.EdgeInsets.only(top: 6),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'RetailSale POS — Request Report',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+              ),
+              pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+              ),
+            ],
           ),
         ),
         build: (context) {
           final widgets = <pw.Widget>[];
 
-          for (final header in ctrl.list) {
-            grandTotal += header.totalAmount;
+          // KPI Summary Bar
+          widgets.add(
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex('#F8FAFC'),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0'), width: 1),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  _pdfKpiBlock('Total Stock Requests', ctrl.list.length.toString(), PdfColor.fromHex('#1E40AF')),
+                  _pdfKpiBlock('Grand Total Request Value', currency.format(grandTotal), PdfColor.fromHex('#166534')),
+                ],
+              ),
+            ),
+          );
 
+          for (final header in ctrl.list) {
             widgets.add(
               pw.Container(
-                margin: const pw.EdgeInsets.only(top: 14, bottom: 6),
-                padding: const pw.EdgeInsets.all(8),
-                color: PdfColors.blueGrey100,
-                child: pw.Text(
-                  'Request: ${header.requestNo} | '
-                  '${DateFormat('dd-MMM-yyyy').format(header.requestDate)} | '
-                  '${header.department} | ${header.status}',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                margin: const pw.EdgeInsets.only(top: 10, bottom: 4),
+                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromHex('#E2E8F0'),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Request No: ${header.requestNo} | Dept: ${header.department} | Status: ${header.status}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColor.fromHex('#1E293B')),
+                    ),
+                    pw.Text(
+                      'Date: ${DateFormat('dd-MMM-yyyy').format(header.requestDate)}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColor.fromHex('#2563EB')),
+                    ),
+                  ],
                 ),
               ),
             );
 
+            final tableHeaders = ['Item', 'Qty', 'Rate', 'Amount'];
+            final tableData = header.items.map((item) {
+              return [
+                '${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
+                item.qty.toString(),
+                item.rate.toStringAsFixed(2),
+                currency.format(item.amount),
+              ];
+            }).toList();
+
             widgets.add(
-              pw.Table.fromTextArray(
-                headers: const ['Item', 'Qty', 'Rate', 'Amount'],
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.blueGrey700),
-                headerStyle: pw.TextStyle(
-                  color: PdfColors.white,
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: 9,
-                ),
-                cellStyle: const pw.TextStyle(fontSize: 9),
-                data: header.items.map((item) {
-                  return [
-                    '${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
-                    item.qty.toString(),
-                    item.rate.toStringAsFixed(2),
-                    item.amount.toStringAsFixed(2),
-                  ];
-                }).toList(),
+              pw.TableHelper.fromTextArray(
+                headers: tableHeaders,
+                data: tableData,
+                headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
+                headerStyle: pw.TextStyle(color: PdfColors.white, fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                cellStyle: const pw.TextStyle(fontSize: 7.0),
+                cellAlignment: pw.Alignment.centerLeft,
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerRight,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.centerRight,
+                },
+                rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+                oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
+                border: pw.TableBorder.all(color: PdfColor.fromHex('#CBD5E1'), width: 0.5),
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                columnWidths: const {
+                  0: pw.FlexColumnWidth(3.2),
+                  1: pw.FlexColumnWidth(1.0),
+                  2: pw.FlexColumnWidth(1.2),
+                  3: pw.FlexColumnWidth(1.5),
+                },
               ),
             );
 
@@ -877,27 +971,34 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
               pw.Align(
                 alignment: pw.Alignment.centerRight,
                 child: pw.Padding(
-                  padding: const pw.EdgeInsets.only(top: 6),
+                  padding: const pw.EdgeInsets.only(top: 4, bottom: 8),
                   child: pw.Text(
-                    'Request Total : ${header.totalAmount.toStringAsFixed(2)}',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    'Request Total: ${currency.format(header.totalAmount)}',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColor.fromHex('#166534')),
                   ),
                 ),
               ),
             );
-
-            widgets.add(pw.SizedBox(height: 16));
           }
 
-          widgets.add(pw.Divider());
-
+          widgets.add(pw.Divider(color: PdfColor.fromHex('#CBD5E1')));
           widgets.add(
             pw.Align(
               alignment: pw.Alignment.centerRight,
-              child: pw.Text(
-                'Grand Total : ${grandTotal.toStringAsFixed(2)}',
-                style:
-                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+              child: pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromHex('#1E293B'),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Text(
+                  "Grand Total Request: ${currency.format(grandTotal)}",
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                    fontSize: 11,
+                  ),
+                ),
               ),
             ),
           );
@@ -907,6 +1008,22 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
       ),
     );
 
-    await Printing.layoutPdf(name: 'Request_Report', onLayout: (format) async => pdf.save());
+    await Printing.layoutPdf(name: 'Request_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}', onLayout: (format) async => pdf.save());
+  }
+
+  pw.Widget _pdfKpiBlock(String label, String value, PdfColor valueColor) {
+    return pw.Column(
+      children: [
+        pw.Text(
+          label.toUpperCase(),
+          style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Text(
+          value,
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: valueColor),
+        ),
+      ],
+    );
   }
 }

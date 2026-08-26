@@ -555,60 +555,133 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
 
   Future<void> exportToPdf() async {
     final pdf = pw.Document();
-    double grandTotal = 0;
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
+    final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+
+    double grandTotal = 0;
+    for (final header in ctrl.data) {
+      for (final item in header.items) {
+        grandTotal += (item.amount ?? 0);
+      }
+    }
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(24),
-        header: (context) => pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        margin: const pw.EdgeInsets.all(20),
+        header: (context) => pw.Column(
           children: [
-            pw.Row(children: [
-              if (logo != null)
-                pw.Container(
-                  width: 42,
-                  height: 42,
-                  margin: const pw.EdgeInsets.only(right: 10),
-                  child: pw.Image(logo, fit: pw.BoxFit.contain),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    if (logo != null)
+                      pw.Container(
+                        width: 45,
+                        height: 45,
+                        margin: const pw.EdgeInsets.only(right: 12),
+                        child: pw.Image(logo, fit: pw.BoxFit.contain),
+                      ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        if ((branding?.businessName ?? '').isNotEmpty)
+                          pw.Text(
+                            branding!.businessName,
+                            style: pw.TextStyle(
+                              fontSize: 13,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColor.fromHex('#1E293B'),
+                            ),
+                          ),
+                        pw.Text(
+                          'DAMAGE SUMMARY REPORT',
+                          style: pw.TextStyle(
+                            fontSize: 15,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColor.fromHex('#2563EB'),
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'From: ${DateFormat('dd-MMM-yyyy').format(fromDate)}  To: ${DateFormat('dd-MMM-yyyy').format(toDate)}',
+                          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  if ((branding?.businessName ?? '').isNotEmpty)
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
                     pw.Text(
-                      branding!.businessName,
+                      'Generated: $nowStr',
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                    ),
+                    pw.Text(
+                      'Total Damage Entries: ${ctrl.data.length}',
                       style: pw.TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: pw.FontWeight.bold,
+                        color: PdfColor.fromHex('#475569'),
                       ),
                     ),
-                  pw.Text(
-                    'Damage Summary Report',
-                    style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ]),
-            pw.Text('From: ${DateFormat('dd-MMM-yyyy').format(fromDate)}  '
-                'To: ${DateFormat('dd-MMM-yyyy').format(toDate)}'),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Divider(color: PdfColor.fromHex('#CBD5E1'), thickness: 1),
+            pw.SizedBox(height: 8),
           ],
         ),
-        footer: (context) => pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text(
-            'Page ${context.pageNumber} of ${context.pagesCount}',
-            style: const pw.TextStyle(fontSize: 10),
+        footer: (context) => pw.Container(
+          margin: const pw.EdgeInsets.only(top: 8),
+          padding: const pw.EdgeInsets.only(top: 6),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'RetailSale POS — Damage Report',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+              ),
+              pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+              ),
+            ],
           ),
         ),
         build: (context) {
           final widgets = <pw.Widget>[];
+
+          // KPI Summary Bar
+          widgets.add(
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex('#F8FAFC'),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0'), width: 1),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  _pdfKpiBlock('Total Damage Entries', ctrl.data.length.toString(), PdfColor.fromHex('#1E40AF')),
+                  _pdfKpiBlock('Grand Total Damage Value', currency.format(grandTotal), PdfColor.fromHex('#DC2626')),
+                ],
+              ),
+            ),
+          );
 
           for (final header in ctrl.data) {
             final total = header.items.fold<double>(
@@ -616,49 +689,70 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
               (sum, e) => sum + (e.amount ?? 0),
             );
 
-            grandTotal += total;
-
             widgets.add(
               pw.Container(
-                margin: const pw.EdgeInsets.only(top: 14, bottom: 6),
-                padding: const pw.EdgeInsets.all(8),
-                color: PdfColors.blueGrey100,
-                child: pw.Text(
-                  'Damage: ${header.damageNo} | '
-                  '${DateFormat('dd-MMM-yyyy').format(header.date)}',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                margin: const pw.EdgeInsets.only(top: 10, bottom: 4),
+                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromHex('#E2E8F0'),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Damage Ref: ${header.damageNo}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColor.fromHex('#1E293B')),
+                    ),
+                    pw.Text(
+                      'Date: ${DateFormat('dd-MMM-yyyy').format(header.date)}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColor.fromHex('#2563EB')),
+                    ),
+                  ],
                 ),
               ),
             );
 
+            final tableHeaders = ['Item', 'Unit', 'Qty', 'Rate', 'Amount', 'Remarks'];
+            final tableData = header.items.map((item) {
+              return [
+                '${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
+                item.unit,
+                item.qty.toString(),
+                item.rate.toStringAsFixed(2),
+                currency.format(item.amount ?? 0),
+                item.remarks ?? '',
+              ];
+            }).toList();
+
             widgets.add(
-              pw.Table.fromTextArray(
-                headers: const [
-                  'Item',
-                  'Unit',
-                  'Qty',
-                  'Rate',
-                  'Amount',
-                  'Remarks'
-                ],
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.blueGrey700),
-                headerStyle: pw.TextStyle(
-                  color: PdfColors.white,
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: 9,
-                ),
-                cellStyle: const pw.TextStyle(fontSize: 9),
-                data: header.items.map((item) {
-                  return [
-                    '${item.itemName}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
-                    item.unit,
-                    item.qty.toString(),
-                    item.rate.toStringAsFixed(2),
-                    (item.amount ?? 0).toStringAsFixed(2),
-                    item.remarks ?? '',
-                  ];
-                }).toList(),
+              pw.TableHelper.fromTextArray(
+                headers: tableHeaders,
+                data: tableData,
+                headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
+                headerStyle: pw.TextStyle(color: PdfColors.white, fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                cellStyle: const pw.TextStyle(fontSize: 7.0),
+                cellAlignment: pw.Alignment.centerLeft,
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.centerRight,
+                  4: pw.Alignment.centerRight,
+                  5: pw.Alignment.centerLeft,
+                },
+                rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+                oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
+                border: pw.TableBorder.all(color: PdfColor.fromHex('#CBD5E1'), width: 0.5),
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                columnWidths: const {
+                  0: pw.FlexColumnWidth(2.5),
+                  1: pw.FlexColumnWidth(0.8),
+                  2: pw.FlexColumnWidth(0.8),
+                  3: pw.FlexColumnWidth(1.0),
+                  4: pw.FlexColumnWidth(1.2),
+                  5: pw.FlexColumnWidth(2.0),
+                },
               ),
             );
 
@@ -666,27 +760,34 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
               pw.Align(
                 alignment: pw.Alignment.centerRight,
                 child: pw.Padding(
-                  padding: const pw.EdgeInsets.only(top: 6),
+                  padding: const pw.EdgeInsets.only(top: 4, bottom: 8),
                   child: pw.Text(
-                    'Damage Total : ${total.toStringAsFixed(2)}',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    'Entry Total: ${currency.format(total)}',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColor.fromHex('#DC2626')),
                   ),
                 ),
               ),
             );
-
-            widgets.add(pw.SizedBox(height: 16));
           }
 
-          widgets.add(pw.Divider());
-
+          widgets.add(pw.Divider(color: PdfColor.fromHex('#CBD5E1')));
           widgets.add(
             pw.Align(
               alignment: pw.Alignment.centerRight,
-              child: pw.Text(
-                'Grand Total : ${grandTotal.toStringAsFixed(2)}',
-                style:
-                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+              child: pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromHex('#1E293B'),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Text(
+                  "Grand Total Damage: ${currency.format(grandTotal)}",
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                    fontSize: 11,
+                  ),
+                ),
               ),
             ),
           );
@@ -696,6 +797,22 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
       ),
     );
 
-    await Printing.layoutPdf(name: 'Damage_Report', onLayout: (format) async => pdf.save());
+    await Printing.layoutPdf(name: 'Damage_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}', onLayout: (format) async => pdf.save());
+  }
+
+  pw.Widget _pdfKpiBlock(String label, String value, PdfColor valueColor) {
+    return pw.Column(
+      children: [
+        pw.Text(
+          label.toUpperCase(),
+          style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Text(
+          value,
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: valueColor),
+        ),
+      ],
+    );
   }
 }

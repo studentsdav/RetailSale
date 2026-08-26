@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../utils/branding_storage.dart';
 
 class CashierHandoverReportScreen extends StatefulWidget {
   const CashierHandoverReportScreen({super.key});
@@ -279,6 +280,11 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
 
   Future<pw.Document> _buildPdfDocument() async {
     final pdf = pw.Document();
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final branding = await BrandingStorage.getCurrentBrandingContext();
+    final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
+    final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+
     double totalExp = 0;
     double totalPhy = 0;
     double totalVrc = 0;
@@ -296,54 +302,162 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
       return [
         (h['handover_date'] ?? '').toString(),
         cName.toString(),
-        exp.toStringAsFixed(2),
-        phy.toStringAsFixed(2),
-        vrc.toStringAsFixed(2),
+        currency.format(exp),
+        currency.format(phy),
+        currency.format(vrc),
         (h['shortage_status'] ?? '').toString(),
       ];
     }).toList();
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) {
-          return [
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(20),
+        header: (context) => pw.Column(
+          children: [
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                pw.Text('Cashier Shift Handover Analytics Report', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
-                pw.Text('Period: ${_df.format(_fromDate)} to ${_df.format(_toDate)}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    if (logo != null)
+                      pw.Container(
+                        width: 45,
+                        height: 45,
+                        margin: const pw.EdgeInsets.only(right: 12),
+                        child: pw.Image(logo, fit: pw.BoxFit.contain),
+                      ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        if ((branding?.businessName ?? '').isNotEmpty)
+                          pw.Text(
+                            branding!.businessName,
+                            style: pw.TextStyle(
+                              fontSize: 13,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColor.fromHex('#1E293B'),
+                            ),
+                          ),
+                        pw.Text(
+                          'CASHIER SHIFT HANDOVER REPORT',
+                          style: pw.TextStyle(
+                            fontSize: 15,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColor.fromHex('#2563EB'),
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'Period: ${_df.format(_fromDate)} to ${_df.format(_toDate)}',
+                          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'Generated: $nowStr',
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                    ),
+                    pw.Text(
+                      'Total Handovers: ${_filteredHandovers.length}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColor.fromHex('#475569'),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-            pw.SizedBox(height: 12),
-            pw.Divider(color: PdfColors.orange400, thickness: 1.5),
-            pw.SizedBox(height: 12),
+            pw.SizedBox(height: 8),
+            pw.Divider(color: PdfColor.fromHex('#CBD5E1'), thickness: 1),
+            pw.SizedBox(height: 8),
+          ],
+        ),
+        footer: (context) => pw.Container(
+          margin: const pw.EdgeInsets.only(top: 8),
+          padding: const pw.EdgeInsets.only(top: 6),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'RetailSale POS — Cashier Handover Report',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+              ),
+              pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+              ),
+            ],
+          ),
+        ),
+        build: (pw.Context context) {
+          return [
+            // KPI Summary Bar
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex('#F8FAFC'),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0'), width: 1),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  _pdfKpiBlock('Total Expected Cash', currency.format(totalExp), PdfColor.fromHex('#1E40AF')),
+                  _pdfKpiBlock('Total Physical Cash', currency.format(totalPhy), PdfColor.fromHex('#166534')),
+                  _pdfKpiBlock('Total Net Variance', currency.format(totalVrc), totalVrc < 0 ? PdfColor.fromHex('#DC2626') : PdfColor.fromHex('#2563EB')),
+                ],
+              ),
+            ),
+
             pw.TableHelper.fromTextArray(
-              headers: ['Date', 'Cashier Name', 'Expected Cash (Rs.)', 'Physical Cash (Rs.)', 'Variance (Rs.)', 'Status'],
+              headers: ['Date', 'Cashier Name', 'Expected Cash', 'Physical Cash', 'Variance', 'Status'],
               data: [
                 ...rowsData,
                 [
                   'GRAND TOTAL',
                   '',
-                  totalExp.toStringAsFixed(2),
-                  totalPhy.toStringAsFixed(2),
-                  totalVrc.toStringAsFixed(2),
-                  totalVrc < 0 ? 'Shortage' : (totalVrc > 0 ? 'Surplus' : 'Matched'),
+                  currency.format(totalExp),
+                  currency.format(totalPhy),
+                  currency.format(totalVrc),
+                  totalVrc < 0 ? 'SHORTAGE' : (totalVrc > 0 ? 'SURPLUS' : 'MATCHED'),
                 ],
               ],
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.orange800),
-              cellHeight: 24,
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
+              headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
+              cellStyle: const pw.TextStyle(fontSize: 7.5),
+              rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+              oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
+              border: pw.TableBorder.all(color: PdfColor.fromHex('#CBD5E1'), width: 0.5),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               cellAlignments: {
-                0: pw.Alignment.centerLeft,
+                0: pw.Alignment.center,
                 1: pw.Alignment.centerLeft,
                 2: pw.Alignment.centerRight,
                 3: pw.Alignment.centerRight,
                 4: pw.Alignment.centerRight,
                 5: pw.Alignment.center,
+              },
+              columnWidths: const {
+                0: pw.FlexColumnWidth(1.0),
+                1: pw.FlexColumnWidth(2.2),
+                2: pw.FlexColumnWidth(1.4),
+                3: pw.FlexColumnWidth(1.4),
+                4: pw.FlexColumnWidth(1.4),
+                5: pw.FlexColumnWidth(1.0),
               },
             ),
           ];
@@ -352,6 +466,22 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
     );
 
     return pdf;
+  }
+
+  pw.Widget _pdfKpiBlock(String label, String value, PdfColor valueColor) {
+    return pw.Column(
+      children: [
+        pw.Text(
+          label.toUpperCase(),
+          style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Text(
+          value,
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: valueColor),
+        ),
+      ],
+    );
   }
 
   Future<void> _exportPdf() async {

@@ -20,6 +20,7 @@ import 'expense_analytics_screen.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 import '../../utils/branding_storage.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class CashLedgerScreen extends StatefulWidget {
   const CashLedgerScreen({super.key});
@@ -1906,97 +1907,29 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       }
     }
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        build: (_) => [
-          pw.Container(
-            padding: const pw.EdgeInsets.all(12),
-            decoration: pw.BoxDecoration(
-              color: accent,
-              borderRadius: pw.BorderRadius.circular(8),
-            ),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text(
-                  titles[_tabController.index],
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 18,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.Text(
-                  'From ${_fmtDate(fromDate)} To ${_fmtDate(toDate)}',
-                  style: const pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 12),
-          if (_tabController.index == 0)
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: PdfColors.lightBlue50,
-                border: pw.Border.all(color: PdfColors.lightBlue200),
-              ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-                children: [
-                  _pdfMiniStat('Bills', '${ctrl.totalCreditBills}'),
-                  _pdfMiniStat('Outstanding', ctrl.totalOutstanding.toStringAsFixed(2)),
-                ],
-              ),
-            ),
-          if (_tabController.index == 6)
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: PdfColors.green50,
-                border: pw.Border.all(color: PdfColors.green200),
-              ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-                children: [
-                  _pdfMiniStat('Sales', '${ctrl.deliveries.length}'),
-                  _pdfMiniStat('Amount', ctrl.deliveryTotal.toStringAsFixed(2)),
-                  _pdfMiniStat(
-                    'Outstanding',
-                    ctrl.deliveryOutstanding.toStringAsFixed(2),
-                  ),
-                ],
-              ),
-            ),
-          if (_tabController.index == 0 || _tabController.index == 6)
-            pw.SizedBox(height: 12),
-          pw.TableHelper.fromTextArray(
-            headers: headers,
-            data: rows,
-            headerDecoration: pw.BoxDecoration(color: accent),
-            headerStyle: pw.TextStyle(
-              color: PdfColors.white,
-              fontWeight: pw.FontWeight.bold,
-              fontSize: 9,
-            ),
-            cellStyle: const pw.TextStyle(fontSize: 8),
-            rowDecoration: tableRowDecoration,
-            oddRowDecoration: tableOddRowDecoration,
-            cellPadding: const pw.EdgeInsets.symmetric(
-              horizontal: 6,
-              vertical: 6,
-            ),
-            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-          ),
-        ],
-      ),
-    );
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    List<PdfKpiItem>? kpis;
+    if (_tabController.index == 0) {
+      kpis = [
+        PdfKpiItem(label: 'Total Credit Bills', value: '${ctrl.totalCreditBills}', color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Total Outstanding', value: currency.format(ctrl.totalOutstanding), color: PdfColor.fromHex('#DC2626')),
+      ];
+    } else if (_tabController.index == 6) {
+      kpis = [
+        PdfKpiItem(label: 'Total Deliveries', value: '${ctrl.deliveries.length}', color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Delivery Amount', value: currency.format(ctrl.deliveryTotal), color: PdfColor.fromHex('#166534')),
+        PdfKpiItem(label: 'Delivery Outstanding', value: currency.format(ctrl.deliveryOutstanding), color: PdfColor.fromHex('#DC2626')),
+      ];
+    }
 
-    await Printing.layoutPdf(name: 'Cash_Ledger_Report', onLayout: (format) async => pdf.save());
+    await PdfReportBuilder.generateAndPrintReport(
+      title: titles[_tabController.index],
+      subtitle: 'From ${_fmtDate(fromDate)} To ${_fmtDate(toDate)}',
+      headers: headers,
+      data: rows,
+      kpis: kpis,
+      pdfFileName: 'Cash_Ledger_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+    );
   }
 
   pw.Widget _pdfMiniStat(String label, String value) {

@@ -9,8 +9,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
+import 'package:intl/intl.dart';
 import '../../controllers/reports/stock_balance_controller.dart';
 import '../../models/reports/stock_item_model.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class StockBalanceScreen extends StatefulWidget {
   const StockBalanceScreen({super.key});
@@ -244,91 +246,62 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
   }
 
   Future<void> _exportPdf() async {
-    final pdf = pw.Document();
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    double totalValue = 0;
+    int lowStockCount = 0;
+    for (final item in _filteredItems) {
+      totalValue += item.value;
+      if (item.stockStatus == 'REORDER' || item.stockStatus == 'LOW_BUFFER') {
+        lowStockCount++;
+      }
+    }
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        build: (_) => [
-          pw.Text(
-            'Reorder / Minimum Level Stock Report',
-            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 8),
-          pw.Text(
-            'Status: $statusFilter   Category: $categoryFilter   Search: ${searchCtrl.text.trim().isEmpty ? 'ALL' : searchCtrl.text.trim()}',
-          ),
-          pw.SizedBox(height: 12),
-          pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey300),
-            columnWidths: const {
-              0: pw.FlexColumnWidth(2.3),
-              1: pw.FlexColumnWidth(1.5),
-              8: pw.FlexColumnWidth(1.4),
-            },
-            children: [
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.blue700),
-                children: [
-                  for (final header in const [
-                    'Item',
-                    'Category',
-                    'Unit',
-                    'Minimum',
-                    'Balance',
-                    'Shortfall',
-                    'Rate',
-                    'Value',
-                    'Status',
-                  ])
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
-                      child: pw.Text(
-                        header,
-                        style: pw.TextStyle(
-                          color: PdfColors.white,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              for (final item in _filteredItems)
-                pw.TableRow(
-                  decoration: pw.BoxDecoration(
-                    color: item.stockStatus == 'REORDER'
-                        ? PdfColors.red50
-                        : item.stockStatus == 'LOW_BUFFER'
-                            ? PdfColors.amber50
-                            : item.stockStatus == 'HEALTHY'
-                                ? PdfColors.green50
-                                : PdfColors.blueGrey50,
-                  ),
-                  children: [
-                    for (final value in [
-                       '${item.name}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
-                      item.category,
-                      item.unit,
-                      _qty(item.reorder),
-                      _qty(item.qty),
-                      item.shortfall > 0 ? _qty(item.shortfall) : '-',
-                      item.rate.toStringAsFixed(2),
-                      item.value.toStringAsFixed(2),
-                      _statusLabel(item),
-                    ])
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
-                        child: pw.Text(value),
-                      ),
-                  ],
-                ),
-            ],
-          ),
-        ],
-      ),
+    await PdfReportBuilder.generateAndPrintReport(
+      title: 'Stock Balance & Reorder Report',
+      subtitle: 'Status: $statusFilter   Category: $categoryFilter   Search: ${searchCtrl.text.trim().isEmpty ? 'ALL' : searchCtrl.text.trim()}',
+      headers: ['Item', 'Category', 'Unit', 'Minimum', 'Balance', 'Shortfall', 'Rate', 'Value (Rs)', 'Status'],
+      data: _filteredItems.map((item) {
+        return [
+          '${item.name}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
+          item.category,
+          item.unit,
+          _qty(item.reorder),
+          _qty(item.qty),
+          item.shortfall > 0 ? _qty(item.shortfall) : '-',
+          item.rate.toStringAsFixed(2),
+          currency.format(item.value),
+          _statusLabel(item),
+        ];
+      }).toList(),
+      kpis: [
+        PdfKpiItem(label: 'Total Items', value: _filteredItems.length.toString(), color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Low / Reorder Items', value: lowStockCount.toString(), color: PdfColor.fromHex('#DC2626')),
+        PdfKpiItem(label: 'Total Stock Value', value: currency.format(totalValue), color: PdfColor.fromHex('#166534')),
+      ],
+      cellAlignments: {
+        0: pw.Alignment.centerLeft,
+        1: pw.Alignment.centerLeft,
+        2: pw.Alignment.center,
+        3: pw.Alignment.centerRight,
+        4: pw.Alignment.centerRight,
+        5: pw.Alignment.centerRight,
+        6: pw.Alignment.centerRight,
+        7: pw.Alignment.centerRight,
+        8: pw.Alignment.center,
+      },
+      columnWidths: {
+        0: const pw.FlexColumnWidth(2.2),
+        1: const pw.FlexColumnWidth(1.2),
+        2: const pw.FlexColumnWidth(0.7),
+        3: const pw.FlexColumnWidth(0.9),
+        4: const pw.FlexColumnWidth(0.9),
+        5: const pw.FlexColumnWidth(0.9),
+        6: const pw.FlexColumnWidth(0.9),
+        7: const pw.FlexColumnWidth(1.2),
+        8: const pw.FlexColumnWidth(1.1),
+      },
+      pdfFileName: 'Stock_Balance_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
-
-    await Printing.layoutPdf(name: 'Stock_Balance_Report', onLayout: (format) async => pdf.save());
   }
 
   @override

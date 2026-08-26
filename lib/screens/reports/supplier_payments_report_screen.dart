@@ -12,6 +12,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/supplier_payments_report_controller.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class SupplierPaymentsReportScreen extends StatefulWidget {
   const SupplierPaymentsReportScreen({super.key});
@@ -152,62 +153,68 @@ class _SupplierPaymentsReportScreenState extends State<SupplierPaymentsReportScr
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
     final rows = ctrl.transactions;
+    final totalCashPaid = ctrl.totalPaid;
+    final totalCreditAdjusted = ctrl.totalCreditAdjusted;
+    final totalApplied = totalCashPaid + totalCreditAdjusted;
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        build: (_) => [
-          pw.Text(
-            'Vendor Payment Transaction Report',
-            style: pw.TextStyle(
-              fontSize: 18,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(
-            'From: ${fromDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(fromDate!)}'
-            '  To: ${toDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(toDate!)}',
-          ),
-          pw.SizedBox(height: 12),
-          pw.Table.fromTextArray(
-            headers: const [
-              'Date',
-              'Vendor Name',
-              'Bill No',
-              'Payment Mode',
-              'Reference No',
-              'Cash Paid',
-              'Credit Adjusted',
-              'Total Applied',
-            ],
-            data: rows.map((row) {
-              final rawDate = DateTime.tryParse('${row['payment_date'] ?? ''}')
-                  ?.toLocal();
-              final cashPaid = double.tryParse('${row['amount'] ?? 0}') ?? 0;
-              final creditAdjusted = double.tryParse('${row['credit_adjusted'] ?? 0}') ?? 0;
-              final totalApplied = cashPaid + creditAdjusted;
-              return [
-                rawDate == null
-                    ? '--'
-                    : DateFormat('dd-MMM-yyyy').format(rawDate),
-                '${row['supplier']?['supplier_name'] ?? ''}',
-                '${row['bill']?['bill_no'] ?? ''}',
-                '${row['payment_mode'] ?? ''}',
-                '${row['reference_no'] ?? ''}',
-                _fmt(cashPaid),
-                _fmt(creditAdjusted),
-                _fmt(totalApplied),
-              ];
-            }).toList(),
-          ),
-        ],
-      ),
+    await PdfReportBuilder.generateAndPrintReport(
+      title: 'Supplier Payments Report',
+      subtitle: 'From: ${fromDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(fromDate!)}  To: ${toDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(toDate!)}',
+      headers: [
+        'Date',
+        'Supplier',
+        'Bill No',
+        'Payment Mode',
+        'Reference No',
+        'Cash Paid',
+        'Credit Adjusted',
+        'Total Applied',
+      ],
+      data: rows.map((row) {
+        final rawDate = DateTime.tryParse('${row['payment_date'] ?? ''}')?.toLocal();
+        final cashPaid = double.tryParse('${row['amount'] ?? 0}') ?? 0;
+        final creditAdjusted = double.tryParse('${row['credit_adjusted'] ?? 0}') ?? 0;
+        final applied = cashPaid + creditAdjusted;
+        return [
+          rawDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(rawDate),
+          '${row['supplier']?['supplier_name'] ?? ''}',
+          '${row['bill']?['bill_no'] ?? ''}',
+          '${row['payment_mode'] ?? ''}',
+          '${row['reference_no'] ?? ''}',
+          currency.format(cashPaid),
+          currency.format(creditAdjusted),
+          currency.format(applied),
+        ];
+      }).toList(),
+      kpis: [
+        PdfKpiItem(label: 'Total Cash Paid', value: currency.format(totalCashPaid), color: PdfColor.fromHex('#166534')),
+        PdfKpiItem(label: 'Total Credit Adjusted', value: currency.format(totalCreditAdjusted), color: PdfColor.fromHex('#2563EB')),
+        PdfKpiItem(label: 'Total Applied Amount', value: currency.format(totalApplied), color: PdfColor.fromHex('#1E40AF')),
+      ],
+      cellAlignments: {
+        0: pw.Alignment.center,
+        1: pw.Alignment.centerLeft,
+        2: pw.Alignment.centerLeft,
+        3: pw.Alignment.center,
+        4: pw.Alignment.centerLeft,
+        5: pw.Alignment.centerRight,
+        6: pw.Alignment.centerRight,
+        7: pw.Alignment.centerRight,
+      },
+      columnWidths: {
+        0: const pw.FlexColumnWidth(0.9),
+        1: const pw.FlexColumnWidth(2.0),
+        2: const pw.FlexColumnWidth(1.2),
+        3: const pw.FlexColumnWidth(1.0),
+        4: const pw.FlexColumnWidth(1.2),
+        5: const pw.FlexColumnWidth(1.1),
+        6: const pw.FlexColumnWidth(1.1),
+        7: const pw.FlexColumnWidth(1.2),
+      },
+      pdfFileName: 'Supplier_Payments_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
-
-    await Printing.layoutPdf(name: 'Supplier_Payments_Report', onLayout: (_) async => pdf.save());
   }
 
   @override

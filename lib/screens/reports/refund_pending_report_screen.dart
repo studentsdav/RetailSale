@@ -12,6 +12,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/sales/sales_controller.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class RefundPendingReportScreen extends StatefulWidget {
   const RefundPendingReportScreen({super.key});
@@ -197,64 +198,79 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
+    final refunds = this.refunds;
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    double totalPendingValue = 0;
+    double totalPaid = 0;
+    double totalBalance = 0;
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        build: (_) => [
-          pw.Text(
-            'Pending Customer Refunds Report',
-            style: pw.TextStyle(
-              fontSize: 18,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(
-            'From: ${fromDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(fromDate!)}'
-            '  To: ${toDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(toDate!)}',
-          ),
-          pw.SizedBox(height: 12),
-          pw.Table.fromTextArray(
-            headers: const [
-              'Refund No',
-              'Date',
-              'Bill No',
-              'Customer',
-              'Refund Value',
-              'Paid',
-              'Balance',
-              'Status',
-            ],
-            data: refunds.map((row) {
-              final rawDate = DateTime.tryParse('${row['refund_date'] ?? ''}')?.toLocal();
-              final displayDate = rawDate == null
-                  ? '--'
-                  : DateFormat('dd-MMM-yyyy').format(displayDateUtcOrLocal(row['refund_date']));
+    for (final row in refunds) {
+      final pending = double.tryParse('${row['amount_pending'] ?? 0}') ?? 0.0;
+      final paid = double.tryParse('${row['amount_paid'] ?? 0}') ?? 0.0;
+      totalPendingValue += pending;
+      totalPaid += paid;
+      totalBalance += (pending - paid);
+    }
 
-              final pending = double.tryParse('${row['amount_pending'] ?? 0}') ?? 0.0;
-              final paid = double.tryParse('${row['amount_paid'] ?? 0}') ?? 0.0;
-              final balance = pending - paid;
+    await PdfReportBuilder.generateAndPrintReport(
+      title: 'Pending Customer Refunds Report',
+      subtitle: 'From: ${fromDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(fromDate!)}  To: ${toDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(toDate!)}',
+      headers: [
+        'Refund No',
+        'Date',
+        'Bill No',
+        'Customer',
+        'Refund Value',
+        'Paid',
+        'Balance',
+        'Status',
+      ],
+      data: refunds.map((row) {
+        final displayDate = DateFormat('dd-MMM-yyyy').format(displayDateUtcOrLocal(row['refund_date']));
+        final pending = double.tryParse('${row['amount_pending'] ?? 0}') ?? 0.0;
+        final paid = double.tryParse('${row['amount_paid'] ?? 0}') ?? 0.0;
+        final balance = pending - paid;
+        final customerName = (row['sale']?['customer_name'] ?? 'Walk-in Customer').toString();
 
-              final customerName = row['sale']?['customer_name'] ?? 'Walk-in Customer';
-              return [
-                '${row['refund_no'] ?? ''}',
-                displayDate,
-                '${row['sale']?['sale_no'] ?? ''}',
-                customerName,
-                _fmt(pending),
-                _fmt(paid),
-                _fmt(balance),
-                '${row['status'] ?? ''}',
-              ];
-            }).toList(),
-          ),
-        ],
-      ),
+        return <String>[
+          '${row['refund_no'] ?? ''}',
+          displayDate,
+          '${row['sale']?['sale_no'] ?? ''}',
+          customerName,
+          currency.format(pending),
+          currency.format(paid),
+          currency.format(balance),
+          '${row['status'] ?? ''}',
+        ];
+      }).toList(),
+      kpis: [
+        PdfKpiItem(label: 'Total Pending Refunds', value: refunds.length.toString(), color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Total Refund Value', value: currency.format(totalPendingValue), color: PdfColor.fromHex('#D97706')),
+        PdfKpiItem(label: 'Total Amount Paid', value: currency.format(totalPaid), color: PdfColor.fromHex('#166534')),
+        PdfKpiItem(label: 'Remaining Balance', value: currency.format(totalBalance), color: PdfColor.fromHex('#DC2626')),
+      ],
+      cellAlignments: {
+        0: pw.Alignment.center,
+        1: pw.Alignment.center,
+        2: pw.Alignment.center,
+        3: pw.Alignment.centerLeft,
+        4: pw.Alignment.centerRight,
+        5: pw.Alignment.centerRight,
+        6: pw.Alignment.centerRight,
+        7: pw.Alignment.center,
+      },
+      columnWidths: {
+        0: const pw.FlexColumnWidth(1.2),
+        1: const pw.FlexColumnWidth(1.0),
+        2: const pw.FlexColumnWidth(1.2),
+        3: const pw.FlexColumnWidth(2.0),
+        4: const pw.FlexColumnWidth(1.1),
+        5: const pw.FlexColumnWidth(1.1),
+        6: const pw.FlexColumnWidth(1.1),
+        7: const pw.FlexColumnWidth(1.0),
+      },
+      pdfFileName: 'Refund_Pending_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
-
-    await Printing.layoutPdf(name: 'Refund_Pending_Report', onLayout: (_) async => pdf.save());
   }
 
   Color _statusColor(String status) {

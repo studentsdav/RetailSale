@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/stock_transfer_report_controller.dart';
+import '../../utils/pdf_report_builder.dart';
 
 class StockTransferReportScreen extends StatefulWidget {
   const StockTransferReportScreen({super.key});
@@ -141,56 +142,68 @@ class _StockTransferReportScreenState extends State<StockTransferReportScreen> {
   }
 
   Future<void> _exportToPdf() async {
-    final pdf = pw.Document();
     final rows = ctrl.transfers;
+    double totalPacks = 0;
+    double totalLoose = 0;
+    for (final r in rows) {
+      totalPacks += (double.tryParse('${r['pack_count'] ?? 0}') ?? 0);
+      totalLoose += (double.tryParse('${r['loose_qty'] ?? 0}') ?? 0);
+    }
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        build: (_) => [
-          pw.Text(
-            'Stock Transfer Report',
-            style: pw.TextStyle(
-              fontSize: 18,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(
-            'From: ${DateFormat('dd-MMM-yyyy').format(fromDate)}  To: ${DateFormat('dd-MMM-yyyy').format(toDate)}',
-          ),
-          pw.SizedBox(height: 12),
-          pw.Table.fromTextArray(
-            headers: const [
-              'Date',
-              'Ref No',
-              'Source Item',
-              'Source Unit',
-              'Pack Count',
-              'Loose Item',
-              'Loose Unit',
-              'Loose Qty',
-            ],
-            data: rows.map((row) {
-              final sourceBrand = row['source_brand'] != null && row['source_brand'].toString().isNotEmpty ? ' (${row['source_brand']})' : '';
-              final looseBrand = row['loose_brand'] != null && row['loose_brand'].toString().isNotEmpty ? ' (${row['loose_brand']})' : '';
-              return [
-                _dateText(row['transfer_date']),
-                '${row['ref_no'] ?? ''}',
-                '${row['source_item_name'] ?? row['source_item_code'] ?? ''}$sourceBrand',
-                '${row['source_unit'] ?? ''}',
-                _fmt(row['pack_count']),
-                '${row['loose_item_name'] ?? row['loose_item_code'] ?? ''}$looseBrand',
-                '${row['loose_unit'] ?? ''}',
-                _fmt(row['loose_qty']),
-              ];
-            }).toList(),
-          ),
-        ],
-      ),
+    await PdfReportBuilder.generateAndPrintReport(
+      title: 'Stock Transfer / Conversion Report',
+      subtitle: 'From: ${DateFormat('dd-MMM-yyyy').format(fromDate)}  To: ${DateFormat('dd-MMM-yyyy').format(toDate)}',
+      headers: [
+        'Date',
+        'Ref No',
+        'Source Item',
+        'Source Unit',
+        'Pack Count',
+        'Loose Item',
+        'Loose Unit',
+        'Loose Qty',
+      ],
+      data: rows.map((row) {
+        final sourceBrand = row['source_brand'] != null && row['source_brand'].toString().isNotEmpty ? ' (${row['source_brand']})' : '';
+        final looseBrand = row['loose_brand'] != null && row['loose_brand'].toString().isNotEmpty ? ' (${row['loose_brand']})' : '';
+        return [
+          _dateText(row['transfer_date']),
+          '${row['ref_no'] ?? ''}',
+          '${row['source_item_name'] ?? row['source_item_code'] ?? ''}$sourceBrand',
+          '${row['source_unit'] ?? ''}',
+          _fmt(row['pack_count']),
+          '${row['loose_item_name'] ?? row['loose_item_code'] ?? ''}$looseBrand',
+          '${row['loose_unit'] ?? ''}',
+          _fmt(row['loose_qty']),
+        ];
+      }).toList(),
+      kpis: [
+        PdfKpiItem(label: 'Total Transfers', value: rows.length.toString(), color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Total Pack Count', value: _fmt(totalPacks), color: PdfColor.fromHex('#166534')),
+        PdfKpiItem(label: 'Total Loose Qty', value: _fmt(totalLoose), color: PdfColor.fromHex('#2563EB')),
+      ],
+      cellAlignments: {
+        0: pw.Alignment.center,
+        1: pw.Alignment.center,
+        2: pw.Alignment.centerLeft,
+        3: pw.Alignment.center,
+        4: pw.Alignment.centerRight,
+        5: pw.Alignment.centerLeft,
+        6: pw.Alignment.center,
+        7: pw.Alignment.centerRight,
+      },
+      columnWidths: {
+        0: const pw.FlexColumnWidth(0.9),
+        1: const pw.FlexColumnWidth(1.1),
+        2: const pw.FlexColumnWidth(2.0),
+        3: const pw.FlexColumnWidth(0.8),
+        4: const pw.FlexColumnWidth(0.9),
+        5: const pw.FlexColumnWidth(2.0),
+        6: const pw.FlexColumnWidth(0.8),
+        7: const pw.FlexColumnWidth(0.9),
+      },
+      pdfFileName: 'Stock_Transfer_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
-
-    await Printing.layoutPdf(name: 'Stock_Transfer_Report', onLayout: (_) async => pdf.save());
   }
 
   @override

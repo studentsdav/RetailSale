@@ -1488,14 +1488,22 @@ async function getSubscriptionItemAdvanceSummary(req, subscription, transaction 
     const consumedQty = Math.max(originalQty - availableQty, 0);
     const rate = toAmount(advance.rate);
 
+    const itemMaster = subscription?.item || subscription?.item_master || (await req.propertyDb.models.item_master.findByPk(itemId, { transaction }));
+    const taxPercent = toAmount(itemMaster?.tax_percent || 0);
+    const isTaxInclusive = itemMaster?.is_tax_inclusive === true || String(itemMaster?.tax_type || '').toUpperCase() === 'GST_INCLUSIVE';
+    const effectiveRate = (!isTaxInclusive && taxPercent > 0)
+        ? rate * (1 + taxPercent / 100.0)
+        : rate;
+
     return {
         original_qty: Number(originalQty.toFixed(2)),
         consumed_qty: Number(consumedQty.toFixed(2)),
         available_qty: Number(availableQty.toFixed(2)),
-        rate: Number(rate.toFixed(2)),
-        original_amount: Number((originalQty * rate).toFixed(2)),
-        consumed_amount: Number((consumedQty * rate).toFixed(2)),
-        available_amount: Number((availableQty * rate).toFixed(2))
+        rate: Number(effectiveRate.toFixed(2)),
+        base_rate: Number(rate.toFixed(2)),
+        original_amount: Number((originalQty * effectiveRate).toFixed(2)),
+        consumed_amount: Number((consumedQty * effectiveRate).toFixed(2)),
+        available_amount: Number((availableQty * effectiveRate).toFixed(2))
     };
 }
 
@@ -5412,10 +5420,11 @@ exports.listSubscriptions = async (req, res) => {
             }
             const advanceSummary = await getSubscriptionItemAdvanceSummary(req, subscription);
             const cashAdvanceSummary = await getSubscriptionCustomerAdvanceSummary(req, subscription);
+            const metrics = buildSubscriptionMetrics(subscription, consumptions);
             const isSettled = String(subscription.status || '').toUpperCase() === 'SETTLED' || String(subscription.status || '').toUpperCase() === 'CANCELLED';
-            const origAmount = advanceSummary.original_amount || cashAdvanceSummary.original_amount || 0;
-            const consumedAmount = isSettled ? origAmount : (advanceSummary.consumed_amount || cashAdvanceSummary.consumed_amount || 0);
-            const remainingAmount = isSettled ? 0 : ((advanceSummary.available_amount != null && advanceSummary.original_qty > 0) ? advanceSummary.available_amount : (cashAdvanceSummary.available_amount || 0));
+            const origAmount = toAmount(subscription.total_payment_amount) || cashAdvanceSummary.original_amount || advanceSummary.original_amount || 0;
+            const consumedAmount = isSettled ? origAmount : (cashAdvanceSummary.consumed_amount > 0 ? cashAdvanceSummary.consumed_amount : (metrics.actual_value > 0 ? metrics.actual_value : advanceSummary.consumed_amount));
+            const remainingAmount = isSettled ? 0 : (cashAdvanceSummary.available_amount != null && cashAdvanceSummary.original_amount > 0 ? cashAdvanceSummary.available_amount : (advanceSummary.available_amount || 0));
             const remainingQty = isSettled ? 0 : advanceSummary.available_qty;
             const consumedQty = isSettled ? advanceSummary.original_qty : advanceSummary.consumed_qty;
 
@@ -5433,7 +5442,7 @@ exports.listSubscriptions = async (req, res) => {
                 advance_original_amount: origAmount,
                 advance_consumed_amount: consumedAmount,
                 advance_remaining_amount: remainingAmount,
-                ...buildSubscriptionMetrics(subscription, consumptions),
+                ...metrics,
                 search_index: haystack
             });
         }
@@ -5481,6 +5490,7 @@ exports.listCustomerSubscriptions = async (req, res) => {
             const coveredRows = await loadSubscriptionConsumptionRows(req, subscription);
             const advanceSummary = await getSubscriptionItemAdvanceSummary(req, subscription);
             const cashAdvanceSummary = await getSubscriptionCustomerAdvanceSummary(req, subscription);
+            const metrics = buildSubscriptionMetrics(subscription, coveredRows);
             const itemId = Number(subscription.item_id) || 0;
             const todayConsumedQty = await getCustomerItemConsumedQtyForDay(
                 req,
@@ -5497,9 +5507,9 @@ exports.listCustomerSubscriptions = async (req, res) => {
                 remainingAssignedByItem.add(assignKey);
             }
             const isSettled = String(subscription.status || '').toUpperCase() === 'SETTLED' || String(subscription.status || '').toUpperCase() === 'CANCELLED';
-            const origAmount = advanceSummary.original_amount || cashAdvanceSummary.original_amount || 0;
-            const consumedAmount = isSettled ? origAmount : (advanceSummary.consumed_amount || cashAdvanceSummary.consumed_amount || 0);
-            const remainingAmount = isSettled ? 0 : ((advanceSummary.available_amount != null && advanceSummary.original_qty > 0) ? advanceSummary.available_amount : (cashAdvanceSummary.available_amount || 0));
+            const origAmount = toAmount(subscription.total_payment_amount) || cashAdvanceSummary.original_amount || advanceSummary.original_amount || 0;
+            const consumedAmount = isSettled ? origAmount : (cashAdvanceSummary.consumed_amount > 0 ? cashAdvanceSummary.consumed_amount : (metrics.actual_value > 0 ? metrics.actual_value : advanceSummary.consumed_amount));
+            const remainingAmount = isSettled ? 0 : (cashAdvanceSummary.available_amount != null && cashAdvanceSummary.original_amount > 0 ? cashAdvanceSummary.available_amount : (advanceSummary.available_amount || 0));
             const remainingQty = isSettled ? 0 : advanceSummary.available_qty;
             const consumedQty = isSettled ? advanceSummary.original_qty : advanceSummary.consumed_qty;
 
