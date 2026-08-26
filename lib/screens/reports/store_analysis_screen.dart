@@ -9,8 +9,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/reports/sales_report_controller.dart';
+import '../../controllers/reports/stock_balance_controller.dart';
 import '../../controllers/reports/store_analysis_controller.dart';
 import '../../models/reports/sales_report_model.dart';
+import '../../models/reports/stock_item_model.dart';
 
 class StoreAnalysisScreen extends StatefulWidget {
   const StoreAnalysisScreen({super.key});
@@ -22,6 +24,15 @@ class StoreAnalysisScreen extends StatefulWidget {
 class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
   final StoreAnalysisController _controller = StoreAnalysisController();
   final SalesReportController _salesController = SalesReportController();
+  final StockBalanceController _stockBalanceController = StockBalanceController();
+
+  DateTime fromDate = DateTime.now().subtract(const Duration(days: 29));
+  DateTime toDate = DateTime.now();
+
+  final TextEditingController _fromCtrl = TextEditingController();
+  final TextEditingController _toCtrl = TextEditingController();
+
+  String _velocityFilter = 'ALL'; // 'ALL', 'FAST', 'MODERATE', 'SLOW', 'DEADSTOCK'
 
   final NumberFormat _inr = NumberFormat.currency(
     locale: 'en_IN',
@@ -57,18 +68,73 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
   @override
   void initState() {
     super.initState();
+    _fromCtrl.text = DateFormat('dd-MMM-yyyy').format(fromDate);
+    _toCtrl.text = DateFormat('dd-MMM-yyyy').format(toDate);
     _reload();
   }
 
   void _reload() {
     setState(() => _isLoading = true);
+    _salesController.fromDate = fromDate;
+    _salesController.toDate = toDate;
     _rfmFuture = _controller.fetchRfmSegments();
     _trendFuture = _controller.fetchSalesTrend();
     _basketFuture = _controller.fetchMarketBasket();
     _topCustomerItemsFuture = _controller.fetchTopCustomerItems();
-    _salesController.load().then((_) {
+
+    Future.wait([
+      _salesController.load(),
+      _stockBalanceController.load(),
+    ]).then((_) {
       if (mounted) setState(() => _isLoading = false);
     });
+  }
+
+  Future<void> _pickFromDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: fromDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (d != null) {
+      setState(() {
+        fromDate = d;
+        _fromCtrl.text = DateFormat('dd-MMM-yyyy').format(d);
+      });
+      _reload();
+    }
+  }
+
+  Future<void> _pickToDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: toDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (d != null) {
+      setState(() {
+        toDate = d;
+        _toCtrl.text = DateFormat('dd-MMM-yyyy').format(d);
+      });
+      _reload();
+    }
+  }
+
+  void _applyPreset(int days) {
+    setState(() {
+      if (days == 0) {
+        fromDate = DateTime.now();
+        toDate = DateTime.now();
+      } else {
+        fromDate = DateTime.now().subtract(Duration(days: days - 1));
+        toDate = DateTime.now();
+      }
+      _fromCtrl.text = DateFormat('dd-MMM-yyyy').format(fromDate);
+      _toCtrl.text = DateFormat('dd-MMM-yyyy').format(toDate);
+    });
+    _reload();
   }
 
   Color _segmentColor(String segment) {
@@ -92,13 +158,21 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
   }
 
   String _pdfMoney(double val) => val.toStringAsFixed(2);
-  List<SalesReport> get _sales => _salesController.list;
+
+  List<SalesReport> get _sales => _salesController.list
+      .where((s) => !s.saleNo.trim().toUpperCase().startsWith('CUST-'))
+      .toList();
 
   double get _totalRevenue => _sales.fold(0.0, (s, sale) => s + sale.netAmount);
-  double get _taxableAmount => _sales.fold(0.0, (s, sale) => s + sale.taxableAmount);
+  double get _taxableAmount => _sales.fold(0.0, (s, sale) {
+        if (sale.items.isNotEmpty) {
+          return s + sale.items.fold(0.0, (isum, item) => isum + item.taxableAmount);
+        }
+        return s + sale.taxableAmount;
+      });
   double get _totalGst => _sales.fold(0.0, (s, sale) => s + sale.totalTax);
   double get _totalDiscount => _sales.fold(0.0, (s, sale) => s + sale.totalDiscount);
-  double get _subTotal => _sales.fold(0.0, (s, sale) => s + sale.subTotal);
+  double get _subTotal => _taxableAmount + _totalDiscount;
 
   Map<int, ({double taxableValue, double taxAmount})> get _realTaxBands {
     final Map<int, ({double taxableValue, double taxAmount})> bands = {};
@@ -304,6 +378,109 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
     );
   }
 
+  Widget _filterCard() {
+    final rawDays = toDate.difference(fromDate).inDays + 1;
+    final days = rawDays < 1 ? 1 : rawDays;
+    final isToday = days == 1 && DateFormat('yyyy-MM-dd').format(fromDate) == DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final is7Days = days == 7;
+    final is30Days = days == 30;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.date_range, color: Color(0xFF2563EB), size: 20),
+              const SizedBox(width: 6),
+              const Text(
+                'Analysis Period:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+              ),
+            ],
+          ),
+          SizedBox(
+            width: 155,
+            height: 42,
+            child: TextField(
+              controller: _fromCtrl,
+              readOnly: true,
+              onTap: _pickFromDate,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                labelText: 'From Date',
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                suffixIcon: const Icon(Icons.calendar_today, size: 16),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 155,
+            height: 42,
+            child: TextField(
+              controller: _toCtrl,
+              readOnly: true,
+              onTap: _pickToDate,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                labelText: 'To Date',
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                suffixIcon: const Icon(Icons.calendar_today, size: 16),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+          ChoiceChip(
+            label: const Text('Today'),
+            selected: isToday,
+            onSelected: (_) => _applyPreset(0),
+          ),
+          ChoiceChip(
+            label: const Text('Last 7 Days'),
+            selected: is7Days,
+            onSelected: (_) => _applyPreset(7),
+          ),
+          ChoiceChip(
+            label: const Text('Last 30 Days'),
+            selected: is30Days,
+            onSelected: (_) => _applyPreset(30),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            onPressed: _reload,
+            icon: const Icon(Icons.play_arrow, size: 18),
+            label: const Text('Generate Analysis', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -335,6 +512,8 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _filterCard(),
+
                   // Top Executive Metric Cards
                   Wrap(
                     spacing: 14,
@@ -612,22 +791,122 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
     );
   }
 
-  // --- Tab 3: Inventory Velocity ---
+  // --- Tab 3: Inventory Velocity & Deadstock Analysis ---
   Widget _buildInventoryVelocityTab() {
-    final Map<String, ({double qty, double amount})> itemMap = {};
+    final rawDays = toDate.difference(fromDate).inDays + 1;
+    final days = rawDays < 1 ? 1 : rawDays;
+
+    final Map<String, ({double qty, double amount})> soldMap = {};
     for (final sale in _sales) {
       for (final item in sale.items) {
         final name = item.itemName.trim().isEmpty ? 'Item' : item.itemName.trim();
-        final current = itemMap[name] ?? (qty: 0.0, amount: 0.0);
-        itemMap[name] = (
+        final current = soldMap[name] ?? (qty: 0.0, amount: 0.0);
+        soldMap[name] = (
           qty: current.qty + item.qty,
           amount: current.amount + item.netAmount,
         );
       }
     }
 
-    final sortedItems = itemMap.entries.toList()
-      ..sort((a, b) => b.value.qty.compareTo(a.value.qty));
+    // Combine stock balance items and sold items
+    final Map<String, ({double soldQty, double revenue, double stockQty, double rate})> unifiedMap = {};
+
+    for (final stockItem in _stockBalanceController.items) {
+      final name = stockItem.name.trim().isEmpty ? 'Item' : stockItem.name.trim();
+      final sold = soldMap[name];
+      unifiedMap[name] = (
+        soldQty: sold?.qty ?? 0.0,
+        revenue: sold?.amount ?? 0.0,
+        stockQty: stockItem.qty,
+        rate: stockItem.rate,
+      );
+    }
+
+    for (final entry in soldMap.entries) {
+      if (!unifiedMap.containsKey(entry.key)) {
+        unifiedMap[entry.key] = (
+          soldQty: entry.value.qty,
+          revenue: entry.value.amount,
+          stockQty: 0.0,
+          rate: 0.0,
+        );
+      }
+    }
+
+    final allItems = unifiedMap.entries.toList();
+
+    int fastCount = 0;
+    int moderateCount = 0;
+    int slowCount = 0;
+    int deadstockCount = 0;
+    double deadstockValue = 0.0;
+
+    final List<Map<String, dynamic>> processedItems = [];
+
+    for (final e in allItems) {
+      final soldQty = e.value.soldQty;
+      final revenue = e.value.revenue;
+      final stockQty = e.value.stockQty;
+      final rate = e.value.rate;
+      final dailyRate = soldQty / days;
+
+      final String status;
+      final String code; // 'FAST', 'MODERATE', 'SLOW', 'DEADSTOCK'
+      final Color color;
+      final String action;
+
+      if (soldQty == 0) {
+        code = 'DEADSTOCK';
+        status = 'Deadstock (0 Sales in $days Days)';
+        color = const Color(0xFFDC2626);
+        action = 'Liquidate via promo offer or return to supplier';
+        deadstockCount++;
+        deadstockValue += stockQty * rate;
+      } else if (dailyRate >= 0.5) {
+        code = 'FAST';
+        status = 'Fast Moving (Top Seller)';
+        color = const Color(0xFF16A34A);
+        action = 'Reorder immediately to prevent stockouts';
+        fastCount++;
+      } else if (dailyRate >= 0.1) {
+        code = 'MODERATE';
+        status = 'Moderate Velocity';
+        color = const Color(0xFFD97706);
+        action = 'Maintain steady safety stock';
+        moderateCount++;
+      } else {
+        code = 'SLOW';
+        status = 'Slow Moving (Low Run-Rate)';
+        color = const Color(0xFFEA580C);
+        action = 'Run promo offer or bundle discounts';
+        slowCount++;
+      }
+
+      processedItems.add({
+        'name': e.key,
+        'soldQty': soldQty,
+        'dailyRate': dailyRate,
+        'revenue': revenue,
+        'stockQty': stockQty,
+        'rate': rate,
+        'code': code,
+        'status': status,
+        'color': color,
+        'action': action,
+      });
+    }
+
+    // Default Sort: DEADSTOCK items on top first, then sorted by soldQty
+    processedItems.sort((a, b) {
+      if (a['code'] == 'DEADSTOCK' && b['code'] != 'DEADSTOCK') return -1;
+      if (a['code'] != 'DEADSTOCK' && b['code'] == 'DEADSTOCK') return 1;
+      return (b['soldQty'] as double).compareTo(a['soldQty'] as double);
+    });
+
+    final filteredList = processedItems.where((item) {
+      if (_velocityFilter == 'ALL') return true;
+      return item['code'] == _velocityFilter;
+    }).toList();
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -639,49 +918,116 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Inventory Velocity & Deadstock Health', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          const Text(
-            'Purpose: Identify fast-selling items to reorder before stockout, and slow-moving deadstock to discount and release working capital.',
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          DataTable(
-            headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-            columns: const [
-              DataColumn(label: Text('Item Name / Category')),
-              DataColumn(label: Text('Units Sold')),
-              DataColumn(label: Text('Revenue Generated')),
-              DataColumn(label: Text('Turnover Velocity')),
-              DataColumn(label: Text('Business Action Required')),
-            ],
-            rows: [
-              ...sortedItems.take(5).map((e) => DataRow(cells: [
-                    DataCell(Text(e.key, style: const TextStyle(fontWeight: FontWeight.w700))),
-                    DataCell(Text(e.value.qty.toStringAsFixed(2))),
-                    DataCell(Text(_inr.format(e.value.amount), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w700))),
-                    const DataCell(Text('Fast Moving (Top Seller)', style: TextStyle(color: Colors.green, fontWeight: FontWeight.w700))),
-                    const DataCell(Text('Reorder immediately to prevent stockouts', style: TextStyle(color: Colors.blue))),
-                  ])),
-              if (sortedItems.length > 5)
-                ...sortedItems.skip(5).take(3).map((e) => DataRow(cells: [
-                      DataCell(Text(e.key)),
-                      DataCell(Text(e.value.qty.toStringAsFixed(2))),
-                      DataCell(Text(_inr.format(e.value.amount))),
-                      const DataCell(Text('Medium Velocity')),
-                      const DataCell(Text('Maintain steady reorder stock')),
-                    ])),
-              DataRow(
-                color: WidgetStateProperty.all(const Color(0xFFFEF2F2)),
-                cells: const [
-                  DataCell(Text('Deadstock / Unsold Items', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.red))),
-                  DataCell(Text('0.00 Units', style: TextStyle(color: Colors.red))),
-                  DataCell(Text('₹0.00', style: TextStyle(color: Colors.red))),
-                  DataCell(Text('Slow / Deadstock', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w800))),
-                  DataCell(Text('Run discount offer or return to supplier', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700))),
-                ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Inventory Velocity & Deadstock Intelligence', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Text(
+                  'Analysis Period: ${DateFormat('dd-MMM-yyyy').format(fromDate)} to ${DateFormat('dd-MMM-yyyy').format(toDate)} ($days Days)',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
+                ),
               ),
             ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Calculation Logic: Velocity = Units Sold ÷ $days Period Days. Deadstock items (0 sales in $days days) are ranked on top.',
+            style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5),
+          ),
+          const SizedBox(height: 14),
+
+          // Executive Summary Badges
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _velocityFilterChip('ALL', 'All Items', '${processedItems.length} SKUs', const Color(0xFF2563EB)),
+              _velocityFilterChip('DEADSTOCK', '🔴 Deadstock (0 Sales)', '$deadstockCount SKUs (${_inr.format(deadstockValue)} Tied Up)', const Color(0xFFDC2626)),
+              _velocityFilterChip('FAST', '🟢 Fast Moving', '$fastCount SKUs', const Color(0xFF16A34A)),
+              _velocityFilterChip('MODERATE', '🟡 Moderate', '$moderateCount SKUs', const Color(0xFFD97706)),
+              _velocityFilterChip('SLOW', '🟠 Slow Moving', '$slowCount SKUs', const Color(0xFFEA580C)),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+              columns: const [
+                DataColumn(label: Text('Item Name')),
+                DataColumn(label: Text('Stock Available')),
+                DataColumn(label: Text('Units Sold')),
+                DataColumn(label: Text('Run-Rate (Units/Day)')),
+                DataColumn(label: Text('Revenue / Tied-Up Value')),
+                DataColumn(label: Text('Velocity Classification')),
+                DataColumn(label: Text('Action Recommended')),
+              ],
+              rows: filteredList.map((e) {
+                final String code = e['code'];
+                final Color color = e['color'];
+                final double soldQty = e['soldQty'];
+                final double stockQty = e['stockQty'];
+                final double dailyRate = e['dailyRate'];
+                final double revenue = e['revenue'];
+                final double rate = e['rate'];
+                final Color? rowBg = code == 'DEADSTOCK' ? const Color(0xFFFEF2F2) : null;
+
+                return DataRow(
+                  color: WidgetStateProperty.all(rowBg),
+                  cells: [
+                    DataCell(Text(e['name'], style: const TextStyle(fontWeight: FontWeight.w700))),
+                    DataCell(Text(stockQty > 0 ? '${stockQty.toStringAsFixed(0)} in stock' : 'Out of Stock', style: TextStyle(color: stockQty > 0 ? Colors.black87 : Colors.grey))),
+                    DataCell(Text('${soldQty.toStringAsFixed(2)} units')),
+                    DataCell(Text('${dailyRate.toStringAsFixed(2)} /day', style: const TextStyle(fontWeight: FontWeight.w600))),
+                    DataCell(Text(code == 'DEADSTOCK' ? _inr.format(stockQty * rate) : _inr.format(revenue), style: TextStyle(color: color, fontWeight: FontWeight.w700))),
+                    DataCell(Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(e['status'], style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+                    )),
+                    DataCell(Text(e['action'], style: TextStyle(color: e['code'] == 'FAST' ? const Color(0xFF2563EB) : color, fontWeight: FontWeight.w600, fontSize: 12))),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _velocityFilterChip(String key, String label, String sub, Color color) {
+    final isSelected = _velocityFilter == key;
+
+    return ChoiceChip(
+      selected: isSelected,
+      onSelected: (_) => setState(() => _velocityFilter = key),
+      selectedColor: color.withOpacity(0.18),
+      backgroundColor: Colors.grey.shade100,
+      side: BorderSide(color: isSelected ? color : Colors.grey.shade300, width: isSelected ? 1.8 : 1.0),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(color: isSelected ? color : Colors.black87, fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600, fontSize: 12)),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: isSelected ? color : Colors.grey.shade400,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(sub, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10.5)),
           ),
         ],
       ),

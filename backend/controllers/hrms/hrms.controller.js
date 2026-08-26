@@ -1101,6 +1101,18 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
       let total_working_hours = 0, total_overtime_hours = 0, total_late_mins = 0;
       let total_less_hours = 0;
 
+      let empWorkingHoursPerDay = workingHoursPerDay;
+      const empShift = emp.shift || {};
+      if (empShift.start_time && empShift.end_time) {
+        const shiftStart = moment(`2000-01-01 ${empShift.start_time}`, 'YYYY-MM-DD HH:mm:ss');
+        const shiftEnd = moment(`2000-01-01 ${empShift.end_time}`, 'YYYY-MM-DD HH:mm:ss');
+        let shiftDurationMins = shiftEnd.diff(shiftStart, 'minutes');
+        if (shiftDurationMins < 0) shiftDurationMins += 24 * 60;
+        if (shiftDurationMins > 0) {
+          empWorkingHoursPerDay = shiftDurationMins / 60;
+        }
+      }
+
       for (let d = moment(calcStart); d.isSameOrBefore(calcEnd); d.add(1, 'days')) {
         const dateStr = d.format('YYYY-MM-DD');
         const punch = punches.find(p => p.punch_date === dateStr);
@@ -1148,10 +1160,16 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
             else if (punch.status === 'Unpaid Leave') unpaid_leave++;
 
             const hw = parseFloat(punch.hours_worked) || 0.0;
-            if (hw > workingHoursPerDay) {
-              total_overtime_hours += (hw - workingHoursPerDay);
-            } else if (hw < workingHoursPerDay && (punch.status === 'Present' || punch.status === 'Half-Day' || punch.status === 'Half Day')) {
-              total_less_hours += (workingHoursPerDay - hw);
+            let ot = 0.0;
+            if (punch.overtime_hours !== undefined && punch.overtime_hours !== null && parseFloat(punch.overtime_hours) > 0) {
+              ot = parseFloat(punch.overtime_hours);
+            } else if (hw > empWorkingHoursPerDay) {
+              ot = hw - empWorkingHoursPerDay;
+            }
+            total_overtime_hours += ot;
+
+            if (hw < empWorkingHoursPerDay && (punch.status === 'Present' || punch.status === 'Half-Day' || punch.status === 'Half Day')) {
+              total_less_hours += (empWorkingHoursPerDay - hw);
             }
           } else {
             // No punch record for this working day
@@ -1241,7 +1259,7 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
         empBonuses = arrs.reduce((sum, a) => sum + parseFloat(a.amount || 0), 0);
       }
 
-      const hourlyRate = base / divisor / workingHoursPerDay;
+      const hourlyRate = base / divisor / empWorkingHoursPerDay;
       const overtimePay = salaryOverrideZero ? 0 : parseFloat((total_overtime_hours * hourlyRate * (holidayOvertimeMultiplier || 1.5)).toFixed(2));
       const less_hours_debit = salaryOverrideZero ? 0 : parseFloat((total_less_hours * hourlyRate).toFixed(2));
       
@@ -1260,7 +1278,7 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
           basic = evalFormula(formula, prorated_salary, prorated_salary);
         } else if (type === 'Fixed') {
           const fixedAmt = parseFloat(formula) || 0.0;
-          basic = salaryOverrideZero ? 0 : parseFloat(((fixedAmt / divisor) * prorated_salary_days).toFixed(2));
+          basic = salaryOverrideZero ? 0 : (fixedAmt > 0 ? parseFloat(((fixedAmt / divisor) * prorated_salary_days).toFixed(2)) : prorated_salary * 0.5);
         }
       }
 
@@ -1268,18 +1286,32 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
       let extraDeductions = 0;
       const breakdown = { payment_status: 'Unpaid', payment_method: 'Cash' };
 
+      const fixedEarningsComps = [];
+      const fixedDeductionsComps = [];
+
       for (const comp of components) {
         if (basicComp && comp.id === basicComp.id) {
-          breakdown[comp.name] = basic;
+          breakdown[comp.name] = parseFloat(basic.toFixed(2));
+          continue;
+        }
+
+        if (comp.type === 'Fixed') {
+          const fixedAmt = parseFloat(comp.formula) || 0.0;
+          if (fixedAmt > 0) {
+            const val = salaryOverrideZero ? 0 : parseFloat(((fixedAmt / divisor) * prorated_salary_days).toFixed(2));
+            breakdown[comp.name] = val;
+            if (comp.nature === 'Earning') extraEarnings += val;
+            else if (comp.nature === 'Deduction') extraDeductions += val;
+          } else {
+            if (comp.nature === 'Earning') fixedEarningsComps.push(comp);
+            else fixedDeductionsComps.push(comp);
+          }
           continue;
         }
 
         let val = 0;
         if (!salaryOverrideZero) {
-          if (comp.type === 'Fixed') {
-            const fixedAmt = parseFloat(comp.formula) || 0.0;
-            val = parseFloat(((fixedAmt / divisor) * prorated_salary_days).toFixed(2));
-          } else if (comp.type === 'Percentage') {
+          if (comp.type === 'Percentage') {
             const pct = parseFloat(comp.formula.replace(/%/g, '').trim()) || 0.0;
             val = basic * (pct / 100.0);
           } else if (comp.type === 'Formula') {
@@ -1287,6 +1319,7 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
           }
         }
 
+        val = parseFloat(val.toFixed(2));
         breakdown[comp.name] = val;
 
         if (comp.nature === 'Earning') {
@@ -1294,6 +1327,22 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
         } else if (comp.nature === 'Deduction') {
           extraDeductions += val;
         }
+      }
+
+      if (fixedEarningsComps.length > 0) {
+        const allocatedEarningsSoFar = basic + extraEarnings;
+        const remainingProrated = Math.max(0, prorated_salary - allocatedEarningsSoFar);
+        const valPerComp = parseFloat((remainingProrated / fixedEarningsComps.length).toFixed(2));
+
+        for (const comp of fixedEarningsComps) {
+          const val = salaryOverrideZero ? 0 : valPerComp;
+          breakdown[comp.name] = val;
+          extraEarnings += val;
+        }
+      }
+
+      for (const comp of fixedDeductionsComps) {
+        breakdown[comp.name] = 0.00;
       }
 
       const absent_deduction_amount = salaryOverrideZero ? 0 : ((base / divisor) * absentDays);
@@ -1305,7 +1354,7 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
         total_less_hours,
         weekdays_count: weekly_offs_count,
         holidays_count,
-        required_hours: Math.round((activeDaysInPeriod - weekly_offs_count - holidays_count) * workingHoursPerDay),
+        required_hours: Math.round((activeDaysInPeriod - weekly_offs_count - holidays_count) * empWorkingHoursPerDay),
         completed_hours: parseFloat(total_working_hours.toFixed(2)),
         overtime_addition_amount: overtimePay,
         late_deduction_amount: 0.00,
@@ -1355,7 +1404,7 @@ const activeDaysInPeriod = calcEnd.diff(calcStart, 'days') + 1;
         total_less_hours,
         weekdays_count: weekly_offs_count,
         holidays_count,
-        required_hours: Math.round((activeDaysInPeriod - weekly_offs_count - holidays_count) * workingHoursPerDay),
+        required_hours: Math.round((activeDaysInPeriod - weekly_offs_count - holidays_count) * empWorkingHoursPerDay),
         completed_hours: parseFloat(total_working_hours.toFixed(2)),
         overtime_addition_amount: overtimePay,
         late_deduction_amount: 0.00,
