@@ -1829,20 +1829,30 @@ class PosInvoicePrinter {
   }
 
   static double _itemGrossValueWithTax(SaleItem item) {
-    if (item.lineTotal > 0.0009 && item.lineTotal > item.taxableAmount) {
-      return item.lineTotal;
+    if (item.isTaxInclusive) {
+      if (item.lineTotal > 0.0009) return item.lineTotal;
+      final baseRate = (item.originalRate != null && item.originalRate! > 0)
+          ? item.originalRate!
+          : ((item.referenceRate > 0) ? item.referenceRate : item.rate);
+      final baseAmount = baseRate * item.qty;
+      if (baseAmount > 0.0009) return baseAmount;
+      return item.taxableAmount > 0.0009 ? item.taxableAmount : 0.0;
+    } else {
+      if (item.lineTotal > 0.0009 && item.lineTotal > item.taxableAmount) {
+        return item.lineTotal;
+      }
+      final tax = item.taxAmount > 0.0009
+          ? item.taxAmount
+          : (item.taxableAmount > 0.0009 ? (item.taxableAmount * item.taxPercent / 100.0) : 0.0);
+      if (item.taxableAmount > 0.0009) {
+        return item.taxableAmount + tax;
+      }
+      final baseRate = (item.originalRate != null && item.originalRate! > 0)
+          ? item.originalRate!
+          : ((item.referenceRate > 0) ? item.referenceRate : item.rate);
+      final baseAmount = baseRate * item.qty;
+      return baseAmount * (1.0 + item.taxPercent / 100.0);
     }
-    final tax = item.taxAmount > 0.0009
-        ? item.taxAmount
-        : (item.taxableAmount > 0.0009 ? (item.taxableAmount * item.taxPercent / 100.0) : 0.0);
-    if (item.taxableAmount > 0.0009) {
-      return item.taxableAmount + tax;
-    }
-    final baseRate = (item.originalRate != null && item.originalRate! > 0)
-        ? item.originalRate!
-        : ((item.referenceRate > 0) ? item.referenceRate : item.rate);
-    final baseAmount = baseRate * item.qty;
-    return item.isTaxInclusive ? baseAmount : baseAmount * (1.0 + item.taxPercent / 100.0);
   }
 
   static double _subscriptionAdjustmentAmount(SaleOrder order) {
@@ -1868,7 +1878,22 @@ class PosInvoicePrinter {
     );
   }
 
+  static double _groupTaxableTotal(List<TaxBreakdown> taxes) {
+    double sum = 0;
+    for (final tax in taxes) {
+      final code = tax.code.toUpperCase();
+      if (code == 'CGST' || code == 'IGST' || code == 'VAT' || code == 'CUSTOM') {
+        sum += tax.taxableAmount;
+      }
+    }
+    return sum;
+  }
+
   static double _adjustedItemTaxableTotal(SaleOrder order) {
+    final grouped = _groupedTaxBreakup(order);
+    if (grouped.isNotEmpty) {
+      return _groupTaxableTotal(grouped);
+    }
     return _itemTaxableTotal(order);
   }
 
@@ -1912,12 +1937,21 @@ class PosInvoicePrinter {
     if (coupon > 0.0009) {
       return coupon;
     }
+    final hasSubscriptionItems = order.items.any((item) => item.isAdvanceFree) ||
+        order.paymentMode.trim().toUpperCase() == 'SUBSCRIPTION';
+    if (hasSubscriptionItems) {
+      final lineDiscount = order.items.fold<double>(
+        0,
+        (sum, item) => item.isAdvanceFree ? sum : sum + item.lineDiscount,
+      );
+      return lineDiscount > 0.0009 ? lineDiscount : 0.0;
+    }
     if (order.schemeDiscount > 0.0009) {
       return order.schemeDiscount;
     }
     final lineDiscount = order.items.fold<double>(
       0,
-      (sum, item) => item.isAdvanceFree ? sum : sum + item.lineDiscount,
+      (sum, item) => sum + item.lineDiscount,
     );
     if (lineDiscount > 0.0009) {
       return lineDiscount;
@@ -2110,16 +2144,26 @@ class PosInvoicePrinter {
     if (taxPercent <= 0) return const <TaxBreakdown>[];
 
     final double taxableAmount;
+    final double taxAmount;
+    final isTaxInclusive = item.isTaxInclusive ||
+        order.billingTaxMode.trim().toUpperCase().contains('INCLUSIVE') ||
+        (order.items.isNotEmpty && order.items.every((i) => i.isTaxInclusive));
     if (item.isAdvanceFree) {
-      taxableAmount = item.referenceRate > 0
+      final gross = item.referenceRate > 0
           ? item.referenceRate * item.qty
-          : item.amount;
+          : (item.taxableAmount > 0 ? (item.taxableAmount + item.taxAmount) : item.amount);
+      if (isTaxInclusive && taxPercent > 0) {
+        taxableAmount = gross / (1 + taxPercent / 100);
+        taxAmount = gross - taxableAmount;
+      } else {
+        taxableAmount = gross;
+        taxAmount = taxableAmount * taxPercent / 100;
+      }
     } else {
       taxableAmount = _displayItemTaxableAmount(order, item);
+      taxAmount = taxableAmount * taxPercent / 100;
     }
     if (taxableAmount <= 0) return const <TaxBreakdown>[];
-
-    final taxAmount = taxableAmount * taxPercent / 100;
     final normalizedType = item.taxType.trim().toUpperCase();
     if (normalizedType == 'VAT') {
       return [

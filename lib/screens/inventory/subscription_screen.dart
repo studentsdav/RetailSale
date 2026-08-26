@@ -706,16 +706,42 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   double get _taxPercentValue => _selectedItem?.taxPercent ?? 0;
 
+  bool get _isItemTaxInclusive {
+    if (_selectedItem != null) {
+      final taxType = _selectedItem!.taxType.trim().toUpperCase();
+      if (taxType == 'GST_INCLUSIVE' || _selectedItem!.isTaxInclusive) {
+        return true;
+      }
+    }
+    final s = context.read<SystemSettingsController>().settings;
+    final billingMode = s?.billingTaxMode.trim().toUpperCase() ?? '';
+    if (billingMode.contains('INCLUSIVE')) {
+      return true;
+    }
+    return false;
+  }
+
   double get _taxableSubscriptionAmount {
     final base = _baseSubscriptionAmount;
     final discount = _calculatedSchemeDiscountAmount(_schemeDraft);
-    return (base - discount).clamp(0, double.infinity).toDouble();
+    final netGross = (base - discount).clamp(0.0, double.infinity).toDouble();
+    if (_isItemTaxInclusive && _taxPercentValue > 0) {
+      return (netGross / (1 + _taxPercentValue / 100)).clamp(0, double.infinity).toDouble();
+    }
+    return netGross;
   }
 
-  double get _taxAmountValue =>
-      (_taxableSubscriptionAmount * _taxPercentValue / 100)
-          .clamp(0, double.infinity)
-          .toDouble();
+  double get _taxAmountValue {
+    final base = _baseSubscriptionAmount;
+    final discount = _calculatedSchemeDiscountAmount(_schemeDraft);
+    final netGross = (base - discount).clamp(0.0, double.infinity).toDouble();
+    if (_isItemTaxInclusive && _taxPercentValue > 0) {
+      return (netGross - _taxableSubscriptionAmount).clamp(0, double.infinity).toDouble();
+    }
+    return (_taxableSubscriptionAmount * _taxPercentValue / 100)
+        .clamp(0, double.infinity)
+        .toDouble();
+  }
 
   bool get _isHomeDelivery => _deliveryType == 'HOME';
 

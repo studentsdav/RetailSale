@@ -690,11 +690,7 @@ class _SaleScreenState extends State<SaleScreen> {
       .where((item) => item.discountApplicable)
       .fold<double>(
         0,
-        (sum, item) =>
-            sum +
-            (item.isTaxInclusive
-                ? item.amount
-                : (item.amount * (1 + item.taxPercent / 100))),
+        (sum, item) => sum + item.amount,
       );
 
   double get _schemeDiscountAmount {
@@ -9897,14 +9893,17 @@ class _SaleScreenState extends State<SaleScreen> {
               runSpacing: 10,
               children: [
                 _miniInfoCard(subTotalLabel, _invoice.subTotal, subtitle: subTotalNote),
-                _miniInfoCard(
-                  _invoice.subTotal > 0 && _invoice.totalDiscount > 0
-                      ? 'Discount (${((_invoice.totalDiscount / _invoice.subTotal) * 100).toStringAsFixed(((_invoice.totalDiscount / _invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
-                      : 'Discount',
-                  _invoice.totalDiscount,
-                ),
-                if (allInclusive)
-                  _miniInfoCard('Net Amount (Incl. GST)', (_invoice.subTotal - _invoice.totalDiscount).clamp(0.0, double.infinity)),
+                ...(() {
+                  final double displayDiscount = _invoice.totalDiscount.clamp(0.0, _invoice.subTotal);
+                  return [
+                    _miniInfoCard(
+                      _getDiscountLabel(_invoice),
+                      displayDiscount,
+                    ),
+                    if (allInclusive)
+                      _miniInfoCard('Net Amount (Incl. GST)', (_invoice.subTotal - displayDiscount).clamp(0.0, double.infinity)),
+                  ];
+                })(),
                 _miniInfoCard('Taxable Value', _invoice.taxableAmount),
                 if (_invoice.chargeTotal > 0)
                   _miniInfoCard('Charges', _invoice.chargeTotal),
@@ -10279,10 +10278,8 @@ class _SaleScreenState extends State<SaleScreen> {
                   return [
                     _summaryRow(subTotalLabel, invoice.subTotal, subtitle: subTotalNote),
                     _summaryRow(
-                      invoice.subTotal > 0 && invoice.totalDiscount > 0
-                          ? 'Discount (${((invoice.totalDiscount / invoice.subTotal) * 100).toStringAsFixed(((invoice.totalDiscount / invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
-                          : 'Discount',
-                      invoice.totalDiscount,
+                      _getDiscountLabel(invoice),
+                      invoice.totalDiscount.clamp(0.0, invoice.subTotal),
                     ),
                     if (allInclusive)
                       _summaryRow('Net Amount (Incl. GST)', (invoice.subTotal - invoice.totalDiscount).clamp(0.0, double.infinity)),
@@ -11388,6 +11385,26 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
+  String _getDiscountLabel(InvoiceComputation invoice) {
+    final enteredVal = double.tryParse(_manualDiscountValue.text.trim()) ?? 0;
+    if (_manualDiscountType == 'PERCENT' && enteredVal > 0) {
+      final fmtVal = enteredVal % 1 == 0 
+          ? enteredVal.toStringAsFixed(0) 
+          : enteredVal.toStringAsFixed(1);
+      return 'Discount ($fmtVal%)';
+    }
+    if (invoice.totalDiscount > 0) {
+      final gross = invoice.items.fold<double>(0, (s, i) => s + i.amount);
+      final baseForPct = gross > 0 ? gross : invoice.subTotal;
+      if (baseForPct > 0) {
+        final pct = (invoice.totalDiscount / baseForPct) * 100;
+        final fmtPct = pct % 1 == 0 ? pct.toStringAsFixed(0) : pct.toStringAsFixed(1);
+        return 'Discount ($fmtPct%)';
+      }
+    }
+    return 'Discount';
+  }
+
   Widget _buildTotalsSummary(InvoiceComputation invoice) {
     return _surfaceCard(
       child: Column(
@@ -11399,9 +11416,7 @@ class _SaleScreenState extends State<SaleScreen> {
                 'Subscription Item Discount', _subscriptionItemAdvanceDiscount),
           _summaryRow('Scheme Savings', _totalSchemeSavingsAmount),
           _summaryRow(
-            invoice.subTotal > 0 && invoice.totalDiscount > 0
-                ? 'Discount (${((invoice.totalDiscount / invoice.subTotal) * 100).toStringAsFixed(((invoice.totalDiscount / invoice.subTotal) * 100) % 1 == 0 ? 0 : 1)}%)'
-                : 'Discount',
+            _getDiscountLabel(invoice),
             _manualDiscountAmount,
           ),
           if (_loyaltyDiscountAmount > 0)

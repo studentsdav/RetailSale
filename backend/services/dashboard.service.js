@@ -1,4 +1,4 @@
-const { QueryTypes } = require('sequelize');
+const { QueryTypes, Op } = require('sequelize');
 
 const SALES_ZONES = [
   { key: 'MORNING', label: 'Morning', startHour: 5, endHour: 11 },
@@ -332,16 +332,28 @@ FROM item_stock;
   ]);
 
   const sales = await db.models.sales_headers.findAll({
-    where: { outlet_id: outletId },
-    include: [{
-      model: db.models.sales_items,
-      as: 'items',
-      include: [{
-        model: db.models.item_master,
-        as: 'item',
-        attributes: ['rate', 'item_group', 'sub_category', 'brand']
-      }]
-    }],
+    where: {
+      outlet_id: outletId,
+      status: { [Op.in]: ['COMPLETED', 'RETURNED'] },
+      is_deleted: false,
+      is_latest: true
+    },
+    include: [
+      {
+        model: db.models.sales_items,
+        as: 'items',
+        include: [{
+          model: db.models.item_master,
+          as: 'item',
+          attributes: ['rate', 'retail_sale_price', 'item_group', 'sub_category', 'brand', 'is_tax_inclusive']
+        }]
+      },
+      {
+        model: db.models.milk_subscription_consumptions,
+        as: 'consumptions',
+        required: false
+      }
+    ],
     order: [['sale_date', 'DESC'], ['id', 'DESC']]
   });
 
@@ -377,7 +389,16 @@ FROM item_stock;
   currentYearEnd.setFullYear(currentYearEnd.getFullYear() + 1);
 
   function fitsRange(date, start, end) {
-    return date >= start && date < end;
+    const dStr = formatDateLocalYmd(date);
+    const sStr = formatDateLocalYmd(start);
+    const eStr = formatDateLocalYmd(end);
+    if (!dStr || !sStr) return false;
+    if (eStr) return dStr >= sStr && dStr < eStr;
+    return dStr >= sStr;
+  }
+
+  function isSameDay(date1, date2) {
+    return formatDateLocalYmd(date1) === formatDateLocalYmd(date2);
   }
 
   function addPeriod(rangeKey, date, salesValue, profitValue, lossValue) {
@@ -410,19 +431,38 @@ FROM item_stock;
   let todayCollection = 0;
   let todayCogs = 0;
   let todayGst = 0;
+  let todaySubscriptionAmount = 0;
 
   for (const sale of sales) {
     const subItems = (sale.items || []).filter(i => i.is_advance_free);
     const subscriptionSubtotal = subItems.reduce((sum, i) => sum + toNumber(i.amount), 0);
     const subscriptionTax = subItems.reduce((sum, i) => sum + toNumber(i.tax_amount), 0);
     const subscriptionTaxable = subItems.reduce((sum, i) => sum + toNumber(i.taxable_amount), 0);
-    const subscriptionNet = subItems.reduce((sum, i) => sum + toNumber(i.net_amount), 0);
+    const subscriptionNet = subItems.reduce((sum, i) => {
+      const dbNet = toNumber(i.net_amount);
+      if (dbNet > 0) return sum + dbNet;
+      const dbLineTotal = toNumber(i.line_total);
+      if (dbLineTotal > 0) return sum + dbLineTotal;
+      const isInclusive = i.tax_type === 'GST_INCLUSIVE' || i.is_tax_inclusive === true || i.isTaxInclusive === true;
+      if (isInclusive) {
+        const amt = toNumber(i.amount);
+        if (amt > 0) return sum + amt;
+        const taxable = toNumber(i.taxable_amount);
+        const taxAmt = toNumber(i.tax_amount);
+        if (taxable > 0 && taxAmt > 0) return sum + taxable + taxAmt;
+        return sum + taxable;
+      } else {
+        const taxPct = toNumber(i.tax_percent || i.taxPercent);
+        const taxAmt = toNumber(i.tax_amount) > 0 ? toNumber(i.tax_amount) : (toNumber(i.taxable_amount) * (taxPct / 100));
+        const calcNet = toNumber(i.taxable_amount) + taxAmt;
+        return sum + (calcNet > 0 ? calcNet : (toNumber(i.amount) * (1 + taxPct / 100)));
+      }
+    }, 0);
 
-    // Subtract subscription subtotal from discount, but ADD subscription to taxable, tax, and net_amount
     const isFullSubscriptionSale = sale.payment_mode === 'SUBSCRIPTION';
     sale.total_discount = isFullSubscriptionSale ? 0 : Math.max(toNumber(sale.total_discount) - subscriptionSubtotal, 0);
     sale.taxable_amount = toNumber(sale.taxable_amount) + subscriptionTaxable;
-    sale.total_tax = toNumber(sale.total_tax) + subscriptionTax;
+    sale.total_tax = toNumber(sale.total_tax);
     sale.net_amount = toNumber(sale.net_amount) + subscriptionNet;
 
     const saleDate = normalizeDate(sale.sale_date);
@@ -432,8 +472,14 @@ FROM item_stock;
 
     for (const item of sale.items || []) {
       const qty = toNumber(item.qty);
-      const lineNet = toNumber(item.net_amount);
+      const dbLineNet = toNumber(item.net_amount);
       const lineTaxable = toNumber(item.taxable_amount);
+      const lineTax = toNumber(item.tax_amount);
+      let lineNet = dbLineNet;
+      if (item.is_advance_free) {
+        const calculatedItemNet = lineTaxable + lineTax;
+        lineNet = dbLineNet > 0 ? dbLineNet : (calculatedItemNet > 0 ? calculatedItemNet : toNumber(item.amount));
+      }
       const itemCost = toNumber(item.item?.rate) * qty;
       cogsTotal = roundAmount(cogsTotal + itemCost);
       if (fitsRange(saleDate, currentDayStart, currentDayEnd)) {
@@ -470,11 +516,39 @@ FROM item_stock;
     grandTaxableRevenue = roundAmount(grandTaxableRevenue + toNumber(sale.taxable_amount));
     grandProfit = roundAmount(grandProfit + saleProfit);
     grandLoss = roundAmount(grandLoss + saleLoss);
-    if (fitsRange(saleDate, currentDayStart, currentDayEnd)) {
+    if (isSameDay(saleDate, now)) {
       todayDiscount = roundAmount(todayDiscount + toNumber(sale.total_discount));
       todayRevenue = roundAmount(todayRevenue + saleRevenue);
       todayTaxableRevenue = roundAmount(todayTaxableRevenue + toNumber(sale.taxable_amount));
       todayGst = roundAmount(todayGst + toNumber(sale.total_tax));
+
+      let subBillAmt = (sale.consumptions || [])
+        .filter(c => !(c.status === 'PENDING' && toNumber(c.excess_qty) > 0 && sale.payment_mode !== 'SUBSCRIPTION'))
+        .reduce((sum, c) => sum + toNumber(c.covered_amount), 0);
+
+      if (subBillAmt === 0) {
+        const ref = String(sale.payment_reference || '').trim();
+        if (ref.startsWith('POSPAY:')) {
+          try {
+            const lines = JSON.parse(ref.substring(7));
+            if (Array.isArray(lines)) {
+              for (const line of lines) {
+                const method = String(line.method || '').toUpperCase();
+                if (method === 'ADVANCE' || method === 'ADVANCE_ADJUSTMENT' || method === 'ADVANCE_APPLY' || method === 'SUBSCRIPTION') {
+                  subBillAmt += toNumber(line.amount);
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      const pMode = String(sale.payment_mode || '').toUpperCase();
+      if (subBillAmt === 0 && (pMode === 'SUBSCRIPTION' || pMode === 'ADVANCE' || pMode === 'ADVANCE_ADJUSTMENT' || subscriptionNet > 0)) {
+        subBillAmt = subscriptionNet > 0 ? subscriptionNet : saleRevenue;
+      }
+      subBillAmt = Math.min(subBillAmt, saleRevenue);
+      todaySubscriptionAmount = roundAmount(todaySubscriptionAmount + subBillAmt);
     }
 
     addPeriod('day', saleDate, toNumber(sale.taxable_amount), saleProfit, saleLoss);
@@ -484,15 +558,12 @@ FROM item_stock;
   }
 
   let todaySubscriptionQty = 0;
-  let todaySubscriptionAmount = 0;
 
   for (const c of subscriptionConsumptionResult || []) {
     const cDate = normalizeDate(c.txn_date);
-    const cAmount = toNumber(c.covered_amount);
     const cQty = toNumber(c.covered_qty);
 
     if (fitsRange(cDate, currentDayStart, currentDayEnd)) {
-      todaySubscriptionAmount = roundAmount(todaySubscriptionAmount + cAmount);
       todaySubscriptionQty = roundAmount(todaySubscriptionQty + cQty);
     }
   }

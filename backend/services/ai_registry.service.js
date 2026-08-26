@@ -139,9 +139,15 @@ const SCREEN_NAVIGATION_REGISTRY = [
     },
     {
         actionType: 'CLOSING_REPORT',
-        label: 'Open Day Closing Report',
-        keywords: ['closing report', 'day close', 'shift close', 'end of day', 'cash tally'],
-        description: 'Day end register reconciliation & closing report'
+        label: 'Open Day Closing Report (Night Audit)',
+        keywords: ['closing report', 'day close', 'shift close', 'end of day', 'financial closing', 'night audit', 'cash tally'],
+        description: 'Financial end-of-day register reconciliation & night audit'
+    },
+    {
+        actionType: 'STOCK_CLOSING_REPORT',
+        label: 'Open Stock Closing Report',
+        keywords: ['stock closing', 'inventory closing', 'item closing report', 'closing stock'],
+        description: 'Inventory item opening, sales, damage, and closing stock report'
     },
     {
         actionType: 'CASH_LEDGER',
@@ -358,13 +364,21 @@ Schema definitions for Text-to-SQL translation:
     Columns: id (INTEGER, PK), outlet_id (INTEGER), emp_id (INTEGER, FK), emp_name (VARCHAR), month (VARCHAR), year (INTEGER), basic_salary (DECIMAL), allowances (DECIMAL), deductions (DECIMAL), net_salary (DECIMAL), payment_status (VARCHAR)
     Info: Staff monthly salary dispatches and payroll records (payment_status: 'PAID', 'PENDING').
 
-19. Table "cash_ledger" / "cash_entries"
-    Columns: id (INTEGER, PK), outlet_id (INTEGER), txn_date (TIMESTAMP), amount_in (DECIMAL), amount_out (DECIMAL), balance (DECIMAL), category (VARCHAR), notes (TEXT)
-    Info: Daily cash register transactions, petty cash, and drawer balance entries.
+19. Table "cash_ledger" (Daily Cash Drawer & Multi-Channel Payments Ledger)
+    Columns: id (INTEGER, PK), outlet_id (INTEGER), txn_date (DATEONLY), transaction_type (VARCHAR), reference_type (VARCHAR), reference_id (VARCHAR), reference_no (VARCHAR), party_name (VARCHAR), payment_method (VARCHAR), amount_in (DECIMAL), amount_out (DECIMAL), adjustment_amount (DECIMAL), balance (DECIMAL), notes (TEXT), created_by (INTEGER), created_at (TIMESTAMP)
+    Info: Cash drawer, split payment collections (payment_method: 'CASH', 'CARD', 'UPI', 'CREDIT', 'SUBSCRIPTION', etc.), petty cash debits, and store transaction log.
 
-20. Table "kot_headers" / "kitchen_orders"
+20. Table "customer_repayments" (Customer Credit Settlements)
+    Columns: id (INTEGER, PK), outlet_id (INTEGER), sale_id (INTEGER, FK), payment_date (DATEONLY), amount (DECIMAL), payment_mode (VARCHAR), reference_no (VARCHAR), notes (TEXT)
+    Info: Credit repayments made by customers against pending sales bills.
+
+21. Table "kot_headers" / "kitchen_orders"
     Columns: id (INTEGER, PK), outlet_id (INTEGER), kot_no (VARCHAR), table_no (VARCHAR), captain_name (VARCHAR), status (VARCHAR), created_at (TIMESTAMP)
     Info: Restaurant Kitchen Order Tickets (status: 'PENDING', 'COOKING', 'READY', 'SERVED', 'CANCELLED').
+
+22. Table "property_info" / "outlets" / "system_settings"
+    Columns: id (INTEGER, PK), outlet_id (INTEGER), property_name (VARCHAR), outlet_code (VARCHAR), address (TEXT), mobile (VARCHAR), email (VARCHAR)
+    Info: Store profile, tax registration, and connected outlet configuration details.
 `;
 
 function getActionMappingList() {

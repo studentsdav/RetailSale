@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 // Inventory & POS Screens
 import '../../screens/inventory/salescreen.dart';
-import '../../screens/inventory/enterprise_pos_screen.dart';
 import '../../screens/inventory/item_master_screen.dart';
 import '../../screens/inventory/stock_transfer_screen.dart';
 import '../../screens/inventory/stock_issue_screen.dart';
@@ -23,6 +22,7 @@ import '../../controllers/inventory/item_controller.dart';
 // Reports Screens
 import '../../screens/reports/sales_report_screen.dart';
 import '../../screens/reports/closing_report_screen.dart';
+import '../../screens/reports/night_audit_screen.dart';
 import '../../screens/reports/cash_ledger_screen.dart';
 import '../../screens/reports/stock_ledger_report_screen.dart';
 import '../../screens/reports/stock_balance_screen.dart';
@@ -237,7 +237,15 @@ class AiNavigationRegistry {
         targetScreen = const SalesReportScreen();
         break;
 
+      case 'DAY_CLOSING_REPORT':
+      case 'NIGHT_AUDIT':
       case 'CLOSING_REPORT':
+      case 'FINANCIAL_CLOSING':
+        targetScreen = const NightAuditScreen();
+        break;
+
+      case 'STOCK_CLOSING_REPORT':
+      case 'STOCK_CLOSING':
         targetScreen = const ClosingReportScreen();
         break;
 

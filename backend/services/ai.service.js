@@ -312,11 +312,15 @@ async function translateTextToQuery(question, config = {}) {
                 WHERE outlet_id = :outletId
                 ORDER BY id DESC LIMIT 50`;
     }
-    if (qLow.includes('pending') || qLow.includes('credit') || qLow.includes('collect') || qLow.includes('udhar') || qLow.includes('unpaid') || qLow.includes('due')) {
-        return `SELECT id, sale_no, customer_name, customer_phone, net_amount, amount_paid, balance_due, sale_date, payment_mode
+    if (qLow.includes('outstanding') || qLow.includes('pending') || qLow.includes('credit') || qLow.includes('collect') || qLow.includes('udhar') || qLow.includes('unpaid') || qLow.includes('due')) {
+        return `SELECT COALESCE(NULLIF(customer_name, ''), 'Walk-in Customer') AS customer_name,
+                COALESCE(customer_phone, '') AS customer_phone,
+                SUM(GREATEST(COALESCE(balance_due, 0), 0)) AS outstanding_balance,
+                COUNT(id) AS unpaid_bills
                 FROM sales_headers
-                WHERE outlet_id = :outletId AND is_deleted = false AND status != 'CANCELLED' AND balance_due > 0
-                ORDER BY balance_due DESC LIMIT 50`;
+                WHERE outlet_id = :outletId AND is_deleted = false AND status != 'CANCELLED' AND COALESCE(balance_due, 0) > 0.01
+                GROUP BY COALESCE(NULLIF(customer_name, ''), 'Walk-in Customer'), COALESCE(customer_phone, '')
+                ORDER BY outstanding_balance DESC LIMIT 50`;
     }
 
     const provider = (config.aiProvider || (GEMINI_API_KEY ? 'gemini' : (OPENAI_API_KEY ? 'openai' : null)));
@@ -392,11 +396,13 @@ function getMockQuery(question) {
                 WHERE outlet_id = :outletId 
                 ORDER BY id DESC LIMIT 50`;
     }
-    if (q.includes('credit') || q.includes('pending') || q.includes('due') || q.includes('udhar') || q.includes('unpaid') || q.includes('collect')) {
-        return `SELECT id, sale_no, customer_name, customer_phone, net_amount, amount_paid, balance_due, sale_date, payment_mode 
+    if (q.includes('outstanding') || q.includes('credit') || q.includes('pending') || q.includes('due') || q.includes('udhar') || q.includes('unpaid') || q.includes('collect')) {
+        return `SELECT COALESCE(NULLIF(customer_name, ''), 'Walk-in Customer') AS customer_name, COALESCE(customer_phone, '') AS customer_phone,
+                SUM(GREATEST(COALESCE(balance_due, 0), 0)) AS outstanding_balance, COUNT(id) AS unpaid_bills 
                 FROM sales_headers 
-                WHERE outlet_id = :outletId AND is_deleted = false AND status != 'CANCELLED' AND balance_due > 0 
-                ORDER BY balance_due DESC LIMIT 50`;
+                WHERE outlet_id = :outletId AND is_deleted = false AND status != 'CANCELLED' AND COALESCE(balance_due, 0) > 0.01 
+                GROUP BY COALESCE(NULLIF(customer_name, ''), 'Walk-in Customer'), COALESCE(customer_phone, '') 
+                ORDER BY outstanding_balance DESC LIMIT 50`;
     }
     if (q.includes('attendance') || q.includes('punch') || q.includes('clock-in') || q.includes('check-in')) {
         return `SELECT p.id, e.first_name, e.last_name, e.designation, p.punch_time, p.punch_type 
@@ -876,11 +882,18 @@ function getMockLynxAssist(prompt, liveContext = {}) {
     }
 
     // 7. Finance, Cash Ledger, Closing & AI Analytics
-    if (q.includes('closing') || q.includes('day close') || q.includes('shift close') || q.includes('end of day')) {
+    if (q.includes('stock closing') || q.includes('closing stock') || q.includes('inventory closing')) {
+        return {
+            reply: "📦 **FAMALTH LYNX Stock Closing Report**: View item opening stock, stock in, sales deductions, damages, returns, and closing balances.",
+            action: { type: "STOCK_CLOSING_REPORT", label: "Open Stock Closing Report" },
+            quickReplies: ["Low Stock Alert", "Stock Balance", "Day Closing Report"]
+        };
+    }
+    if (q.includes('closing') || q.includes('day close') || q.includes('shift close') || q.includes('end of day') || q.includes('night audit')) {
         return {
             reply: "🌙 **FAMALTH LYNX Day Closing Report**: Reconcile daily cash counter totals, UPI collections, card transactions, and net store profit.",
-            action: { type: "CLOSING_REPORT", label: "Open Day Closing Report" },
-            quickReplies: ["Cash Ledger", "Sales Reports", "Expense Analytics"]
+            action: { type: "CLOSING_REPORT", label: "Open Day End Closing (Night Audit)" },
+            quickReplies: ["Stock Closing Report", "Cash Ledger", "Sales Reports"]
         };
     }
     if (q.includes('cash') || q.includes('ledger') || q.includes('drawer') || q.includes('petty cash')) {

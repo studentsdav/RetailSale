@@ -1001,8 +1001,14 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
             const agreedRate = rate > 0 ? rate : toAmount(subscriptionAdvance?.rate || 0);
             const preTaxAmount = coveredQty * agreedRate;
             const taxPercent = toAmount(sourceRow.tax_percent || 0);
-            const taxAmount = preTaxAmount * taxPercent / 100.0;
+            // For tax-inclusive items the rate already contains GST — do NOT add tax again
+            const isTaxInclusiveItem = sourceRow.isTaxInclusive === true || sourceRow.is_tax_inclusive === true ||
+                String(sourceRow.tax_type || '').toUpperCase() === 'GST_INCLUSIVE' ||
+                subscription?.item?.is_tax_inclusive === true ||
+                String(subscription?.item?.tax_type || '').toUpperCase() === 'GST_INCLUSIVE';
+            const taxAmount = isTaxInclusiveItem ? 0 : (preTaxAmount * taxPercent / 100.0);
             const coveredAmount = preTaxAmount + taxAmount;
+            console.log(`[SUBSCRIPTION COVERAGE] item_id=${itemId} rate=${agreedRate} qty=${coveredQty} taxPercent=${taxPercent} is_tax_inclusive=${sourceRow.is_tax_inclusive} isTaxInclusive=${sourceRow.isTaxInclusive} tax_type=${sourceRow.tax_type} isTaxInclusiveItem=${isTaxInclusiveItem} coveredAmount=${coveredAmount}`);
             remainingQty -= coveredQty;
             sourceCoveredQty += coveredQty;
             sourceCoveredAmount += coveredAmount;
@@ -1237,7 +1243,12 @@ async function collectPreSplitSubscriptionAllocation({ req, header, items, trans
         const excessQty = Math.max(bucket.cartQty - coveredQty, 0);
         const taxPercent = bucket.taxPercent || 0;
         const preTaxAmount = coveredQty * agreedRate;
-        const taxAmount = preTaxAmount * taxPercent / 100.0;
+        // For tax-inclusive items the rate already contains GST — do NOT add tax again
+        const isTaxInclusiveItem2 = bucket.isTaxInclusive === true || bucket.is_tax_inclusive === true ||
+            String(bucket.tax_type || '').toUpperCase() === 'GST_INCLUSIVE' ||
+            chosenSubscription?.item?.is_tax_inclusive === true ||
+            String(chosenSubscription?.item?.tax_type || '').toUpperCase() === 'GST_INCLUSIVE';
+        const taxAmount = isTaxInclusiveItem2 ? 0 : (preTaxAmount * taxPercent / 100.0);
         const coveredAmount = preTaxAmount + taxAmount;
         if (coveredQty > 0) {
             inFlightConsumedByKey.set(usageKey, toAmount(inFlightConsumedByKey.get(usageKey) || 0) + coveredQty);
@@ -2501,26 +2512,24 @@ function buildSaleBenefitLedgerEntries({
 
     if (normalizedSchemeFree > 0) {
         const isSubscription = String(paymentMode || '').toUpperCase() === 'SUBSCRIPTION';
-        entries.push({
-            outlet_id: req.user.outlet_id,
-            txn_date: header.sale_date,
-            transaction_type: isSubscription ? 'ADVANCE_APPLY' : 'SALE_SCHEME_FREE_EXPENSE',
-            reference_type: 'SALE',
-            reference_id: sale.id,
-            reference_no: sale.sale_no,
-            party_name: partyName,
-            payment_method: paymentMode,
-            amount_out: normalizedSchemeFree,
-            notes: isSubscription
-                ? `Advance adjusted for subscription sale ${sale.sale_no}`
-                : `Scheme free quantity expense booked for sale ${sale.sale_no}`,
-            created_by
-        });
+        // Avoid double-posting: subscription adjustments are booked via ADVANCE_APPLY
+        // in the subscription allocation flow.
+        if (!isSubscription) {
+            entries.push({
+                outlet_id: req.user.outlet_id,
+                txn_date: header.sale_date,
+                transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
+                reference_type: 'SALE',
+                reference_id: sale.id,
+                reference_no: sale.sale_no,
+                party_name: partyName,
+                payment_method: paymentMode,
+                amount_out: normalizedSchemeFree,
+                notes: `Scheme free quantity expense booked for sale ${sale.sale_no}`,
+                created_by
+            });
+        }
     }
-
-    // Avoid double-posting: subscription adjustments are booked via ADVANCE_APPLY
-    // in the subscription allocation flow. Posting here again creates duplicate
-    // debit lines for the same bill.
 
     return entries;
 }
@@ -2701,14 +2710,26 @@ async function createSaleVersion({
 
         const lineDiscount = toAmount(row.line_discount || 0);
         const amount = toAmount(qty * rate);
-        const isTaxInclusiveRow = taxType === 'GST_INCLUSIVE' || row.isTaxInclusive === true || row.is_tax_inclusive === true;
+        const dbItem = itemMasterMap.get(Number(row.item_id));
+        const isTaxInclusiveHeader = String(header.billing_tax_mode || header.billingTaxMode || '').toUpperCase().includes('INCLUSIVE');
+        const isTaxInclusiveRow = isTaxInclusiveHeader || taxType === 'GST_INCLUSIVE' || row.isTaxInclusive === true || row.is_tax_inclusive === true || dbItem?.is_tax_inclusive === true;
         const grossInclusiveAmount = isTaxInclusiveRow ? amount : toAmount(amount * (1 + (taxPercent / 100)));
 
         let taxableAmount = amount;
         let taxAmount = 0;
         let lineTotal = grossInclusiveAmount;
 
-        if (row.taxable_amount != null && row.tax_amount != null) {
+        if (isTaxInclusiveRow) {
+            const netInclusive = Math.max(0, amount - lineDiscount);
+            if (taxPercent > 0) {
+                taxableAmount = toAmount(netInclusive / (1 + (taxPercent / 100)));
+                taxAmount = toAmount(netInclusive - taxableAmount);
+            } else {
+                taxableAmount = netInclusive;
+                taxAmount = 0;
+            }
+            lineTotal = netInclusive;
+        } else if (row.taxable_amount != null && row.tax_amount != null) {
             taxableAmount = toAmount(row.taxable_amount);
             taxAmount = toAmount(row.tax_amount);
             lineTotal = toAmount(row.line_total ?? (taxableAmount + taxAmount));
@@ -2743,26 +2764,34 @@ async function createSaleVersion({
         itemsTaxTotal += taxAmount;
         itemsLineTotal += lineTotal;
 
-        const rowTaxes = Array.isArray(row.tax_breakup) && row.tax_breakup.length > 0
+        let rowTaxes = Array.isArray(row.tax_breakup) && row.tax_breakup.length > 0
             ? row.tax_breakup
-            : (taxPercent > 0 ? [
-                {
-                    code: 'CGST',
-                    label: 'CGST',
-                    taxType: String(taxType || 'GST').toUpperCase(),
-                    rate: taxPercent / 2,
-                    taxableAmount: toAmount(taxableAmount),
-                    taxAmount: toAmount(taxAmount / 2)
-                },
-                {
-                    code: 'SGST',
-                    label: 'SGST',
-                    taxType: String(taxType || 'GST').toUpperCase(),
-                    rate: taxPercent / 2,
-                    taxableAmount: toAmount(taxableAmount),
-                    taxAmount: toAmount(taxAmount / 2)
-                }
-            ] : []);
+            : [];
+
+        if (rowTaxes.length === 0 || isTaxInclusiveRow || isAdvanceOrSubFree) {
+            if (taxPercent > 0) {
+                const halfRate = taxPercent / 2;
+                const halfTax = toAmount(taxAmount / 2);
+                rowTaxes = [
+                    {
+                        code: 'CGST',
+                        label: 'CGST',
+                        taxType: String(taxType || 'GST').toUpperCase(),
+                        rate: halfRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxAmount: halfTax
+                    },
+                    {
+                        code: 'SGST',
+                        label: 'SGST',
+                        taxType: String(taxType || 'GST').toUpperCase(),
+                        rate: halfRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxAmount: toAmount(taxAmount - halfTax)
+                    }
+                ];
+            }
+        }
 
         for (const tax of rowTaxes) {
             const taxCode = String(tax?.code || '').trim().toUpperCase();
@@ -2900,7 +2929,7 @@ async function createSaleVersion({
         }
     }
 
-    const derivedTaxableAmount = Math.max(0, itemsTaxableTotal - subscriptionTaxableAmount);
+    const derivedTaxableAmount = Math.max(0, itemsTaxableTotal);
     let rawCgst = 0;
     let rawSgst = 0;
     let rawIgst = 0;
@@ -2910,25 +2939,14 @@ async function createSaleVersion({
         else if (code.includes('SGST') || code.includes('UTGST')) rawSgst += toAmount(taxObj.taxAmount);
         else if (code.includes('IGST')) rawIgst += toAmount(taxObj.taxAmount);
     }
-    const derivedCgstAmount = Math.max(0, rawCgst - subscriptionTaxCgst);
-    const derivedSgstAmount = Math.max(0, rawSgst - subscriptionTaxSgst);
-    const derivedIgstAmount = Math.max(0, rawIgst - subscriptionTaxIgst);
-    const derivedTotalTax = Math.max(0, itemsTaxTotal - (subscriptionTaxCgst + subscriptionTaxSgst + subscriptionTaxIgst));
+    const derivedCgstAmount = Math.max(0, rawCgst);
+    const derivedSgstAmount = Math.max(0, rawSgst);
+    const derivedIgstAmount = Math.max(0, rawIgst);
+    const derivedTotalTax = Math.max(0, itemsTaxTotal);
     const derivedTotalDiscount = toAmount(header.total_discount || 0);
 
     const adjustedTaxBreakup = Array.from(taxSummary.values()).map((tax) => {
-        const copy = { ...tax };
-        if (copy.code === 'CGST') {
-            copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxCgst));
-            copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-        } else if (copy.code === 'SGST') {
-            copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxSgst));
-            copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-        } else if (copy.code === 'IGST') {
-            copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxIgst));
-            copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-        }
-        return copy;
+        return { ...tax };
     });
 
     const itemDiscountSum = salesItemRows.reduce((sum, r) => sum + toAmount(r.line_discount || 0), 0);
@@ -3591,7 +3609,7 @@ exports.createSale = async (req, res) => {
                 sale: referenceSale,
                 consumptions: subscriptionAllocation.consumptions
             });
-            if (subscriptionAllocation.totalCoveredAmount > 0 && !subscriptionAllocation.isFreeAllocation) {
+            if (subscriptionAllocation.totalCoveredAmount > 0) {
                 const coverages = Array.isArray(subscriptionAllocation.subscriptionCoverages)
                     ? subscriptionAllocation.subscriptionCoverages
                     : [{
@@ -3619,23 +3637,28 @@ exports.createSale = async (req, res) => {
                         );
                     }
 
+                    console.log(`[SUBSCRIPTION ADV] Looking up advance for subscriptionId=${coverage.subscriptionId}`);
                     const subscriptionCashAdvance = await findSubscriptionCustomerAdvance(
                         req,
                         coverage.subscriptionId,
                         t
                     );
+                    console.log(`[SUBSCRIPTION ADV] Found: ${subscriptionCashAdvance ? 'YES id='+subscriptionCashAdvance.id+' available='+subscriptionCashAdvance.available_amount : 'NO'}`);
                     let appliedCashAdvanceAmount = 0;
                     if (subscriptionCashAdvance) {
                         appliedCashAdvanceAmount = Math.min(
                             toAmount(subscriptionCashAdvance.available_amount),
                             toAmount(coverage.totalCoveredAmount)
                         );
-                        await consumeSubscriptionCustomerAdvance(
-                            req,
-                            coverage.subscriptionId,
-                            appliedCashAdvanceAmount,
-                            t
-                        );
+                        if (appliedCashAdvanceAmount > 0) {
+                            // Directly update the already-found advance to avoid a second SELECT inside the transaction
+                            const newAvailable = Math.max(toAmount(subscriptionCashAdvance.available_amount) - appliedCashAdvanceAmount, 0);
+                            await subscriptionCashAdvance.update(
+                                { available_amount: newAvailable, updated_by: req.user.id },
+                                { transaction: t }
+                            );
+                            console.log(`[SUBSCRIPTION] Deducted ${appliedCashAdvanceAmount} from advance id=${subscriptionCashAdvance.id}, new available=${newAvailable}`);
+                        }
                     }
                     if (appliedCashAdvanceAmount > 0) {
                         await createLedgerEntry({

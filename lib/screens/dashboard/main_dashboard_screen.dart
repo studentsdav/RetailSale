@@ -1519,7 +1519,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           children: [
             _statCard(
               'Today Revenue (No Sub)',
-              'Rs. ${todayRevenue.toStringAsFixed(0)}',
+              'Rs. ${(todayRevenue - todaySubscriptionAmount).toStringAsFixed(0)}',
               Icons.payments_outlined,
               const Color(0xFF2563EB),
               onTap: () {
@@ -1533,7 +1533,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             ),
             _statCard(
               'Today Revenue (With Sub)',
-              'Rs. ${(todayRevenue + todaySubscriptionAmount).toStringAsFixed(0)}',
+              'Rs. ${todayRevenue.toStringAsFixed(0)}',
               Icons.payments_outlined,
               const Color(0xFF0EA5E9),
               onTap: () {

@@ -30,7 +30,16 @@ exports.getPropertyInfo = async (req, res) => {
             where: { outlet_id: actualOutletId }
         });
 
-        res.json({ success: true, data: info });
+        const infoObj = info ? info.toJSON() : {};
+        if (actualOutletId && req.propertyDb.models.outlets) {
+            const outletObj = await req.propertyDb.models.outlets.findByPk(actualOutletId);
+            if (outletObj) {
+                infoObj.outlet_module = outletObj.business_module || outletObj.outlet_module || 'ALL';
+                infoObj.business_module = outletObj.business_module || outletObj.outlet_module || 'ALL';
+            }
+        }
+
+        res.json({ success: true, data: infoObj });
     } catch (err) {
         console.error("GET PROPERTY INFO ERROR STACK:", err);
         res.status(500).json({ success: false, error: err.message });

@@ -72,6 +72,13 @@ class SalesReportItem {
   final double estimatedProfit;
   final List<SalesTaxBreakupEntry> taxBreakup;
 
+  double get taxPercent {
+    if (taxableAmount > 0.009 && taxAmount > 0.009) {
+      return (taxAmount / taxableAmount) * 100;
+    }
+    return 0;
+  }
+
   const SalesReportItem({
     required this.itemCode,
     required this.itemName,

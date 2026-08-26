@@ -168,7 +168,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   double _itemTaxRate(SalesReportItem item) {
-    final rate = item.taxBreakup.fold<double>(0, (sum, tax) => sum + tax.rate);
+    double rate = item.taxBreakup.fold<double>(0, (sum, tax) => sum + tax.rate);
+    if (rate <= 0.009) {
+      rate = item.taxPercent;
+    }
+    if (rate <= 0.009 && item.taxAmount > 0.009 && item.taxableAmount > 0.009) {
+      rate = (item.taxAmount / item.taxableAmount) * 100;
+    }
     return _normalizeTaxRate(rate);
   }
 
@@ -222,9 +228,20 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       final placeOfSupply = _derivePlaceOfSupply(sale);
       for (final item in sale.items) {
         final itemTaxable = _isTaxedItem(item) ? item.taxableAmount : 0.0;
-        final cgst = _taxAmountFor(item, 'CGST');
-        final sgst = _taxAmountFor(item, 'SGST');
-        final igst = _taxAmountFor(item, 'IGST');
+        double cgst = _taxAmountFor(item, 'CGST');
+        double sgst = _taxAmountFor(item, 'SGST');
+        double igst = _taxAmountFor(item, 'IGST');
+        if (item.taxAmount > 0.009 && ((cgst + sgst + igst) - item.taxAmount).abs() > 0.01) {
+          if (igst > 0.009) {
+            igst = item.taxAmount;
+            cgst = 0;
+            sgst = 0;
+          } else {
+            cgst = item.taxAmount / 2;
+            sgst = item.taxAmount / 2;
+            igst = 0;
+          }
+        }
         final itemNetVal = item.netAmount > 0.009
             ? item.netAmount
             : (itemTaxable + cgst + sgst + igst > 0
@@ -651,12 +668,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   double get _headerTaxableTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + _taxableSaleValue(sale));
   // All figures from header-level columns (consistent with DB, dashboard, and payment breakdown)
-  double get _headerCgstTotal =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.cgstAmount);
-  double get _headerSgstTotal =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.sgstAmount);
-  double get _headerIgstTotal =>
-      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.igstAmount);
+  double get _headerCgstTotal => _billWiseSales.fold<double>(
+        0,
+        (sum, sale) => sum + sale.items.fold<double>(0, (s, item) => s + _taxAmountFor(item, 'CGST')),
+      );
+  double get _headerSgstTotal => _billWiseSales.fold<double>(
+        0,
+        (sum, sale) => sum + sale.items.fold<double>(0, (s, item) => s + _taxAmountFor(item, 'SGST')),
+      );
+  double get _headerIgstTotal => _billWiseSales.fold<double>(
+        0,
+        (sum, sale) => sum + sale.items.fold<double>(0, (s, item) => s + _taxAmountFor(item, 'IGST')),
+      );
   double get _headerDiscountTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalDiscount);
   double get _headerChargeTotal =>
@@ -669,16 +692,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   double _saleTotalTax(SalesReport sale) =>
       _saleItemTaxTotal(sale) + _saleChargeTaxTotal(sale);
 
-  double get _headerItemTaxTotal => _billWiseSales.fold<double>(
-        0,
-        (sum, sale) => sum + _saleItemTaxTotal(sale),
-      );
+  // Total tax across all bills (Items GST + Charges GST)
+  double get _headerTaxTotal =>
+      _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.totalTax);
   double get _headerChargeTaxTotal => _billWiseSales.fold<double>(
         0,
         (sum, sale) => sum + _saleChargeTaxTotal(sale),
       );
-  // Total tax across all bills (Items GST + Charges GST)
-  double get _headerTaxTotal => _headerItemTaxTotal + _headerChargeTaxTotal;
+  double get _headerItemTaxTotal => _headerTaxTotal - _headerChargeTaxTotal;
   // Total Revenue = sum of header net_amount (matches payment breakdown)
   double get _headerRevenueTotal =>
       _billWiseSales.fold<double>(0, (sum, sale) => sum + sale.netAmount);
@@ -2530,9 +2551,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   Widget _buildSummaryRow() {
-    final subTotal = _headerTaxableTotal + _headerDiscountTotal;
+    final subTotal = _headerItemTaxableTotal + _headerDiscountTotal;
     final discount = _headerDiscountTotal;   // header total_discount
-    final gst      = _headerItemTaxTotal;    // header total_tax minus charge GST
+    final gst      = _headerItemTaxTotal;    // item GST
     final netSales = _headerItemNetAmount;   // Revenue − Charges − ChargeGST
 
     return Column(
@@ -4475,9 +4496,15 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   double _taxAmountFor(SalesReportItem item, String code) {
-    return item.taxBreakup
-        .where((tax) => tax.code.toUpperCase() == code)
-        .fold<double>(0, (sum, tax) => sum + tax.taxAmount);
+    final list = item.taxBreakup
+        .where((tax) => tax.code.toUpperCase() == code);
+    if (list.isNotEmpty) {
+      return list.fold<double>(0, (sum, tax) => sum + tax.taxAmount);
+    }
+    if (code == 'CGST' || code == 'SGST') {
+      return (item.taxAmount / 2);
+    }
+    return 0.0;
   }
 
   String _derivePlaceOfSupply(SalesReport sale) {

@@ -247,25 +247,6 @@ exports.getSalesReport = async (req, res) => {
         });
 
         let totalSubscriptionAmount = 0;
-        if (from_date && to_date) {
-            const subConsumption = await req.propertyDb.query(`
-                SELECT COALESCE(SUM(c.covered_amount), 0) as total_subscription_amount
-                FROM milk_subscription_consumptions c
-                LEFT JOIN sales_headers sh ON c.sale_id = sh.id
-                WHERE c.outlet_id = :outletId
-                  AND c.txn_date BETWEEN :fromDate AND :toDate
-                  AND c.status != 'CANCELLED'
-                  AND NOT (c.status = 'PENDING' AND c.excess_qty > 0 AND sh.payment_mode != 'SUBSCRIPTION')
-            `, {
-                replacements: {
-                    outletId: outlet_id,
-                    fromDate: `${from_date}T00:00:00`,
-                    toDate: `${to_date}T23:59:59`
-                },
-                type: req.propertyDb.QueryTypes.SELECT
-            });
-            totalSubscriptionAmount = toNumber(subConsumption?.[0]?.total_subscription_amount);
-        }
 
         const paymentModeSummary = {};
         const timeZoneMap = Object.fromEntries(
@@ -326,17 +307,29 @@ exports.getSalesReport = async (req, res) => {
                 const subscriptionNet = subItems.reduce((sum, i) => {
                     const dbNet = toNumber(i.net_amount);
                     if (dbNet > 0) return sum + dbNet;
-                    const taxPct = toNumber(i.tax_percent || i.taxPercent);
-                    const taxAmt = toNumber(i.tax_amount) > 0 ? toNumber(i.tax_amount) : (toNumber(i.taxable_amount) * (taxPct / 100));
-                    const calcNet = toNumber(i.taxable_amount) + taxAmt;
-                    return sum + (calcNet > 0 ? calcNet : (toNumber(i.amount) * (1 + taxPct / 100)));
+                    const dbLineTotal = toNumber(i.line_total);
+                    if (dbLineTotal > 0) return sum + dbLineTotal;
+                    const isInclusive = i.tax_type === 'GST_INCLUSIVE' || i.is_tax_inclusive === true || i.isTaxInclusive === true;
+                    if (isInclusive) {
+                        const amt = toNumber(i.amount);
+                        if (amt > 0) return sum + amt;
+                        const taxable = toNumber(i.taxable_amount);
+                        const taxAmt = toNumber(i.tax_amount);
+                        if (taxable > 0 && taxAmt > 0) return sum + taxable + taxAmt;
+                        return sum + taxable;
+                    } else {
+                        const taxPct = toNumber(i.tax_percent || i.taxPercent);
+                        const taxAmt = toNumber(i.tax_amount) > 0 ? toNumber(i.tax_amount) : (toNumber(i.taxable_amount) * (taxPct / 100));
+                        const calcNet = toNumber(i.taxable_amount) + taxAmt;
+                        return sum + (calcNet > 0 ? calcNet : (toNumber(i.amount) * (1 + taxPct / 100)));
+                    }
                 }, 0);
 
                 // Add subscription back to taxable, GST, and net_amount, and subtract subtotal from discount
                 const isFullSubscriptionSale = sale.payment_mode === 'SUBSCRIPTION';
                 sale.total_discount = isFullSubscriptionSale ? 0 : Math.max(toNumber(sale.total_discount) - subscriptionSubtotal, 0);
                 sale.taxable_amount = toNumber(sale.taxable_amount) + subscriptionTaxable;
-                sale.total_tax = toNumber(sale.total_tax) + subscriptionTax;
+                sale.total_tax = toNumber(sale.total_tax);
                 sale.net_amount = toNumber(sale.net_amount) + subscriptionNet;
 
                 const saleDate = normalizeDate(sale.sale_date);
@@ -407,6 +400,14 @@ exports.getSalesReport = async (req, res) => {
                         effectiveNetAmount = dbNetAmount;
                         effectiveTaxableAmount = toNumber(item.taxable_amount);
                         effectiveTaxAmount = toNumber(item.tax_amount);
+
+                        if (isTaxInclusive && effectiveNetAmount > 0) {
+                            if (effectiveTaxableAmount === 0 || effectiveTaxableAmount >= effectiveNetAmount) {
+                                const taxPct = toNumber(item.tax_percent || item.taxPercent || 18);
+                                effectiveTaxableAmount = roundAmount(effectiveNetAmount / (1 + taxPct / 100));
+                            }
+                            effectiveTaxAmount = roundAmount(effectiveNetAmount - effectiveTaxableAmount);
+                        }
                     }
 
                     const itemCostRate = toNumber(item.item?.rate);
@@ -437,7 +438,20 @@ exports.getSalesReport = async (req, res) => {
                         itemZoneMap[itemName].total_sales + effectiveNetAmount
                     );
 
-                    const itemTaxBreakup = safeArray(item.tax_breakup);
+                    let itemTaxBreakup = safeArray(item.tax_breakup);
+                    const itemTaxPct = effectiveTaxableAmount > 0 ? roundAmount((effectiveTaxAmount / effectiveTaxableAmount) * 100) : toNumber(item.tax_percent || item.taxPercent);
+                    if (effectiveTaxAmount > 0) {
+                        const existingSum = itemTaxBreakup.reduce((s, t) => s + toNumber(t.tax_amount || t.taxAmount), 0);
+                        if (existingSum === 0 || Math.abs(existingSum - effectiveTaxAmount) > 0.05) {
+                            const cgstAmt = roundAmount(effectiveTaxAmount / 2);
+                            const sgstAmt = roundAmount(effectiveTaxAmount - cgstAmt);
+                            const halfRate = roundAmount(itemTaxPct / 2);
+                            itemTaxBreakup = [
+                                { code: 'CGST', label: 'CGST', rate: halfRate, tax_amount: cgstAmt },
+                                { code: 'SGST', label: 'SGST', rate: halfRate, tax_amount: sgstAmt }
+                            ];
+                        }
+                    }
 
                     return {
                         item_code: item.item_code,
@@ -468,7 +482,7 @@ exports.getSalesReport = async (req, res) => {
                 const saleDiscount = toNumber(sale.total_discount);
                 const saleChargeTotal = chargeSplit.packingCharges + chargeSplit.otherCharges;
                 const saleItemTax = lineItems.reduce((sum, item) => sum + toNumber(item.tax_amount), 0);
-                const saleTotalTax = roundAmount(Math.max(toNumber(sale.total_tax), saleItemTax + saleChargeTaxTotal));
+                const saleTotalTax = roundAmount(saleItemTax + saleChargeTaxTotal);
                 const saleNetRevenue = toNumber(sale.net_amount);
                 const saleEstimatedCost = lineItems.reduce((sum, item) => sum + item.estimated_cost, 0);
                 const saleProfit = saleNetRevenue - saleEstimatedCost;
@@ -518,6 +532,8 @@ exports.getSalesReport = async (req, res) => {
                 if (subscriptionAmount === 0 && subscriptionNet > 0) {
                     subscriptionAmount = subscriptionNet;
                 }
+                subscriptionAmount = Math.min(subscriptionAmount, saleNetRevenue);
+                totalSubscriptionAmount = roundAmount(totalSubscriptionAmount + subscriptionAmount);
 
                 let cashAmount = 0;
                 let cardAmount = 0;
@@ -592,22 +608,28 @@ exports.getSalesReport = async (req, res) => {
                     paymentModeSummary[pKey].sales_count += 1;
                 }
 
-                let billCgst = toNumber(sale.cgst_amount);
-                let billSgst = toNumber(sale.sgst_amount);
-                let billIgst = toNumber(sale.igst_amount);
-                if (billCgst === 0 && billSgst === 0 && billIgst === 0 && saleTotalTax > 0) {
-                    for (const tax of safeArray(sale.tax_breakup)) {
-                        const code = String(tax.code || tax.label || '').toUpperCase();
-                        const amt = toNumber(tax.tax_amount || tax.taxAmount);
-                        if (code.includes('CGST')) billCgst += amt;
-                        else if (code.includes('SGST') || code.includes('UTGST')) billSgst += amt;
-                        else if (code.includes('IGST')) billIgst += amt;
-                    }
-                    if (billCgst === 0 && billSgst === 0 && billIgst === 0) {
-                        billCgst = roundAmount(saleTotalTax / 2);
-                        billSgst = roundAmount(saleTotalTax / 2);
-                    }
-                }
+                let billCgst = lineItems.reduce((sum, item) => {
+                    const itemCgst = safeArray(item.tax_breakup)
+                        .filter(t => String(t.code || t.label || '').toUpperCase().includes('CGST'))
+                        .reduce((s, t) => s + toNumber(t.tax_amount), 0);
+                    return sum + (itemCgst > 0 ? itemCgst : (toNumber(item.tax_amount) / 2));
+                }, 0);
+                let billSgst = lineItems.reduce((sum, item) => {
+                    const itemSgst = safeArray(item.tax_breakup)
+                        .filter(t => String(t.code || t.label || '').toUpperCase().includes('SGST'))
+                        .reduce((s, t) => s + toNumber(t.tax_amount), 0);
+                    return sum + (itemSgst > 0 ? itemSgst : (toNumber(item.tax_amount) / 2));
+                }, 0);
+                let billIgst = lineItems.reduce((sum, item) => {
+                    const itemIgst = safeArray(item.tax_breakup)
+                        .filter(t => String(t.code || t.label || '').toUpperCase().includes('IGST'))
+                        .reduce((s, t) => s + toNumber(t.tax_amount), 0);
+                    return sum + itemIgst;
+                }, 0);
+
+                billCgst = roundAmount(billCgst);
+                billSgst = roundAmount(billSgst);
+                billIgst = roundAmount(billIgst);
 
                 return {
                     id: sale.id,

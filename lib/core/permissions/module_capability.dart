@@ -10,11 +10,17 @@ class ModuleCapability {
   static String normalize(String? rawModule) {
     if (rawModule == null || rawModule.trim().isEmpty) return all;
     final upper = rawModule.trim().toUpperCase();
-    if (upper == inventory ||
-        upper == retail ||
-        upper == restaurant ||
-        upper == all) {
-      return upper;
+    if (upper.contains('RESTAURANT') || upper.contains('KDS') || upper.contains('KOT')) {
+      return restaurant;
+    }
+    if (upper.contains('RETAIL') || upper.contains('POS')) {
+      return retail;
+    }
+    if (upper.contains('INVENTORY')) {
+      return inventory;
+    }
+    if (upper.contains('ALL')) {
+      return all;
     }
     return all;
   }

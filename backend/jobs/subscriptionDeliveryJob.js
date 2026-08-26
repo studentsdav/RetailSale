@@ -158,6 +158,7 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
         if (subItems && subItems.length > 0) {
             for (const sItem of subItems) {
                 if (!sItem.item_master) continue;
+                const isTaxInclusive = String(sItem.item_master.tax_type || '').toUpperCase() === 'GST_INCLUSIVE' || sItem.item_master.is_tax_inclusive === true;
                 const rate = parseFloat(sItem.item_master.retail_sale_price ?? sItem.item_master.rate ?? 0);
                 const qty = parseFloat(sItem.qty ?? 1);
                 const amt = rate * qty;
@@ -165,14 +166,31 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                 subTotal += amt;
 
                 const taxPercent = parseFloat(sItem.item_master.tax_percent || 0.0);
-                const taxAmount = (amt * taxPercent) / 100;
+                let taxableAmount = amt;
+                let taxAmount = 0;
+                let lineTotal = amt;
+
+                if (isTaxInclusive) {
+                    if (taxPercent > 0) {
+                        taxableAmount = parseFloat((amt / (1 + taxPercent / 100)).toFixed(2));
+                        taxAmount = parseFloat((amt - taxableAmount).toFixed(2));
+                    } else {
+                        taxableAmount = amt;
+                        taxAmount = 0;
+                    }
+                    lineTotal = amt;
+                } else {
+                    taxableAmount = amt;
+                    taxAmount = parseFloat(((amt * taxPercent) / 100).toFixed(2));
+                    lineTotal = amt + taxAmount;
+                }
+
                 totalTax += taxAmount;
                 const halfRate = taxPercent / 2;
-                const halfAmount = taxAmount / 2;
+                const halfAmount = parseFloat((taxAmount / 2).toFixed(2));
+                const sgstAmount = parseFloat((taxAmount - halfAmount).toFixed(2));
                 totalCgst += halfAmount;
-                totalSgst += halfAmount;
-
-                const lineTotal = amt + taxAmount;
+                totalSgst += sgstAmount;
 
                 const taxBreakup = taxPercent > 0 ? [
                     {
@@ -181,8 +199,8 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                         taxType: 'GST',
                         tax_type: 'GST',
                         rate: halfRate,
-                        taxableAmount: amt,
-                        taxable_amount: amt,
+                        taxableAmount: taxableAmount,
+                        taxable_amount: taxableAmount,
                         taxAmount: halfAmount,
                         tax_amount: halfAmount
                     },
@@ -192,10 +210,10 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                         taxType: 'GST',
                         tax_type: 'GST',
                         rate: halfRate,
-                        taxableAmount: amt,
-                        taxable_amount: amt,
-                        taxAmount: halfAmount,
-                        tax_amount: halfAmount
+                        taxableAmount: taxableAmount,
+                        taxable_amount: taxableAmount,
+                        taxAmount: sgstAmount,
+                        tax_amount: sgstAmount
                     }
                 ] : [];
 
@@ -205,6 +223,7 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                     qty,
                     rate,
                     amount: amt,
+                    taxableAmount,
                     taxPercent,
                     taxAmount,
                     halfRate,
@@ -214,6 +233,7 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                 });
             }
         } else if (sub.item_master) {
+            const isTaxInclusive = String(sub.item_master?.tax_type || '').toUpperCase() === 'GST_INCLUSIVE' || sub.item_master?.is_tax_inclusive === true;
             const rate = parseFloat(sub.item_master.retail_sale_price ?? sub.item_master.rate ?? 0);
             const qty = parseFloat(sub.daily_allowed_qty ?? 1);
             const amt = rate * qty;
@@ -221,14 +241,30 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
             subTotal = amt;
 
             const taxPercent = parseFloat(sub.item_master.tax_percent || 0.0);
-            const taxAmount = (amt * taxPercent) / 100;
+            let taxableAmount = amt;
+            let taxAmount = 0;
+            let lineTotal = amt;
+
+            if (isTaxInclusive) {
+                if (taxPercent > 0) {
+                    taxableAmount = parseFloat((amt / (1 + taxPercent / 100)).toFixed(2));
+                    taxAmount = parseFloat((amt - taxableAmount).toFixed(2));
+                } else {
+                    taxableAmount = amt;
+                    taxAmount = 0;
+                }
+                lineTotal = amt;
+            } else {
+                taxableAmount = amt;
+                taxAmount = parseFloat(((amt * taxPercent) / 100).toFixed(2));
+                lineTotal = amt + taxAmount;
+            }
+
             totalTax = taxAmount;
             const halfRate = taxPercent / 2;
-            const halfAmount = taxAmount / 2;
+            const halfAmount = parseFloat((taxAmount / 2).toFixed(2));
             totalCgst = halfAmount;
-            totalSgst = halfAmount;
-
-            const lineTotal = amt + taxAmount;
+            totalSgst = parseFloat((taxAmount - halfAmount).toFixed(2));
 
             const taxBreakup = taxPercent > 0 ? [
                 {
@@ -237,8 +273,8 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                     taxType: 'GST',
                     tax_type: 'GST',
                     rate: halfRate,
-                    taxableAmount: amt,
-                    taxable_amount: amt,
+                    taxableAmount: taxableAmount,
+                    taxable_amount: taxableAmount,
                     taxAmount: halfAmount,
                     tax_amount: halfAmount
                 },
@@ -248,10 +284,10 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                     taxType: 'GST',
                     tax_type: 'GST',
                     rate: halfRate,
-                    taxableAmount: amt,
-                    taxable_amount: amt,
-                    taxAmount: halfAmount,
-                    tax_amount: halfAmount
+                    taxableAmount: taxableAmount,
+                    taxable_amount: taxableAmount,
+                    taxAmount: totalSgst,
+                    tax_amount: totalSgst
                 }
             ] : [];
 
@@ -261,6 +297,7 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                 qty,
                 rate,
                 amount: amt,
+                taxableAmount,
                 taxPercent,
                 taxAmount,
                 halfRate,
@@ -339,6 +376,8 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                     outlet_id: outletId, subscription_id: sub.id, sale_id: header.id,
                     item_id: ln.item_id, txn_date: new Date(today),
                     cart_qty: ln.qty, covered_qty: ln.qty, excess_qty: 0, source: 'AUTO_JOB',
+                    rate: parseFloat(ln.lineTotal / ln.qty).toFixed(2),
+                    covered_amount: parseFloat(ln.lineTotal).toFixed(2),
                 }).catch(() => {});
             }
 

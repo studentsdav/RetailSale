@@ -1015,20 +1015,22 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                     double>(
                                                 0,
                                                 (sum, item) =>
-                                                    sum +
-                                                    (item.isTaxInclusive
-                                                        ? item.amount
-                                                        : item.amount))
+                                                    sum + item.amount)
                                             : _selectedOrder!.items.fold<double>(
                                                 0, (sum, item) => sum + item.amount);
-                                        final double displayDiscount = _selectedOrder!.totalDiscount > 0
+                                        final bool allInclusive = _selectedOrder!.items.isNotEmpty && _selectedOrder!.items.every((item) => item.isTaxInclusive);
+                                        final double rawDiscount = _selectedOrder!.totalDiscount > 0
                                             ? _selectedOrder!.totalDiscount
                                             : _selectedOrder!.items.fold<double>(
                                                 0, (sum, item) => sum + item.lineDiscount);
+                                        final double displayDiscount = allInclusive
+                                            ? (rawDiscount > displaySubTotal ? displaySubTotal : rawDiscount)
+                                            : rawDiscount;
                                         final double displayTaxableAmount = _selectedOrder!.taxableAmount > 0
                                             ? _selectedOrder!.taxableAmount
                                             : _selectedOrder!.items.fold<double>(
                                                 0, (sum, item) => sum + item.taxableAmount);
+                                        final double displayTax = _selectedOrder!.totalTax;
 
                                         final double preTaxSum = _selectedOrder!.items
                                             .where((item) => !item.isTaxInclusive)
@@ -1041,7 +1043,6 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                         if (preTaxSum > 0 && postTaxSum > 0) {
                                           subTotalNote = '(Pre-tax: ${_fmtAmount(preTaxSum)}, Post-tax: ${_fmtAmount(postTaxSum)})';
                                         }
-                                        final bool allInclusive = _selectedOrder!.items.isNotEmpty && _selectedOrder!.items.every((item) => item.isTaxInclusive);
 
                                         return [
                                           _metricCard('Sub Total',
@@ -1063,14 +1064,14 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                                       if (!c.taxable || c.taxPercent <= 0 || c.amount <= 0) return sum;
                                                       return sum + (c.amount * c.taxPercent / 100);
                                                     }))),
+                                          _metricCard('Tax',
+                                              _fmtAmount(displayTax)),
+                                          _metricCard(
+                                              'Net Amount',
+                                              _fmtAmount(
+                                                  _selectedOrder!.netAmount)),
                                         ];
                                       })(),
-                                      _metricCard('Tax',
-                                          _fmtAmount(_selectedOrder!.totalTax)),
-                                      _metricCard(
-                                          'Net Amount',
-                                          _fmtAmount(
-                                              _selectedOrder!.netAmount)),
                                     ],
                                   ),
                                   const SizedBox(height: 16),

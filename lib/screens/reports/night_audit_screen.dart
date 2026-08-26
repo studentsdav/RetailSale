@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/reports/night_audit_controller.dart';
+import '../../controllers/settings/property_info_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/token_storage.dart';
@@ -17,6 +18,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _notesController = TextEditingController();
+  String? _currentModule;
 
   // Retail POS Design System Colors
   static const Color posBgColor = Color(0xFFF4EEE8);
@@ -34,11 +36,45 @@ class _NightAuditScreenState extends State<NightAuditScreen>
       if (mounted) setState(() {});
     });
 
+    _loadUserModule();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = context.read<NightAuditController>();
       controller.fetchStatus();
       controller.fetchHistory();
     });
+  }
+
+  bool get _isRestaurantModule {
+    return ModuleCapability.hasRestaurant(_currentModule);
+  }
+
+  Future<void> _loadUserModule() async {
+    try {
+      final userMap = await TokenStorage.getUser();
+      String? mod;
+      if (userMap != null) {
+        mod = userMap['business_module'] ??
+            userMap['outlet_module'] ??
+            userMap['outletmodule'] ??
+            userMap['module'];
+      }
+
+      final propCtrl = PropertyInfoController();
+      await propCtrl.load();
+      if (propCtrl.data != null && propCtrl.data!.outletModule.trim().isNotEmpty) {
+        final pMod = propCtrl.data!.outletModule.trim();
+        if (pMod == 'INVENTORY' || pMod == 'RETAIL' || pMod == 'RESTAURANT' || pMod == 'ALL') {
+          mod = pMod;
+        }
+      }
+
+      if (mounted && mod != null && mod.isNotEmpty) {
+        setState(() {
+          _currentModule = mod;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -373,7 +409,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
             ),
             child: Column(
               children: [
-                if (ModuleCapability.hasRestaurant()) ...[
+                if (_isRestaurantModule) ...[
                   _buildChecklistItem(
                     title: 'Open Kitchen Orders (KOTs)',
                     count: validation?['openKotCount'] ?? 0,
@@ -968,7 +1004,8 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                     _buildRowDetail('Expected Cash', '₹${run['cash_expected'] ?? '0.00'}'),
                     _buildRowDetail('Physical Cash', '₹${run['cash_physical'] ?? '0.00'}'),
                     _buildRowDetail('Cash Variance', '₹${cashVariance.toStringAsFixed(2)}'),
-                    _buildRowDetail('Open KOT Count', '${run['open_kot_count'] ?? 0}'),
+                    if (_isRestaurantModule)
+                      _buildRowDetail('Open KOT Count', '${run['open_kot_count'] ?? 0}'),
                     _buildRowDetail('Execution Time', '${run['completed_at'] ?? 'N/A'}'),
                   ],
                 ),
