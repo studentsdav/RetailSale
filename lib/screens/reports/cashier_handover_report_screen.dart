@@ -223,9 +223,9 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
       sheet.appendRow([
         exc.TextCellValue('Handover Date'),
         exc.TextCellValue('Cashier Name'),
-        exc.TextCellValue('Expected Cash (₹)'),
-        exc.TextCellValue('Physical Cash (₹)'),
-        exc.TextCellValue('Variance (₹)'),
+        exc.TextCellValue('Expected Cash (Rs.)'),
+        exc.TextCellValue('Physical Cash (Rs.)'),
+        exc.TextCellValue('Variance (Rs.)'),
         exc.TextCellValue('Status'),
       ]);
 
@@ -320,7 +320,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
             pw.Divider(color: PdfColors.orange400, thickness: 1.5),
             pw.SizedBox(height: 12),
             pw.TableHelper.fromTextArray(
-              headers: ['Date', 'Cashier Name', 'Expected Cash (₹)', 'Physical Cash (₹)', 'Variance (₹)', 'Status'],
+              headers: ['Date', 'Cashier Name', 'Expected Cash (Rs.)', 'Physical Cash (Rs.)', 'Variance (Rs.)', 'Status'],
               data: [
                 ...rowsData,
                 [

@@ -421,6 +421,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                 _buildChecklistItem(
                   title: 'Unclosed Cashier Shifts',
                   count: validation?['unclosedShiftCount'] ?? 0,
+                  unclosedCashiers: validation?['unclosedCashiers'] as List?,
                   icon: Icons.badge,
                   onTap: () => _showCashierHandoverDialogFromAudit(context),
                 ),
@@ -630,6 +631,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
     required String title,
     required int count,
     required IconData icon,
+    List? unclosedCashiers,
     VoidCallback? onTap,
   }) {
     final bool isPassed = count == 0;
@@ -648,13 +650,29 @@ class _NightAuditScreenState extends State<NightAuditScreen>
         title,
         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: posTextDark),
       ),
-      subtitle: Text(
-        isPassed ? 'Clear (0 pending)' : '$count pending item(s) - Tap to resolve',
-        style: TextStyle(
-          fontSize: 13,
-          color: isPassed ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
-          fontWeight: FontWeight.w500,
-        ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isPassed ? 'Clear (0 pending)' : '$count pending item(s) - Tap to resolve',
+            style: TextStyle(
+              fontSize: 13,
+              color: isPassed ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (!isPassed && unclosedCashiers != null && unclosedCashiers.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Unclosed Cashier(s): ${unclosedCashiers.map((c) => "${c['name']} (${c['billCount']} bill${(c['billCount'] ?? 1) > 1 ? 's' : ''})").join(', ')}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFFB91C1C),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -686,8 +704,23 @@ class _NightAuditScreenState extends State<NightAuditScreen>
     final Map<String, int> denoms = {
       '2000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, 'coins': 0
     };
-    final String businessDate = context.read<NightAuditController>().currentBusinessDay?['business_date'] ??
+    final auditCtrl = context.read<NightAuditController>();
+    final String businessDate = auditCtrl.currentBusinessDay?['business_date'] ??
         DateTime.now().toIso8601String().split('T')[0];
+
+    final List unclosedCashiers = (auditCtrl.validationData?['unclosedCashiers'] as List?) ?? [];
+    
+    final userMap = await TokenStorage.getUser();
+    final int? currentUserId = userMap?['id'] != null ? int.tryParse(userMap!['id'].toString()) : null;
+
+    int? selectedCashierId = currentUserId;
+    if (unclosedCashiers.isNotEmpty) {
+      final firstMatch = unclosedCashiers.firstWhere(
+        (c) => (int.tryParse(c['id']?.toString() ?? '') == currentUserId),
+        orElse: () => unclosedCashiers.first,
+      );
+      selectedCashierId = int.tryParse(firstMatch['id']?.toString() ?? '') ?? currentUserId;
+    }
 
     await showDialog<void>(
       context: context,
@@ -723,7 +756,47 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                         'Submit physical cash handover for business date: $businessDate',
                         style: const TextStyle(fontSize: 13, color: posTextMuted),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
+
+                      if (unclosedCashiers.isNotEmpty) ...[
+                        const Text(
+                          'Select Cashier to Close Shift:',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: posTextDark),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.white,
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              isExpanded: true,
+                              value: selectedCashierId,
+                              items: unclosedCashiers.map<DropdownMenuItem<int>>((c) {
+                                final cId = int.tryParse(c['id']?.toString() ?? '') ?? 0;
+                                final name = c['name'] ?? 'User #$cId';
+                                final bCount = c['billCount'] ?? 1;
+                                return DropdownMenuItem<int>(
+                                  value: cId,
+                                  child: Text('$name ($bCount bill${bCount > 1 ? 's' : ''})'),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() {
+                                    selectedCashierId = val;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
                       Wrap(
                         spacing: 10,
                         runSpacing: 10,
@@ -780,13 +853,9 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                   ),
                   onPressed: () async {
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
-                    final auditCtrl = context.read<NightAuditController>();
                     try {
-                      final userMap = await TokenStorage.getUser();
-                      final int? cashierId = userMap?['id'] != null ? int.tryParse(userMap!['id'].toString()) : null;
-
                       await ApiClient.post(ApiEndpoints.hrmsHandover, {
-                        if (cashierId != null) 'cashier_id': cashierId,
+                        if (selectedCashierId != null) 'cashier_id': selectedCashierId,
                         'handover_date': businessDate,
                         'physical_cash': totalCash,
                         'denominations': denoms,
@@ -800,7 +869,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                             backgroundColor: Colors.green,
                           ),
                         );
-                        auditCtrl.runValidation();
+                        await auditCtrl.fetchStatus();
                       }
                     } catch (e) {
                       scaffoldMessenger.showSnackBar(

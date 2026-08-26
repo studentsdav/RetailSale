@@ -97,18 +97,30 @@ async function validatePreAuditConditions(propertyDb, outletId, businessDate) {
 
     // 2. Check unclosed cashier shifts / handovers
     let unclosedShiftCount = 0;
+    let unclosedCashiers = [];
     const startDate = new Date(`${businessDate}T00:00:00.000Z`);
     const endDate = new Date(`${businessDate}T23:59:59.999Z`);
 
     try {
         const activeCashiers = await propertyDb.models.sales_headers.findAll({
-            attributes: [[propertyDb.Sequelize.fn('DISTINCT', propertyDb.Sequelize.col('created_by')), 'cashier_id']],
-            where: { outlet_id: outletId, sale_date: { [Op.gte]: startDate, [Op.lte]: endDate } },
+            attributes: [
+                ['created_by', 'cashier_id'],
+                [propertyDb.Sequelize.fn('COUNT', propertyDb.Sequelize.col('id')), 'bill_count']
+            ],
+            where: {
+                outlet_id: outletId,
+                sale_date: { [Op.gte]: startDate, [Op.lte]: endDate },
+                status: { [Op.notIn]: ['CANCELLED', 'Cancelled', 'DRAFT', 'Draft'] }
+            },
+            group: ['created_by'],
             raw: true,
             bypassOutletFilter: true
         });
 
-        const cashierIds = activeCashiers.map(c => c.cashier_id).filter(Boolean);
+        const cashierIds = activeCashiers
+            .map(c => Number(c.cashier_id))
+            .filter(id => id && !isNaN(id));
+
         if (cashierIds.length > 0) {
             const closedHandovers = await propertyDb.models.hr_cashier_handovers.findAll({
                 attributes: ['cashier_id'],
@@ -121,17 +133,42 @@ async function validatePreAuditConditions(propertyDb, outletId, businessDate) {
                 bypassOutletFilter: true
             });
 
-            const closedCashierIds = new Set(closedHandovers.map(h => h.cashier_id));
-            unclosedShiftCount = cashierIds.filter(id => !closedCashierIds.has(id)).length;
+            const closedCashierIds = new Set(closedHandovers.map(h => Number(h.cashier_id)));
+            const unclosedIds = cashierIds.filter(id => !closedCashierIds.has(id));
+            unclosedShiftCount = unclosedIds.length;
+
+            if (unclosedIds.length > 0) {
+                const userRecords = await propertyDb.models.users.findAll({
+                    where: { id: { [Op.in]: unclosedIds } },
+                    attributes: ['id', 'full_name', 'username', 'mobile'],
+                    raw: true,
+                    bypassOutletFilter: true
+                }).catch(() => []);
+
+                unclosedCashiers = unclosedIds.map(id => {
+                    const u = userRecords.find(ur => Number(ur.id) === Number(id));
+                    const act = activeCashiers.find(c => Number(c.cashier_id) === Number(id));
+                    const name = u ? (u.full_name || u.username || `User #${id}`) : `Cashier #${id}`;
+                    const count = act ? parseInt(act.bill_count || 1, 10) : 1;
+                    return {
+                        id,
+                        name,
+                        username: u?.username || '',
+                        billCount: count
+                    };
+                });
+            }
         }
     } catch (e) {
         unclosedShiftCount = 0;
+        unclosedCashiers = [];
     }
 
     if (unclosedShiftCount > 0) {
+        const cashierNamesStr = unclosedCashiers.map(c => `${c.name} (${c.billCount} bill${c.billCount > 1 ? 's' : ''})`).join(', ');
         warnings.push({
             type: 'UNCLOSED_SHIFTS',
-            message: `There are ${unclosedShiftCount} cashier(s) who have not submitted their Shift Handover for ${businessDate}.`
+            message: `There are ${unclosedShiftCount} cashier(s) who logged in and created sales today but have not submitted their Shift Handover for ${businessDate}: ${cashierNamesStr}.`
         });
     }
 
@@ -169,6 +206,7 @@ async function validatePreAuditConditions(propertyDb, outletId, businessDate) {
         businessDate,
         openKotCount,
         unclosedShiftCount,
+        unclosedCashiers,
         draftBillCount,
         warnings
     };
