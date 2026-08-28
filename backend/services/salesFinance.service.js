@@ -52,7 +52,9 @@ async function refreshSaleOutstanding({
     // net_amount already includes round_off_amount (net = subtotal + tax + charges + roundOff).
     // Do NOT subtract round_off_amount again — that was creating a phantom outstanding balance.
     const effectiveNet = roundAmount(sale.net_amount);
-    const balanceDue = Math.max(0, effectiveNet - totalPaid);
+    const rawBalance = roundAmount(effectiveNet - totalPaid);
+    const isCredit = String(sale.payment_mode || '').toUpperCase().includes('CREDIT');
+    const balanceDue = (!isCredit && rawBalance <= 0.50) ? 0 : Math.max(0, rawBalance);
     const paymentStatus = resolvePaymentStatus(totalPaid, effectiveNet, sale.payment_mode);
 
     await sale.update({

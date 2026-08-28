@@ -904,7 +904,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                         sale['id'] == _selectedSale?['id'];
                                     final saleDate = DateTime.tryParse(
                                       sale['sale_date']?.toString() ?? '',
-                                    );
+                                    )?.toLocal();
                                     return ListTile(
                                       selected: selected,
                                       title: Row(
@@ -1141,11 +1141,11 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                               .map((cn) {
                                             final cnMap =
                                                 Map<String, dynamic>.from(cn);
-                                            final cnDate = DateTime.tryParse(
+                                            final cnDate = (DateTime.tryParse(
                                                     cnMap['credit_note_date']
                                                             ?.toString() ??
                                                         '') ??
-                                                DateTime.now();
+                                                DateTime.now()).toLocal();
                                             return ListTile(
                                               contentPadding: EdgeInsets.zero,
                                               title: Text(

@@ -24,8 +24,17 @@ function extractNumericPart(value, setting) {
         middle = middle.substring(prefix.length);
     }
     if (postfix) {
-        if (!middle.endsWith(postfix)) return null;
-        middle = middle.substring(0, middle.length - postfix.length);
+        if (middle.endsWith(postfix)) {
+            middle = middle.substring(0, middle.length - postfix.length);
+        } else {
+            // Fallback for financial year postfix pattern like -26/27 or -26/28
+            const fyMatch = middle.match(/^(.*?)(-\d{2}\/\d{2}|-\d{4}\/\d{2}|-\d{2}-\d{2})$/);
+            if (fyMatch) {
+                middle = fyMatch[1];
+            } else {
+                return null;
+            }
+        }
     }
 
     const parsed = parseInt(middle, 10);

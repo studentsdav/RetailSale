@@ -117,6 +117,17 @@ function incrementSaleNo(saleNo) {
     const raw = String(saleNo || '').trim();
     if (!raw) return raw;
 
+    // Handle financial year postfix format like "-26/27", "-2025/26", "-26-27"
+    const fyMatch = raw.match(/^(.*?)[^\d]?(\d+)(-\d{2}\/\d{2}|-\d{4}\/\d{2}|-\d{2}-\d{2})$/);
+    if (fyMatch) {
+        const prefix = fyMatch[1] || '';
+        const numeric = fyMatch[2] || '0';
+        const postfix = fyMatch[3] || '';
+        const width = numeric.length;
+        const nextValue = String(Number(numeric) + 1).padStart(width, '0');
+        return `${prefix}${nextValue}${postfix}`;
+    }
+
     const match = raw.match(/^(.*?)(\d+)([^0-9]*)$/);
     if (!match) {
         return `${raw}-2`;
@@ -626,11 +637,14 @@ async function getSubscriptionConsumedQtyForDay(
     transaction = undefined,
     itemId = null
 ) {
+    const outlet_id = req.user?.outlet_id;
+    const formattedYmd = formatDateLocalYmd(txnDate);
     const [rows] = await req.propertyDb.query(
         `
 SELECT COALESCE(SUM(covered_qty), 0) AS covered_qty
 FROM milk_subscription_consumptions
 WHERE subscription_id = :subscription_id
+  ${outlet_id ? 'AND outlet_id = :outlet_id' : ''}
   AND txn_date = :txn_date
   ${Number.isFinite(Number(itemId)) && Number(itemId) > 0 ? 'AND item_id = :item_id' : ''}
   AND status <> 'CANCELLED'
@@ -638,7 +652,8 @@ WHERE subscription_id = :subscription_id
         {
             replacements: {
                 subscription_id: subscriptionId,
-                txn_date: formatDateLocalYmd(txnDate),
+                outlet_id: outlet_id || undefined,
+                txn_date: formattedYmd,
                 item_id: Number.isFinite(Number(itemId)) && Number(itemId) > 0
                     ? Number(itemId)
                     : undefined
@@ -647,7 +662,7 @@ WHERE subscription_id = :subscription_id
         }
     );
     const consumedQty = toRoundedAmount(rows?.[0]?.covered_qty);
-    if (consumedQty > 0) {
+    if (consumedQty > 0 || !outlet_id) {
         return consumedQty;
     }
 
@@ -657,15 +672,18 @@ SELECT COALESCE(SUM(si.qty), 0) AS covered_qty
 FROM sales_headers sh
 INNER JOIN sales_items si
     ON si.sale_id = sh.id
-WHERE sh.notes ILIKE :subscription_note
-  AND sh.sale_date::date = :txn_date
+WHERE sh.outlet_id = :outlet_id
+  AND sh.sale_date >= :start_date AND sh.sale_date <= :end_date
   AND COALESCE(sh.is_deleted, FALSE) = FALSE
+  AND sh.notes LIKE '%[SUBSCRIPTION_AUTO] subscription_id=' || :subscription_id || '%'
   ${Number.isFinite(Number(itemId)) && Number(itemId) > 0 ? 'AND si.item_id = :item_id' : ''}
         `,
         {
             replacements: {
-                subscription_note: `%[SUBSCRIPTION_AUTO] subscription_id=${subscriptionId}%`,
-                txn_date: formatDateLocalYmd(txnDate),
+                outlet_id,
+                subscription_id: String(subscriptionId),
+                start_date: `${formattedYmd} 00:00:00`,
+                end_date: `${formattedYmd} 23:59:59.999`,
                 item_id: Number.isFinite(Number(itemId)) && Number(itemId) > 0
                     ? Number(itemId)
                     : undefined
@@ -797,11 +815,13 @@ WHERE c.outlet_id = :outlet_id
         return consumedQty + pendingReservedQty;
     }
 
+    const formattedYmd = formatDateLocalYmd(txnDate);
     let customerWhereFallback = '';
     const fallbackParams = {
         outlet_id: req.user.outlet_id,
         item_id: normalizedItemId,
-        txn_date: formatDateLocalYmd(txnDate),
+        start_date: `${formattedYmd} 00:00:00`,
+        end_date: `${formattedYmd} 23:59:59.999`,
         subscription_note: '%[SUBSCRIPTION_AUTO]%'
     };
     if (normalizedIdentity.customer_phone) {
@@ -825,9 +845,9 @@ FROM sales_headers sh
 INNER JOIN sales_items si
     ON si.sale_id = sh.id
 WHERE sh.outlet_id = :outlet_id
-  AND sh.sale_date::date = :txn_date
+  AND sh.sale_date >= :start_date AND sh.sale_date <= :end_date
   AND COALESCE(sh.is_deleted, FALSE) = FALSE
-  AND sh.notes ILIKE :subscription_note
+  AND sh.notes LIKE :subscription_note
   AND si.item_id = :item_id
   ${customerWhereFallback}
         `,
@@ -1416,24 +1436,35 @@ function buildManualAdvanceExclusionClause(alias = '') {
 }
 
 async function findSubscriptionItemAdvance(req, subscriptionId, itemId, transaction = undefined) {
+    const outlet_id = req.user?.outlet_id;
+    const whereBase = { item_id: itemId };
+    if (outlet_id) whereBase.outlet_id = outlet_id;
+
+    // 1. Fast indexed lookup by source_sale_id (< 1ms)
+    const fastMatch = await req.propertyDb.models.customer_item_advances.findOne({
+        where: {
+            ...whereBase,
+            source_sale_id: subscriptionId
+        },
+        transaction
+    });
+    if (fastMatch) return fastMatch;
+
+    // 2. Fallback search by note pattern if source_sale_id was not set on older records
     return req.propertyDb.models.customer_item_advances.findOne({
         where: {
-            outlet_id: req.user.outlet_id,
-            item_id: itemId,
-            [Op.or]: [
-                { source_sale_id: subscriptionId },
-                { note: { [Op.iLike]: `%Subscription #${subscriptionId}%` } }
-            ]
+            ...whereBase,
+            note: { [Op.iLike]: `%Subscription #${subscriptionId}%` }
         },
         transaction
     });
 }
 
-async function consumeSubscriptionItemAdvance(req, subscriptionId, itemId, qty, transaction = undefined) {
+async function consumeSubscriptionItemAdvance(req, subscriptionId, itemId, qty, transaction = undefined, existingAdvance = null) {
     const delta = toAmount(qty);
     if (delta <= 0) return null;
 
-    const advance = await findSubscriptionItemAdvance(req, subscriptionId, itemId, transaction);
+    const advance = existingAdvance || (await findSubscriptionItemAdvance(req, subscriptionId, itemId, transaction));
     if (!advance) return null;
 
     const currentAvailable = toAmount(advance.available_qty);
@@ -2566,7 +2597,8 @@ async function createSaleVersion({
     createPayment = true,
     stockTxnType = 'SALE',
     affectStock = true,
-    invoiceDiscountAmount = 0
+    invoiceDiscountAmount = 0,
+    itemMasterMap: inputItemMasterMap = null
 }) {
     const saleItems = Array.isArray(items) ? items : [];
     const status = header.status || 'COMPLETED';
@@ -2586,15 +2618,18 @@ async function createSaleVersion({
     const created_by = req.user.id;
     const normalizedIdentity = normalizeCustomerIdentity(header);
 
-    const itemIds = saleItems.map(row => Number(row?.item_id)).filter(id => Number.isFinite(id) && id > 0);
-    const itemMasters = itemIds.length > 0 ? await req.propertyDb.models.item_master.findAll({
-        where: {
-            outlet_id,
-            id: { [Op.in]: itemIds }
-        },
-        transaction
-    }) : [];
-    const itemMasterMap = new Map(itemMasters.map(item => [item.id, item]));
+    let itemMasterMap = inputItemMasterMap;
+    if (!itemMasterMap) {
+        const itemIds = saleItems.map(row => Number(row?.item_id)).filter(id => Number.isFinite(id) && id > 0);
+        const itemMasters = itemIds.length > 0 ? await req.propertyDb.models.item_master.findAll({
+            where: {
+                outlet_id,
+                id: { [Op.in]: itemIds }
+            },
+            transaction
+        }) : [];
+        itemMasterMap = new Map(itemMasters.map(item => [item.id, item]));
+    }
 
     let totalQty = 0;
     let subTotal = 0;
@@ -2631,7 +2666,8 @@ async function createSaleVersion({
         baseAmount,
         netAmount,
         saleItems,
-        transaction
+        transaction,
+        { itemMasterMap }
     );
     console.log(`[PERF-CSV] calculateCommissionFields: ${Date.now()-_t}ms`);
     _t = Date.now();
@@ -3318,6 +3354,37 @@ exports.createSale = async (req, res) => {
         const moduleUpper = String(req.user?.business_module || req.user?.module || '').toUpperCase();
         const isRestaurant = moduleUpper === 'RESTAURANT';
 
+        // Fallback: If customer_gstin or customer_address is missing on header, try looking up linked customer record
+        if ((!headerForCreate.customer_gstin || !headerForCreate.customer_address) && (headerForCreate.customer_phone || headerForCreate.customer_name)) {
+            try {
+                const phoneDigits = String(headerForCreate.customer_phone || '').replace(/\D/g, '').trim();
+                const last10 = phoneDigits.length > 10 ? phoneDigits.slice(-10) : phoneDigits;
+                const custWhere = { outlet_id: req.user.outlet_id };
+                if (last10.length >= 7) {
+                    custWhere.customer_phone = { [Op.in]: [last10, `91${last10}`, `+91${last10}`, `0${last10}`] };
+                } else if (headerForCreate.customer_name) {
+                    custWhere.customer_name = String(headerForCreate.customer_name).trim();
+                }
+                const foundCustomer = await req.propertyDb.models.customers.findOne({ where: custWhere, transaction: t });
+                if (foundCustomer) {
+                    if (!headerForCreate.customer_gstin && foundCustomer.customer_gstin) {
+                        headerForCreate.customer_gstin = String(foundCustomer.customer_gstin).trim().toUpperCase();
+                    }
+                    if (!headerForCreate.customer_address && foundCustomer.customer_address) {
+                        headerForCreate.customer_address = String(foundCustomer.customer_address).trim();
+                    }
+                }
+            } catch (_) {}
+        }
+
+        // Auto-set order_type to B2B if customer_gstin is present and order_type is default/STORE/B2C
+        if (headerForCreate.customer_gstin && String(headerForCreate.customer_gstin).trim().length > 0) {
+            const currentType = String(headerForCreate.order_type || '').toUpperCase();
+            if (!currentType || currentType === 'STORE' || currentType === 'B2C' || currentType === 'RETAIL') {
+                headerForCreate.order_type = 'B2B';
+            }
+        }
+
         if (status === 'DRAFT') {
             if (isRestaurant) {
                 // Restaurant Case: Direct official bill number (e.g. FAM-63-26)
@@ -3469,7 +3536,7 @@ exports.createSale = async (req, res) => {
         const hasSubscriptionFreeRows = splitItems.free.some((row) => row._subscription_free === true || row.is_advance_free === true);
         const hasSchemeFreeRows = splitItems.free.some((row) => row.is_scheme_free === true && !(row._subscription_free === true || row.is_advance_free === true));
         const paidSaleNo = String(headerForCreate.sale_no || '').trim();
-        const freeSaleNo = incrementSaleNo(paidSaleNo);
+        const freeSaleNo = splitItems.paid.length > 0 ? incrementSaleNo(paidSaleNo) : paidSaleNo;
         const buildBillHeader = (saleNo, extra = {}) => ({
             ...headerForCreate,
             sale_no: saleNo,
@@ -3533,7 +3600,8 @@ exports.createSale = async (req, res) => {
                 }),
                 items: splitItems.paid,
                 overrides: {},
-                affectStock
+                affectStock,
+                itemMasterMap: itemMetaMap
             });
             console.log(`[PERF] createSaleVersion(paid): ${Date.now()-t6}ms`);
             createdSales.push(primarySale);
@@ -3556,20 +3624,26 @@ exports.createSale = async (req, res) => {
                         ? 'SUBSCRIPTION'
                         : (hasSchemeFreeRows ? 'SCHEME' : 'DISCOUNT'),
                     payment_reference: null,
-                    amount_paid: 0,
-                    initial_amount_paid: 0,
+                    amount_paid: freeBillNetAmount,
                     change_amount: 0,
-                    balance_due: freeBillNetAmount,
-                    net_amount: freeBillNetAmount,
+                    balance_due: 0,
                     charges: freeBillCharges,
                     charge_total: freeBillChargeTotal,
                     charge_tax_total: freeBillChargeTaxTotal,
+                    sub_total: freeBillDiscount,
+                    taxable_amount: 0,
+                    total_tax: 0,
+                    cgst_amount: 0,
+                    sgst_amount: 0,
+                    igst_amount: 0,
+                    tax_percent: 0,
                     total_discount: freeBillDiscount,
+                    manual_discount_type: 'AMOUNT',
+                    manual_discount_value: freeBillDiscount,
+                    manual_discount_amount: freeBillDiscount,
+                    round_off_amount: 0,
+                    net_amount: freeBillNetAmount,
                     invoice_discount_amount: freeBillDiscount,
-                    scheme_id: null,
-                    scheme_name: null,
-                    scheme_discount: 0,
-                    ledger_discount_amount: 0,
                     manual_discount_type: null,
                     manual_discount_value: 0,
                     manual_discount_amount: 0,
@@ -3641,7 +3715,8 @@ exports.createSale = async (req, res) => {
                             coverage.subscriptionId,
                             coverage.itemId || subscriptionAllocation.subscriptionItemId,
                             coverage.totalCoveredQty,
-                            t
+                            t,
+                            coverageAdvance
                         );
                     }
 
@@ -4902,6 +4977,30 @@ exports.getSaleDetails = async (req, res) => {
         });
 
         const saleJson = sale.toJSON();
+        
+        // Fallback: If customer_gstin or customer_address is empty, lookup customer master record
+        if ((!saleJson.customer_gstin || !saleJson.customer_address) && (saleJson.customer_phone || saleJson.customer_name)) {
+            try {
+                const phoneDigits = String(saleJson.customer_phone || '').replace(/\D/g, '').trim();
+                const last10 = phoneDigits.length > 10 ? phoneDigits.slice(-10) : phoneDigits;
+                const custWhere = { outlet_id: outlet_id || saleJson.outlet_id };
+                if (last10) {
+                    custWhere.customer_phone = { [Op.like]: `%${last10}%` };
+                } else if (saleJson.customer_name) {
+                    custWhere.customer_name = { [Op.iLike]: String(saleJson.customer_name).trim() };
+                }
+                const foundCustomer = await req.propertyDb.models.customers.findOne({ where: custWhere });
+                if (foundCustomer) {
+                    if (!saleJson.customer_gstin && foundCustomer.customer_gstin) {
+                        saleJson.customer_gstin = String(foundCustomer.customer_gstin).trim().toUpperCase();
+                    }
+                    if (!saleJson.customer_address && foundCustomer.customer_address) {
+                        saleJson.customer_address = String(foundCustomer.customer_address).trim();
+                    }
+                }
+            } catch (_) {}
+        }
+
         saleJson.items = saleJson.items.map(item => {
             return {
                 ...item,

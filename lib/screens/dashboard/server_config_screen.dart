@@ -3,7 +3,7 @@ import 'package:retailpos/screens/splash_screen.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
-import '../../main.dart'; // Adjust import to where your main() or restart logic is
+import '../settings/outlet_setup_screen.dart';
 
 class ServerConfigScreen extends StatefulWidget {
   final Widget? nextScreen;
@@ -17,6 +17,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
   final _urlCtrl = TextEditingController();
   bool _isLoading = false;
   bool _isFetching = false;
+  bool _hasFetched = false;
   List<dynamic> _fetchedOutlets = [];
   String? _selectedOutletCode;
 
@@ -24,7 +25,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
   void initState() {
     super.initState();
     _urlCtrl.text = AppConfig.baseUrl;
-    
+
     // Auto-fetch outlets if baseUrl is already configured
     if (AppConfig.baseUrl.isNotEmpty) {
       Future.microtask(() => _fetchOutletsAndPreselect());
@@ -53,6 +54,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
       _isFetching = true;
       _fetchedOutlets = [];
       _selectedOutletCode = null;
+      _hasFetched = true;
     });
 
     try {
@@ -63,17 +65,23 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
 
       final res = await ApiClient.get("$finalUrl/api/public/outlets");
       if (res['success'] == true && res['data'] is List) {
+        final list = res['data'] as List;
         setState(() {
-          _fetchedOutlets = res['data'];
+          _fetchedOutlets = list;
           if (_fetchedOutlets.isNotEmpty) {
             _selectedOutletCode = _fetchedOutlets.first['outlet_code']?.toString();
           }
         });
       } else {
-        throw Exception("Failed to fetch outlets from server");
+        setState(() {
+          _fetchedOutlets = [];
+        });
       }
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _fetchedOutlets = [];
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Failed to fetch outlets: ${e.toString()}"),
@@ -81,9 +89,11 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
         ),
       );
     } finally {
-      setState(() {
-        _isFetching = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isFetching = false;
+        });
+      }
     }
   }
 
@@ -100,7 +110,8 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
   }
 
   Future<void> _saveAndRestart() async {
-    if (_urlCtrl.text.trim().isEmpty) {
+    final url = _urlCtrl.text.trim();
+    if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text("Server URL is required"),
@@ -109,7 +120,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
       return;
     }
 
-    if (_selectedOutletCode == null) {
+    if (_fetchedOutlets.isNotEmpty && _selectedOutletCode == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text("Please select an outlet"),
@@ -121,20 +132,28 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
     setState(() => _isLoading = true);
 
     try {
-      String finalUrl = _urlCtrl.text.trim();
+      String finalUrl = url;
       if (finalUrl.endsWith('/')) {
         finalUrl = finalUrl.substring(0, finalUrl.length - 1);
       }
 
-      List<String> finalOutlets = [_selectedOutletCode!];
+      List<String> finalOutlets = [];
+      if (_selectedOutletCode != null && _fetchedOutlets.isNotEmpty) {
+        finalOutlets = [_selectedOutletCode!];
+      }
 
       await AppConfig.saveConfig(finalUrl, finalOutlets);
 
       if (!mounted) return;
+
+      final Widget destination = finalOutlets.isEmpty
+          ? (widget.nextScreen ?? const OutletSetupScreen())
+          : (widget.nextScreen ?? const SplashScreen());
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
-          builder: (context) => widget.nextScreen ?? const SplashScreen(),
+          builder: (context) => destination,
         ),
         (Route<dynamic> route) => false,
       );
@@ -147,6 +166,15 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool canSave = _urlCtrl.text.trim().isNotEmpty &&
+        !_isLoading &&
+        !_isFetching &&
+        (_fetchedOutlets.isEmpty || _selectedOutletCode != null);
+
+    final String buttonText = _fetchedOutlets.isNotEmpty
+        ? "Save Configuration"
+        : "Save & Proceed to Outlet Setup";
+
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(title: const Text("System Configuration")),
@@ -181,6 +209,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                   Expanded(
                     child: TextField(
                       controller: _urlCtrl,
+                      onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(
                         labelText: "Server URL",
                         hintText: "http://192.168.1.100:3000",
@@ -234,20 +263,42 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                     });
                   },
                 ),
+              ] else if (_hasFetched) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "No registered outlets found on this server. Proceed to registration and outlet setup.",
+                          style: TextStyle(color: Colors.blue, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 height: 48,
                 child: FilledButton(
-                  onPressed: _isLoading || _selectedOutletCode == null ? null : _saveAndRestart,
+                  onPressed: canSave ? _saveAndRestart : null,
                   child: _isLoading
                       ? const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                               color: Colors.white, strokeWidth: 2))
-                      : const Text("Save Configuration"),
+                      : Text(buttonText),
                 ),
               ),
             ],

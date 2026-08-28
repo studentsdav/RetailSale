@@ -1432,6 +1432,12 @@ ON customer_item_advances(outlet_id, customer_phone, customer_gstin, advance_dat
 CREATE INDEX IF NOT EXISTS idx_customer_item_advances_available
 ON customer_item_advances(outlet_id, item_id, available_qty, advance_date);
 
+CREATE INDEX IF NOT EXISTS idx_customer_item_advances_source_sale
+ON customer_item_advances(outlet_id, item_id, source_sale_id);
+
+CREATE INDEX IF NOT EXISTS idx_customer_advances_source_sale
+ON customer_advances(outlet_id, source_sale_id);
+
 COMMIT;
       `);
     }

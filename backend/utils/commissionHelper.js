@@ -25,7 +25,48 @@ async function getSaleSourcesCache(db, transaction) {
     return map;
 }
 
-async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, saleItems = [], transaction = null) {
+let _rulesCacheMap = new Map();
+let _rulesCacheTime = 0;
+
+async function getCommissionRulesCache(db, platform_id, transaction) {
+    const now = Date.now();
+    if ((now - _rulesCacheTime) < 60000 && _rulesCacheMap.has(platform_id)) {
+        return _rulesCacheMap.get(platform_id);
+    }
+    const rules = await db.models.commission_rules.findAll({
+        where: { platform_id, is_active: true },
+        transaction
+    });
+    if ((now - _rulesCacheTime) >= 60000) {
+        _rulesCacheMap.clear();
+        _rulesCacheTime = now;
+    }
+    _rulesCacheMap.set(platform_id, rules);
+    return rules;
+}
+
+let _itemGroupsCacheMap = new Map();
+let _itemGroupsCacheTime = 0;
+
+async function getItemGroupsCache(db, currentOutletId, transaction) {
+    const now = Date.now();
+    const key = String(currentOutletId || 0);
+    if ((now - _itemGroupsCacheTime) < 60000 && _itemGroupsCacheMap.has(key)) {
+        return _itemGroupsCacheMap.get(key);
+    }
+    const groups = await db.models.item_groups.findAll({
+        where: currentOutletId ? { outlet_id: currentOutletId } : {},
+        transaction
+    });
+    if ((now - _itemGroupsCacheTime) >= 60000) {
+        _itemGroupsCacheMap.clear();
+        _itemGroupsCacheTime = now;
+    }
+    _itemGroupsCacheMap.set(key, groups);
+    return groups;
+}
+
+async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, saleItems = [], transaction = null, options = {}) {
     let platform_commission_rate = 0;
     let platform_gst_rate = 0;
     let platform_tds_rate = 0;
@@ -56,30 +97,27 @@ async function calculateCommissionFields(db, saleSource, baseAmount, netAmount, 
 
     // 2. Run Hierarchical Rule Engine if items are provided
     if (platform_id && Array.isArray(saleItems) && saleItems.length > 0) {
-        // ⚡ Fetch rules FIRST — if there are none we skip the more expensive
-        // item_master + item_groups fetches entirely (saves 2 DB round-trips).
-        const rules = await db.models.commission_rules.findAll({
-            where: { platform_id, is_active: true },
-            transaction
-        });
+        // ⚡ Fetch rules using in-memory cache FIRST
+        const rules = await getCommissionRulesCache(db, platform_id, transaction);
 
         if (rules.length === 0) {
             // No rules configured for this source — skip item-level calculation
         } else {
-        // Fetch items master details
-        const itemIds = saleItems.map(item => Number(item.item_id || item.product_id)).filter(Boolean);
-        const itemMasters = itemIds.length > 0
-            ? await db.models.item_master.findAll({ where: { id: itemIds }, transaction })
-            : [];
-        const itemMasterMap = new Map(itemMasters.map(item => [item.id, item]));
+        // Fetch or reuse items master details
+        let itemMasterMap = options.itemMasterMap;
+        if (!itemMasterMap) {
+            const itemIds = saleItems.map(item => Number(item.item_id || item.product_id)).filter(Boolean);
+            const itemMasters = itemIds.length > 0
+                ? await db.models.item_master.findAll({ where: { id: itemIds }, transaction })
+                : [];
+            itemMasterMap = new Map(itemMasters.map(item => [item.id, item]));
+        }
 
-        // Fetch category group details for the current outlet to avoid duplicate name conflicts
-        const store = require('./context').contextStorage.getStore();
-        const currentOutletId = store?.get('outlet_id') || itemMasters[0]?.outlet_id;
-        const allGroups = await db.models.item_groups.findAll({
-            where: currentOutletId ? { outlet_id: currentOutletId } : {},
-            transaction
-        });
+        // Fetch category group details using in-memory cache
+        const store = require('./context')?.contextStorage?.getStore?.();
+        const firstItem = itemMasterMap ? Array.from(itemMasterMap.values())[0] : null;
+        const currentOutletId = store?.get('outlet_id') || firstItem?.outlet_id;
+        const allGroups = await getItemGroupsCache(db, currentOutletId, transaction);
         const groupNameToId = new Map(allGroups.map(g => [g.group_name, g.id]));
 
 

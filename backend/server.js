@@ -280,12 +280,8 @@ if (!fs.existsSync(licensePath)) {
         await runMigrations(propertyDb);
 
         console.log('✅ Database migrations complete');
-        try {
-            await propertyDb.sync({ alter: false });
-            console.log('✅ Models synced');
-        } catch (syncErr) {
-            console.warn('⚠️ Model sync skipped or failed:', syncErr.message);
-        }
+        // Note: Model sync disabled to prevent duplicate PostgreSQL constraint index generation. Database migrations manage table schema.
+        // await propertyDb.sync({ alter: false });
 
         initializeAllBackups();
         startLoyaltyExpiryJob(propertyDb);

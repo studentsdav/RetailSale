@@ -831,7 +831,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         'amount': sale.netAmount
       });
     }
-    return splits;
+
+    // Consolidate duplicate mode entries (e.g. CARD 23.50 + CARD 0.10 roundoff) into a single row per payment mode
+    final Map<String, double> consolidated = {};
+    for (final item in splits) {
+      final String m = (item['mode'] ?? 'CASH').toString().toUpperCase();
+      final double a = (item['amount'] as num).toDouble();
+      consolidated[m] = (consolidated[m] ?? 0.0) + a;
+    }
+    return consolidated.entries
+        .where((e) => e.value.abs() > 0.001)
+        .map((e) => {'mode': e.key, 'amount': e.value})
+        .toList();
   }
 
   List<PaymentBreakdownRow> get _paymentBreakdownRows {
@@ -956,17 +967,31 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       _gstr2Rows.fold<int>(0, (sum, row) => sum + row.billCount);
 
   double _billWiseTaxSaleValue(SalesReport sale) {
-    return sale.items.fold<double>(
+    final rawTaxed = sale.items.fold<double>(
       0,
       (sum, item) => sum + (_isTaxedItem(item) ? item.netAmount : 0),
     );
-  }
-
-  double _billWiseNonTaxSaleValue(SalesReport sale) {
-    return sale.items.fold<double>(
+    final rawNonTax = sale.items.fold<double>(
       0,
       (sum, item) => sum + (_isTaxedItem(item) ? 0 : item.netAmount),
     );
+    final rawTotal = rawTaxed + rawNonTax;
+    if (rawTotal <= 0.009) return 0;
+    return (rawTaxed / rawTotal) * sale.netAmount;
+  }
+
+  double _billWiseNonTaxSaleValue(SalesReport sale) {
+    final rawTaxed = sale.items.fold<double>(
+      0,
+      (sum, item) => sum + (_isTaxedItem(item) ? item.netAmount : 0),
+    );
+    final rawNonTax = sale.items.fold<double>(
+      0,
+      (sum, item) => sum + (_isTaxedItem(item) ? 0 : item.netAmount),
+    );
+    final rawTotal = rawTaxed + rawNonTax;
+    if (rawTotal <= 0.009) return 0;
+    return (rawNonTax / rawTotal) * sale.netAmount;
   }
 
   double _taxableSaleValue(SalesReport sale) {

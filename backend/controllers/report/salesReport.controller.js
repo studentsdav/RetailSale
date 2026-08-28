@@ -280,6 +280,52 @@ exports.getSalesReport = async (req, res) => {
         let profit = 0;
         let loss = 0;
 
+        // Pre-fetch customer master details for sales headers missing GSTIN or address
+        const phonesToLookup = new Set();
+        const namesToLookup = new Set();
+        for (const s of sales) {
+            const rawGstin = String(s.customer_gstin || '').trim();
+            if (!rawGstin) {
+                if (s.customer_phone) {
+                    const cleanP = String(s.customer_phone).replace(/\D/g, '').trim();
+                    const last10 = cleanP.length > 10 ? cleanP.slice(-10) : cleanP;
+                    if (last10) phonesToLookup.add(last10);
+                }
+                if (s.customer_name) {
+                    namesToLookup.add(String(s.customer_name).trim().toUpperCase());
+                }
+            }
+        }
+        const customerMasterByPhone = new Map();
+        const customerMasterByName = new Map();
+        if (phonesToLookup.size > 0 || namesToLookup.size > 0) {
+            try {
+                const orConds = [];
+                if (phonesToLookup.size > 0) {
+                    orConds.push({ customer_phone: { [Op.or]: Array.from(phonesToLookup).map(p => ({ [Op.like]: `%${p}%` })) } });
+                }
+                if (namesToLookup.size > 0) {
+                    orConds.push({ customer_name: { [Op.or]: Array.from(namesToLookup).map(n => ({ [Op.iLike]: n })) } });
+                }
+                const custRows = await req.propertyDb.models.customers.findAll({
+                    where: {
+                        outlet_id,
+                        [Op.or]: orConds
+                    }
+                });
+                for (const c of custRows) {
+                    if (c.customer_phone) {
+                        const cleanP = String(c.customer_phone).replace(/\D/g, '').trim();
+                        const last10 = cleanP.length > 10 ? cleanP.slice(-10) : cleanP;
+                        if (last10) customerMasterByPhone.set(last10, c);
+                    }
+                    if (c.customer_name) {
+                        customerMasterByName.set(String(c.customer_name).trim().toUpperCase(), c);
+                    }
+                }
+            } catch (_) {}
+        }
+
         // Combine sales and credit notes into a unified array, sorted by date DESC
         const allRecords = [
             ...sales.map(s => ({ type: 'SALE', record: s, date: new Date(s.sale_date) })),
@@ -290,6 +336,20 @@ exports.getSalesReport = async (req, res) => {
         const data = allRecords.map((rec) => {
             if (rec.type === 'SALE') {
                 const sale = rec.record;
+                let resolvedGstin = String(sale.customer_gstin || '').trim().toUpperCase();
+                let resolvedAddress = String(sale.customer_address || '').trim();
+                if (!resolvedGstin) {
+                    const cleanP = String(sale.customer_phone || '').replace(/\D/g, '').trim();
+                    const last10 = cleanP.length > 10 ? cleanP.slice(-10) : cleanP;
+                    const matchCust = (last10 ? customerMasterByPhone.get(last10) : null) ||
+                        (sale.customer_name ? customerMasterByName.get(String(sale.customer_name).trim().toUpperCase()) : null);
+                    if (matchCust && matchCust.customer_gstin) {
+                        resolvedGstin = String(matchCust.customer_gstin).trim().toUpperCase();
+                    }
+                    if (!resolvedAddress && matchCust && matchCust.customer_address) {
+                        resolvedAddress = String(matchCust.customer_address).trim();
+                    }
+                }
                 let effectivePaymentMode = sale.payment_mode;
                 if (String(sale.payment_mode).toUpperCase() === 'CREDIT' && sale.repayments && sale.repayments.length > 0) {
                     const sortedRepayments = [...sale.repayments].sort((a, b) => new Date(a.payment_date || a.createdAt).getTime() - new Date(b.payment_date || b.createdAt).getTime());
@@ -638,8 +698,8 @@ exports.getSalesReport = async (req, res) => {
                     sale_zone: zone.key,
                     customer_name: sale.customer_name,
                     customer_phone: sale.customer_phone,
-                    customer_address: sale.customer_address,
-                    customer_gstin: sale.customer_gstin,
+                    customer_address: resolvedAddress || sale.customer_address,
+                    customer_gstin: resolvedGstin || sale.customer_gstin,
                     payment_mode: effectivePaymentMode,
                     payment_reference: sale.payment_reference,
                     cash_amount: roundAmount(cashAmount),
@@ -648,7 +708,7 @@ exports.getSalesReport = async (req, res) => {
                     other_amount: roundAmount(otherAmount),
                     advance_amount: roundAmount(advanceAmount),
                     advance_adjustment_amount: roundAmount(advanceAdjustmentAmount),
-                    order_type: sale.order_type,
+                    order_type: resolvedGstin ? 'B2B' : sale.order_type,
                     sale_source: sale.sale_source || 'Store',
                     billing_country: sale.billing_country,
                     billing_tax_mode: sale.billing_tax_mode,

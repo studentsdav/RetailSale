@@ -665,14 +665,8 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   bool get _isCashRoundApplicable {
-    if (_paymentEntries.isEmpty) {
-      return _paymentMode.toUpperCase() == 'CASH';
-    }
-    final active = _paymentEntries
-        .where((entry) => (entry.amount) > _retailRoundingTolerance)
-        .toList();
-    if (active.isEmpty) return _paymentMode.toUpperCase() == 'CASH';
-    return active.every((entry) => entry.method.toUpperCase() == 'CASH');
+    // Bill rounding applies consistently to all payment methods in retail sales (CASH, CARD, UPI, BANK, etc.)
+    return true;
   }
 
   double _normalizeRetailAmount(double value) {
@@ -1688,10 +1682,13 @@ class _SaleScreenState extends State<SaleScreen> {
 
     final invoiceTotal = invoiceTotalOverride ?? _payableInvoiceTotal;
     double overpay = _positiveDelta(nonCredit - invoiceTotal);
+    if (overpay <= _cashRoundStep) overpay = 0;
     double refund = cash >= overpay ? overpay : 0;
     final invalidRefund = overpay > cash;
     final collectedApplied = nonCredit - refund;
-    double balanceDue = _positiveDelta(invoiceTotal - collectedApplied);
+    double rawBalanceDue = _positiveDelta(invoiceTotal - collectedApplied);
+    final hasCreditMethod = entries.any((entry) => entry.method.trim().toUpperCase() == 'CREDIT' && entry.amount > 0.009);
+    double balanceDue = (!hasCreditMethod && rawBalanceDue <= _cashRoundStep) ? 0 : rawBalanceDue;
     final primaryMode = entries
         .firstWhere(
           (entry) => entry.method != 'CREDIT' && entry.method != 'CASH ON DELIVERY',
@@ -2652,6 +2649,9 @@ class _SaleScreenState extends State<SaleScreen> {
       _customerName.text = customer.customerName;
       _customerAddress.text = customer.customerAddress;
       _customerGstin.text = customer.customerGstin;
+      if (customer.customerGstin.trim().isNotEmpty) {
+        _orderType = 'B2B';
+      }
       _schemeManuallyRemoved =
           preserveManualSchemeRemoval ? _schemeManuallyRemoved : false;
       _selectedCustomerSchemeSuppressed =
@@ -5205,6 +5205,7 @@ class _SaleScreenState extends State<SaleScreen> {
               .where((entry) => entry.method != 'CREDIT')
               .fold<double>(0, (sum, entry) => sum + entry.amount);
           double overpay = _positiveDelta(rawNonCredit - payableAfterAdvance);
+          if (overpay <= _cashRoundStep) overpay = 0;
           double previousAdjust = adjustPreviousCredit
               ? (overpay > previousOutstanding ? previousOutstanding : overpay)
               : 0;
@@ -6438,22 +6439,52 @@ class _SaleScreenState extends State<SaleScreen> {
         'Retail round off: ${retailRoundOff >= 0 ? '+' : ''}${retailRoundOff.toStringAsFixed(2)}',
       );
     }
-    String? resolvedCustomerAddress = _customerAddress.text.trim();
-    if (_taxMode == 'IGST' && _selectedIgstState != null) {
-      if (resolvedCustomerAddress.isEmpty) {
-        resolvedCustomerAddress = 'State: ${_titleCase(_selectedIgstState!)}';
-      } else if (!resolvedCustomerAddress.toLowerCase().contains(_selectedIgstState!.toLowerCase())) {
-        resolvedCustomerAddress += ', State: ${_titleCase(_selectedIgstState!)}';
+    String addr = _customerAddress.text.trim();
+    if (addr.isEmpty && _selectedCustomer != null) {
+      addr = _selectedCustomer!.customerAddress.trim();
+    }
+    if (addr.isEmpty && _customerPhone.text.trim().isNotEmpty) {
+      final phone = _customerPhone.text.trim();
+      for (final c in ctrl.customers) {
+        if (c.customerPhone.trim() == phone && c.customerAddress.trim().isNotEmpty) {
+          addr = c.customerAddress.trim();
+          break;
+        }
       }
     }
-    if (resolvedCustomerAddress.isEmpty) resolvedCustomerAddress = null;
+    if (_taxMode == 'IGST' && _selectedIgstState != null) {
+      if (addr.isEmpty) {
+        addr = 'State: ${_titleCase(_selectedIgstState!)}';
+      } else if (!addr.toLowerCase().contains(_selectedIgstState!.toLowerCase())) {
+        addr += ', State: ${_titleCase(_selectedIgstState!)}';
+      }
+    }
+    final String? resolvedCustomerAddress = addr.isEmpty ? null : addr;
+
+    String gstin = _customerGstin.text.trim();
+    if (gstin.isEmpty && _selectedCustomer != null) {
+      gstin = _selectedCustomer!.customerGstin.trim();
+    }
+    if (gstin.isEmpty && _customerPhone.text.trim().isNotEmpty) {
+      final phone = _customerPhone.text.trim();
+      for (final c in ctrl.customers) {
+        if (c.customerPhone.trim() == phone && c.customerGstin.trim().isNotEmpty) {
+          gstin = c.customerGstin.trim();
+          break;
+        }
+      }
+    }
+    final String? resolvedCustomerGstin = gstin.isEmpty ? null : gstin;
+    final String resolvedOrderType = (resolvedCustomerGstin != null && resolvedCustomerGstin.isNotEmpty)
+        ? 'B2B'
+        : _orderType;
 
     final order = SaleOrder(
       saleNo: _saleNo.text,
       hasBillNo: _saleNo.text.trim().isNotEmpty,
       saleDate: _saleDate,
       status: status,
-      orderType: _orderType,
+      orderType: resolvedOrderType,
       billingCountry: _billingCountry,
       billingTaxMode: _taxMode,
       billFormat: _billFormat,
@@ -6464,9 +6495,7 @@ class _SaleScreenState extends State<SaleScreen> {
           ? null
           : _customerPhone.text.trim(),
       customerAddress: resolvedCustomerAddress,
-      customerGstin: _customerGstin.text.trim().isEmpty
-          ? null
-          : _customerGstin.text.trim(),
+      customerGstin: resolvedCustomerGstin,
       doctorName:
           _doctorName.text.trim().isEmpty ? null : _doctorName.text.trim(),
       patientName:
@@ -6831,7 +6860,7 @@ class _SaleScreenState extends State<SaleScreen> {
       _loadCustomerOutstanding();
     } else {
       ctrl.refreshSchemes().catchError((_) => null);
-      ctrl.searchCustomers('').catchError((_) => null);
+      ctrl.searchCustomers('').catchError((_) => <SaleCustomer>[]);
     }
     ctrl.loadInitialData().then((_) {
       if (mounted) setState(() {});
@@ -7110,7 +7139,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     final draft = drafts[index];
                     final saleDate = DateTime.tryParse(
                       draft['sale_date']?.toString() ?? '',
-                    );
+                    )?.toLocal();
                     final draftId =
                         int.tryParse(draft['id']?.toString() ?? '') ?? 0;
                     return ListTile(
@@ -7342,7 +7371,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     final sale = sales[index];
                     final saleDate = DateTime.tryParse(
                       sale['sale_date']?.toString() ?? '',
-                    );
+                    )?.toLocal();
                     return ListTile(
                       title: Text(sale['sale_no']?.toString() ?? 'Bill'),
                       subtitle: Text(

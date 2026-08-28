@@ -2487,6 +2487,11 @@ class PosInvoicePrinter {
     if (rawAddress == null || rawAddress.trim().isEmpty) return '';
     String address = rawAddress.trim();
     
+    if (address.toLowerCase().startsWith('state:')) {
+      final stateVal = address.substring(6).trim();
+      return stateVal.isEmpty ? '' : stateVal;
+    }
+
     while (true) {
       final stateIndex = address.toLowerCase().lastIndexOf(', state:');
       if (stateIndex != -1) {
@@ -2496,11 +2501,7 @@ class PosInvoicePrinter {
       }
     }
     
-    if (address.toLowerCase().startsWith('state:')) {
-      return '';
-    }
-    
-    return address;
+    return address.trim();
   }
 
   static String _deriveBuyerState(SaleOrder order, PropertyInfo? property) {
@@ -2706,7 +2707,7 @@ class PosInvoicePrinter {
     } else {
       final cnNo = creditNote['credit_note_no']?.toString() ?? '';
       final cnDateRaw = creditNote['credit_note_date']?.toString() ?? '';
-      final cnDate = DateTime.tryParse(cnDateRaw) ?? DateTime.now();
+      final cnDate = (DateTime.tryParse(cnDateRaw) ?? DateTime.now()).toLocal();
 
       final originalSaleNo = creditNote['sale'] is Map
           ? (creditNote['sale']['sale_no']?.toString() ?? '')
@@ -2714,7 +2715,7 @@ class PosInvoicePrinter {
       final originalSaleDateRaw = creditNote['sale'] is Map
           ? (creditNote['sale']['sale_date']?.toString() ?? '')
           : '';
-      final originalSaleDate = DateTime.tryParse(originalSaleDateRaw) ?? DateTime.now();
+      final originalSaleDate = (DateTime.tryParse(originalSaleDateRaw) ?? DateTime.now()).toLocal();
 
       final customerName = creditNote['customer_name']?.toString() ?? 'Walk-in Customer';
       final customerPhone = creditNote['customer_phone']?.toString() ?? '--';
@@ -3019,7 +3020,7 @@ class PosInvoicePrinter {
 
     final cnNo = creditNote['credit_note_no']?.toString() ?? '';
     final cnDateRaw = creditNote['credit_note_date']?.toString() ?? '';
-    final cnDate = DateTime.tryParse(cnDateRaw) ?? DateTime.now();
+    final cnDate = (DateTime.tryParse(cnDateRaw) ?? DateTime.now()).toLocal();
 
     final originalSaleNo = creditNote['sale'] is Map
         ? (creditNote['sale']['sale_no']?.toString() ?? '')
@@ -3027,7 +3028,7 @@ class PosInvoicePrinter {
     final originalSaleDateRaw = creditNote['sale'] is Map
         ? (creditNote['sale']['sale_date']?.toString() ?? '')
         : '';
-    final originalSaleDate = DateTime.tryParse(originalSaleDateRaw) ?? DateTime.now();
+    final originalSaleDate = (DateTime.tryParse(originalSaleDateRaw) ?? DateTime.now()).toLocal();
 
     final customerName = creditNote['customer_name']?.toString() ?? 'Walk-in Customer';
     final customerPhone = creditNote['customer_phone']?.toString() ?? '--';
