@@ -65,6 +65,12 @@ import '../../screens/auth/user_management_screen.dart';
 import '../../screens/dashboard/autonomous_agent_screen.dart';
 import '../../screens/dashboard/lynx_feature_testing_screen.dart';
 import '../../screens/dashboard/customer_app_screen.dart';
+import '../../screens/accounting/accounting_dashboard_screen.dart';
+import '../../screens/accounting/bank_accounts_screen.dart';
+import '../../screens/accounting/accounting_vouchers_screen.dart';
+import '../../screens/accounting/trial_balance_screen.dart';
+import '../../screens/accounting/profit_loss_screen.dart';
+import '../../screens/accounting/balance_sheet_screen.dart';
 
 /// Authoritative AI Navigation Registry for FAMALTH LYNX.
 /// Maps every AI action type code to its target Flutter screen.
@@ -74,6 +80,41 @@ class AiNavigationRegistry {
     Widget? targetScreen;
 
     switch (actionType.toUpperCase()) {
+      // Accounting & Finance Section
+      case 'ACCOUNTING_HUB':
+      case 'ACCOUNTING_SECTION':
+      case 'FINANCE_SECTION':
+      case 'ACCOUNTING':
+        targetScreen = const AccountingDashboardScreen();
+        break;
+
+      case 'ACCOUNTING_VOUCHERS':
+      case 'CONTRA_VOUCHER':
+      case 'PAYMENT_VOUCHER':
+      case 'RECEIPT_VOUCHER':
+      case 'JOURNAL_VOUCHER':
+      case 'VOUCHERS':
+        targetScreen = const AccountingVouchersScreen();
+        break;
+
+      case 'BANK_ACCOUNTS':
+      case 'COMPANY_BANKS':
+        targetScreen = const BankAccountsScreen();
+        break;
+
+      case 'TRIAL_BALANCE':
+        targetScreen = const TrialBalanceScreen();
+        break;
+
+      case 'PROFIT_LOSS':
+      case 'PROFIT_AND_LOSS':
+      case 'INCOME_STATEMENT':
+        targetScreen = const ProfitLossScreen();
+        break;
+
+      case 'BALANCE_SHEET':
+        targetScreen = const BalanceSheetScreen();
+        break;
       // 0. Customer Subscriptions (Milk & Daily Consumables)
       case 'MANAGE_SUBSCRIPTIONS':
       case 'SUBSCRIPTION_DASHBOARD':

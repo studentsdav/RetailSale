@@ -259,7 +259,7 @@ class _RecurringExpensesScreenState extends State<RecurringExpensesScreen> {
                                         DataCell(
                                           Switch(
                                             value: isActive,
-                                            activeColor: const Color(0xFF008060),
+                                            activeTrackColor: const Color(0xFF008060),
                                             onChanged: (val) async {
                                               await ctrl.saveRecurringExpense({
                                                 'id': item['id'],
@@ -338,6 +338,8 @@ class _RecurringExpensesScreenState extends State<RecurringExpensesScreen> {
     String freq = 'MONTHLY';
     DateTime selectedNextDate = DateTime.now();
 
+    int remindDaysBefore = 7;
+
     showDialog(
       context: mainContext,
       builder: (dialogCtx) {
@@ -378,7 +380,7 @@ class _RecurringExpensesScreenState extends State<RecurringExpensesScreen> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: freq,
+                      initialValue: freq,
                       decoration: const InputDecoration(
                         labelText: 'Frequency Interval',
                         border: OutlineInputBorder(),
@@ -392,6 +394,25 @@ class _RecurringExpensesScreenState extends State<RecurringExpensesScreen> {
                       ],
                       onChanged: (val) {
                         if (val != null) setDialogState(() => freq = val);
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<int>(
+                      initialValue: remindDaysBefore,
+                      decoration: const InputDecoration(
+                        labelText: 'Auto-Create Sticky Note Reminder',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('1 Day Before Due Date')),
+                        DropdownMenuItem(value: 3, child: Text('3 Days Before Due Date')),
+                        DropdownMenuItem(value: 7, child: Text('7 Days Before Due Date (Default)')),
+                        DropdownMenuItem(value: 15, child: Text('15 Days Before Due Date')),
+                        DropdownMenuItem(value: 30, child: Text('30 Days Before Due Date')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => remindDaysBefore = val);
                       },
                     ),
                     const SizedBox(height: 14),
@@ -441,6 +462,7 @@ class _RecurringExpensesScreenState extends State<RecurringExpensesScreen> {
                       'amount': double.tryParse(amountCtrl.text.trim()) ?? 0.0,
                       'frequency': freq,
                       'next_generation_date': DateFormat('yyyy-MM-dd').format(selectedNextDate),
+                      'remind_days_before': remindDaysBefore,
                       'is_active': true,
                     });
 

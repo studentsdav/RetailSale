@@ -25,6 +25,10 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     MapEntry('Sales Bill No', 'SALES'),
     MapEntry('Request No', 'REQUEST'),
     MapEntry('Damage No', 'DAMAGE'),
+    MapEntry('Contra Voucher No', 'CONTRA'),
+    MapEntry('Payment Voucher No', 'PAYMENT'),
+    MapEntry('Receipt Voucher No', 'RECEIPT'),
+    MapEntry('Journal Voucher No', 'JOURNAL'),
   ];
 
   List<MapEntry<String, String>> get _visibleModuleDefs {
@@ -41,6 +45,10 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     'SALES': [],
     'REQUEST': [],
     'DAMAGE': [],
+    'CONTRA': [],
+    'PAYMENT': [],
+    'RECEIPT': [],
+    'JOURNAL': [],
   };
 
   bool _isSaving = false;

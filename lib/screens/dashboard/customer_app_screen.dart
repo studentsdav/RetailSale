@@ -228,7 +228,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   void _startCustomerNotificationTimer() {
     _notificationTimer?.cancel();
-    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+    Future<void> fetchCustNotifs() async {
       if (!mounted) return;
       final phone = _loggedInCustomer?['phone'];
       if (phone == null) return;
@@ -243,10 +243,20 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           final id = n['id'] as int? ?? 0;
           if (id > 0 && n['is_read'] == false && !_shownNotificationIds.contains(id)) {
             _shownNotificationIds.add(id);
-            NotificationService.show(id, n['title']?.toString() ?? 'Notification', n['message']?.toString() ?? '');
+            await NotificationService.show(
+              id,
+              n['title']?.toString() ?? 'Notification',
+              n['message']?.toString() ?? '',
+              uniqueKey: 'cust_notif_$id',
+            );
           }
         }
       } catch (_) {}
+    }
+
+    fetchCustNotifs();
+    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+      await fetchCustNotifs();
     });
   }
 

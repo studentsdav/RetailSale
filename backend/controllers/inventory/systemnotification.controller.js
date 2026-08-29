@@ -1,6 +1,16 @@
 exports.getNotifications = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const outlet_id = req.user?.outlet_id || 0;
+
+        try {
+            const { processNotesReminders } = require('../../jobs/notesReminderJob');
+            await processNotesReminders(req.propertyDb);
+        } catch (_) {}
+
+        try {
+            const { processRecurringExpenses } = require('../../jobs/recurringExpensesJob');
+            await processRecurringExpenses(req.propertyDb);
+        } catch (_) {}
 
         const rows = await req.propertyDb.models.system_notifications.findAll({
             where: { outlet_id },
@@ -67,5 +77,31 @@ exports.markNotificationRead = async (req, res) => {
             success: false,
             error: err.message
         });
+    }
+};
+
+exports.markAllNotificationsRead = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id || 0;
+        await req.propertyDb.models.system_notifications.update(
+            { is_read: true },
+            { where: { outlet_id, is_read: false } }
+        );
+        res.json({ success: true, message: 'All notifications marked as read' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.deleteNotification = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const outlet_id = req.user?.outlet_id || 0;
+        await req.propertyDb.models.system_notifications.destroy({
+            where: { id, outlet_id }
+        });
+        res.json({ success: true, message: 'Notification deleted' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 };

@@ -1,10 +1,31 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:retailpos/core/api/api_client.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/api/api_client.dart';
 import 'package:retailpos/core/settings/local_preferences.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
+
+  static const String _dispatchedKeysPrefsKey = 'dispatched_notification_keys';
+
+  static Future<bool> isDispatched(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    final dispatched = prefs.getStringList(_dispatchedKeysPrefsKey) ?? [];
+    return dispatched.contains(key);
+  }
+
+  static Future<void> markDispatched(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    final dispatched = prefs.getStringList(_dispatchedKeysPrefsKey) ?? [];
+    if (!dispatched.contains(key)) {
+      dispatched.add(key);
+      if (dispatched.length > 500) {
+        dispatched.removeRange(0, dispatched.length - 500);
+      }
+      await prefs.setStringList(_dispatchedKeysPrefsKey, dispatched);
+    }
+  }
 
   static Future<void> init() async {
     final branding = await LocalPreferences.getAppBranding();
@@ -32,7 +53,11 @@ class NotificationService {
         final id = response.payload;
 
         if (id != null && id.isNotEmpty) {
-          await ApiClient.put('/api/notifications/$id/read', {});
+          try {
+            await ApiClient.put('/api/notifications/$id/read', {});
+          } catch (e) {
+            // Ignore error
+          }
         }
       },
     );
@@ -45,9 +70,24 @@ class NotificationService {
     }
   }
 
-  static Future<void> show(int id, String title, String body) async {
+  static Future<void> show(
+    int id,
+    String title,
+    String body, {
+    String? uniqueKey,
+    bool force = false,
+  }) async {
     final showNotif = await LocalPreferences.getShowNotifications();
     if (!showNotif) return;
+
+    final key = uniqueKey ?? 'notif_$id';
+    if (!force && await isDispatched(key)) {
+      // Notification already dispatched and presented once.
+      // Do NOT trigger again when user dismisses or timer polls.
+      return;
+    }
+
+    await markDispatched(key);
 
     final branding = await LocalPreferences.getAppBranding();
     final appName = branding.productName.isNotEmpty ? branding.productName : branding.companyName;
@@ -72,8 +112,10 @@ class NotificationService {
 
     final notificationTitle = title.contains(appName) ? title : '[$appName] $title';
 
+    int notifId = key.hashCode.abs() % 2147483647;
+
     await _notifications.show(
-      id: id,
+      id: notifId,
       title: notificationTitle,
       body: body,
       notificationDetails: details,

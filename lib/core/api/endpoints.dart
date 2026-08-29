@@ -98,6 +98,14 @@ class ApiEndpoints {
   static const financeDeliveryReport = '/api/finance/delivery-report';
   static const financeExpiryReport = '/api/finance/expiry-report';
   static const paySupplierBill = '/api/suppliers/bills/pay';
+
+  // Accounting Section Endpoints
+  static const accountingBanks = '/api/accounting/banks';
+  static const accountingVouchers = '/api/accounting/vouchers';
+  static const accountingTrialBalance = '/api/accounting/reports/trial-balance';
+  static const accountingProfitLoss = '/api/accounting/reports/profit-loss';
+  static const accountingBalanceSheet = '/api/accounting/reports/balance-sheet';
+  static const accountingBrs = '/api/accounting/reports/brs';
   static const sales = '/api/sales';
   static const commissionRules = '/api/sales/commission-rules';
   static const salesSchemes = '/api/sales/schemes';

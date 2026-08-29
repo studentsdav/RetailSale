@@ -920,7 +920,10 @@ exports.createRepayment = async (req, res) => {
         const waiveOff = isWaiveOffMode(payment_mode);
 
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id, transaction: t });
-        const initialPaid = toAmount(sale.initial_amount_paid ?? sale.amount_paid);
+        const isCreditMode9 = String(sale.payment_mode || '').trim().toUpperCase().includes('CREDIT');
+        const initialPaid = (sale.initial_amount_paid !== null && sale.initial_amount_paid !== undefined && isCreditMode9)
+            ? toAmount(sale.initial_amount_paid)
+            : Math.max(0, toAmount(sale.amount_paid) - repaymentTotal);
         const available = Math.max(0, toAmount(sale.net_amount) - initialPaid - repaymentTotal);
 
         // Always auto-adjust excess payment against other outstanding bills first, then advance
@@ -1176,7 +1179,10 @@ exports.updateRepayment = async (req, res) => {
 
         await ensureRepaymentDuplicateFree({ req, sale_id: repayment.sale_id, payment_date, amount, payment_mode, reference_no, excludeId: repayment.id, transaction: t });
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id: repayment.sale_id, exclude_repayment_id: repayment.id, transaction: t });
-        const initialPaid = toAmount(sale.initial_amount_paid ?? sale.amount_paid);
+        const isCreditMode11 = String(sale.payment_mode || '').trim().toUpperCase().includes('CREDIT');
+        const initialPaid = (sale.initial_amount_paid !== null && sale.initial_amount_paid !== undefined && isCreditMode11)
+            ? toAmount(sale.initial_amount_paid)
+            : Math.max(0, toAmount(sale.amount_paid) - repaymentTotal);
         const available = Math.max(0, toAmount(sale.net_amount) - initialPaid - repaymentTotal);
         if (amount > available + 0.009) throw new Error(`Repayment exceeds outstanding balance. Available amount is ${available.toFixed(2)}`);
 
@@ -2033,8 +2039,11 @@ exports.getCreditReport = async (req, res) => {
         let totalAdvance = 0;
 
         for (const sale of sales) {
-            const initialPaid = toAmount(sale.initial_amount_paid ?? sale.amount_paid);
             const repaymentTotal = (sale.repayments || []).reduce((sum, payment) => sum + toAmount(payment.amount), 0);
+            const isCreditMode = String(sale.payment_mode || '').trim().toUpperCase().includes('CREDIT');
+            const initialPaid = (sale.initial_amount_paid !== null && sale.initial_amount_paid !== undefined && isCreditMode)
+                ? toAmount(sale.initial_amount_paid)
+                : Math.max(0, toAmount(sale.amount_paid) - repaymentTotal);
             const totalPaid = toAmount(initialPaid + repaymentTotal);
             const balanceDue = Math.max(0, toAmount(sale.net_amount) - totalPaid);
             const isCreditBill = balanceDue > 0.009;
@@ -2449,6 +2458,9 @@ exports.adjustBulkRepayment = async (req, res) => {
 
 exports.getRecurringExpenses = async (req, res) => {
     try {
+        const { processRecurringExpenses } = require('../../jobs/recurringExpensesJob');
+        await processRecurringExpenses(req.propertyDb);
+
         const outlet_id = req.user?.outlet_id || 1;
         const items = await req.propertyDb.models.recurring_expenses.findAll({
             where: { outlet_id },
@@ -2463,7 +2475,7 @@ exports.getRecurringExpenses = async (req, res) => {
 exports.createRecurringExpense = async (req, res) => {
     try {
         const outlet_id = req.user?.outlet_id || 1;
-        const { description, amount, frequency, expense_category_id, start_date, end_date, next_generation_date } = req.body;
+        const { description, amount, frequency, expense_category_id, start_date, end_date, next_generation_date, remind_days_before } = req.body;
         
         const todayStr = new Date().toISOString().split('T')[0];
         const record = await req.propertyDb.models.recurring_expenses.create({
@@ -2475,8 +2487,17 @@ exports.createRecurringExpense = async (req, res) => {
             start_date: start_date || todayStr,
             end_date: end_date || null,
             next_generation_date: next_generation_date || start_date || todayStr,
+            remind_days_before: remind_days_before !== undefined ? (parseInt(remind_days_before, 10) || 7) : 7,
             is_active: true
         });
+
+        // Immediately check & create reminder note if due
+        try {
+            const { processRecurringExpenses } = require('../../jobs/recurringExpensesJob');
+            await processRecurringExpenses(req.propertyDb);
+        } catch (jobErr) {
+            console.warn('[RECURRING EXPENSE CREATE] Warning running processRecurringExpenses:', jobErr.message);
+        }
 
         res.json({ success: true, data: record });
     } catch (e) {
@@ -2492,6 +2513,14 @@ exports.updateRecurringExpense = async (req, res) => {
         if (!record) return res.status(404).json({ success: false, message: 'Recurring expense not found' });
 
         await record.update(req.body);
+
+        try {
+            const { processRecurringExpenses } = require('../../jobs/recurringExpensesJob');
+            await processRecurringExpenses(req.propertyDb);
+        } catch (jobErr) {
+            console.warn('[RECURRING EXPENSE UPDATE] Warning running processRecurringExpenses:', jobErr.message);
+        }
+
         res.json({ success: true, data: record });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });

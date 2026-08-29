@@ -1500,6 +1500,11 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                           padding: const pw.EdgeInsets.only(top: 2),
                           child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
                         ),
+                      if ((_supplierBill.text).trim().isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 2),
+                          child: pw.Text("Supplier Bill No: ${_supplierBill.text.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                        ),
                     ],
                   ),
                 ),
@@ -1513,8 +1518,6 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                     _metaRow("Date", DateFormat('dd-MMM-yyyy').format(_date)),
                     if ((poNumber ?? '').trim().isNotEmpty)
                       _metaRow("PO No", poNumber!.trim()),
-                    if ((_supplierBill.text).trim().isNotEmpty)
-                      _metaRow("Bill No", _supplierBill.text.trim()),
                   ],
                 ),
               ],

@@ -1,5 +1,9 @@
+const { processNotesReminders } = require('../../jobs/notesReminderJob');
+
 exports.getNotes = async (req, res) => {
     try {
+        await processNotesReminders(req.propertyDb);
+
         const outlet_id = req.user?.outlet_id || 0;
         const search = req.query.q || '';
         const section = req.query.section || 'notes'; // notes, archive, trash

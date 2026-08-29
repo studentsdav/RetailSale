@@ -165,7 +165,8 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   }
 
   void _startNotificationTimer() {
-    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+    _notificationTimer?.cancel();
+    Future<void> fetchNotifs() async {
       if (!mounted) return;
       try {
         final res = await ApiClient.get('/api/notifications');
@@ -174,10 +175,20 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           final id = n['id'] as int? ?? 0;
           if (id > 0 && n['is_read'] == false && !_shownNotificationIds.contains(id)) {
             _shownNotificationIds.add(id);
-            NotificationService.show(id, n['title']?.toString() ?? 'Notification', n['message']?.toString() ?? '');
+            await NotificationService.show(
+              id,
+              n['title']?.toString() ?? 'Notification',
+              n['message']?.toString() ?? '',
+              uniqueKey: 'sys_notif_$id',
+            );
           }
         }
       } catch (_) {}
+    }
+
+    fetchNotifs();
+    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+      await fetchNotifs();
     });
   }
 

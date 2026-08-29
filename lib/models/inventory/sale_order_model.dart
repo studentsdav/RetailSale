@@ -18,9 +18,11 @@ class SaleOrder {
   final String? customerPhone;
   final String? doctorName;
   final String? patientName;
+  final double initialAmountPaid;
   final double amountPaid;
   final double changeAmount;
   final double balanceDue;
+  final List<Map<String, dynamic>> repayments;
   final String? customerAddress;
   final String? customerGstin;
   final String paymentMode;
@@ -90,9 +92,11 @@ class SaleOrder {
     this.customerPhone,
     this.doctorName,
     this.patientName,
+    this.initialAmountPaid = 0.0,
     required this.amountPaid,
     required this.changeAmount,
     required this.balanceDue,
+    this.repayments = const [],
     this.customerAddress,
     this.customerGstin,
     required this.paymentMode,
@@ -436,9 +440,13 @@ class SaleOrder {
       customerGstin: json['customer_gstin']?.toString(),
       paymentMode: json['payment_mode']?.toString() ?? 'CASH',
       paymentReference: json['payment_reference']?.toString(),
+      initialAmountPaid: parseNum(json['initial_amount_paid'] ?? json['initialAmountPaid']),
       amountPaid: parseNum(json['amount_paid']),
       changeAmount: parseNum(json['change_amount']),
       balanceDue: parseNum(json['balance_due']),
+      repayments: (json['repayments'] as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(),
       subTotal: parseNum(json['sub_total']),
       totalQty: parseNum(json['total_qty']),
       taxPercent: parseNum(json['tax_percent']),

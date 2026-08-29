@@ -224,6 +224,11 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                           padding: const pw.EdgeInsets.only(top: 2),
                           child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
                         ),
+                      if ((grn['supplier_bill_no'] ?? '').toString().trim().isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 2),
+                          child: pw.Text("Supplier Bill No: ${grn['supplier_bill_no'].toString().trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                        ),
                     ],
                   ),
                 ),
@@ -237,8 +242,6 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                     _metaRow("Date", DateFormat('dd-MMM-yyyy').format(receiptDate)),
                     if ((poNumber).trim().isNotEmpty)
                       _metaRow("PO No", poNumber.trim()),
-                    if ((grn['supplier_bill_no'] ?? '').toString().trim().isNotEmpty)
-                      _metaRow("Bill No", grn['supplier_bill_no'].toString().trim()),
                   ],
                 ),
               ],

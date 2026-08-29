@@ -78,6 +78,12 @@ import '../modify/stock_out_modify.dart';
 import '../recovery/backup_service.dart';
 import '../reports/closing_report_screen.dart';
 import '../reports/cash_ledger_screen.dart';
+import '../accounting/accounting_dashboard_screen.dart';
+import '../accounting/bank_accounts_screen.dart';
+import '../accounting/accounting_vouchers_screen.dart';
+import '../accounting/trial_balance_screen.dart';
+import '../accounting/profit_loss_screen.dart';
+import '../accounting/balance_sheet_screen.dart';
 import '../reports/damage_report_screen.dart';
 import '../reports/damage_summary_screen.dart';
 import '../reports/purchase_report_screen.dart';
@@ -857,48 +863,48 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         return;
       }
 
-      _notificationTimer?.cancel(); // prevent duplicate timers
-
+      _notificationTimer?.cancel();
+      _checkNotifications();
       _notificationTimer =
           Timer.periodic(const Duration(minutes: 1), (timer) async {
-        final allowNotifications =
-            await LocalPreferences.getShowNotifications();
-        if (!allowNotifications) {
-          return;
-        }
-        final bool isTokenValid = !TokenStorage.isExpired(token);
-        if (!isTokenValid) {
-          await TokenStorage.clear();
-          _notificationTimer?.cancel();
-          Navigator.push(context,
-              MaterialPageRoute(builder: (context) => const LoginScreen()));
-          return;
-        }
-        try {
-          final res = await ApiClient.get('/api/notifications');
-          for (final n in res['data']) {
-            final id = n['id'] as int? ?? 0;
-            if (id > 0 &&
-                n['is_read'] == false &&
-                !_shownNotificationIds.contains(id)) {
-              _shownNotificationIds.add(id);
-              NotificationService.show(
-                  id,
-                  n['title']?.toString() ?? 'Notification',
-                  n['message']?.toString() ?? '');
-            }
-          }
-        } catch (e) {
-          _notificationTimer?.cancel();
-        }
+        await _checkNotifications();
       });
     } catch (e) {
       _notificationTimer?.cancel();
     }
   }
 
+  Future<void> _checkNotifications() async {
+    final allowNotifications = await LocalPreferences.getShowNotifications();
+    if (!allowNotifications) return;
+    try {
+      final token = await TokenStorage.read();
+      if (token == null || TokenStorage.isExpired(token)) return;
+
+      final res = await ApiClient.get('/api/notifications');
+      if (res != null && res['data'] is List) {
+        for (final n in res['data']) {
+          final id = n['id'] as int? ?? 0;
+          if (id > 0 && n['is_read'] == false) {
+            final key = 'sys_notif_$id';
+            if (!_shownNotificationIds.contains(id)) {
+              _shownNotificationIds.add(id);
+              await NotificationService.show(
+                id,
+                n['title']?.toString() ?? 'Notification',
+                n['message']?.toString() ?? '',
+                uniqueKey: key,
+              );
+            }
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadDashboard() async {
     try {
+      _checkNotifications();
       Future.delayed(const Duration(seconds: 1));
       final data = await dashboardCtrl.load();
 
@@ -2242,6 +2248,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         return Icons.folder_shared_outlined;
       case 'HR & Payroll':
         return Icons.people_outline;
+      case 'Finance & Accounting':
+      case 'Finance & Expenses':
+      case 'Finance':
+        return Icons.account_balance_outlined;
       case 'Stock View':
         return Icons.inventory_2_outlined;
       case 'Reports':
@@ -2603,6 +2613,50 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecurringExpensesScreen())),
       },
 
+      // Finance & Accounting Section
+      {
+        'category': 'Finance & Accounting',
+        'icon': Icons.account_balance,
+        'label': 'Accounting Section Hub',
+        'permission': 'CASH_LEDGER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountingDashboardScreen())),
+      },
+      {
+        'category': 'Finance & Accounting',
+        'icon': Icons.receipt_long,
+        'label': 'Accounting Vouchers (F4 - F9)',
+        'permission': 'CASH_LEDGER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountingVouchersScreen())),
+      },
+      {
+        'category': 'Finance & Accounting',
+        'icon': Icons.account_balance_wallet,
+        'label': 'Company Bank Accounts',
+        'permission': 'CASH_LEDGER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BankAccountsScreen())),
+      },
+      {
+        'category': 'Finance & Accounting',
+        'icon': Icons.balance,
+        'label': 'Trial Balance Report',
+        'permission': 'CASH_LEDGER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TrialBalanceScreen())),
+      },
+      {
+        'category': 'Finance & Accounting',
+        'icon': Icons.show_chart,
+        'label': 'Profit & Loss Statement (P&L)',
+        'permission': 'CASH_LEDGER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfitLossScreen())),
+      },
+      {
+        'category': 'Finance & Accounting',
+        'icon': Icons.assessment,
+        'label': 'Balance Sheet Statement',
+        'permission': 'CASH_LEDGER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BalanceSheetScreen())),
+      },
+
       // Stock View
       {
         'category': 'Stock View',
@@ -2773,6 +2827,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
       {
         'category': 'Reports',
+        'icon': Icons.account_balance_wallet,
+        'label': 'Accounting Section',
+        'permission': 'CASH_LEDGER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountingDashboardScreen())),
+      },
+      {
+        'category': 'Reports',
         'icon': Icons.refresh,
         'label': 'Return Report',
         'permission': 'RETURN_REPORT',
@@ -2903,6 +2964,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
       'HR & Payroll',
       'Restaurant (Beta)',
+      'Finance & Accounting',
+      'Finance & Expenses',
       'Stock View',
       'Reports',
       'System',

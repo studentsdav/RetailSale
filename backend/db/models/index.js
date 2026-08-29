@@ -305,6 +305,14 @@ propertyDb.models.recurring_expenses =
     require('../../models/property/recurringExpense.model')(propertyDb, DataTypes);
 propertyDb.models.milk_subscription_items =
     require('../../models/property/milkSubscriptionItem.model')(propertyDb, DataTypes);
+propertyDb.models.bank_accounts =
+    require('../../models/property/bankAccount.model')(propertyDb, DataTypes);
+propertyDb.models.chart_of_accounts =
+    require('../../models/property/chartOfAccounts.model')(propertyDb, DataTypes);
+propertyDb.models.accounting_vouchers =
+    require('../../models/property/accountingVoucher.model')(propertyDb, DataTypes);
+propertyDb.models.voucher_lines =
+    require('../../models/property/voucherLine.model')(propertyDb, DataTypes);
 
 Object.values(propertyDb.models).forEach(model => {
     if (typeof model.associate === 'function') {

@@ -4482,12 +4482,20 @@ exports.updateSalePaymentMode = async (req, res) => {
             });
         }
 
+        let nextNotes = sale.notes || '';
+        const newPaymentSummary = mergedLines.map(line => `${line.method} ${toAmount(line.amount).toFixed(2)}`).join(', ');
+        if (nextNotes.includes('Payment:')) {
+            nextNotes = nextNotes.replace(/Payment:\s*[^|\n]*/, `Payment: ${newPaymentSummary}`);
+        }
+
         await sale.update({
             payment_mode: resolvedMode,
+            initial_amount_paid: amountPaid,
             amount_paid: amountPaid,
             balance_due: balanceDue,
             change_amount: nextChangeAmount,
-            payment_reference: nextPaymentReference
+            payment_reference: nextPaymentReference,
+            notes: nextNotes
         }, { transaction: t });
 
         await req.propertyDb.models.cash_ledger.update(

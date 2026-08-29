@@ -277,6 +277,83 @@ if (!fs.existsSync(licensePath)) {
             console.warn('⚠️ Failed to verify user_notes table:', noteErr.message);
         }
 
+        try {
+            await propertyDb.query(`
+                ALTER TABLE recurring_expenses
+                ADD COLUMN IF NOT EXISTS remind_days_before INTEGER DEFAULT 7;
+            `);
+            console.log('✅ Verified/added remind_days_before column in recurring_expenses table');
+        } catch (recErr) {
+            console.warn('⚠️ Failed to dynamically alter table recurring_expenses:', recErr.message);
+        }
+
+        try {
+            await propertyDb.query(`
+                CREATE TABLE IF NOT EXISTS bank_accounts (
+                    id SERIAL PRIMARY KEY,
+                    outlet_id INTEGER NOT NULL,
+                    bank_name VARCHAR(150) NOT NULL,
+                    account_name VARCHAR(150) NOT NULL,
+                    account_number VARCHAR(50) NOT NULL,
+                    ifsc_code VARCHAR(20),
+                    branch_name VARCHAR(100),
+                    account_type VARCHAR(30) DEFAULT 'CURRENT',
+                    opening_balance NUMERIC(12,2) DEFAULT 0.00,
+                    current_balance NUMERIC(12,2) DEFAULT 0.00,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS chart_of_accounts (
+                    id SERIAL PRIMARY KEY,
+                    outlet_id INTEGER NOT NULL,
+                    account_code VARCHAR(30),
+                    account_name VARCHAR(150) NOT NULL,
+                    group_name VARCHAR(100) NOT NULL,
+                    nature VARCHAR(30) NOT NULL,
+                    opening_debit NUMERIC(12,2) DEFAULT 0.00,
+                    opening_credit NUMERIC(12,2) DEFAULT 0.00,
+                    current_balance NUMERIC(12,2) DEFAULT 0.00,
+                    is_system BOOLEAN DEFAULT FALSE,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS accounting_vouchers (
+                    id SERIAL PRIMARY KEY,
+                    outlet_id INTEGER NOT NULL,
+                    voucher_no VARCHAR(50) NOT NULL,
+                    voucher_type VARCHAR(30) NOT NULL,
+                    voucher_date DATE NOT NULL,
+                    payment_mode VARCHAR(30) DEFAULT 'CASH',
+                    bank_account_id INTEGER,
+                    reference_no VARCHAR(100),
+                    narration TEXT,
+                    total_debit NUMERIC(12,2) DEFAULT 0.00,
+                    total_credit NUMERIC(12,2) DEFAULT 0.00,
+                    status VARCHAR(20) DEFAULT 'POSTED',
+                    created_by INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS voucher_lines (
+                    id SERIAL PRIMARY KEY,
+                    voucher_id INTEGER NOT NULL,
+                    line_type VARCHAR(20) NOT NULL,
+                    account_id INTEGER,
+                    account_name VARCHAR(150) NOT NULL,
+                    account_type VARCHAR(50) DEFAULT 'GENERAL',
+                    debit_amount NUMERIC(12,2) DEFAULT 0.00,
+                    credit_amount NUMERIC(12,2) DEFAULT 0.00,
+                    particulars VARCHAR(255)
+                );
+            `);
+            console.log('✅ Verified/created accounting database tables (bank_accounts, chart_of_accounts, accounting_vouchers, voucher_lines)');
+        } catch (accErr) {
+            console.warn('⚠️ Failed to verify accounting tables:', accErr.message);
+        }
+
         await runMigrations(propertyDb);
 
         console.log('✅ Database migrations complete');
@@ -300,6 +377,10 @@ if (!fs.existsSync(licensePath)) {
         // Start background Night Audit worker
         const { startNightAuditJob } = require('./jobs/nightAuditJob');
         startNightAuditJob(propertyDb);
+
+        // Start background Notes Reminder worker
+        const { startNotesReminderJob } = require('./jobs/notesReminderJob');
+        startNotesReminderJob(propertyDb);
 
     } catch (err) {
         console.error('❌ Database connection failed', err);
@@ -325,6 +406,7 @@ app.use('/api/analytics', require('./routes/analytics.routes'));
 app.use('/api/users', require('./routes/user.routes'));
 app.use('/api/reports', require('./routes/reports.routes'));
 app.use('/api/finance', require('./routes/finance.routes'));
+app.use('/api/accounting', require('./routes/accounting.routes'));
 app.use('/api/notifications', require('./routes/notification.routes'));
 app.use('/api/delivery', require('./routes/delivery.routes'));
 app.use('/api/audit', require('./routes/audit.routes'));

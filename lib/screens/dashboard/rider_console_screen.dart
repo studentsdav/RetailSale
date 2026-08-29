@@ -106,7 +106,7 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
 
   void _startRiderNotificationTimer() {
     _notificationTimer?.cancel();
-    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+    Future<void> fetchRiderNotifs() async {
       if (!mounted) return;
       final riderId = _loggedInRider?['id'];
       if (riderId == null) return;
@@ -118,10 +118,20 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
           final id = n['id'] as int? ?? 0;
           if (id > 0 && n['is_read'] == false && !_shownNotificationIds.contains(id)) {
             _shownNotificationIds.add(id);
-            NotificationService.show(id, n['title']?.toString() ?? 'Notification', n['message']?.toString() ?? '');
+            await NotificationService.show(
+              id,
+              n['title']?.toString() ?? 'Notification',
+              n['message']?.toString() ?? '',
+              uniqueKey: 'rider_notif_$id',
+            );
           }
         }
       } catch (_) {}
+    }
+
+    fetchRiderNotifs();
+    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+      await fetchRiderNotifs();
     });
   }
 

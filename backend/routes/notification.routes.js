@@ -8,6 +8,8 @@ router.use(auth, license('INVENTORY'));
 
 router.get('/', notifyCtrl.getNotifications);
 router.post('/', notifyCtrl.createNotification);
+router.put('/mark-all-read', notifyCtrl.markAllNotificationsRead);
 router.put('/:id/read', notifyCtrl.markNotificationRead);
+router.delete('/:id', notifyCtrl.deleteNotification);
 
 module.exports = router;

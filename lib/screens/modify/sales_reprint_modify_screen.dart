@@ -184,9 +184,12 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     final reprintJson = Map<String, dynamic>.from(
         _selectedDetails!['details'] ?? _selectedDetails!);
     reprintJson['bill_format'] = currentBillFormat;
-    // Preserve items from the original details map
+    // Preserve items and repayments from the original details map
     if (_selectedDetails!['items'] != null) {
       reprintJson['items'] = _selectedDetails!['items'];
+    }
+    if (_selectedDetails!['repayments'] != null) {
+      reprintJson['repayments'] = _selectedDetails!['repayments'];
     }
     final reprintOrder = SaleOrder.fromJson(reprintJson);
 

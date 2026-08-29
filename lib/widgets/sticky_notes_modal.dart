@@ -448,6 +448,8 @@ class _StickyNotesModalState extends State<StickyNotesModal> {
         reminderText = '$startPrefix${note.reminderTime ?? "09:00 AM"} 🔁 Weekly';
       } else if (note.reminderType == 'MONTHLY') {
         reminderText = '$startPrefix${note.reminderTime ?? "09:00 AM"} 🔁 Monthly';
+      } else if (note.reminderType == 'YEARLY') {
+        reminderText = '$startPrefix${note.reminderTime ?? "09:00 AM"} 🔁 Yearly';
       } else if (note.reminderDate != null) {
         reminderText = DateFormat('dd MMM, HH:mm').format(note.reminderDate!);
       } else if (note.reminderTime != null) {

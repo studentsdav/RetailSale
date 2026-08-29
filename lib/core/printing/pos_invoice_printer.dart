@@ -527,6 +527,33 @@ class PosInvoicePrinter {
                   _thermalMetaRow('Total Received', _money(pmts['received']!), '', ''),
               ];
             }
+            if (order.paymentMode.toUpperCase() == 'CREDIT' && order.repayments.isNotEmpty) {
+              final repaymentRows = <pw.Widget>[
+                _thermalMetaRow(
+                  'Payment',
+                  _displayPaymentMode(order),
+                  'Initial Paid',
+                  _money(order.initialAmountPaid),
+                ),
+              ];
+              for (final rep in order.repayments) {
+                final rMode = (rep['payment_mode'] ?? 'REPAYMENT').toString().toUpperCase();
+                final rAmt = double.tryParse((rep['amount'] ?? 0).toString()) ?? 0.0;
+                repaymentRows.add(_thermalMetaRow(
+                  'Repaid ($rMode)',
+                  _money(rAmt),
+                  '',
+                  '',
+                ));
+              }
+              repaymentRows.add(_thermalMetaRow(
+                'Total Paid',
+                _money(order.amountPaid),
+                'Balance Due',
+                _money(order.balanceDue),
+              ));
+              return repaymentRows;
+            }
             return [
               _thermalMetaRow(
                 'Payment',
@@ -1366,7 +1393,15 @@ class PosInvoicePrinter {
     if (splits.length > 1) {
       return 'SPLIT PAYMENT (${splits.length} Modes)';
     }
-    return order.paymentMode.trim().isEmpty ? 'CASH' : order.paymentMode.trim();
+    final rawMode = order.paymentMode.trim().isEmpty ? 'CASH' : order.paymentMode.trim();
+    if (rawMode.toUpperCase() == 'CREDIT') {
+      if (order.balanceDue <= 0.009) {
+        return 'CREDIT (FULLY REPAID)';
+      } else if (order.repayments.isNotEmpty || order.amountPaid > (order.initialAmountPaid > 0 ? order.initialAmountPaid : 0)) {
+        return 'CREDIT (PARTIALLY REPAID)';
+      }
+    }
+    return rawMode;
   }
 
   static String _exchangeAgainstBillNo(SaleOrder order) {

@@ -42,6 +42,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DATEONLY,
             allowNull: false
         },
+        remind_days_before: {
+            type: DataTypes.INTEGER,
+            defaultValue: 7
+        },
         is_active: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
