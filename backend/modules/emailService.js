@@ -106,6 +106,12 @@ async function sendEmail(to, subject, htmlContent) {
 
     // 2. Fallback to standard Nodemailer SMTP
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
+    const emailPass = process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || (sysConfig ? sysConfig.emailPass : null);
+    const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
+    const emailPort = Number(process.env.EMAIL_PORT) || 587;
+
+    console.log(`🔍 [EMAIL DEBUG] Target: ${to} | User Configured: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Pass Configured: ${emailPass ? 'YES (length=' + emailPass.length + ')' : 'NO'} | Host: ${emailHost}:${emailPort} | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'}`);
+
     const transporter = getTransporter();
 
     if (!transporter) {
@@ -123,8 +129,8 @@ async function sendEmail(to, subject, htmlContent) {
         console.log(`[EMAIL] Sent to ${to}: ${info.messageId}`);
         return true;
     } catch (error) {
-        console.error(`[EMAIL ERROR] Failed to send to ${to}: ${error.message}`);
-        throw new Error("Failed to send email. Please check server configuration.");
+        console.error(`[EMAIL ERROR DETAILED] Failed to send to ${to}: ${error.code || ''} ${error.message}`);
+        throw new Error(`Failed to send email. ${error.code || error.message}`);
     }
 }
 

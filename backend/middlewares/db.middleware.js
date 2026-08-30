@@ -10,7 +10,11 @@ module.exports = async (req, res, next) => {
             selfHealed = true;
             try {
                 // Ensure base tables exist on fresh database
-                await propertyDb.sync().catch(err => console.warn('⚠️ Model sync notice:', err.message));
+                await propertyDb.sync().catch(err => {
+                    if (!err.message.includes('foreign key constraint')) {
+                        console.warn('⚠️ Model sync notice:', err.message);
+                    }
+                });
 
                 // Dynamically ensure columns exist
                 await propertyDb.query(`
