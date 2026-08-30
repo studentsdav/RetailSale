@@ -107,33 +107,40 @@ app.get('/health', async (req, res) => {
         }
 
 
-        const configPath = path.join(rootDir, 'config.enc');
-        const sysConfigPath = path.join(rootDir, 'sysConfig.enc');
+        if (!process.env.DATABASE_URL && !process.env.DB_HOST) {
+            const configPath = path.join(rootDir, 'config.enc');
+            const sysConfigPath = path.join(rootDir, 'sysConfig.enc');
 
-        if (!fs.existsSync(configPath)) {
-            return res.json({ success: false, action: 'RECOVER_CONFIG', message: "Configuration missing." });
+            if (!fs.existsSync(configPath)) {
+                return res.json({ success: false, action: 'RECOVER_CONFIG', message: "Configuration missing." });
+            }
+
+            try {
+                const config = loadConfig();
+                const testDb = new Sequelize(config.db_database, config.db_user, config.db_password, {
+                    host: config.db_host || "127.0.0.1",
+                    port: Number(config.db_port || 5432),
+                    dialect: "postgres",
+                    logging: false
+                });
+
+                await testDb.authenticate();
+                await testDb.close();
+            } catch (dbError) {
+                console.log(dbError);
+                return res.json({ success: false, action: 'FULL_RECOVERY', message: "Database connection failed." });
+            }
+
+            if (!fs.existsSync(sysConfigPath)) {
+                return res.json({ success: false, action: 'AUTO_REINSTALL', message: "System files missing." });
+            }
+        } else {
+            try {
+                await propertyDb.authenticate();
+            } catch (dbError) {
+                return res.json({ success: false, action: 'FULL_RECOVERY', message: "Cloud database connection failed." });
+            }
         }
-
-        try {
-            const config = loadConfig();
-            const testDb = new Sequelize(config.db_database, config.db_user, config.db_password, {
-                host: config.db_host || "127.0.0.1",
-                port: Number(config.db_port || 5432),
-                dialect: "postgres",
-                logging: false
-            });
-
-            await testDb.authenticate();
-            await testDb.close();
-        } catch (dbError) {
-            console.log(dbError)
-            return res.json({ success: false, action: 'FULL_RECOVERY', message: "Database connection failed." });
-        }
-
-        if (!fs.existsSync(sysConfigPath)) {
-            return res.json({ success: false, action: 'AUTO_REINSTALL', message: "System files missing." });
-        }
-
 
         res.json({ success: true, action: 'OK', status: 'RUNNING', time: new Date() });
 
