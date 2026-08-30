@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: retail-sale-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: retail-sale-db
+          property: connectionString
+
+databases:
+  - name: retail-sale-db
+    plan: free
+    databaseName: retailsale_db
+    user: retailsale_user

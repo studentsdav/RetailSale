@@ -3,6 +3,11 @@ const loadConfig = require("../utils/decryptConfig");
 
 async function ensureDatabase() {
 
+    if (process.env.DATABASE_URL) {
+        console.log("ℹ️ Using DATABASE_URL. Bypassing database creation check for managed cloud PostgreSQL.");
+        return;
+    }
+
     const config = loadConfig();
 
     // ✅ validation
