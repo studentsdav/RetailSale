@@ -56,15 +56,16 @@ async function createDraftForSubscription(db, sub, outletId, today) {
                     amount: lineAmt
                 });
             }
-        } else if (sub.item_master) {
-            const rate = parseFloat(sub.item_master.retail_sale_price ?? sub.item_master.rate ?? 0);
+        } else if (sub.item || sub.item_master) {
+            const itemMaster = sub.item || sub.item_master;
+            const rate = parseFloat(itemMaster.retail_sale_price ?? itemMaster.rate ?? 0);
             const qty = parseFloat(sub.daily_allowed_qty ?? 1);
             const lineAmt = rate * qty;
             totalQty = qty;
             subTotal = lineAmt;
             lines.push({
                 item_id: sub.item_id,
-                item_master: sub.item_master,
+                item_master: itemMaster,
                 qty,
                 rate,
                 amount: lineAmt
@@ -232,15 +233,16 @@ async function createAcceptedSaleForSubscription(db, sub, outletId, today) {
                     taxBreakup
                 });
             }
-        } else if (sub.item_master) {
-            const isTaxInclusive = String(sub.item_master?.tax_type || '').toUpperCase() === 'GST_INCLUSIVE' || sub.item_master?.is_tax_inclusive === true;
-            const rate = parseFloat(sub.item_master.retail_sale_price ?? sub.item_master.rate ?? 0);
+        } else if (sub.item || sub.item_master) {
+            const itemMaster = sub.item || sub.item_master;
+            const isTaxInclusive = String(itemMaster?.tax_type || '').toUpperCase() === 'GST_INCLUSIVE' || itemMaster?.is_tax_inclusive === true;
+            const rate = parseFloat(itemMaster.retail_sale_price ?? itemMaster.rate ?? 0);
             const qty = parseFloat(sub.daily_allowed_qty ?? 1);
             const amt = rate * qty;
             totalQty = qty;
             subTotal = amt;
 
-            const taxPercent = parseFloat(sub.item_master.tax_percent || 0.0);
+            const taxPercent = parseFloat(itemMaster.tax_percent || 0.0);
             let taxableAmount = amt;
             let taxAmount = 0;
             let lineTotal = amt;
@@ -460,11 +462,11 @@ async function runSubscriptionDelivery(db) {
                         start_date: { [Op.lte]: today },
                         end_date: { [Op.gte]: today }
                     },
-                    include: [{ model: db.models.item_master, as: 'item_master', required: false,
+                    include: [{ model: db.models.item_master, as: 'item', required: false,
                         attributes: ['item_code','item_name','unit','rate','retail_sale_price','hsn_code','tax_percent','tax_type'] }],
                 });
             } catch (err) {
-                log('subscription lookup failed (' + err.message + '), retrying with minimal filter');
+                log('subscription lookup failed (' + err.message + '), retrying without association');
                 try {
                     subscriptions = await db.models.milk_subscriptions.findAll({
                         where: {
@@ -473,9 +475,7 @@ async function runSubscriptionDelivery(db) {
                             active_subscription: true,
                             start_date: { [Op.lte]: today },
                             end_date: { [Op.gte]: today }
-                        },
-                        include: [{ model: db.models.item_master, as: 'item_master', required: false,
-                            attributes: ['item_code','item_name','unit','rate','retail_sale_price','hsn_code','tax_percent','tax_type'] }],
+                        }
                     });
                 } catch (e2) { log('Fallback also failed: ' + e2.message, true); }
             }

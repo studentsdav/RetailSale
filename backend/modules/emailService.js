@@ -32,6 +32,8 @@ function getTransporter() {
         return null;
     }
 
+    const timeoutMs = Number(process.env.EMAIL_TIMEOUT) || 30000;
+
     return nodemailer.createTransport({
         host: emailHost,
         port: emailPort,
@@ -43,9 +45,10 @@ function getTransporter() {
         },
         lookup: ipv4Lookup,
         family: 4,
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000
+        connectionTimeout: timeoutMs,
+        greetingTimeout: timeoutMs,
+        socketTimeout: timeoutMs,
+        dnsTimeout: timeoutMs
     });
 }
 
