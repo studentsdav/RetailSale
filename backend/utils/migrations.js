@@ -1490,7 +1490,7 @@ COMMIT;
       await db.query(`
         BEGIN;
         -- Changed to snake_case to match your other columns
-        ALTER TABLE system_settings ADD COLUMN is_cloud_enabled BOOLEAN DEFAULT FALSE;
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS is_cloud_enabled BOOLEAN DEFAULT FALSE;
         COMMIT;
       `);
     }

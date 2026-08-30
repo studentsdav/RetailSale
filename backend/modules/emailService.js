@@ -28,10 +28,59 @@ function getTransporter() {
     });
 }
 
+const https = require("https");
+
+async function sendViaResendApi(apiKey, to, subject, htmlContent) {
+    const fromAddress = process.env.EMAIL_FROM || "Retail POS <onboarding@resend.dev>";
+    const postData = JSON.stringify({
+        from: fromAddress,
+        to: [to],
+        subject: subject,
+        html: htmlContent
+    });
+
+    return new Promise((resolve, reject) => {
+        const req = https.request({
+            hostname: 'api.resend.com',
+            path: '/emails',
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    console.log(`[EMAIL-RESEND] Sent to ${to}: ${data}`);
+                    resolve(true);
+                } else {
+                    reject(new Error(`Resend API error (${res.statusCode}): ${data}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(postData);
+        req.end();
+    });
+}
+
 /**
  * Core function to send any generic email
  */
 async function sendEmail(to, subject, htmlContent) {
+    // 1. Try Resend HTTP API first if key is provided (bypasses cloud SMTP firewall blocks!)
+    if (process.env.RESEND_API_KEY) {
+        try {
+            return await sendViaResendApi(process.env.RESEND_API_KEY, to, subject, htmlContent);
+        } catch (resendErr) {
+            console.error(`[EMAIL RESEND ERROR] ${resendErr.message}`);
+        }
+    }
+
+    // 2. Fallback to standard Nodemailer SMTP
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
     const transporter = getTransporter();
 

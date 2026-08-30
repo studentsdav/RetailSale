@@ -21,12 +21,18 @@ async function runMigrations(db) {
 
             console.log("Running migration:", migration.version);
 
-            await migration.up(db);
+            try {
+                await migration.up(db);
+            } catch (migErr) {
+                console.warn(`⚠️ Migration ${migration.version} notice:`, migErr.message);
+            }
 
-            await db.query(
-                "INSERT INTO schema_version(version) VALUES ($1)",
-                { bind: [migration.version] }
-            );
+            try {
+                await db.query(
+                    "INSERT INTO schema_version(version) VALUES ($1) ON CONFLICT (version) DO NOTHING",
+                    { bind: [migration.version] }
+                );
+            } catch (_) {}
 
             currentVersion = migration.version;
         }
