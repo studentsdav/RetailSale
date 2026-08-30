@@ -168,19 +168,21 @@ if (!fs.existsSync(licensePath)) {
     try {
         const configPath = path.join(rootDir, 'config.enc');
 
-        if (!fs.existsSync(configPath)) {
-            console.log('⚠️ [SYSTEM] config.enc is missing. Skipping database boot.');
+        if (!process.env.DATABASE_URL && !process.env.DB_HOST && !fs.existsSync(configPath)) {
+            console.log('⚠️ [SYSTEM] config.enc is missing and cloud DB not set. Skipping database boot.');
             console.log('🛡️ [SYSTEM] Server entering Recovery Mode.');
             return;
         }
 
         const config = loadConfig();
-        console.log('✅ Database connected', config.db_password);
-        await waitForPostgres(config);
 
-        await ensureDatabase(config);
+        if (!process.env.DATABASE_URL) {
+            await waitForPostgres(config);
+            await ensureDatabase(config);
+        }
+
         await propertyDb.authenticate();
-        console.log('✅ Database connected');
+        console.log('✅ Database connected successfully');
         
         // Dynamically add merchant_upi_id and subscription delivery charge columns if missing to prevent DB query crashes
         try {

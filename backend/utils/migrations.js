@@ -2688,9 +2688,9 @@ COMMIT;
         );
         
         -- Seed default sale sources
-        INSERT INTO sale_sources (name, is_system) VALUES 
-          ('Store', TRUE), 
-          ('App', TRUE) 
+        INSERT INTO sale_sources (name, is_system, created_at, updated_at) VALUES 
+          ('Store', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), 
+          ('App', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         ON CONFLICT (name) DO NOTHING;
 
         -- Add sale_source to sales_headers
@@ -2707,12 +2707,12 @@ COMMIT;
         );
 
         -- Seed default payment methods
-        INSERT INTO payment_methods (name, is_system) VALUES 
-          ('CASH', TRUE), 
-          ('CARD', TRUE), 
-          ('UPI', TRUE), 
-          ('BANK', TRUE), 
-          ('CREDIT', TRUE) 
+        INSERT INTO payment_methods (name, is_system, created_at, updated_at) VALUES 
+          ('CASH', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), 
+          ('CARD', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), 
+          ('UPI', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), 
+          ('BANK', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), 
+          ('CREDIT', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         ON CONFLICT (name) DO NOTHING;
 
         COMMIT;

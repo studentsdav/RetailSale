@@ -25,6 +25,7 @@ async function runMigrations(db) {
                 await migration.up(db);
             } catch (migErr) {
                 console.warn(`⚠️ Migration ${migration.version} notice:`, migErr.message);
+                await db.query("ROLLBACK;").catch(() => {});
             }
 
             try {
