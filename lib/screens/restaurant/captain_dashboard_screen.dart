@@ -16,6 +16,9 @@ import 'kots_history_screen.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../core/printing/device_printer_routing.dart';
+import '../../core/auth/token_storage.dart';
+import '../../controllers/security/user_controller.dart';
+import '../auth/login_screen.dart';
 
 class CaptainDashboardScreen extends StatefulWidget {
   const CaptainDashboardScreen({super.key});
@@ -1262,36 +1265,27 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0, top: 8, bottom: 8),
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple.shade600,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              icon: const Icon(Icons.card_giftcard, size: 16),
-              label: LayoutBuilder(
-                builder: (context, constraints) {
-                  return const Text(
-                    'NC Order',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  );
-                },
-              ),
-              onPressed: () => _showNcOrderDialog(context),
-            ),
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh Desk',
             onPressed: () {
               ctrl.loadTables();
               ctrl.loadFloors();
               ctrl.loadDiningAreas();
               _fetchActiveKots();
             },
-          )
+          ),
+          IconButton(
+            icon: const Icon(Icons.lock_reset_rounded),
+            tooltip: 'Change Password',
+            onPressed: () => _showChangePasswordDialog(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Logout',
+            onPressed: () => _handleLogout(),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Row(
@@ -3515,5 +3509,174 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
+  }
+
+  Future<void> _handleLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout Confirmation'),
+        content: const Text('Are you sure you want to log out of the system?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await TokenStorage.clear();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  Future<void> _showChangePasswordDialog() async {
+    final userMap = await TokenStorage.getUser();
+    final username = userMap?['username'] ?? '';
+    final oldPassCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+    bool obscureOld = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            title: Row(
+              children: const [
+                Icon(Icons.lock_reset, color: Color(0xFFFF7A1A)),
+                SizedBox(width: 10),
+                Text('Change Password'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Change password for "$username"',
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: oldPassCtrl,
+                    obscureText: obscureOld,
+                    decoration: InputDecoration(
+                      labelText: 'Current Password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureOld ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setDlgState(() => obscureOld = !obscureOld),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: newPassCtrl,
+                    obscureText: obscureNew,
+                    decoration: InputDecoration(
+                      labelText: 'New Password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_clock_outlined),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setDlgState(() => obscureNew = !obscureNew),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmPassCtrl,
+                    obscureText: obscureConfirm,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm New Password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.check_circle_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setDlgState(() => obscureConfirm = !obscureConfirm),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF7A1A),
+                ),
+                onPressed: () async {
+                  final oldPass = oldPassCtrl.text.trim();
+                  final newPass = newPassCtrl.text.trim();
+                  final confirmPass = confirmPassCtrl.text.trim();
+
+                  if (oldPass.isEmpty || newPass.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please fill all password fields.')),
+                    );
+                    return;
+                  }
+                  if (newPass.length < 4) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('New password must be at least 4 characters.')),
+                    );
+                    return;
+                  }
+                  if (newPass != confirmPass) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('New password and confirmation do not match.')),
+                    );
+                    return;
+                  }
+
+                  try {
+                    await UserController().changePassword(username, oldPass, newPass);
+                    if (context.mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Password changed successfully.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to change password: ${e.toString().replaceFirst('Exception: ', '')}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Update Password'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }

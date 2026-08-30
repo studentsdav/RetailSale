@@ -44,6 +44,9 @@ import '../settings/settings_screen.dart';
 import 'item_master_screen.dart';
 import 'subscription_screen.dart';
 import '../../core/api/api_client.dart';
+import '../auth/login_screen.dart';
+import '../../controllers/security/user_controller.dart';
+import '../../models/auth/permission_service.dart';
 
 class SaleScreen extends StatefulWidget {
   final int? editSaleId;
@@ -247,6 +250,12 @@ class _SaleScreenState extends State<SaleScreen> {
 
   Future<void> _init() async {
     try {
+      if (PermissionService.user == null) {
+        final role = (await TokenStorage.getRole()) ?? 'CASHIER';
+        final perms = await TokenStorage.getPermissions();
+        PermissionService.init(role: role, permissions: perms);
+      }
+
       _preloadedTableId = widget.preloadedTableId;
       _preloadedKotIds = widget.preloadedKotIds;
 
@@ -8945,40 +8954,50 @@ class _SaleScreenState extends State<SaleScreen> {
                     selected: true,
                     tooltip: 'Current bill',
                   ),
-                  _sidebarButton(Icons.person_add_alt_1_rounded,
-                      onTap: _showCustomerDialog, tooltip: 'Add customer'),
-                  _sidebarButton(Icons.groups_2_outlined,
-                      onTap: _openCustomerListScreen, tooltip: 'Customer list'),
+                  if (PermissionService.can('ADD_CUSTOMER') || PermissionService.can('CUSTOMER_LIST'))
+                    _sidebarButton(Icons.person_add_alt_1_rounded,
+                        onTap: _showCustomerDialog, tooltip: 'Add customer'),
+                  if (PermissionService.can('CUSTOMER_LIST'))
+                    _sidebarButton(Icons.groups_2_outlined,
+                        onTap: _openCustomerListScreen, tooltip: 'Customer list'),
                   // Draft button with count badge
-                  _sidebarBadgeButton(
-                    icon: Icons.drafts_outlined,
-                    onTap: () async {
-                      await _showDraftsDialog();
-                      _loadSubscriptionDraftCounts();
-                    },
-                    tooltip: 'Draft bills',
-                    count: _totalDraftCount,
-                  ),
-                  _sidebarButton(
-                    Icons.point_of_sale_outlined,
-                    onTap: _showCashierShiftCloseDialog,
-                    tooltip: 'Close Shift / Cashier Handover',
-                  ),
-                  _sidebarButton(Icons.inventory_2_outlined,
-                      onTap: _openItemMaster, tooltip: 'Item master'),
-                  _sidebarButton(Icons.add_card_rounded,
-                      onTap: _createSchemeDialog, tooltip: 'Create schemes'),
-                  _sidebarButton(Icons.local_offer_outlined,
-                      onTap: _showManageSchemesDialog, tooltip: 'Manage schemes'),
-                  _sidebarButton(Icons.storefront,
-                      onTap: _goback, tooltip: 'Receiving'),
-                  _sidebarButton(Icons.payment, onTap: getSub, tooltip: 'Subscription'),
-                  _sidebarButton(
-                    Icons.receipt_long_outlined,
-                    onTap: _openBillReprint,
-                    tooltip: 'Bill Reprint',
-                  ),
-                  if (_subscriptionDraftCount > 0)
+                  if (PermissionService.can('DRAFT_BILLS') || PermissionService.can('RETAIL_SALES'))
+                    _sidebarBadgeButton(
+                      icon: Icons.drafts_outlined,
+                      onTap: () async {
+                        await _showDraftsDialog();
+                        _loadSubscriptionDraftCounts();
+                      },
+                      tooltip: 'Draft bills',
+                      count: _totalDraftCount,
+                    ),
+                  if (PermissionService.can('CASHIER_HANDOVER') || PermissionService.can('CLOSING_REPORT'))
+                    _sidebarButton(
+                      Icons.point_of_sale_outlined,
+                      onTap: _showCashierShiftCloseDialog,
+                      tooltip: 'Close Shift / Cashier Handover',
+                    ),
+                  if (PermissionService.can('ITEM_MASTER'))
+                    _sidebarButton(Icons.inventory_2_outlined,
+                        onTap: _openItemMaster, tooltip: 'Item master'),
+                  if (PermissionService.can('SCHEME_MANAGEMENT') || PermissionService.can('PROMO_VOUCHERS') || PermissionService.can('SCHEME_REPORT'))
+                    _sidebarButton(Icons.add_card_rounded,
+                        onTap: _createSchemeDialog, tooltip: 'Create schemes'),
+                  if (PermissionService.can('SCHEME_MANAGEMENT') || PermissionService.can('PROMO_VOUCHERS') || PermissionService.can('SCHEME_REPORT'))
+                    _sidebarButton(Icons.local_offer_outlined,
+                        onTap: _showManageSchemesDialog, tooltip: 'Manage schemes'),
+                  if (PermissionService.can('STOCK_IN') || PermissionService.can('PURCHASE_ORDER'))
+                    _sidebarButton(Icons.storefront,
+                        onTap: _goback, tooltip: 'Receiving'),
+                  if (PermissionService.can('POS_SUBSCRIPTIONS') || PermissionService.can('SUBSCRIPTION_REPORT'))
+                    _sidebarButton(Icons.payment, onTap: getSub, tooltip: 'Subscription'),
+                  if (PermissionService.can('REPRINT_SALES_BILL'))
+                    _sidebarButton(
+                      Icons.receipt_long_outlined,
+                      onTap: _openBillReprint,
+                      tooltip: 'Bill Reprint',
+                    ),
+                  if (_subscriptionDraftCount > 0 && (PermissionService.can('POS_SUBSCRIPTIONS') || PermissionService.can('SUBSCRIPTION_REPORT')))
                     _sidebarBadgeButton(
                       icon: Icons.delivery_dining,
                       onTap: _showSubscriptionDraftsDialog,
@@ -8992,8 +9011,13 @@ class _SaleScreenState extends State<SaleScreen> {
           ),
           
           const SizedBox(height: 10),
-          _sidebarButton(Icons.settings_outlined,
-              onTap: _openSettings, tooltip: 'Settings'),
+          if (PermissionService.can('USER_MANAGEMENT') || PermissionService.can('SYSTEM_SETTINGS') || PermissionService.user?.role == 'ADMIN')
+            _sidebarButton(Icons.settings_outlined,
+                onTap: _openSettings, tooltip: 'Settings'),
+          _sidebarButton(Icons.lock_reset_rounded,
+              onTap: _showChangePasswordDialogInPos, tooltip: 'Change Password'),
+          _sidebarButton(Icons.logout_rounded,
+              onTap: _logoutFromPos, tooltip: 'Logout'),
           const SizedBox(height: 14),
         ],
       ),
@@ -9004,6 +9028,175 @@ class _SaleScreenState extends State<SaleScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const SubscriptionScreen(),
+      ),
+    );
+  }
+
+  Future<void> _logoutFromPos() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout Confirmation'),
+        content: const Text('Are you sure you want to log out of POS terminal?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await TokenStorage.clear();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  Future<void> _showChangePasswordDialogInPos() async {
+    final userMap = await TokenStorage.getUser();
+    final username = userMap?['username'] ?? '';
+    final oldPassCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+    bool obscureOld = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            title: Row(
+              children: const [
+                Icon(Icons.lock_reset, color: Color(0xFFFF7A1A)),
+                SizedBox(width: 10),
+                Text('Change Password'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Change password for "$username"',
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: oldPassCtrl,
+                    obscureText: obscureOld,
+                    decoration: InputDecoration(
+                      labelText: 'Current Password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureOld ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setDlgState(() => obscureOld = !obscureOld),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: newPassCtrl,
+                    obscureText: obscureNew,
+                    decoration: InputDecoration(
+                      labelText: 'New Password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_clock_outlined),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setDlgState(() => obscureNew = !obscureNew),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmPassCtrl,
+                    obscureText: obscureConfirm,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm New Password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.check_circle_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setDlgState(() => obscureConfirm = !obscureConfirm),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF7A1A),
+                ),
+                onPressed: () async {
+                  final oldPass = oldPassCtrl.text.trim();
+                  final newPass = newPassCtrl.text.trim();
+                  final confirmPass = confirmPassCtrl.text.trim();
+
+                  if (oldPass.isEmpty || newPass.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please fill all password fields.')),
+                    );
+                    return;
+                  }
+                  if (newPass.length < 4) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('New password must be at least 4 characters.')),
+                    );
+                    return;
+                  }
+                  if (newPass != confirmPass) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('New password and confirmation do not match.')),
+                    );
+                    return;
+                  }
+
+                  try {
+                    await UserController().changePassword(username, oldPass, newPass);
+                    if (context.mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Password changed successfully.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to change password: ${e.toString().replaceFirst('Exception: ', '')}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Update Password'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
