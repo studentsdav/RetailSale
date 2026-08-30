@@ -121,6 +121,7 @@ class _SaleScreenState extends State<SaleScreen> {
   String _billingCountry = 'India';
   String _billFormat = 'A4';
   String _selectedCatalogCategory = 'ALL';
+  int _displayedCatalogCount = 35;
   String _lastProcessedScanValue = '';
   DateTime _lastProcessedScanAt = DateTime.fromMillisecondsSinceEpoch(0);
   int? _selectedCartIndex;
@@ -9216,7 +9217,8 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   Widget _buildCatalogPane() {
-    final products = _catalogItems;
+    final allProducts = _catalogItems;
+    final products = allProducts.take(_displayedCatalogCount).toList();
 
     return Container(
       decoration: const BoxDecoration(
@@ -9338,7 +9340,9 @@ class _SaleScreenState extends State<SaleScreen> {
                   autofocus:
                       !context.watch<UiPreferencesController>().touchMode,
                   onChanged: (value) {
-                    setState(() {});
+                    setState(() {
+                      _displayedCatalogCount = 35;
+                    });
                     _tryAutoAddScannedItem(value);
                   },
                   onSubmitted: (_) => _handleQuickEntry(),
@@ -9423,7 +9427,10 @@ class _SaleScreenState extends State<SaleScreen> {
                         backgroundColor: const Color(0xFFF8FAFD),
                         side: BorderSide.none,
                         onSelected: (_) {
-                          setState(() => _selectedCatalogCategory = category);
+                          setState(() {
+                            _selectedCatalogCategory = category;
+                            _displayedCatalogCount = 35;
+                          });
                         },
                       );
                     },
@@ -9470,7 +9477,18 @@ class _SaleScreenState extends State<SaleScreen> {
                 final double targetHeight = _showItemImages ? 148.0 : 118.0;
                 final double childAspectRatio = cellWidth / targetHeight;
 
-                return GridView.builder(
+                return NotificationListener<ScrollNotification>(
+                  onNotification: (ScrollNotification scrollInfo) {
+                    if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 250) {
+                      if (_displayedCatalogCount < allProducts.length) {
+                        setState(() {
+                          _displayedCatalogCount += 35;
+                        });
+                      }
+                    }
+                    return false;
+                  },
+                  child: GridView.builder(
                   itemCount: products.length,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: crossAxisCount,
@@ -9726,8 +9744,8 @@ class _SaleScreenState extends State<SaleScreen> {
                       ),
                     );
                   },
-                );
-              },
+                ),
+              );
             ),
           ),
           const SizedBox(height: 14),
