@@ -8,6 +8,9 @@ module.exports = async (req, res, next) => {
         
         if (!selfHealed) {
             try {
+                // Ensure base tables exist on fresh database
+                await propertyDb.sync();
+
                 // Dynamically ensure columns exist
                 await propertyDb.query(`
                     ALTER TABLE outlets ADD COLUMN IF NOT EXISTS business_module VARCHAR(50) DEFAULT 'ALL';

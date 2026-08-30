@@ -37,6 +37,7 @@ const fs = require('fs');
 const { apiLimiter } = require('./middlewares/rateLimit.middleware');
 const { contextMiddleware } = require('./middlewares/context.middleware');
 const app = express();
+app.set('trust proxy', 1);
 app.use(contextMiddleware);
 app.use((req, res, next) => {
     console.log(`[REQUEST] ${req.method} ${req.originalUrl || req.url}`);
