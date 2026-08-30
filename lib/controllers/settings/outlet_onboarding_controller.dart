@@ -125,95 +125,78 @@ class OutletOnboardingController extends ChangeNotifier {
       final userMap = await TokenStorage.getUser();
       businessModule = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
 
+      // Parallelize all 7 onboarding API checks concurrently using Future.wait
+      final results = await Future.wait([
+        ApiClient.get(ApiEndpoints.propertyInfo).catchError((_) => null),
+        ApiClient.get(ApiEndpoints.documentSequence).catchError((_) => null),
+        ApiClient.get(ApiEndpoints.stockLocations).catchError((_) => null),
+        ApiClient.get(ApiEndpoints.items).catchError((_) => null),
+        ApiClient.get(ApiEndpoints.suppliers).catchError((_) => null),
+        ApiClient.get('/api/restaurant/tables').catchError((_) => null),
+        ApiClient.get(ApiEndpoints.users).catchError((_) => null),
+      ]);
+
       // 1. Property Setup Status
-      try {
-        final propRes = await ApiClient.get(ApiEndpoints.propertyInfo);
-        if (propRes != null && propRes['success'] == true && propRes['data'] != null) {
-          final data = propRes['data'];
-          final String name = (data['property_name'] ?? data['propertyName'] ?? data['name'] ?? '').toString().trim();
-          propertyConfigured = name.isNotEmpty;
-        } else {
-          propertyConfigured = false;
-        }
-      } catch (_) {
+      final propRes = results[0];
+      if (propRes != null && propRes['success'] == true && propRes['data'] != null) {
+        final data = propRes['data'];
+        final String name = (data['property_name'] ?? data['propertyName'] ?? data['name'] ?? '').toString().trim();
+        propertyConfigured = name.isNotEmpty;
+      } else {
         propertyConfigured = false;
       }
 
       // 2. Document Sequence Status
-      try {
-        final seqRes = await ApiClient.get(ApiEndpoints.documentSequence);
-        if (seqRes != null && seqRes['success'] == true && seqRes['data'] is List) {
-          final list = seqRes['data'] as List;
-          sequenceConfigured = list.isNotEmpty;
-        } else {
-          sequenceConfigured = false;
-        }
-      } catch (_) {
+      final seqRes = results[1];
+      if (seqRes != null && seqRes['success'] == true && seqRes['data'] is List) {
+        final list = seqRes['data'] as List;
+        sequenceConfigured = list.isNotEmpty;
+      } else {
         sequenceConfigured = false;
       }
 
       // 3. Location Setup Status
-      try {
-        final locRes = await ApiClient.get(ApiEndpoints.stockLocations);
-        if (locRes != null && locRes['success'] == true && locRes['data'] is List) {
-          final list = locRes['data'] as List;
-          locationConfigured = list.isNotEmpty;
-        } else {
-          locationConfigured = false;
-        }
-      } catch (_) {
+      final locRes = results[2];
+      if (locRes != null && locRes['success'] == true && locRes['data'] is List) {
+        final list = locRes['data'] as List;
+        locationConfigured = list.isNotEmpty;
+      } else {
         locationConfigured = false;
       }
 
       // 4. Item Master Status
-      try {
-        final itemRes = await ApiClient.get(ApiEndpoints.items);
-        if (itemRes != null && itemRes['success'] == true && itemRes['data'] is List) {
-          final list = itemRes['data'] as List;
-          itemMasterConfigured = list.isNotEmpty;
-        } else {
-          itemMasterConfigured = false;
-        }
-      } catch (_) {
+      final itemRes = results[3];
+      if (itemRes != null && itemRes['success'] == true && itemRes['data'] is List) {
+        final list = itemRes['data'] as List;
+        itemMasterConfigured = list.isNotEmpty;
+      } else {
         itemMasterConfigured = false;
       }
 
       // 5. Supplier Status
-      try {
-        final supRes = await ApiClient.get(ApiEndpoints.suppliers);
-        if (supRes != null && supRes['success'] == true && supRes['data'] is List) {
-          final list = supRes['data'] as List;
-          supplierConfigured = list.isNotEmpty;
-        } else {
-          supplierConfigured = false;
-        }
-      } catch (_) {
+      final supRes = results[4];
+      if (supRes != null && supRes['success'] == true && supRes['data'] is List) {
+        final list = supRes['data'] as List;
+        supplierConfigured = list.isNotEmpty;
+      } else {
         supplierConfigured = false;
       }
 
       // 6. Restaurant Setup Status
-      try {
-        final restRes = await ApiClient.get('/api/restaurant/tables');
-        if (restRes != null && restRes['success'] == true && restRes['data'] is List) {
-          final list = restRes['data'] as List;
-          restaurantConfigured = list.isNotEmpty;
-        } else {
-          restaurantConfigured = false;
-        }
-      } catch (_) {
+      final restRes = results[5];
+      if (restRes != null && restRes['success'] == true && restRes['data'] is List) {
+        final list = restRes['data'] as List;
+        restaurantConfigured = list.isNotEmpty;
+      } else {
         restaurantConfigured = false;
       }
 
       // 7. Users Status
-      try {
-        final usersRes = await ApiClient.get(ApiEndpoints.users);
-        if (usersRes != null && usersRes['success'] == true && usersRes['data'] is List) {
-          final list = usersRes['data'] as List;
-          usersConfigured = list.length > 1; // More than 1 user means staff configured
-        } else {
-          usersConfigured = false;
-        }
-      } catch (_) {
+      final usersRes = results[6];
+      if (usersRes != null && usersRes['success'] == true && usersRes['data'] is List) {
+        final list = usersRes['data'] as List;
+        usersConfigured = list.length > 1; // More than 1 user means staff configured
+      } else {
         usersConfigured = false;
       }
     } finally {
