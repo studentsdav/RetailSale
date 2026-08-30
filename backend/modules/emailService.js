@@ -9,6 +9,19 @@ if (dns.setDefaultResultOrder) {
     } catch (_) {}
 }
 
+function ipv4Lookup(hostname, options, callback) {
+    if (typeof options === 'function') {
+        callback = options;
+        options = {};
+    }
+    dns.resolve4(hostname, (err, addresses) => {
+        if (err || !addresses || addresses.length === 0) {
+            return dns.lookup(hostname, { family: 4 }, callback);
+        }
+        callback(null, addresses[0], 4);
+    });
+}
+
 function getTransporter() {
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
     const emailPass = process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || (sysConfig ? sysConfig.emailPass : null);
@@ -28,7 +41,8 @@ function getTransporter() {
             user: emailUser,
             pass: emailPass
         },
-        family: 4, // Force IPv4 to bypass ENETUNREACH IPv6 network error on Render
+        lookup: ipv4Lookup,
+        family: 4,
         connectionTimeout: 5000,
         greetingTimeout: 5000,
         socketTimeout: 5000
