@@ -15,35 +15,31 @@ class ServerConfigScreen extends StatefulWidget {
 
 class _ServerConfigScreenState extends State<ServerConfigScreen> {
   final _urlCtrl = TextEditingController();
+  final _outletCodeCtrl = TextEditingController();
   bool _isLoading = false;
-  bool _isFetching = false;
-  bool _hasFetched = false;
-  List<dynamic> _fetchedOutlets = [];
-  String? _selectedOutletCode;
 
   @override
   void initState() {
     super.initState();
     _urlCtrl.text = AppConfig.baseUrl;
-
-    // Auto-fetch outlets if baseUrl is already configured
-    if (AppConfig.baseUrl.isNotEmpty) {
-      Future.microtask(() => _fetchOutletsAndPreselect());
-    }
+    _outletCodeCtrl.text = ""; // Keep clean to prevent pre-filling default/previous outlets
   }
 
   @override
   void dispose() {
     _urlCtrl.dispose();
+    _outletCodeCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _fetchOutlets() async {
+  Future<void> _checkAndProceed() async {
     final url = _urlCtrl.text.trim();
+    final outletCode = _outletCodeCtrl.text.trim();
+
     if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Server URL is required to fetch outlets"),
+          content: Text("Server URL is required"),
           backgroundColor: Colors.red,
         ),
       );
@@ -51,10 +47,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
     }
 
     setState(() {
-      _isFetching = true;
-      _fetchedOutlets = [];
-      _selectedOutletCode = null;
-      _hasFetched = true;
+      _isLoading = true;
     });
 
     try {
@@ -63,245 +56,192 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
         finalUrl = finalUrl.substring(0, finalUrl.length - 1);
       }
 
-      final res = await ApiClient.get("$finalUrl/api/public/outlets");
-      if (res['success'] == true && res['data'] is List) {
-        final list = res['data'] as List;
-        setState(() {
-          _fetchedOutlets = list;
-          if (_fetchedOutlets.isNotEmpty) {
-            _selectedOutletCode = _fetchedOutlets.first['outlet_code']?.toString();
-          }
-        });
+      if (outletCode.isEmpty) {
+        // No outlet code entered -> New user registration flow
+        await AppConfig.saveConfig(finalUrl, []);
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => widget.nextScreen ?? const OutletSetupScreen(),
+          ),
+          (route) => false,
+        );
+        return;
+      }
+
+      // Outlet code entered -> Check server for specific outlet existence securely
+      final res = await ApiClient.post(
+        "$finalUrl/api/public/outlet/check",
+        {'outlet_code': outletCode},
+      );
+
+      if (res['success'] == true && res['exists'] == true) {
+        // Outlet exists -> Save configuration and proceed to Login / Splash
+        await AppConfig.saveConfig(finalUrl, [outletCode]);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Outlet '$outletCode' verified successfully!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => widget.nextScreen ?? const SplashScreen(),
+          ),
+          (route) => false,
+        );
       } else {
-        setState(() {
-          _fetchedOutlets = [];
-        });
+        // Outlet code not found -> Prompt registration
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Outlet code '$outletCode' not found. Proceeding to registration...",
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        await AppConfig.saveConfig(finalUrl, []);
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => widget.nextScreen ?? const OutletSetupScreen(),
+          ),
+          (route) => false,
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _fetchedOutlets = [];
-      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Failed to fetch outlets: ${e.toString()}"),
+          content: Text("Connection error: ${e.toString()}"),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isFetching = false;
+          _isLoading = false;
         });
       }
-    }
-  }
-
-  Future<void> _fetchOutletsAndPreselect() async {
-    await _fetchOutlets();
-    if (AppConfig.outlets.isNotEmpty) {
-      final configuredOutlet = AppConfig.outlets.first;
-      if (_fetchedOutlets.any((item) => item['outlet_code'] == configuredOutlet)) {
-        setState(() {
-          _selectedOutletCode = configuredOutlet;
-        });
-      }
-    }
-  }
-
-  Future<void> _saveAndRestart() async {
-    final url = _urlCtrl.text.trim();
-    if (url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text("Server URL is required"),
-            backgroundColor: Colors.red),
-      );
-      return;
-    }
-
-    if (_fetchedOutlets.isNotEmpty && _selectedOutletCode == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text("Please select an outlet"),
-            backgroundColor: Colors.red),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      String finalUrl = url;
-      if (finalUrl.endsWith('/')) {
-        finalUrl = finalUrl.substring(0, finalUrl.length - 1);
-      }
-
-      List<String> finalOutlets = [];
-      if (_selectedOutletCode != null && _fetchedOutlets.isNotEmpty) {
-        finalOutlets = [_selectedOutletCode!];
-      }
-
-      await AppConfig.saveConfig(finalUrl, finalOutlets);
-
-      if (!mounted) return;
-
-      final Widget destination = finalOutlets.isEmpty
-          ? (widget.nextScreen ?? const OutletSetupScreen())
-          : (widget.nextScreen ?? const SplashScreen());
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (context) => destination,
-        ),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
-      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool canSave = _urlCtrl.text.trim().isNotEmpty &&
-        !_isLoading &&
-        !_isFetching &&
-        (_fetchedOutlets.isEmpty || _selectedOutletCode != null);
-
-    final String buttonText = _fetchedOutlets.isNotEmpty
-        ? "Save Configuration"
-        : "Save & Proceed to Outlet Setup";
+    final bool canProceed = _urlCtrl.text.trim().isNotEmpty && !_isLoading;
 
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(title: const Text("System Configuration")),
       body: Center(
-        child: Container(
-          width: 450,
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.dns, size: 64, color: Colors.blue),
-              const SizedBox(height: 16),
-              const Text("Terminal Setup",
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text(
-                "Configure the server connection and select your outlet.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 32),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _urlCtrl,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: "Server URL",
-                        hintText: "http://192.168.1.100:3000",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.link),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isFetching ? null : _fetchOutlets,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      child: _isFetching
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.sync),
-                    ),
-                  ),
-                ],
-              ),
-              if (_fetchedOutlets.isNotEmpty) ...[
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            width: 450,
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(Icons.dns_rounded, size: 56, color: Colors.blue),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _selectedOutletCode,
-                  decoration: const InputDecoration(
-                    labelText: "Select Outlet",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.storefront),
-                  ),
-                  items: _fetchedOutlets.map<DropdownMenuItem<String>>((dynamic item) {
-                    return DropdownMenuItem<String>(
-                      value: item['outlet_code']?.toString(),
-                      child: Text(item['outlet_name']?.toString() ?? ''),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedOutletCode = value;
-                    });
-                  },
+                const Text(
+                  "Terminal Setup",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-              ] else if (_hasFetched) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
+                const SizedBox(height: 8),
+                const Text(
+                  "Configure server URL and enter your outlet code to proceed.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, height: 1.4),
+                ),
+                const SizedBox(height: 28),
+
+                // Server URL Field
+                TextField(
+                  controller: _urlCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: "Server URL",
+                    hintText: "https://retail-sale-backend.onrender.com",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.link_rounded),
                   ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "No registered outlets found on this server. Proceed to registration and outlet setup.",
-                          style: TextStyle(color: Colors.blue, fontSize: 13),
-                        ),
+                ),
+                const SizedBox(height: 20),
+
+                // Outlet Code Field (Optional)
+                TextField(
+                  controller: _outletCodeCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: "Outlet Code (Optional)",
+                    hintText: "e.g. MUMBAI_STORE (Leave blank for new store)",
+                    helperText:
+                        "Enter your outlet code if you have one, or leave blank to register a new store.",
+                    helperMaxLines: 2,
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.storefront_rounded),
+                  ),
+                ),
+                const SizedBox(height: 28),
+
+                // Submit Button
+                SizedBox(
+                  height: 50,
+                  child: FilledButton(
+                    onPressed: canProceed ? _checkAndProceed : null,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
+                    ),
+                    child: _isLoading
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Text("Verifying..."),
+                            ],
+                          )
+                        : Text(
+                            _outletCodeCtrl.text.trim().isNotEmpty
+                                ? "Verify & Connect Outlet"
+                                : "Save & Register New Store",
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ],
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton(
-                  onPressed: canSave ? _saveAndRestart : null,
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                      : Text(buttonText),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

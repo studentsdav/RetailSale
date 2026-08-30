@@ -6848,6 +6848,7 @@ class _SaleScreenState extends State<SaleScreen> {
       _loyaltyMaxRedeemPerBill = 0;
       _previousOutstandingAmount = 0;
       _pendingPreviousAdjustment = 0;
+      _displayedCatalogCount = 35;
     });
     if (preserveCustomer) {
       ctrl.refreshSchemes(
@@ -9746,8 +9747,9 @@ class _SaleScreenState extends State<SaleScreen> {
                   },
                 ),
               );
-            ),
+            },
           ),
+        ),
           const SizedBox(height: 14),
           _buildSchemeSelectionBar(),
         ],
