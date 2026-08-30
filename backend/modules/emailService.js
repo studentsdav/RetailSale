@@ -1,7 +1,13 @@
 const nodemailer = require("nodemailer");
+const dns = require("dns");
 const sysConfig = require('../utils/configManager');
-// Initialize the transporter once
 
+// Force Node.js DNS to prefer IPv4 over IPv6 on cloud hosts like Render
+if (dns.setDefaultResultOrder) {
+    try {
+        dns.setDefaultResultOrder('ipv4first');
+    } catch (_) {}
+}
 
 function getTransporter() {
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
@@ -22,6 +28,7 @@ function getTransporter() {
             user: emailUser,
             pass: emailPass
         },
+        family: 4, // Force IPv4 to bypass ENETUNREACH IPv6 network error on Render
         connectionTimeout: 5000,
         greetingTimeout: 5000,
         socketTimeout: 5000
