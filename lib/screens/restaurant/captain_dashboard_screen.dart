@@ -1257,7 +1257,10 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Captain Console / Order Desk'),
+        title: const Text(
+          'Captain Console / Order Desk',
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8.0, top: 8, bottom: 8),
@@ -1265,14 +1268,18 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.purple.shade600,
                 foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               icon: const Icon(Icons.card_giftcard, size: 16),
-              label: const Text('NC Order (Complimentary)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              label: LayoutBuilder(
+                builder: (context, constraints) {
+                  return const Text(
+                    'NC Order',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  );
+                },
+              ),
               onPressed: () => _showNcOrderDialog(context),
             ),
           ),
@@ -1473,15 +1480,18 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                 ] else if (selectedSidebarTab == 1) ...[
                   // Packing Orders Header Bar
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     color: Colors.white,
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Active Packing / Takeaway Orders',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        const Expanded(
+                          child: Text(
+                            'Active Packing / Takeaway Orders',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         ElevatedButton.icon(
                           onPressed: () {
                             Navigator.push(
@@ -1496,10 +1506,11 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                             ).then((_) => _fetchActiveKots());
                           },
                           icon: const Icon(Icons.add, size: 16),
-                          label: const Text('New Packing Order', style: TextStyle(fontWeight: FontWeight.bold)),
+                          label: const Text('New Packing Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade800,
                             foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
                         ),
                       ],
@@ -1509,22 +1520,26 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                 ] else ...[
                   // NC Orders Header Bar
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     color: Colors.white,
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Active NC (No Charge) Orders',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        const Expanded(
+                          child: Text(
+                            'Active NC (No Charge) Orders',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         ElevatedButton.icon(
                           onPressed: () => _showNcOrderDialog(context),
                           icon: const Icon(Icons.add, size: 16),
-                          label: const Text('New NC Order', style: TextStyle(fontWeight: FontWeight.bold)),
+                          label: const Text('New NC Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.purple.shade700,
                             foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
                         ),
                       ],
@@ -1557,7 +1572,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                                     crossAxisCount: cols,
                                     crossAxisSpacing: 16,
                                     mainAxisSpacing: 16,
-                                    childAspectRatio: 0.8,
+                                    childAspectRatio: 0.68,
                                   ),
                                   itemCount: filteredTables.length,
                                   itemBuilder: (context, index) {
@@ -1620,7 +1635,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                                           decoration: BoxDecoration(
                                             gradient: gradient,
                                           ),
-                                          padding: const EdgeInsets.all(12),
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
@@ -2142,16 +2157,17 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                 subtitle: Text('View placed orders or modify running KOT'),
               ),
             ),
-            SimpleDialogOption(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _showBillingCheckoutDialog(context, table, ctrl);
-              },
-              child: const ListTile(
-                leading: Icon(Icons.receipt_long, color: Colors.teal),
-                title: Text('Print Bill & Settle'),
+            if (MediaQuery.of(context).size.width >= 900)
+              SimpleDialogOption(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  _showBillingCheckoutDialog(context, table, ctrl);
+                },
+                child: const ListTile(
+                  leading: Icon(Icons.receipt_long, color: Colors.teal),
+                  title: Text('Print Bill & Settle'),
+                ),
               ),
-            ),
             SimpleDialogOption(
               onPressed: () {
                 Navigator.pop(dialogContext);
@@ -2749,28 +2765,30 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                             ).then((_) => _fetchActiveKots());
                           },
                         ),
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              side: BorderSide(color: Colors.blue.shade700),
+                        if (MediaQuery.of(context).size.width >= 900) ...[
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                side: BorderSide(color: Colors.blue.shade700),
+                              ),
+                              onPressed: () => _printKotById(kot),
+                              child: const Text('Print', style: TextStyle(fontSize: 11)),
                             ),
-                            onPressed: () => _printKotById(kot),
-                            child: const Text('Print', style: TextStyle(fontSize: 11)),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade700,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade700,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              onPressed: () => _settlePackingOrder(kot),
+                              child: const Text('Settle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                             ),
-                            onPressed: () => _settlePackingOrder(kot),
-                            child: const Text('Settle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),

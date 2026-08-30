@@ -595,7 +595,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
         title: Text('Running Orders - Table ${widget.tableName}'),
         elevation: 0,
         actions: [
-          if (activeKotsList.isNotEmpty)
+          if (MediaQuery.of(context).size.width >= 900 && activeKotsList.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 4.0, top: 8, bottom: 8),
               child: ElevatedButton.icon(

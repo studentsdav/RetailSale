@@ -52,7 +52,7 @@ class PosBillingEngine {
         if (item.isSchemeFree) {
           lineDiscount = grossInclusive;
         } else {
-          lineDiscount = (schemeShare + manualShare).clamp(0.0, grossInclusive);
+          lineDiscount = (item.lineDiscount + schemeShare + manualShare).clamp(0.0, grossInclusive);
         }
 
         final netInclusive = (grossInclusive - lineDiscount).clamp(0.0, double.infinity);
@@ -100,7 +100,7 @@ class PosBillingEngine {
         if (item.isSchemeFree) {
           lineDiscount = grossExclusive;
         } else {
-          lineDiscount = (schemeShare + manualShare).clamp(0.0, grossExclusive);
+          lineDiscount = (item.lineDiscount + schemeShare + manualShare).clamp(0.0, grossExclusive);
         }
 
         final taxableAmount = (grossExclusive - lineDiscount).clamp(0.0, double.infinity);

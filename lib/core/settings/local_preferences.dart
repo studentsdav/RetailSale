@@ -362,4 +362,27 @@ class LocalPreferences {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_tokenCopiesCountKey, value);
   }
+
+  static const _enableKotPrintKey = 'enable_kot_print_key';
+  static const _kotPrintModeKey = 'kot_print_mode_key';
+
+  static Future<bool?> getEnableKotPrint() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_enableKotPrintKey);
+  }
+
+  static Future<void> setEnableKotPrint(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableKotPrintKey, value);
+  }
+
+  static Future<String?> getKotPrintMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kotPrintModeKey);
+  }
+
+  static Future<void> setKotPrintMode(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kotPrintModeKey, value);
+  }
 }

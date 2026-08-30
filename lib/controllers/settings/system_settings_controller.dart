@@ -75,6 +75,16 @@ class SystemSettingsController extends ChangeNotifier {
       settings!.tokenCopiesCount = localTokenCopies;
     }
 
+    final localEnableKotPrint = await LocalPreferences.getEnableKotPrint();
+    if (localEnableKotPrint != null && settings != null) {
+      settings!.enableKotPrint = localEnableKotPrint;
+    }
+
+    final localKotPrintMode = await LocalPreferences.getKotPrintMode();
+    if (localKotPrintMode != null && localKotPrintMode.isNotEmpty && settings != null) {
+      settings!.kotPrintMode = localKotPrintMode;
+    }
+
     loading = false;
     notifyListeners();
   }
@@ -89,6 +99,8 @@ class SystemSettingsController extends ChangeNotifier {
     await LocalPreferences.setEnableTokenSystem(payload.enableTokenSystem);
     await LocalPreferences.setTokenCopiesCount(payload.tokenCopiesCount);
     await LocalPreferences.setDevicePrinterMappings(payload.devicePrinterMappings);
+    await LocalPreferences.setEnableKotPrint(payload.enableKotPrint);
+    await LocalPreferences.setKotPrintMode(payload.kotPrintMode);
 
     try {
       final res = await ApiClient.post(
@@ -105,6 +117,10 @@ class SystemSettingsController extends ChangeNotifier {
         }
       }
     } catch (_) {}
+
+    // Ensure user-selected KOT print preferences remain intact after save
+    settings!.enableKotPrint = payload.enableKotPrint;
+    settings!.kotPrintMode = payload.kotPrintMode;
 
     loading = false;
     notifyListeners();

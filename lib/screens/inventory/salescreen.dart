@@ -3047,7 +3047,7 @@ class _SaleScreenState extends State<SaleScreen> {
   // This relies on `_itemSchemeProgress` (enrollment + progress) already loaded.
   void _rebuildItemSchemeFreeLines() {
     // 1. Gather all free lines (both scheme free and happy hour free) and normalize
-    final freeLines = _items.where((it) => it.isSchemeFree).toList();
+    final freeLines = _items.where((it) => it.isSchemeFree || it.appliedSchemeId != null || (it.notes != null && it.notes!.startsWith('PROMO_'))).toList();
     if (freeLines.isNotEmpty) {
       final itemIdsToRestore = freeLines.map((it) => it.itemId).toSet();
       for (final itemId in itemIdsToRestore) {
@@ -3057,7 +3057,7 @@ class _SaleScreenState extends State<SaleScreen> {
         final totalQty = lines.fold<double>(0.0, (sum, it) => sum + it.qty);
         if (totalQty <= 0) continue;
         
-        final paidLine = lines.cast<SaleItem?>().firstWhere((it) => it != null && !it.isSchemeFree, orElse: () => null);
+        final paidLine = lines.cast<SaleItem?>().firstWhere((it) => it != null && !it.isSchemeFree && it.appliedSchemeId == null && (it.notes == null || !it.notes!.startsWith('PROMO_')), orElse: () => null);
         final seed = paidLine ?? lines.first;
         final resolvedRate = seed.rate > 0 ? seed.rate : _defaultRateForItemId(itemId);
         
@@ -3067,8 +3067,10 @@ class _SaleScreenState extends State<SaleScreen> {
           originalQty: totalQty,
           rate: resolvedRate,
           isSchemeFree: false,
+          lineDiscount: 0.0,
           appliedSchemeId: null,
           appliedHappyHourId: null,
+          notes: (seed.notes != null && seed.notes!.startsWith('PROMO_')) ? null : seed.notes,
         ));
       }
     }
@@ -3448,9 +3450,10 @@ class _SaleScreenState extends State<SaleScreen> {
             taxPercent: it.taxPercent,
             brand: it.brand,
             isTaxInclusive: it.isTaxInclusive,
-            isSchemeFree: true,
+            isSchemeFree: discountPercent >= 99.9,
             lineDiscount: take * discountPerUnit,
-            appliedSchemeId: promo['id'],
+            appliedSchemeId: null,
+            notes: 'PROMO_${promo['id']}',
           );
 
           if (take >= it.qty - 1e-9) {
@@ -6753,13 +6756,14 @@ class _SaleScreenState extends State<SaleScreen> {
             saveResponse?['data']?['sale_no'] ??
             saveResponse?['sale_no'] ??
             order.saleNo).toString();
+        final bool isTokenSystemEnabled = settingsCtrl.settings?.enableTokenSystem ?? false;
         final String primaryTokenNo = (saveResponse?['data']?['token_no'] ??
             saveResponse?['token_no'] ??
             order.tokenNo ??
             '').toString();
         final printOrder = order.copyWith(
           saleNo: primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo,
-          tokenNo: primaryTokenNo.trim().isNotEmpty ? primaryTokenNo : order.tokenNo,
+          tokenNo: isTokenSystemEnabled ? (primaryTokenNo.trim().isNotEmpty ? primaryTokenNo : order.tokenNo) : null,
           status: status,
           hasBillNo: (primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo).isNotEmpty &&
               !primarySaleNo.toUpperCase().startsWith('DRAFT-'),

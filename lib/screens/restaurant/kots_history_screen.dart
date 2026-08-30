@@ -35,13 +35,62 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
   final List<String> _statuses = ['All', 'Closed', 'Completed', 'Billed', 'Cancelled', 'Rejected', 'Preparing', 'Ready', 'Served'];
   final List<String> _types = ['All', 'Dine In', 'Takeaway', 'NC Order'];
 
+  List<dynamic> _masterItems = [];
+
   @override
   void initState() {
     super.initState();
     settingsCtrl.load().then((_) {
       if (mounted) setState(() {});
     });
+    _loadMasterItems();
     _loadHistoryKots();
+  }
+
+  Future<void> _loadMasterItems() async {
+    try {
+      final res = await ApiClient.get('/api/inventory/items');
+      if (res['success'] == true && res['data'] != null) {
+        if (mounted) {
+          setState(() {
+            _masterItems = List<dynamic>.from(res['data']);
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  String _getItemLocation(Map<String, dynamic> item) {
+    String loc = (item['location'] ?? item['station_name'] ?? item['kitchen_location'] ?? '').toString().trim();
+    if (loc.isNotEmpty && loc.toLowerCase() != 'null') return loc;
+
+    if (item['item'] != null && item['item'] is Map) {
+      final itemMap = item['item'] as Map;
+      loc = (itemMap['location'] ?? itemMap['station_name'] ?? itemMap['kitchen_location'] ?? '').toString().trim();
+      if (loc.isNotEmpty && loc.toLowerCase() != 'null') return loc;
+    }
+
+    final int itemId = int.tryParse((item['item_id'] ?? item['id'] ?? 0).toString()) ?? 0;
+    final String itemName = (item['item_name'] ?? item['name'] ?? '').toString().trim().toLowerCase();
+
+    dynamic master;
+    if (itemId > 0 && _masterItems.isNotEmpty) {
+      try {
+        master = _masterItems.firstWhere((i) => (i is Map ? i['id'] : i.id) == itemId);
+      } catch (_) {}
+    }
+    if (master == null && itemName.isNotEmpty && _masterItems.isNotEmpty) {
+      try {
+        master = _masterItems.firstWhere((i) => ((i is Map ? i['item_name'] ?? i['itemName'] : i.itemName) ?? '').toString().trim().toLowerCase() == itemName);
+      } catch (_) {}
+    }
+
+    if (master != null) {
+      loc = (master is Map ? (master['location'] ?? master['station_name'] ?? master['kitchen_location'] ?? '') : (master.location ?? '')).toString().trim();
+      if (loc.isNotEmpty && loc.toLowerCase() != 'null') return loc;
+    }
+
+    return 'Kitchen';
   }
 
   String _displayName(Map<String, dynamic> item) {
@@ -428,7 +477,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                    final isCancelled = item['status'] == 'Cancelled' || item['status'] == 'Rejected';
                   final double quantity = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '1') ?? 1.0;
                   final String qtyStr = (quantity % 1 == 0) ? quantity.toInt().toString() : quantity.toStringAsFixed(1);
-                  final String itemLoc = (item['location'] ?? item['station_name'] ?? 'Kitchen').toString();
+                  final String itemLoc = _getItemLocation(item);
 
                   return Row(
                     children: [

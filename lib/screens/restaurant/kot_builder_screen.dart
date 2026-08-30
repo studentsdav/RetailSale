@@ -790,18 +790,18 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     }
   }
 
-  void _showModifiersDialog(int itemId) {
+  Future<void> _showModifiersDialog(int itemId) async {
     final cartItem = _cart[itemId]!;
     final remarkCtrl = TextEditingController(text: cartItem['item_remark']);
-    List<String> selectedMods = List<String>.from(cartItem['modifier_details']);
+    List<String> selectedMods = List<String>.from(cartItem['modifier_details'] ?? []);
 
     final modifiersList = ['Extra Cheese', 'No Onion', 'Extra Spicy', 'Less Salt', 'Gluten Free'];
 
-    showDialog(
+    await showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (dialogContext, setDialogState) {
             return AlertDialog(
               title: Text('Modifiers: ${cartItem['item_name']}'),
               content: Column(
@@ -825,7 +825,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                         label: Text(mod),
                         selected: hasMod,
                         onSelected: (selected) {
-                          setState(() {
+                          setDialogState(() {
                             if (selected) {
                               selectedMods.add(mod);
                             } else {
@@ -839,14 +839,14 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                 ],
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
                 ElevatedButton(
                   onPressed: () {
-                    this.setState(() {
+                    setState(() {
                       _cart[itemId]!['item_remark'] = remarkCtrl.text;
                       _cart[itemId]!['modifier_details'] = selectedMods;
                     });
-                    Navigator.pop(context);
+                    Navigator.pop(dialogContext);
                   },
                   child: const Text('Apply Customizations'),
                 )
@@ -1824,20 +1824,24 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.85,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: _buildOrderBasketPanel(isBottomSheet: true),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: _buildOrderBasketPanel(isBottomSheet: true, onCartUpdated: () => setModalState(() {})),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildOrderBasketPanel({bool isBottomSheet = false}) {
+  Widget _buildOrderBasketPanel({bool isBottomSheet = false, VoidCallback? onCartUpdated}) {
     return Container(
       width: isBottomSheet ? double.infinity : 340,
       decoration: BoxDecoration(
@@ -1963,7 +1967,10 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                   ),
                                 ),
                                 InkWell(
-                                  onTap: () => _removeFromCart(key),
+                                  onTap: () {
+                                    _removeFromCart(key);
+                                    onCartUpdated?.call();
+                                  },
                                   child: const Padding(
                                     padding: EdgeInsets.all(2.0),
                                     child: Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
@@ -2047,7 +2054,10 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                     'Customize',
                                     style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFFFF7A1A)),
                                   ),
-                                  onPressed: () => _showModifiersDialog(key),
+                                  onPressed: () async {
+                                    await _showModifiersDialog(key);
+                                    onCartUpdated?.call();
+                                  },
                                 ),
 
                                 // Cart Stepper Controls
@@ -2061,7 +2071,10 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                   child: Row(
                                     children: [
                                       InkWell(
-                                        onTap: () => _removeFromCart(key),
+                                        onTap: () {
+                                          _removeFromCart(key);
+                                          onCartUpdated?.call();
+                                        },
                                         child: const Padding(
                                           padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           child: Icon(Icons.remove, size: 14, color: Color(0xFF334155)),
@@ -2084,6 +2097,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                               item['qty'] = qty + 1;
                                             });
                                           }
+                                          onCartUpdated?.call();
                                         },
                                         child: const Padding(
                                           padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -2206,89 +2220,93 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     final String formattedDate = DateFormat('dd-MMM-yyyy hh:mm:ss a').format(_currentDateTime);
 
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
         color: Color(0xFF1E293B),
         border: Border(bottom: BorderSide(color: Color(0xFF334155))),
       ),
-      child: Row(
-        children: [
-          // Order / KOT Number Pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFF7A1A),
-              borderRadius: BorderRadius.circular(6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // Order / KOT Number Pill
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF7A1A),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.receipt_long, size: 14, color: Colors.white),
+                  const SizedBox(width: 5),
+                  Text(
+                    'Order / KOT No: $_kotNumber',
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.receipt_long, size: 14, color: Colors.white),
-                const SizedBox(width: 5),
-                Text(
-                  'Order / KOT No: $_kotNumber',
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
+            const SizedBox(width: 16),
 
-          // Date & Live Ticking Clock
-          const Icon(Icons.access_time_rounded, size: 15, color: Colors.white70),
-          const SizedBox(width: 6),
-          Text(
-            formattedDate,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 20),
-
-          // Captain / Waiter Name Selection
-          const Icon(Icons.person_outline, size: 16, color: Colors.white70),
-          const SizedBox(width: 6),
-          const Text('Captain / Waiter: ', style: TextStyle(color: Colors.white70, fontSize: 12)),
-          DropdownButton<String>(
-            value: _selectedCaptain,
-            dropdownColor: const Color(0xFF1E293B),
-            underline: const SizedBox(),
-            isDense: true,
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 18),
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-            items: _captainList.map((c) {
-              return DropdownMenuItem<String>(
-                value: c,
-                child: Text(c, style: const TextStyle(color: Colors.white)),
-              );
-            }).toList(),
-            onChanged: (val) {
-              if (val != null) {
-                setState(() => _selectedCaptain = val);
-              }
-            },
-          ),
-          const Spacer(),
-
-          // Table Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white24),
+            // Date & Live Ticking Clock
+            const Icon(Icons.access_time_rounded, size: 15, color: Colors.white70),
+            const SizedBox(width: 6),
+            Text(
+              formattedDate,
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.table_restaurant, size: 14, color: Colors.white),
-                const SizedBox(width: 4),
-                Text(
-                  'Table $_displayTableName',
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              ],
+            const SizedBox(width: 20),
+
+            // Captain / Waiter Name Selection
+            const Icon(Icons.person_outline, size: 16, color: Colors.white70),
+            const SizedBox(width: 6),
+            const Text('Captain / Waiter: ', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            DropdownButton<String>(
+              value: _selectedCaptain,
+              dropdownColor: const Color(0xFF1E293B),
+              underline: const SizedBox(),
+              isDense: true,
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 18),
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+              items: _captainList.map((c) {
+                return DropdownMenuItem<String>(
+                  value: c,
+                  child: Text(c, style: const TextStyle(color: Colors.white)),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() => _selectedCaptain = val);
+                }
+              },
             ),
-          ),
-        ],
+            const SizedBox(width: 20),
+
+            // Table Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.table_restaurant, size: 14, color: Colors.white),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Table $_displayTableName',
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

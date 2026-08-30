@@ -135,6 +135,7 @@ class PosInvoicePrinter {
     final settingsCtrl = SystemSettingsController();
     await settingsCtrl.load();
     final bool showBrandName = settingsCtrl.settings?.showBrandName ?? true;
+    final bool enableTokenSystem = settingsCtrl.settings?.enableTokenSystem ?? false;
 
     final document = pw.Document();
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
@@ -159,6 +160,7 @@ class PosInvoicePrinter {
       thankYouMessage: thankYouMessage,
       authorizedSignatureLabel: authorizedSignatureLabel,
       showBrandName: showBrandName,
+      enableTokenSystem: enableTokenSystem,
     );
 
     final int numCopies = copyCount > 1 ? copyCount : 1;
@@ -245,7 +247,7 @@ class PosInvoicePrinter {
                   _receiptTitle(order, hasTaxData),
                   style: emphasisStyle,
                 ),
-                if (!_isRestaurantOrder(order) && (order.tokenNo ?? '').trim().isNotEmpty) ...[
+                if (data.enableTokenSystem && !_isRestaurantOrder(order) && (order.tokenNo ?? '').trim().isNotEmpty) ...[
                   pw.SizedBox(height: 4),
                   pw.Container(
                     padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 8),
@@ -725,7 +727,7 @@ class PosInvoicePrinter {
                           fontWeight: pw.FontWeight.bold,
                         ),
                       ),
-                      if ((order.tokenNo ?? '').trim().isNotEmpty) ...[
+                      if (data.enableTokenSystem && (order.tokenNo ?? '').trim().isNotEmpty) ...[
                         pw.SizedBox(height: 4),
                         pw.Container(
                           padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -855,7 +857,7 @@ class PosInvoicePrinter {
                         _receiptNumberLabel(order),
                         order.saleNo,
                       ),
-                      if (!_isRestaurantOrder(order) && (order.tokenNo ?? '').trim().isNotEmpty)
+                      if (data.enableTokenSystem && !_isRestaurantOrder(order) && (order.tokenNo ?? '').trim().isNotEmpty)
                         _a4MetaRow('Token No', order.tokenNo!.trim()),
                       if (_isActualOrder(order) && order.orderId != null && order.hasBillNo)
                         _a4MetaRow('Order No', '#${order.orderId}'),
@@ -4070,6 +4072,7 @@ class _InvoiceContext {
   final String thankYouMessage;
   final String authorizedSignatureLabel;
   final bool showBrandName;
+  final bool enableTokenSystem;
 
   const _InvoiceContext({
     required this.order,
@@ -4089,5 +4092,6 @@ class _InvoiceContext {
     required this.thankYouMessage,
     required this.authorizedSignatureLabel,
     required this.showBrandName,
+    required this.enableTokenSystem,
   });
 }

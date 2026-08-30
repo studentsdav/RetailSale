@@ -511,6 +511,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                                 sysSettings.kotPrintMode = val;
                                 sysSettings.enableKotPrint = val != 'NONE';
                                 await sysSettingsCtrl.save(sysSettings);
+                                if (mounted) setState(() {});
                               }
                             },
                           ),
@@ -527,6 +528,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                           if (!val) sysSettings.kotPrintMode = 'NONE';
                           if (val && sysSettings.kotPrintMode == 'NONE') sysSettings.kotPrintMode = 'DIRECT';
                           await sysSettingsCtrl.save(sysSettings);
+                          if (mounted) setState(() {});
                         },
                       ),
                     ],
