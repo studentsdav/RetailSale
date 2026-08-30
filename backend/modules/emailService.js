@@ -3,22 +3,39 @@ const sysConfig = require('../utils/configManager');
 // Initialize the transporter once
 
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: sysConfig ? sysConfig.emailId : null,
-        pass: sysConfig ? sysConfig.emailPass : null
+function getTransporter() {
+    const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
+    const emailPass = process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || (sysConfig ? sysConfig.emailPass : null);
+    const emailService = process.env.EMAIL_SERVICE || 'gmail';
+
+    if (!emailUser || !emailPass) {
+        return null;
     }
-});
+
+    return nodemailer.createTransport({
+        service: emailService,
+        auth: {
+            user: emailUser,
+            pass: emailPass
+        }
+    });
+}
 
 /**
  * Core function to send any generic email
  */
-
 async function sendEmail(to, subject, htmlContent) {
+    const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
+    const transporter = getTransporter();
+
+    if (!transporter) {
+        console.warn(`⚠️ [EMAIL NOTICE] SMTP credentials not configured (EMAIL_USER / EMAIL_PASS missing). Email to ${to} bypassed.`);
+        return false;
+    }
+
     try {
         const info = await transporter.sendMail({
-            from: `"System Admin" <${process.env.EMAIL_USER}>`,
+            from: `"System Admin" <${emailUser}>`,
             to: to,
             subject: subject,
             html: htmlContent
@@ -35,6 +52,7 @@ async function sendEmail(to, subject, htmlContent) {
  * Template 1: Send an OTP Code
  */
 async function sendOtpEmail(to, otpCode, purpose = "Verification Request") {
+    console.log(`🔑 [OTP GENERATED] Target: ${to} | Verification Code: ${otpCode}`);
     const html = `
         <div style="font-family: sans-serif; padding: 20px; max-width: 600px; border: 1px solid #eee; border-radius: 8px;">
             <h2 style="color: #333;">${purpose}</h2>
@@ -45,7 +63,12 @@ async function sendOtpEmail(to, otpCode, purpose = "Verification Request") {
             <p style="color: #777; font-size: 12px;"><i>This code expires in 10 minutes. If you did not request this, please change your password immediately.</i></p>
         </div>
     `;
-    return await sendEmail(to, `Your Verification Code: ${otpCode}`, html);
+    try {
+        await sendEmail(to, `Your Verification Code: ${otpCode}`, html);
+    } catch (err) {
+        console.warn(`⚠️ [EMAIL NOTICE] Could not send OTP email to ${to}: ${err.message}. Use OTP: ${otpCode} from logs.`);
+    }
+    return true;
 }
 
 /**

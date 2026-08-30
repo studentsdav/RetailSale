@@ -9,34 +9,52 @@ const SECRET_KEY = crypto.scryptSync(SECRET_PASSPHRASE, 'salt', 32);
 const ALGORITHM = 'aes-256-cbc';
 
 function loadSecureConfig() {
-    try {
-        const configPath = path.join(rootDir, 'sysConfig.enc');
+    // 1. Candidate paths to look for sysConfig.enc
+    const candidatePaths = [
+        path.join(rootDir, 'sysConfig.enc'),
+        path.join(rootDir, 'backend', 'sysConfig.enc'),
+        path.join(process.cwd(), 'sysConfig.enc'),
+        path.join(process.cwd(), 'backend', 'sysConfig.enc')
+    ];
 
-        if (!fs.existsSync(configPath)) {
-            throw new Error("CRITICAL: sysConfig.enc file is missing from the installation directory.");
+    let foundPath = candidatePaths.find(p => fs.existsSync(p));
+
+    if (foundPath) {
+        try {
+            const fileContent = fs.readFileSync(foundPath, 'utf8');
+            const parsedFile = JSON.parse(fileContent);
+
+            // Extract IV and Encrypted Data
+            const iv = Buffer.from(parsedFile.iv, 'hex');
+            const encryptedData = parsedFile.encryptedData;
+
+            // Decrypt
+            const decipher = crypto.createDecipheriv(ALGORITHM, SECRET_KEY, iv);
+            let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+            decrypted += decipher.final('utf8');
+
+            console.log(`✅ [SYSTEM] Loaded sysConfig.enc from: ${foundPath}`);
+            return JSON.parse(decrypted);
+
+        } catch (error) {
+            console.error("⚠️ [SYSTEM] Failed to decrypt sysConfig.enc:", error.message);
         }
-
-        const fileContent = fs.readFileSync(configPath, 'utf8');
-        const parsedFile = JSON.parse(fileContent);
-
-        // Extract IV and Encrypted Data
-        const iv = Buffer.from(parsedFile.iv, 'hex');
-        const encryptedData = parsedFile.encryptedData;
-
-        // Decrypt
-        const decipher = crypto.createDecipheriv(ALGORITHM, SECRET_KEY, iv);
-        let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-
-        // Parse back into a JavaScript Object
-        return JSON.parse(decrypted);
-
-    } catch (error) {
-        console.error("⚠️ [SYSTEM] Failed to load secure configuration:", error.message);
-        console.log("🛡️ [SYSTEM] Running in safe Recovery Mode.");
-
-        return null;
     }
+
+    // 2. Fallback to Environment Variables if sysConfig.enc is missing or fails
+    if (process.env.SHEET_ID || process.env.EMAIL_USER || process.env.SCRIPT_URL) {
+        console.log("ℹ️ [SYSTEM] Loading sysConfig from environment variables.");
+        return {
+            sheetId: process.env.SHEET_ID || null,
+            scriptUrl: process.env.SCRIPT_URL || null,
+            emailId: process.env.EMAIL_USER || process.env.EMAIL_ID || null,
+            emailPass: process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || null,
+            rootFolderId: process.env.ROOT_FOLDER_ID || null
+        };
+    }
+
+    console.log("🛡️ [SYSTEM] sysConfig.enc not found and env vars not set. Running in safe Recovery Mode.");
+    return null;
 }
 
 // Load and export the config immediately so it's ready when required
