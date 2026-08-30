@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50)
         },
         role: DataTypes.STRING,
+        max_discount_percent: { type: DataTypes.DECIMAL(5, 2), defaultValue: 100.00 },
         is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
         last_login: DataTypes.DATE
     }, {

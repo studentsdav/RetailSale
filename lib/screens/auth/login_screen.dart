@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:retailpos/core/api/api_client.dart';
+import 'package:retailpos/core/api/endpoints.dart';
 import 'package:retailpos/core/auth/auth_service.dart';
+import 'package:retailpos/core/auth/token_storage.dart';
 import 'package:retailpos/core/config/app_brand.dart';
 import 'package:retailpos/core/config/app_config.dart';
+import 'package:retailpos/core/config/app_constants.dart';
 import 'package:retailpos/core/navigation/home_route_helper.dart';
 import 'package:retailpos/screens/settings/outlet_setup_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -35,16 +39,10 @@ class _LoginScreenState extends State<LoginScreen>
   late final AnimationController _logoCtrl;
   late final Animation<double> _logoAnim;
 
-  final List<String> _roles = [
-    'ADMIN',
-    'STORE',
-    'RETAIL',
-    'ACCOUNTS',
-    'HR',
-  ];
-
   bool _isloading = false;
   String currentVersion = "";
+
+  String _activeModule = 'ALL';
 
   @override
   void initState() {
@@ -69,13 +67,33 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _loadOutletLogo() async {
+    String mod = 'ALL';
     if (_selectedOutlet != null) {
       final path = await BrandingStorage.getLogoPathForOutlet(_selectedOutlet!);
       if (mounted) setState(() => _logoPath = path);
+
+      try {
+        final res = await ApiClient.post(
+          ApiEndpoints.checkOutlet,
+          {'outlet_code': _selectedOutlet!},
+        );
+        if (res != null && res['success'] == true && res['data'] != null) {
+          mod = res['data']['business_module'] ?? 'ALL';
+        }
+      } catch (_) {}
     }
+
+    if (mod == 'ALL') {
+      final user = await TokenStorage.getUser();
+      mod = user?['business_module'] ?? user?['outlet_module'] ?? 'ALL';
+    }
+
     final branding = await LocalPreferences.getAppBranding();
     if (!mounted) return;
-    setState(() => _bgCoverImagePath = branding.homeBgImagePath);
+    setState(() {
+      _activeModule = mod;
+      _bgCoverImagePath = branding.homeBgImagePath;
+    });
   }
 
   @override
@@ -470,14 +488,21 @@ class _LoginScreenState extends State<LoginScreen>
 
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
-            initialValue: _role,
+            initialValue: () {
+              final roles = AppConstants.getRolesForModule(_activeModule);
+              return roles.contains(_role) ? _role : roles.first;
+            }(),
             decoration: const InputDecoration(
               labelText: 'Role',
               prefixIcon: Icon(Icons.badge),
             ),
-            items: _roles
-                .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                .toList(),
+            items: (() {
+              final roles = AppConstants.getRolesForModule(_activeModule);
+              final list = roles.contains(_role) ? roles : [...roles, _role];
+              return list
+                  .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                  .toList();
+            })(),
             onChanged: (v) => setState(() => _role = v ?? _role),
           ),
 

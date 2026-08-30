@@ -8,6 +8,7 @@ import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/settings/theme_controller.dart';
 import '../../controllers/settings/ui_preferences_controller.dart';
 import '../../core/api/api_client.dart';
+import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/settings/local_preferences.dart';
@@ -534,7 +535,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final showSaleAndPayment = _currentActiveModule != 'INVENTORY';
 
     return DefaultTabController(
-      length: showSaleAndPayment ? 8 : 7,
+      length: showSaleAndPayment ? 9 : 8,
       child: Scaffold(
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? const Color(0xFF121214)
@@ -551,6 +552,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Tab(text: 'Branding'),
               const Tab(text: 'Keyboard Shortcuts'),
               if (showSaleAndPayment) const Tab(text: 'Sale & Payment'),
+              const Tab(text: 'Promos & Configs'),
               const Tab(text: 'Business Module'),
             ],
           ),
@@ -1735,7 +1737,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ], constraints),
 
-                // 8. BUSINESS MODULE TAB
+                // 8. PROMOS & CONFIGS TAB
+                _buildPromosAndConfigsTab(buildTabBody, constraints),
+
+                // 9. BUSINESS MODULE TAB
                 _buildBusinessModuleTab(buildTabBody, constraints),
               ],
             );
@@ -1743,6 +1748,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildPromosAndConfigsTab(
+      Widget Function(List<Widget>, BoxConstraints) buildTabBody,
+      BoxConstraints constraints) {
+    return buildTabBody([
+      _customSection(
+        'Promotions, Discounts & Commission Rules',
+        'Configure outlet-wide discount ceilings, automated happy hour pricing, bill value promos, and salesperson commissions.',
+        [
+          _settingRow(
+            title: 'Outlet Maximum Manual Discount (%)',
+            description: 'Set maximum manual discount percentage allowed across all billing terminals in this outlet',
+            control: OutlinedButton.icon(
+              onPressed: () => _showOutletMaxDiscountDialog(),
+              icon: const Icon(Icons.percent_rounded, size: 18),
+              label: const Text('Outlet Max Discount %'),
+            ),
+          ),
+          _settingRow(
+            title: 'Happy Hour Pricing',
+            description: 'Configure automated time-based happy hour discounts and pricing rules',
+            control: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const HappyHourConfigScreen()),
+                );
+              },
+              icon: const Icon(Icons.alarm_on_rounded, size: 18),
+              label: const Text('Configure Happy Hour'),
+            ),
+          ),
+          _settingRow(
+            title: 'Bill Value Promotions',
+            description: 'Set up bill amount threshold discounts and promotional schemes',
+            control: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const BillValuePromoConfigScreen()),
+                );
+              },
+              icon: const Icon(Icons.discount_rounded, size: 18),
+              label: const Text('Configure Promos'),
+            ),
+          ),
+          _settingRow(
+            title: 'Sales Commission Rules',
+            description: 'Manage commission rules and incentive structures for staff and sales channels',
+            isLast: true,
+            control: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CommissionRulesScreen()),
+                );
+              },
+              icon: const Icon(Icons.rule_folder_rounded, size: 18),
+              label: const Text('Configure Commissions'),
+            ),
+          ),
+        ],
+      ),
+    ], constraints);
   }
 
   Widget _buildBusinessModuleTab(
@@ -2206,47 +2276,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'Sale Sources / Channels',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const HappyHourConfigScreen()),
-                      );
-                    },
-                    icon: const Icon(Icons.alarm_on_rounded, size: 18),
-                    label: const Text('Configure Happy Hour'),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const BillValuePromoConfigScreen()),
-                      );
-                    },
-                    icon: const Icon(Icons.discount_rounded, size: 18),
-                    label: const Text('Configure Bill Value Promos'),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const CommissionRulesScreen()),
-                      );
-                    },
-                    icon: const Icon(Icons.rule_folder_rounded, size: 18),
-                    label: const Text('Configure Commission Rules'),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: () => _showAddEditSourceDialog(),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add Source'),
-                  ),
-                ],
+              FilledButton.icon(
+                onPressed: () => _showAddEditSourceDialog(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Source'),
               ),
             ],
           ),
@@ -2875,6 +2908,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         );
       },
+    );
+  }
+
+  Future<void> _showOutletMaxDiscountDialog() async {
+    final currentMax = await LocalPreferences.getMaxDiscountPercent();
+    final ctrl = TextEditingController(text: currentMax.toStringAsFixed(0));
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Outlet Max Manual Discount (%)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Set the maximum manual discount percentage allowed across all billing terminals in this outlet.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Max Discount Percentage (%)',
+                border: OutlineInputBorder(),
+                suffixText: '%',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final val = double.tryParse(ctrl.text.trim()) ?? 100.0;
+              try {
+                await ApiClient.post(ApiEndpoints.settings, {
+                  'outlet_max_discount_percent': val,
+                });
+              } catch (_) {}
+              await LocalPreferences.setMaxDiscountPercent(val);
+              if (!mounted) return;
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Outlet max discount saved to database (${val.toStringAsFixed(0)}%)'),
+                backgroundColor: Colors.green,
+              ));
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
   }
 }

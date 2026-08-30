@@ -22,6 +22,7 @@ import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/settings/ui_preferences_controller.dart';
+import '../../core/config/app_constants.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../core/billing/pos_billing_engine.dart';
 import '../../core/auth/token_storage.dart';
@@ -4501,11 +4502,16 @@ class _SaleScreenState extends State<SaleScreen> {
   Future<void> _showDiscountDialog() async {
     final valueCtrl = TextEditingController(text: _manualDiscountValue.text);
     String discountType = _manualDiscountType;
+    final outletMaxDisc = await LocalPreferences.getMaxDiscountPercent();
+    final userMaxDisc = await AppConstants.getEffectiveUserMaxDiscount();
+    final effectiveMaxAllowed = math.min(outletMaxDisc, userMaxDisc);
+
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('Apply Discount'),
+          title: Text('Apply Discount (Max: ${effectiveMaxAllowed.toStringAsFixed(0)}%)'),
           content: SizedBox(
             width: 320,
             child: Column(
@@ -4528,7 +4534,11 @@ class _SaleScreenState extends State<SaleScreen> {
                   controller: valueCtrl,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Value'),
+                  decoration: InputDecoration(
+                    labelText: discountType == 'PERCENT'
+                        ? 'Percentage (Max ${effectiveMaxAllowed.toStringAsFixed(0)}%)'
+                        : 'Fixed Amount',
+                  ),
                 ),
               ],
             ),
@@ -4540,11 +4550,33 @@ class _SaleScreenState extends State<SaleScreen> {
             ),
             FilledButton(
               onPressed: () {
+                final val = double.tryParse(valueCtrl.text.trim()) ?? 0;
+                double finalVal = val;
+
+                if (discountType == 'PERCENT') {
+                  if (val > effectiveMaxAllowed) {
+                    finalVal = effectiveMaxAllowed;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Discount capped to maximum limit of ${effectiveMaxAllowed.toStringAsFixed(0)}%'),
+                      backgroundColor: Colors.orange,
+                    ));
+                  }
+                } else if (discountType == 'AMOUNT' && _discountBaseAmount > 0) {
+                  final calculatedPercent = (val / _discountBaseAmount) * 100;
+                  if (calculatedPercent > effectiveMaxAllowed) {
+                    finalVal = (_discountBaseAmount * effectiveMaxAllowed) / 100;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Discount amount capped to max ${effectiveMaxAllowed.toStringAsFixed(0)}% (Rs. ${finalVal.toStringAsFixed(2)})'),
+                      backgroundColor: Colors.orange,
+                    ));
+                  }
+                }
+
                 setState(() {
                   _manualDiscountType = discountType;
-                  _manualDiscountValue.text = valueCtrl.text.trim().isEmpty
+                  _manualDiscountValue.text = finalVal <= 0
                       ? '0'
-                      : valueCtrl.text.trim();
+                      : finalVal.toStringAsFixed(2);
                   _syncAmountPaidWithInvoice();
                 });
                 Navigator.pop(dialogContext);

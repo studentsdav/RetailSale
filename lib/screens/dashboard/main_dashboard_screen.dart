@@ -2456,6 +2456,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
         'icon': Icons.email_outlined,
         'label': 'SMTP Email Setup',
+        'permission': 'SMTP_SETTINGS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmtpSettingsScreen())),
       },
 

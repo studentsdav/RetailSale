@@ -42,6 +42,13 @@ class SystemSettingsController extends ChangeNotifier {
       final res = await ApiClient.get(ApiEndpoints.settings);
       if (res['data'] != null && res['data'] is Map) {
         settings = SystemSettings.fromJson(res['data']);
+        if (res['data']['outlet_max_discount_percent'] != null) {
+          final val = res['data']['outlet_max_discount_percent'];
+          final dbMaxDisc = val is num
+              ? val.toDouble()
+              : (double.tryParse(val.toString()) ?? 100.0);
+          await LocalPreferences.setMaxDiscountPercent(dbMaxDisc);
+        }
       }
     } catch (_) {}
 

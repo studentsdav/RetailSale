@@ -3,6 +3,15 @@ const bcrypt = require("bcryptjs");
 
 const ROLE_PERMISSIONS = {
     ADMIN: ['*'],
+    MANAGER: [
+        'ITEM_REQUEST', 'PURCHASE_ORDER', 'STOCK_IN', 'STOCK_OUT', 'RETURN', 'DAMAGE',
+        'ITEM_MASTER', 'SUPPLIER_MASTER', 'STOCK_LOCATION', 'STOCK_BALANCE', 'DAMAGE_SUMMARY',
+        'STOCK_IN_REPORT', 'STOCK_OUT_REPORT', 'DAMAGE_REPORT', 'REQUEST_REPORT', 'PURCHASE_REPORT',
+        'RETURN_REPORT', 'STOCK_TRANSFER', 'PRODUCT_ASSEMBLY', 'RETURN_ISSUE', 'SUPPLIER_RETURN',
+        'STOCK_TRANSFER_REPORT', 'SUBMISSIONS_STATUS', 'RETAIL_SALES', 'REPRINT_SALES_BILL',
+        'MODIFY_SALES_BILL', 'MODIFY_SALES_PAYMENT', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT',
+        'CUSTOMER_APP', 'RETAILER_CONSOLE', 'RIDER_PORTAL', 'CASH_LEDGER'
+    ],
     STORE: [
         'ITEM_REQUEST', 'PURCHASE_ORDER', 'STOCK_IN', 'STOCK_OUT', 'RETURN', 'DAMAGE',
         'ITEM_MASTER', 'SUPPLIER_MASTER', 'STOCK_LOCATION',
@@ -35,6 +44,20 @@ const ROLE_PERMISSIONS = {
     ]
 };
 
+const ROLE_MAX_DISCOUNTS = {
+    ADMIN: 100.0,
+    MANAGER: 50.0,
+    STORE: 20.0,
+    RETAIL: 15.0,
+    CASHIER: 10.0,
+    ACCOUNTS: 25.0,
+    HR: 10.0,
+    WAITER: 5.0,
+    CAPTAIN: 15.0,
+    KDS: 0.0,
+    MARKETING: 25.0
+};
+
 exports.listUsers = async (req, res) => {
     const outlet_id = req.user.outlet_id;
     const users = await req.propertyDb.models.users.findAll({
@@ -45,7 +68,7 @@ exports.listUsers = async (req, res) => {
 };
 
 exports.createUser = async (req, res) => {
-    const { username, full_name, mobile, role, permissions, password, contact_email } = req.body;
+    const { username, full_name, mobile, role, permissions, password, contact_email, max_discount_percent } = req.body;
 
     const outlet_id = req.user.outlet_id;
 
@@ -58,6 +81,11 @@ exports.createUser = async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
 
+    const defaultRoleDisc = ROLE_MAX_DISCOUNTS[role] ?? 10.0;
+    const finalMaxDiscount = (max_discount_percent !== undefined && max_discount_percent !== null)
+        ? max_discount_percent
+        : defaultRoleDisc;
+
     const user = await req.propertyDb.models.users.create({
         outlet_id,
         username,
@@ -65,6 +93,7 @@ exports.createUser = async (req, res) => {
         mobile,
         contact_email,
         role,
+        max_discount_percent: finalMaxDiscount,
         password_hash: hash,
         is_active: true
     });
@@ -123,7 +152,7 @@ exports.changePassword = async (req, res) => {
 };
 
 exports.updateUser = async (req, res) => {
-    const { full_name, mobile, role, contact_email } = req.body;
+    const { full_name, mobile, role, contact_email, max_discount_percent } = req.body;
 
     const user = await req.propertyDb.models.users.findByPk(req.params.id);
     if (!user) {
@@ -133,7 +162,12 @@ exports.updateUser = async (req, res) => {
     const oldData = user.toJSON();
     const roleChanged = role && role !== oldData.role;
 
-    await user.update({ full_name, mobile, role, contact_email });
+    const updatePayload = { full_name, mobile, role, contact_email };
+    if (max_discount_percent !== undefined) {
+        updatePayload.max_discount_percent = max_discount_percent;
+    }
+
+    await user.update(updatePayload);
 
     if (roleChanged) {
         // Destroy existing permissions for this user

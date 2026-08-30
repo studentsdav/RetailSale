@@ -365,6 +365,7 @@ class LocalPreferences {
 
   static const _enableKotPrintKey = 'enable_kot_print_key';
   static const _kotPrintModeKey = 'kot_print_mode_key';
+  static const _outletMaxDiscountKey = 'outlet_max_discount_percent';
 
   static Future<bool?> getEnableKotPrint() async {
     final prefs = await SharedPreferences.getInstance();
@@ -384,5 +385,15 @@ class LocalPreferences {
   static Future<void> setKotPrintMode(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kotPrintModeKey, value);
+  }
+
+  static Future<double> getMaxDiscountPercent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_outletMaxDiscountKey) ?? 100.0;
+  }
+
+  static Future<void> setMaxDiscountPercent(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_outletMaxDiscountKey, value);
   }
 }

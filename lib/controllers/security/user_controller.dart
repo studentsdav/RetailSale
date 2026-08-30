@@ -28,6 +28,7 @@ class UserController extends ChangeNotifier {
     required String mobile,
     required String role,
     required String contact_email,
+    double maxDiscountPercent = 100.0,
     List<String>? permissions,
     required String password,
   }) async {
@@ -40,6 +41,7 @@ class UserController extends ChangeNotifier {
       'mobile': mobile,
       'role': role,
       'contact_email': contact_email,
+      'max_discount_percent': maxDiscountPercent,
       'permissions': permissions ?? [],
       'password': password
     });
@@ -54,6 +56,7 @@ class UserController extends ChangeNotifier {
     required String mobile,
     required String role,
     required String contact_email,
+    double maxDiscountPercent = 100.0,
   }) async {
     loading = true;
     notifyListeners();
@@ -64,7 +67,8 @@ class UserController extends ChangeNotifier {
         'full_name': fullName,
         'mobile': mobile,
         'role': role,
-        'contact_email': contact_email
+        'contact_email': contact_email,
+        'max_discount_percent': maxDiscountPercent,
       },
     );
 

@@ -77,6 +77,7 @@ router.put('/assemblies/:id/stop', assemblyCtrl.stopAssembly);
 // SETTINGS
 router.get('/settings', settingsctrl.getSettings);
 router.post('/settings', settingsctrl.saveSettings);
+router.put('/settings', settingsctrl.saveSettings);
 router.post('/settings/clear-transaction-data', settingsctrl.clearTransactionData);
 router.get('/branding', brandingSettingsCtrl.getBranding);
 router.post('/branding', brandingSettingsCtrl.saveBranding);

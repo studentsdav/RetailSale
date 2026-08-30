@@ -1,4 +1,5 @@
 import 'package:retailpos/models/auth/permission_model.dart';
+import '../../core/permissions/module_capability.dart';
 
 class PermissionService {
   static UserPermission? user;
@@ -13,8 +14,14 @@ class PermissionService {
     );
   }
 
-  static bool can(String permission) {
+  static bool can(String permission, [String? currentModule]) {
     if (user == null) return false;
+
+    if (currentModule != null && currentModule.isNotEmpty) {
+      if (!ModuleCapability.isPermissionAllowed(permission, currentModule)) {
+        return false;
+      }
+    }
 
     if (user!.role == 'ADMIN') return true;
 

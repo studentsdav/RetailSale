@@ -5,6 +5,7 @@ import '../../controllers/public/outlet_controller.dart' show OutletController;
 import '../../models/security/app_user_model.dart';
 import '../../core/permissions/module_capability.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/config/app_constants.dart';
 
 /// ================= SCREEN =================
 class Permission1 {
@@ -42,21 +43,25 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       Permission1('STOCK_IN', 'Receive from Vendor (GRN)'),
       Permission1('STOCK_OUT', 'Stock Dispatch'),
       Permission1('STOCK_TRANSFER', 'Stock Transfer'),
-      Permission1('PRODUCT_ASSEMBLY', 'Product Assembly'),
+      Permission1('PRODUCT_ASSEMBLY', 'Product Assembly / Recipe'),
       Permission1('RETURN', 'Department Return (Main Key)'),
       Permission1('RETURN_ISSUE', 'Return Department Items'),
       Permission1('SUPPLIER_RETURN', 'Return Purchase to Vendor'),
       Permission1('DAMAGE', 'Damage Items Entry'),
-      Permission1('ITEM_MASTER', 'Item Master'),
+      Permission1('ITEM_MASTER', 'Item Master / Products'),
       Permission1('SUPPLIER_MASTER', 'Vendor Master'),
       Permission1('STOCK_LOCATION', 'Stock Location / Department'),
       Permission1('SUBMISSIONS_STATUS', 'My Submissions Status'),
+      Permission1('ITEM_BARCODE_MANAGER', 'Item Barcode & Label Manager'),
+      Permission1('APPROVAL_CENTER', 'Document Approval Center'),
     ]),
-    PermissionGroup('Retail Sales', [
-      Permission1('RETAIL_SALES', 'Retail Sales'),
+    PermissionGroup('Retail Sales & POS', [
+      Permission1('RETAIL_SALES', 'Retail Sales (POS Billing)'),
+      Permission1('ENTERPRISE_POS', 'Enterprise POS Terminal'),
       Permission1('REPRINT_SALES_BILL', 'Reprint Sales Bill'),
       Permission1('MODIFY_SALES_BILL', 'Modify Sales Bill'),
       Permission1('MODIFY_SALES_PAYMENT', 'Modify Sales Payment'),
+      Permission1('CUSTOMER_LIST', 'Customer Master & Directory'),
       Permission1('CUSTOMER_APP', 'Customer App (Delivery)'),
       Permission1('RETAILER_CONSOLE', 'Supplier / Retailer Console'),
       Permission1('RIDER_PORTAL', 'Rider Delivery Portal'),
@@ -66,9 +71,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       Permission1('SUPPLIER_RETURN_REFUND', 'Vendor Return Refund'),
       Permission1('PENDING_REFUNDS', 'Pending Refunds View'),
       Permission1('CASH_LEDGER', 'Finance & Reports (Cash Ledger)'),
+      Permission1('FINANCE_HUB', 'Finance & Accounting Hub (COA / P&L / Banks)'),
+      Permission1('ACCOUNTING_VOUCHERS', 'Accounting Vouchers (F4-F9)'),
+      Permission1('BANK_ACCOUNTS', 'Company Bank Accounts Master'),
+      Permission1('LOAN_EMI', 'Loan & EMI Management'),
+      Permission1('CREDIT_ANALYSIS', 'Credit Ledger & Customer Accounts'),
+      Permission1('EXPENSE_ANALYTICS', 'Expense Analytics & Cost Control'),
       Permission1('HR_PAYROLL', 'Payroll Processing'),
       Permission1('RETAIL_SALES_REPORT', 'Retail Sales Report'),
       Permission1('CLOSING_REPORT', 'Closing Report'),
+      Permission1('CASHIER_HANDOVER', 'Cashier Shift Handover Report'),
+      Permission1('NIGHT_AUDIT', 'Night Audit Report (EOD)'),
       Permission1('STOCK_LEDGER_REPORT', 'Stock Ledger Report'),
       Permission1('VENDOR_PAYMENT_REPORT', 'Vendor Payment Report'),
       Permission1('PURCHASE_REPORT', 'Vendor Purchase Order Report'),
@@ -90,43 +103,59 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       Permission1('HR_EMPLOYEES', 'Employee Directory'),
       Permission1('HR_ATTENDANCE', 'Attendance & Leaves'),
       Permission1('HR_MASTERS', 'HR Masters & Scales'),
+      Permission1('PAY_SCHEDULE', 'Pay Schedule & Shift Timing'),
     ]),
-    PermissionGroup('Restaurant (Beta)', [
+    PermissionGroup('Restaurant & Dining', [
       Permission1('RESTAURANT_CONSOLE', 'Captain Console'),
       Permission1('RESTAURANT_FLOOR_DESIGN', 'Floor Designer'),
       Permission1('RESTAURANT_KDS', 'Kitchen KDS Queue'),
       Permission1('RESTAURANT_SETUP', 'Restaurant Setup'),
+      Permission1('RESTAURANT_ANALYTICS', 'Restaurant Analytics & Reports'),
       Permission1('DELIVERY_CHALLANS', 'Delivery Challans'),
       Permission1('RECURRING_EXPENSES', 'Recurring Expenses'),
+      Permission1('TABLE_RESERVATIONS', 'Table Reservations'),
+      Permission1('RUNNING_ORDERS', 'Running Orders Monitor'),
+      Permission1('KOTS_HISTORY', 'KOT History Log'),
     ]),
-    PermissionGroup('Reports & Analysis', [
-      Permission1('STOCK_BALANCE', 'Stock Balance'),
-      Permission1('DAMAGE_SUMMARY', 'Damage Summary'),
-      Permission1('STOCK_IN_REPORT', 'Receiving Report'),
-      Permission1('STOCK_OUT_REPORT', 'Stock Dispatch Report'),
-      Permission1('STOCK_TRANSFER_REPORT', 'Stock Transfer Report'),
-      Permission1('SUBSCRIPTION_REPORT', 'Subscription Report'),
+    PermissionGroup('Marketing & Campaigns', [
+      Permission1('WHATSAPP_INTEGRATION', 'WhatsApp Dashboard & Automation'),
+      Permission1('LUCKY_DRAW', 'Lucky Draw Campaigns'),
+      Permission1('PROMO_VOUCHERS', 'Bill Value Promos & Vouchers'),
+      Permission1('HAPPY_HOUR', 'Happy Hour Pricing Rules'),
+      Permission1('COMMISSION_RULES', 'Commission Rules & Sales Reps'),
       Permission1('SCHEME_REPORT', 'Scheme Report'),
       Permission1('SCHEME_ANALYSIS', 'Scheme Analysis'),
+      Permission1('SUBSCRIPTION_REPORT', 'Subscription Report'),
+      Permission1('LOYALTY_PROGRAM', 'Loyalty Program Setup'),
       Permission1('LOYALTY_REPORT', 'Loyalty Report'),
       Permission1('STORE_ANALYSIS', 'Store Analysis'),
       Permission1('BRAND_ANALYSIS', 'Brand Analysis'),
       Permission1('SOURCE_ANALYSIS', 'Sale Source Analysis'),
+    ]),
+    PermissionGroup('Reports & Intelligence', [
+      Permission1('STOCK_BALANCE', 'Stock Balance'),
+      Permission1('ITEM_ADVANCE_REPORT', 'Item Advance & Batch Movement'),
+      Permission1('OPERATIONS_INTELLIGENCE', 'Operations Intelligence'),
+      Permission1('DAMAGE_SUMMARY', 'Damage Summary Report'),
+      Permission1('STOCK_IN_REPORT', 'Receiving Report'),
+      Permission1('STOCK_OUT_REPORT', 'Stock Dispatch Report'),
+      Permission1('STOCK_TRANSFER_REPORT', 'Stock Transfer Report'),
       Permission1('COMMISSION_REPORT', 'Commission Report'),
       Permission1('PAYMENT_ANALYSIS', 'Payment Method Analysis'),
       Permission1('AI_QUERY_ANALYTICS', 'AI Query Analytics'),
+      Permission1('LYNX_TESTING', 'LYNX Feature Testing Hub'),
+      Permission1('AUTONOMOUS_AGENT', 'Autonomous AI Agent'),
     ]),
     PermissionGroup('Settings & Customizer', [
       Permission1('PROPERTY_INFORMATION', 'Property Information'),
       Permission1('NUMBERING_SETTINGS', 'Document Sequence Settings'),
-      Permission1('SETTINGS', 'System Settings'),
-      Permission1('SYSTEM_UPDATE', 'System Update'),
-    ]),
-    PermissionGroup('Admin & Integrations', [
-      Permission1('USER_MANAGEMENT', 'User Management'),
-      Permission1('LOYALTY_PROGRAM', 'Loyalty Program'),
-      Permission1('WHATSAPP_INTEGRATION', 'WhatsApp Integration'),
-      Permission1('LUCKY_DRAW', 'Lucky Draw Campaigns'),
+      Permission1('SETTINGS', 'System Settings & Customizer'),
+      Permission1('SYSTEM_UPDATE', 'System Update & Versioning'),
+      Permission1('SMTP_SETTINGS', 'SMTP & Email Configuration'),
+      Permission1('WORKFLOW_AUTOMATION', 'Workflow Automation Rules'),
+      Permission1('DEVELOPER_ECOSYSTEM', 'Developer REST APIs & Webhooks'),
+      Permission1('PLUGIN_MARKETPLACE', 'Add-on Plugin Marketplace'),
+      Permission1('USER_MANAGEMENT', 'User Management & Roles'),
     ]),
   ];
 
@@ -273,6 +302,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 DataColumn(label: Text('Role')),
                 DataColumn(label: Text('Mobile')),
                 DataColumn(label: Text('Email')),
+                DataColumn(label: Text('Max Disc %')),
                 DataColumn(label: Text('Status')),
                 DataColumn(label: Text('Actions')),
               ],
@@ -287,6 +317,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     DataCell(Text(u.role)),
                     DataCell(Text(u.mobile)),
                     DataCell(Text(u.email)),
+                    DataCell(Text('${u.maxDiscountPercent.toStringAsFixed(0)}%')),
                     DataCell(Chip(
                       label: Text(u.isActive ? 'ACTIVE' : 'INACTIVE'),
                       backgroundColor: u.isActive
@@ -352,6 +383,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final mobile = TextEditingController();
     final email = TextEditingController();
     final password = TextEditingController();
+    final maxDiscount = TextEditingController(text: '100');
     final otpCtrl = TextEditingController();
     String role = 'STORE';
 
@@ -445,13 +477,18 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                                 border: OutlineInputBorder())),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          initialValue: role,
+                          initialValue: AppConstants.getRolesForModule(_userBusinessModule).contains(role)
+                              ? role
+                              : AppConstants.getRolesForModule(_userBusinessModule).first,
                           decoration: const InputDecoration(
                               labelText: 'Role', border: OutlineInputBorder()),
-                          items: ['ADMIN', 'STORE', 'RETAIL', 'ACCOUNTS', 'HR', 'WAITER', 'CAPTAIN']
-                              .map((e) =>
-                                  DropdownMenuItem(value: e, child: Text(e)))
-                              .toList(),
+                          items: (() {
+                            final validRoles = AppConstants.getRolesForModule(_userBusinessModule);
+                            final list = validRoles.contains(role) ? validRoles : [...validRoles, role];
+                            return list
+                                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                                .toList();
+                          })(),
                           onChanged: (v) => role = v!,
                         ),
                         const SizedBox(height: 12),
@@ -470,6 +507,24 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           ),
                           validator: (v) =>
                               v!.length < 4 ? 'Min 4 chars' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: maxDiscount,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Max Manual Discount (%)',
+                            border: OutlineInputBorder(),
+                            suffixText: '%',
+                          ),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return null;
+                            final val = double.tryParse(v);
+                            if (val == null || val < 0 || val > 100) {
+                              return 'Enter 0 - 100%';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
                         const Divider(),
@@ -568,6 +623,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               mobile: mobile.text,
                               contact_email: email.text,
                               role: role,
+                              maxDiscountPercent: double.tryParse(maxDiscount.text.trim()) ?? 100.0,
+                              permissions: AppConstants.getDefaultPermissionsForRole(role, _userBusinessModule),
                               password: password.text,
                             );
                             await _loadUsers();
@@ -606,7 +663,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
   Future<void> _openPermissions(AppUser u) async {
     final perms = await userCtrl.getPermissions(u.id);
-    u.permissions = Set.from(perms);
+    if (perms.isEmpty) {
+      u.permissions = Set.from(AppConstants.getDefaultPermissionsForRole(u.role, _userBusinessModule));
+    } else {
+      u.permissions = Set.from(perms);
+    }
 
     showDialog(
       context: context,
@@ -729,10 +790,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final name = TextEditingController(text: u.fullName);
     final mobile = TextEditingController(text: u.mobile);
     final email = TextEditingController(text: u.email);
+    final maxDiscount = TextEditingController(text: u.maxDiscountPercent.toStringAsFixed(0));
     final otpCtrl = TextEditingController();
     String role = u.role;
 
-    String originalEmail = u.email ?? '';
+    String originalEmail = u.email;
 
     bool isEmailVerified = originalEmail.isNotEmpty;
     bool isOtpSent = false;
@@ -817,14 +879,37 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                                 border: OutlineInputBorder())),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          initialValue: role,
+                          initialValue: AppConstants.getRolesForModule(_userBusinessModule).contains(role)
+                              ? role
+                              : AppConstants.getRolesForModule(_userBusinessModule).first,
                           decoration: const InputDecoration(
                               labelText: 'Role', border: OutlineInputBorder()),
-                          items: ['ADMIN', 'STORE', 'RETAIL', 'ACCOUNTS', 'HR', 'WAITER', 'CAPTAIN']
-                              .map((e) =>
-                                  DropdownMenuItem(value: e, child: Text(e)))
-                              .toList(),
+                          items: (() {
+                            final validRoles = AppConstants.getRolesForModule(_userBusinessModule);
+                            final list = validRoles.contains(role) ? validRoles : [...validRoles, role];
+                            return list
+                                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                                .toList();
+                          })(),
                           onChanged: (v) => role = v!,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: maxDiscount,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Max Manual Discount (%)',
+                            border: OutlineInputBorder(),
+                            suffixText: '%',
+                          ),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return null;
+                            final val = double.tryParse(v);
+                            if (val == null || val < 0 || val > 100) {
+                              return 'Enter 0 - 100%';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
                         const Divider(),
@@ -929,6 +1014,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               mobile: mobile.text,
                               contact_email: email.text,
                               role: role,
+                              maxDiscountPercent: double.tryParse(maxDiscount.text.trim()) ?? u.maxDiscountPercent,
                             );
                             await _loadUsers();
                             if (!context.mounted) return;

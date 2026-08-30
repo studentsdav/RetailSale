@@ -6,6 +6,7 @@ class AppUser {
   String mobile;
   String email;
   bool isActive;
+  double maxDiscountPercent;
   Set<String> permissions;
 
   AppUser({
@@ -16,18 +17,27 @@ class AppUser {
     required this.mobile,
     required this.isActive,
     required this.email,
+    this.maxDiscountPercent = 100.0,
     Set<String>? permissions,
   }) : permissions = permissions ?? {};
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
+    double parseMaxDisc(dynamic val) {
+      if (val == null) return 100.0;
+      if (val is num) return val.toDouble();
+      if (val is String) return double.tryParse(val) ?? 100.0;
+      return 100.0;
+    }
+
     return AppUser(
       id: json['id'],
       username: json['username'],
       fullName: json['full_name'],
-      role: json['role'],
+      role: json['role'] ?? '',
       mobile: json['mobile'] ?? "",
-      isActive: json['is_active'],
+      isActive: json['is_active'] ?? true,
       email: json['contact_email'] ?? "",
+      maxDiscountPercent: parseMaxDisc(json['max_discount_percent']),
     );
   }
 }

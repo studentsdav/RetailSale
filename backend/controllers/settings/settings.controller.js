@@ -265,6 +265,10 @@ exports.saveSettings = async (req, res) => {
                 : (existing?.device_printer_mappings || {})
         };
 
+        if (req.body.outlet_max_discount_percent !== undefined) {
+            payload.outlet_max_discount_percent = req.body.outlet_max_discount_percent;
+        }
+
         let record;
         if (existing) {
             record = await existing.update(payload, { transaction: t });

@@ -160,6 +160,24 @@ exports.login = async (req, res, next) => {
 
         await touchClient(outlet_code);
 
+        const ROLE_MAX_DISCOUNTS = {
+            ADMIN: 100.0,
+            MANAGER: 50.0,
+            STORE: 20.0,
+            RETAIL: 15.0,
+            CASHIER: 10.0,
+            ACCOUNTS: 25.0,
+            HR: 10.0,
+            WAITER: 5.0,
+            CAPTAIN: 15.0,
+            KDS: 0.0,
+            MARKETING: 25.0
+        };
+
+        const resolvedMaxDiscount = (user.max_discount_percent !== null && user.max_discount_percent !== undefined)
+            ? parseFloat(user.max_discount_percent)
+            : (ROLE_MAX_DISCOUNTS[user.role] || 10.0);
+
         res.json({
             success: true,
             license_status: licenseState,
@@ -170,6 +188,7 @@ exports.login = async (req, res, next) => {
                 name: user.full_name,
                 role: user.role,
                 mobile: user.mobile,
+                max_discount_percent: resolvedMaxDiscount,
                 outlet_id: currentOutlet.id,
                 outlet_code: currentOutlet.outlet_code,
                 property_name: property?.property_name || '',

@@ -10,6 +10,11 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: true
         },
 
+        outlet_max_discount_percent: {
+            type: DataTypes.DECIMAL(5, 2),
+            defaultValue: 100.00
+        },
+
         is_cloud_enabled: {
             type: DataTypes.BOOLEAN,
             defaultValue: false

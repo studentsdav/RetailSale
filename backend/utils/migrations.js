@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name VARCHAR(100) NOT NULL,
   mobile VARCHAR(15),
   role VARCHAR(30) NOT NULL,  -- ADMIN, STORE, ACCOUNTS
+  max_discount_percent NUMERIC(5,2) DEFAULT 100.00,
   is_active BOOLEAN DEFAULT TRUE,
   last_login TIMESTAMP,
   reset_token VARCHAR(255),
@@ -269,6 +270,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
   outlet_id INT NOT NULL REFERENCES outlets(id),
 
   auto_reorder BOOLEAN DEFAULT TRUE,
+  outlet_max_discount_percent NUMERIC(5,2) DEFAULT 100.00,
   allow_negative_stock BOOLEAN DEFAULT FALSE,
   damage_approval_required BOOLEAN DEFAULT TRUE,
   enable_audit_log BOOLEAN DEFAULT TRUE,
@@ -3953,6 +3955,24 @@ COMMIT;
             notes = REPLACE(notes, 'Scheme free quantity expense booked for sale', 'Advance adjusted for subscription sale')
         WHERE (payment_method = 'SUBSCRIPTION' OR notes LIKE '%Scheme free%')
           AND (notes LIKE '%Scheme free%' OR transaction_type = 'SALE_SCHEME_FREE_EXPENSE');
+      `);
+    }
+  },
+  {
+    version: 103,
+    description: "Add max_discount_percent column to users table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS max_discount_percent NUMERIC(5,2) DEFAULT 100.00;
+      `);
+    }
+  },
+  {
+    version: 104,
+    description: "Add outlet_max_discount_percent column to system_settings table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS outlet_max_discount_percent NUMERIC(5,2) DEFAULT 100.00;
       `);
     }
   }
