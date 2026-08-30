@@ -7,9 +7,10 @@ module.exports = async (req, res, next) => {
         req.propertyDb = propertyDb;
         
         if (!selfHealed) {
+            selfHealed = true;
             try {
                 // Ensure base tables exist on fresh database
-                await propertyDb.sync();
+                await propertyDb.sync().catch(err => console.warn('⚠️ Model sync notice:', err.message));
 
                 // Dynamically ensure columns exist
                 await propertyDb.query(`
@@ -33,8 +34,6 @@ module.exports = async (req, res, next) => {
                 const runMigrations = require('../utils/migrationRunner');
                 await runMigrations(propertyDb);
                 console.log('✅ Self-healed: Checked and ran database schema migrations');
-
-                selfHealed = true;
             } catch (healErr) {
                 console.warn('⚠️ Self-healing column check warning:', healErr.message);
             }
