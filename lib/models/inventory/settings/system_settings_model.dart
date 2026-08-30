@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../billing_charge_model.dart';
 
 class SystemSettings {
@@ -33,6 +34,11 @@ class SystemSettings {
   bool enableSalespersonTagging;
   int billCopiesCount;
   bool showBrandName;
+  bool enableTokenSystem;
+  int tokenCopiesCount;
+  String kotPrintMode; // 'DIRECT', 'DIALOG', 'NONE' (KDS Only)
+  bool enableKotPrint;
+  Map<String, dynamic> devicePrinterMappings;
 
   SystemSettings({
     required this.autoReorder,
@@ -64,39 +70,72 @@ class SystemSettings {
     required this.enableSalespersonTagging,
     this.billCopiesCount = 1,
     required this.showBrandName,
-  });
+    this.enableTokenSystem = false,
+    this.tokenCopiesCount = 1,
+    this.kotPrintMode = 'DIRECT',
+    this.enableKotPrint = true,
+    Map<String, dynamic>? devicePrinterMappings,
+  }) : devicePrinterMappings = devicePrinterMappings ?? {};
+
+  static bool _parseBool(dynamic val, [bool fallback = false]) {
+    if (val == null) return fallback;
+    if (val is bool) return val;
+    if (val is num) return val != 0;
+    final s = val.toString().trim().toLowerCase();
+    if (s == 'true' || s == '1' || s == 'yes') return true;
+    if (s == 'false' || s == '0' || s == 'no') return false;
+    return fallback;
+  }
 
   factory SystemSettings.fromJson(Map<String, dynamic> json) {
-    final rawCharges = json['default_charges'];
+    final rawCharges = json['default_charges'] ?? json['defaultCharges'];
+    final rawDevicePrinters = json['device_printer_mappings'] ?? json['devicePrinterMappings'];
     return SystemSettings(
-      autoReorder: json['auto_reorder'] ?? true,
-      allowNegativeStock: json['allow_negative_stock'] ?? false,
-      damageApprovalRequired: json['damage_approval_required'] ?? true,
-      enableAuditLog: json['enable_audit_log'] ?? true,
-      autoPrintOnSave: json['auto_print_on_save'] ?? false,
-      enableItemImagesInSales: json['enable_item_images_in_sales'] ?? false,
-      printMode: json['print_mode'] ?? 'PRINT_DIALOG',
-      defaultPrinterName: json['default_printer_name'] ?? '',
-      defaultPrinterUrl: json['default_printer_url'] ?? '',
-      billingCountry: json['billing_country'] ?? 'India',
-      billingTaxMode: json['billing_tax_mode'] ?? 'CGST_SGST',
-      billFormat: json['bill_format'] ?? 'A4',
-      billCopiesCount: json['bill_copies_count'] ?? 1,
-      showBrandName: json['show_brand_name'] ?? true,
-      isCloudEnabled: json['is_cloud_enabled'] ?? false,
-      enableAppSubscription: json['enable_app_subscription'] ?? false,
-      enablePaymentGateway: json['enable_payment_gateway'] ?? false,
-      paymentGatewayProvider: json['payment_gateway_provider'] ?? 'SANDBOX',
-      paymentGatewayApiKey: json['payment_gateway_api_key'] ?? '',
-      paymentGatewaySecretKey: json['payment_gateway_secret_key'] ?? '',
-      merchantUpiId: json['merchant_upi_id'] ?? '',
-      subDeliveryChargeEnabled: json['sub_delivery_charge_enabled'] ?? false,
-      subDeliveryChargeName: json['sub_delivery_charge_name'] ?? 'Subscription Delivery',
-      subDeliveryChargeAmount: double.tryParse(json['sub_delivery_charge_amount']?.toString() ?? '0.0') ?? 0.0,
-      subDeliveryChargeType: json['sub_delivery_charge_type'] ?? 'FLAT',
-      subDeliveryChargeGstPercent: double.tryParse(json['sub_delivery_charge_gst_percent']?.toString() ?? '0.0') ?? 0.0,
-      subDeliveryFreeAbove: double.tryParse(json['sub_delivery_free_above']?.toString() ?? '0.0') ?? 0.0,
-      enableSalespersonTagging: json['enable_salesperson_tagging'] ?? false,
+      autoReorder: _parseBool(json['auto_reorder'] ?? json['autoReorder'], true),
+      allowNegativeStock: _parseBool(json['allow_negative_stock'] ?? json['allowNegativeStock'], false),
+      damageApprovalRequired: _parseBool(json['damage_approval_required'] ?? json['damageApprovalRequired'], true),
+      enableAuditLog: _parseBool(json['enable_audit_log'] ?? json['enableAuditLog'], true),
+      autoPrintOnSave: _parseBool(json['auto_print_on_save'] ?? json['autoPrintOnSave'], false),
+      enableItemImagesInSales: _parseBool(json['enable_item_images_in_sales'] ?? json['enableItemImagesInSales'], false),
+      printMode: (json['print_mode'] ?? json['printMode'] ?? 'PRINT_DIALOG').toString(),
+      defaultPrinterName: (json['default_printer_name'] ?? json['defaultPrinterName'] ?? '').toString(),
+      defaultPrinterUrl: (json['default_printer_url'] ?? json['defaultPrinterUrl'] ?? '').toString(),
+      billingCountry: (json['billing_country'] ?? json['billingCountry'] ?? 'India').toString(),
+      billingTaxMode: (json['billing_tax_mode'] ?? json['billingTaxMode'] ?? 'CGST_SGST').toString(),
+      billFormat: (json['bill_format'] ?? json['billFormat'] ?? 'A4').toString(),
+      billCopiesCount: int.tryParse(json['bill_copies_count']?.toString() ?? json['billCopiesCount']?.toString() ?? '1') ?? 1,
+      showBrandName: _parseBool(json['show_brand_name'] ?? json['showBrandName'], true),
+      enableTokenSystem: _parseBool(json['enable_token_system'] ?? json['enableTokenSystem'], false),
+      tokenCopiesCount: int.tryParse(json['token_copies_count']?.toString() ?? json['tokenCopiesCount']?.toString() ?? '1') ?? 1,
+      kotPrintMode: (json['kot_print_mode'] ?? json['kotPrintMode'] ?? 'DIRECT').toString(),
+      enableKotPrint: _parseBool(json['enable_kot_print'] ?? json['enableKotPrint'], true),
+      devicePrinterMappings: () {
+        if (rawDevicePrinters is Map) {
+          return Map<String, dynamic>.from(rawDevicePrinters);
+        } else if (rawDevicePrinters is String && rawDevicePrinters.trim().isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawDevicePrinters);
+            if (decoded is Map) {
+              return Map<String, dynamic>.from(decoded);
+            }
+          } catch (_) {}
+        }
+        return <String, dynamic>{};
+      }(),
+      isCloudEnabled: _parseBool(json['is_cloud_enabled'] ?? json['isCloudEnabled'], false),
+      enableAppSubscription: _parseBool(json['enable_app_subscription'] ?? json['enableAppSubscription'], false),
+      enablePaymentGateway: _parseBool(json['enable_payment_gateway'] ?? json['enablePaymentGateway'], false),
+      paymentGatewayProvider: (json['payment_gateway_provider'] ?? json['paymentGatewayProvider'] ?? 'SANDBOX').toString(),
+      paymentGatewayApiKey: (json['payment_gateway_api_key'] ?? json['paymentGatewayApiKey'] ?? '').toString(),
+      paymentGatewaySecretKey: (json['payment_gateway_secret_key'] ?? json['paymentGatewaySecretKey'] ?? '').toString(),
+      merchantUpiId: (json['merchant_upi_id'] ?? json['merchantUpiId'] ?? '').toString(),
+      subDeliveryChargeEnabled: _parseBool(json['sub_delivery_charge_enabled'] ?? json['subDeliveryChargeEnabled'], false),
+      subDeliveryChargeName: (json['sub_delivery_charge_name'] ?? json['subDeliveryChargeName'] ?? 'Subscription Delivery').toString(),
+      subDeliveryChargeAmount: double.tryParse(json['sub_delivery_charge_amount']?.toString() ?? json['subDeliveryChargeAmount']?.toString() ?? '0.0') ?? 0.0,
+      subDeliveryChargeType: (json['sub_delivery_charge_type'] ?? json['subDeliveryChargeType'] ?? 'FLAT').toString(),
+      subDeliveryChargeGstPercent: double.tryParse(json['sub_delivery_charge_gst_percent']?.toString() ?? json['subDeliveryChargeGstPercent']?.toString() ?? '0.0') ?? 0.0,
+      subDeliveryFreeAbove: double.tryParse(json['sub_delivery_free_above']?.toString() ?? json['subDeliveryFreeAbove']?.toString() ?? '0.0') ?? 0.0,
+      enableSalespersonTagging: _parseBool(json['enable_salesperson_tagging'] ?? json['enableSalespersonTagging'], false),
       defaultCharges: rawCharges is List
           ? rawCharges
               .map((e) => BillingCharge.fromJson(Map<String, dynamic>.from(e)))
@@ -171,6 +210,11 @@ class SystemSettings {
       'enable_salesperson_tagging': enableSalespersonTagging,
       'bill_copies_count': billCopiesCount,
       'show_brand_name': showBrandName,
+      'enable_token_system': enableTokenSystem,
+      'token_copies_count': tokenCopiesCount,
+      'kot_print_mode': kotPrintMode,
+      'enable_kot_print': enableKotPrint,
+      'device_printer_mappings': devicePrinterMappings,
     };
   }
 }

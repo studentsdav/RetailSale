@@ -23,6 +23,7 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     MapEntry('Receiving No', 'RECEIVING'),
     MapEntry('Indent No', 'INDENT'),
     MapEntry('Sales Bill No', 'SALES'),
+    MapEntry('Token No (Sweet Shop / Food Court)', 'TOKEN'),
     MapEntry('Request No', 'REQUEST'),
     MapEntry('Damage No', 'DAMAGE'),
     MapEntry('Contra Voucher No', 'CONTRA'),
@@ -43,6 +44,7 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     'RECEIVING': [],
     'INDENT': [],
     'SALES': [],
+    'TOKEN': [],
     'REQUEST': [],
     'DAMAGE': [],
     'CONTRA': [],
@@ -69,9 +71,12 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     }
   }
 
+  String _outletTag = '';
+
   Future<void> _loadSettings() async {
     final userMap = await TokenStorage.getUser();
     _businessModule = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
+    _outletTag = userMap?['outlet_code']?.toString() ?? userMap?['outlet_id']?.toString() ?? '';
 
     await ctrl.load();
 
@@ -79,7 +84,7 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
       final module = def.value;
       final records = ctrl.getByModuleList(module);
       _rowsByModule[module] = records.isEmpty
-          ? [_NumberingRowState.empty(module)]
+          ? [_NumberingRowState.empty(module, outletTag: _outletTag)]
           : records.map(_NumberingRowState.fromSetting).toList();
     }
 
@@ -182,9 +187,12 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryTeal = theme.primaryColor != Colors.blue ? theme.primaryColor : const Color(0xFF0D9488);
+
     _ensureModuleRows();
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9), // Shopify Polaris Gray
+      backgroundColor: const Color(0xFFF1F5F9), // Standard Famalth Polaris Slate Gray
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -216,7 +224,7 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF008060), // Shopify Emerald
+                backgroundColor: primaryTeal,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                 shape: RoundedRectangleBorder(
@@ -244,14 +252,14 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
         child: Column(
           children: [
             ..._visibleModuleDefs.map(
-              (def) => _buildPolarisModuleSection(def.key, def.value),
+              (def) => _buildPolarisModuleSection(def.key, def.value, primaryTeal),
             ),
             const SizedBox(height: 24),
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF008060),
+                  backgroundColor: primaryTeal,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -273,7 +281,7 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
     );
   }
 
-  Widget _buildPolarisModuleSection(String title, String module) {
+  Widget _buildPolarisModuleSection(String title, String module, Color primaryTeal) {
     final rows = _rowsByModule[module]!;
 
     return Container(
@@ -294,7 +302,7 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Shopify Header Strip
+          // Famalth Header Strip
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
@@ -308,15 +316,15 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE2E8F0),
+                    color: primaryTeal.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     module,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF334155),
+                      color: primaryTeal,
                     ),
                   ),
                 ),
@@ -334,8 +342,8 @@ class _DocumentSequenceScreenState extends State<DocumentSequenceScreen> {
                 OutlinedButton.icon(
                   onPressed: () => _addRow(module),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF008060),
-                    side: const BorderSide(color: Color(0xFF008060)),
+                    foregroundColor: primaryTeal,
+                    side: BorderSide(color: primaryTeal),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
@@ -538,22 +546,44 @@ class _NumberingRowState {
     );
   }
 
-  factory _NumberingRowState.empty(String module) {
+  factory _NumberingRowState.empty(String module, {String? outletTag}) {
+    String tag = '';
+    if (outletTag != null && outletTag.trim().isNotEmpty) {
+      final clean = outletTag.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+      if (clean.length > 2) {
+        tag = clean.substring(clean.length - 2);
+      } else {
+        tag = clean;
+      }
+    }
+
     String defaultPrefix = '';
     if (module == 'KOT') {
-      defaultPrefix = 'KOT-';
+      defaultPrefix = 'KOT$tag-';
     } else if (module == 'PO') {
-      defaultPrefix = 'PO-';
+      defaultPrefix = 'PO$tag-';
     } else if (module == 'SALES') {
-      defaultPrefix = 'SAL-';
+      defaultPrefix = 'SAL$tag-';
+    } else if (module == 'TOKEN') {
+      defaultPrefix = 'TK$tag-';
     } else if (module == 'REQUEST') {
-      defaultPrefix = 'REQ-';
+      defaultPrefix = 'REQ$tag-';
     } else if (module == 'DAMAGE') {
-      defaultPrefix = 'DMG-';
+      defaultPrefix = 'DMG$tag-';
     } else if (module == 'RECEIVING') {
-      defaultPrefix = 'REC-';
+      defaultPrefix = 'GRN$tag-';
     } else if (module == 'INDENT') {
-      defaultPrefix = 'IND-';
+      defaultPrefix = 'IND$tag-';
+    } else if (module == 'CONTRA') {
+      defaultPrefix = 'CNT$tag-';
+    } else if (module == 'PAYMENT') {
+      defaultPrefix = 'PAY$tag-';
+    } else if (module == 'RECEIPT') {
+      defaultPrefix = 'RCT$tag-';
+    } else if (module == 'JOURNAL') {
+      defaultPrefix = 'JRN$tag-';
+    } else {
+      defaultPrefix = '${module.substring(0, module.length > 3 ? 3 : module.length)}$tag-';
     }
 
     final String defaultPostfix = '-${DateTime.now().year.toString().substring(2)}';

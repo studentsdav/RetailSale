@@ -12,6 +12,8 @@ import '../../models/inventory/billing_charge_model.dart';
 import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../../models/inventory/tax_breakdown_model.dart';
+import '../../models/inventory/settings/system_settings_model.dart';
+import 'device_printer_routing.dart';
 import '../config/app_brand.dart';
 import '../../utils/branding_storage.dart';
 import '../../controllers/settings/system_settings_controller.dart';
@@ -243,6 +245,20 @@ class PosInvoicePrinter {
                   _receiptTitle(order, hasTaxData),
                   style: emphasisStyle,
                 ),
+                if (!_isRestaurantOrder(order) && (order.tokenNo ?? '').trim().isNotEmpty) ...[
+                  pw.SizedBox(height: 4),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.black, width: 1.5),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+                    ),
+                    child: pw.Text(
+                      'TOKEN NO: ${order.tokenNo!.trim()}',
+                      style: pw.TextStyle(font: bold, fontSize: 15, color: PdfColors.black),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -269,7 +285,7 @@ class PosInvoicePrinter {
             'Date',
             _date.format(order.saleDate),
           ),
-          if (order.orderId != null && order.hasBillNo)
+          if (_isActualOrder(order) && order.orderId != null && order.hasBillNo)
             _thermalMetaRow(
               'Order No',
               '#${order.orderId}',
@@ -697,15 +713,38 @@ class PosInvoicePrinter {
               pw.SizedBox(width: 12),
               pw.Expanded(
                 child: pw.Center(
-                child: pw.Text(
-                  _receiptTitle(order, hasTaxData)
-                      .replaceFirst('BILL', 'INVOICE')
-                      .replaceFirst('RECEIPT', 'INVOICE'),
-                  style: pw.TextStyle(
-                    fontSize: 20,
-                    fontWeight: pw.FontWeight.bold,
+                  child: pw.Column(
+                    mainAxisSize: pw.MainAxisSize.min,
+                    children: [
+                      pw.Text(
+                        _receiptTitle(order, hasTaxData)
+                            .replaceFirst('BILL', 'INVOICE')
+                            .replaceFirst('RECEIPT', 'INVOICE'),
+                        style: pw.TextStyle(
+                          fontSize: 20,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      if ((order.tokenNo ?? '').trim().isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: pw.BoxDecoration(
+                            border: pw.Border.all(color: PdfColors.black, width: 1.5),
+                            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                          ),
+                          child: pw.Text(
+                            'TOKEN NO: ${order.tokenNo!.trim()}',
+                            style: pw.TextStyle(
+                              fontSize: 14,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.black,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ),
                 ),
               ),
               pw.SizedBox(width: 12),
@@ -816,7 +855,9 @@ class PosInvoicePrinter {
                         _receiptNumberLabel(order),
                         order.saleNo,
                       ),
-                      if (order.orderId != null && order.hasBillNo)
+                      if (!_isRestaurantOrder(order) && (order.tokenNo ?? '').trim().isNotEmpty)
+                        _a4MetaRow('Token No', order.tokenNo!.trim()),
+                      if (_isActualOrder(order) && order.orderId != null && order.hasBillNo)
                         _a4MetaRow('Order No', '#${order.orderId}'),
                       if (_exchangeAgainstBillNo(order).isNotEmpty)
                         _a4MetaRow('Against Bill No', _exchangeAgainstBillNo(order)),
@@ -1406,6 +1447,44 @@ class PosInvoicePrinter {
 
   static String _exchangeAgainstBillNo(SaleOrder order) {
     return (order.exchangeAgainstBillNo ?? '').trim();
+  }
+
+  static bool _isActualOrder(SaleOrder order) {
+    // 1. Table order or KOT order is a restaurant order
+    if (order.tableId != null) return true;
+    if (order.kotIds != null && order.kotIds!.isNotEmpty) return true;
+
+    final type = order.orderType.toUpperCase().trim();
+    final source = (order.saleSource ?? '').toUpperCase().trim();
+
+    // 2. Check if explicitly an App or Online or Delivery or Restaurant order
+    final isAppOrOnline = type.contains('APP') ||
+        type.contains('ONLINE') ||
+        type.contains('SWIGGY') ||
+        type.contains('ZOMATO') ||
+        type.contains('DELIVERY') ||
+        type.contains('UBER') ||
+        source.contains('APP') ||
+        source.contains('ONLINE');
+
+    final isRestaurant = type.contains('DINE') ||
+        type.contains('TABLE') ||
+        type.contains('ROOM') ||
+        type.contains('KOT');
+
+    if (isAppOrOnline || isRestaurant) {
+      return true;
+    }
+
+    // Otherwise, Retail / Store / Counter / POS sales return false (hide Order No)
+    return false;
+  }
+
+  static bool _isRestaurantOrder(SaleOrder order) {
+    if (order.tableId != null) return true;
+    if (order.kotIds != null && order.kotIds!.isNotEmpty) return true;
+    final type = order.orderType.toUpperCase().trim();
+    return type.contains('DINE') || type.contains('TABLE') || type.contains('ROOM') || type.contains('KOT') || type.contains('RESTAURANT');
   }
 
   static String _refundStamp(SaleOrder order) {
@@ -3706,6 +3785,270 @@ class PosInvoicePrinter {
         ),
       ],
     );
+  }
+
+  static Future<Uint8List> buildTokenTicketPdf({
+    required SaleOrder order,
+    required PropertyInfo? property,
+    required String stationLocation,
+    required List<SaleItem> stationItems,
+    int copyCount = 1,
+  }) async {
+    final document = pw.Document();
+    final regular = pw.Font.helvetica();
+    final bold = pw.Font.helveticaBold();
+
+    final tokenNoStr = (order.tokenNo ?? '').trim().isNotEmpty
+        ? order.tokenNo!.trim()
+        : 'TK-${(order.orderId ?? 101).toString().padLeft(3, '0')}';
+
+    for (int c = 0; c < math.max(1, copyCount); c++) {
+      document.addPage(
+        pw.MultiPage(
+          pageFormat: _thermalSheetFor(order.billFormat),
+          margin: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          build: (_) => [
+            pw.DefaultTextStyle(
+              style: pw.TextStyle(font: regular, fontSize: 9, color: PdfColors.black),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  // 1. SHOP HEADER
+                  pw.Center(
+                    child: pw.Text(
+                      property?.propertyName.trim().isNotEmpty == true
+                          ? property!.propertyName.trim().toUpperCase()
+                          : AppBrand.productName.toUpperCase(),
+                      style: pw.TextStyle(font: bold, fontSize: 12, color: PdfColors.black),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Center(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.grey200,
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                      ),
+                      child: pw.Text(
+                        'STATION TOKEN TICKET',
+                        style: pw.TextStyle(font: bold, fontSize: 9, color: PdfColors.black),
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(height: 6),
+
+                  // 2. HIGH-IMPACT TOKEN NUMBER BADGE
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.black, width: 2),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                    ),
+                    child: pw.Column(
+                      children: [
+                        pw.Text(
+                          'TOKEN NO.',
+                          style: pw.TextStyle(font: bold, fontSize: 10, color: PdfColors.grey800, letterSpacing: 1.2),
+                        ),
+                        pw.SizedBox(height: 3),
+                        pw.Text(
+                          tokenNoStr,
+                          style: pw.TextStyle(font: bold, fontSize: 28, color: PdfColors.black),
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(height: 6),
+                  _dashedDivider(),
+
+                  // 3. META DETAILS (BILL NO, STATION, TIME)
+                  _thermalMetaRow('Bill No', order.saleNo, 'Station', stationLocation),
+                  _thermalMetaRow('Date', _date.format(order.saleDate), 'Time', _time.format(order.saleDate)),
+                  if ((order.customerName ?? '').trim().isNotEmpty)
+                    _thermalMetaRow('Customer', order.customerName!.trim(), '', ''),
+                  _dashedDivider(),
+
+                  // 4. ITEM TABLE HEADER
+                  pw.Table(
+                    columnWidths: const {
+                      0: pw.FlexColumnWidth(2),
+                      1: pw.FlexColumnWidth(7),
+                    },
+                    children: [
+                      pw.TableRow(
+                        children: [
+                          _thermalHeaderCell('QTY', align: pw.TextAlign.left, style: pw.TextStyle(font: bold, fontSize: 8.5)),
+                          _thermalHeaderCell('ITEM DESCRIPTION', align: pw.TextAlign.left, style: pw.TextStyle(font: bold, fontSize: 8.5)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 3),
+                  ...stationItems.map((item) {
+                    final qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toStringAsFixed(2);
+                    return pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
+                      child: pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.SizedBox(
+                            width: 32,
+                            child: pw.Text('${qtyStr}x', style: pw.TextStyle(font: bold, fontSize: 10.5)),
+                          ),
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Text(
+                                  '${item.itemName}${(item.brand != null && item.brand!.trim().isNotEmpty) ? " (${item.brand!.trim()})" : ""}',
+                                  style: pw.TextStyle(font: bold, fontSize: 10),
+                                ),
+                                if ((item.notes ?? '').trim().isNotEmpty)
+                                  pw.Text('Note: ${item.notes!.trim()}', style: pw.TextStyle(font: regular, fontSize: 8.5, color: PdfColors.grey700)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  _dashedDivider(),
+
+                  // 5. BARCODE & FOOTER INSTRUCTIONS
+                  pw.SizedBox(height: 2),
+                  pw.Center(
+                    child: pw.SizedBox(
+                      height: 28,
+                      width: 140,
+                      child: pw.BarcodeWidget(
+                        barcode: pw.Barcode.code128(),
+                        data: tokenNoStr,
+                        drawText: false,
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Center(
+                    child: pw.Text(
+                      'Please present this token at counter for pickup',
+                      style: pw.TextStyle(font: bold, fontSize: 8),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return document.save();
+  }
+
+  static Future<void> printTokenTickets({
+    required SaleOrder order,
+    required PropertyInfo? property,
+    required SystemSettings settings,
+    required String currentMachineId,
+  }) async {
+    if (!settings.enableTokenSystem || order.items.isEmpty || _isRestaurantOrder(order)) return;
+
+    final allMappings = DevicePrinterRouting.getSectionMappings(settings, 'tokens');
+    final Map<String, List<SaleItem>> stationGroups = {};
+
+    if (allMappings.isNotEmpty) {
+      final configuredLocs = allMappings
+          .map((m) => m.location.trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+
+      for (final item in order.items) {
+        final loc = (item.location ?? '').trim();
+        String? targetLoc;
+        if (loc.isNotEmpty) {
+          for (final cLoc in configuredLocs) {
+            if (cLoc.toLowerCase() == loc.toLowerCase()) {
+              targetLoc = cLoc;
+              break;
+            }
+          }
+        }
+        targetLoc ??= configuredLocs.first;
+        stationGroups.putIfAbsent(targetLoc, () => []).add(item);
+      }
+    } else {
+      stationGroups['General Counter'] = List.from(order.items);
+    }
+
+    if (stationGroups.isEmpty) return;
+
+    final availablePrinters = await Printing.listPrinters();
+    final deviceMappings = settings.devicePrinterMappings;
+    final machineKey = currentMachineId.trim().toUpperCase();
+    final Map<String, dynamic> machinePrinters = deviceMappings[machineKey] is Map
+        ? Map<String, dynamic>.from(deviceMappings[machineKey])
+        : (deviceMappings['DEFAULT'] is Map ? Map<String, dynamic>.from(deviceMappings['DEFAULT']) : {});
+
+    final Map<String, dynamic> tokenStationPrinters = machinePrinters['tokens'] is Map
+        ? Map<String, dynamic>.from(machinePrinters['tokens'])
+        : {};
+
+    for (final entry in stationGroups.entries) {
+      final stationName = entry.key;
+      final items = entry.value;
+
+      final routings = DevicePrinterRouting.resolvePrinters(
+        settings: settings,
+        machineId: currentMachineId,
+        sectionKey: 'tokens',
+        location: stationName,
+      );
+
+      for (final routingInfo in routings) {
+        final targetPrinterName = routingInfo.printer.trim();
+        final copyCount = routingInfo.copies > 0 ? routingInfo.copies : settings.tokenCopiesCount;
+
+        Printer? matchedPrinter;
+        if (targetPrinterName.isNotEmpty) {
+          matchedPrinter = availablePrinters.firstWhere(
+            (p) => p.name.toLowerCase() == targetPrinterName.toLowerCase() || p.url.toLowerCase() == targetPrinterName.toLowerCase(),
+            orElse: () => availablePrinters.isNotEmpty ? availablePrinters.first : Printer(name: targetPrinterName, url: targetPrinterName),
+          );
+        } else if (availablePrinters.isNotEmpty) {
+          matchedPrinter = availablePrinters.first;
+        }
+
+        final pdfBytes = await buildTokenTicketPdf(
+          order: order,
+          property: property,
+          stationLocation: stationName,
+          stationItems: items,
+          copyCount: copyCount,
+        );
+
+        if (matchedPrinter != null) {
+          try {
+            await Printing.directPrintPdf(
+              printer: matchedPrinter,
+              name: 'TOKEN-${order.tokenNo ?? order.saleNo}-$stationName',
+              onLayout: (_) async => pdfBytes,
+            );
+          } catch (_) {
+            await Printing.layoutPdf(
+              name: 'TOKEN-${order.tokenNo ?? order.saleNo}-$stationName',
+              onLayout: (_) async => pdfBytes,
+            );
+          }
+        } else {
+          await Printing.layoutPdf(
+            name: 'TOKEN-${order.tokenNo ?? order.saleNo}-$stationName',
+            onLayout: (_) async => pdfBytes,
+          );
+        }
+      }
+    }
   }
 }
 

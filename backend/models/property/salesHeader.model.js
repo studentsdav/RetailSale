@@ -72,7 +72,8 @@ module.exports = (sequelize, DataTypes) => {
         applied_rules: DataTypes.STRING,
         commission_percentage_amount: DataTypes.DECIMAL(12, 2),
         commission_fixed_amount: DataTypes.DECIMAL(12, 2),
-        salesman_id: DataTypes.INTEGER
+        salesman_id: DataTypes.INTEGER,
+        token_no: DataTypes.STRING
     }, {
         tableName: 'sales_headers',
         timestamps: true,

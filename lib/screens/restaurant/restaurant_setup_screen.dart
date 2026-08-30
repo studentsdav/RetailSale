@@ -7,6 +7,8 @@ import '../../controllers/settings/system_settings_controller.dart';
 import '../../models/inventory/settings/system_settings_model.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/settings/local_preferences.dart';
+import '../../core/printing/device_printer_routing.dart';
 import 'table_reservation_screen.dart';
 
 class RestaurantSetupScreen extends StatefulWidget {
@@ -22,6 +24,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
   int posCopies = 1;
   int tokenCopies = 2;
   DateTime _resvFilterDate = DateTime.now();
+  String _currentMachineId = LocalPreferences.getSystemHardwareId();
 
   static const Color primaryBlue = Color(0xFF0B5CAD);
   static const Color primaryDark = Color(0xFF0F172A);
@@ -32,7 +35,10 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    LocalPreferences.getMachineId().then((id) {
+      if (mounted) setState(() => _currentMachineId = id);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = Provider.of<RestaurantController>(context, listen: false);
       controller.loadFloors();
@@ -77,7 +83,6 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
           tabs: const [
             Tab(icon: Icon(Icons.table_bar, size: 20), text: 'Tables & Floors'),
             Tab(icon: Icon(Icons.print, size: 20), text: 'Printers & Kitchens'),
-            Tab(icon: Icon(Icons.tune, size: 20), text: 'Token & Printing Options'),
             Tab(icon: Icon(Icons.calendar_month, size: 20), text: 'Reservations'),
           ],
         ),
@@ -89,7 +94,6 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
               children: [
                 _buildTablesFloorsTab(context, controller),
                 _buildPrintersKitchensTab(context, controller),
-                _buildTokenOptionsTab(context, controller),
                 _buildReservationsTab(context, controller),
               ],
             ),
@@ -468,8 +472,73 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
           ),
           const SizedBox(height: 24),
           _buildSectionHeader(
+            title: 'KOT Printing & KDS Output Settings',
+            subtitle: 'Choose whether to print physical KOT paper slips or use KDS screen only',
+            icon: Icons.soup_kitchen_outlined,
+          ),
+          const SizedBox(height: 12),
+          Consumer<SystemSettingsController>(
+            builder: (context, sysSettingsCtrl, _) {
+              final sysSettings = sysSettingsCtrl.currentSettings;
+
+              return _cardWrapper(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text('KOT Print Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                SizedBox(height: 2),
+                                Text('Decide action when order is sent to kitchen', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                          DropdownButton<String>(
+                            value: ['DIRECT', 'DIALOG', 'NONE'].contains(sysSettings.kotPrintMode) ? sysSettings.kotPrintMode : 'DIRECT',
+                            items: const [
+                              DropdownMenuItem(value: 'DIRECT', child: Text('Direct Print (Automatic)')),
+                              DropdownMenuItem(value: 'DIALOG', child: Text('Show Print Dialog')),
+                              DropdownMenuItem(value: 'NONE', child: Text('No KOT Print (KDS Only)')),
+                            ],
+                            onChanged: (val) async {
+                              if (val != null) {
+                                sysSettings.kotPrintMode = val;
+                                sysSettings.enableKotPrint = val != 'NONE';
+                                await sysSettingsCtrl.save(sysSettings);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Enable Physical Paper KOT Print with KDS', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+                        subtitle: const Text('When disabled, order is sent only to Kitchen Display (KDS) screen without paper print.', style: TextStyle(fontSize: 11.5)),
+                        value: sysSettings.enableKotPrint,
+                        onChanged: (val) async {
+                          sysSettings.enableKotPrint = val;
+                          if (!val) sysSettings.kotPrintMode = 'NONE';
+                          if (val && sysSettings.kotPrintMode == 'NONE') sysSettings.kotPrintMode = 'DIRECT';
+                          await sysSettingsCtrl.save(sysSettings);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          _buildSectionHeader(
             title: 'Kitchen & Counter Stations',
-            subtitle: 'Map orders to separate prep lines',
+            subtitle: 'Map order prep lines and printer outputs per terminal machine',
             icon: Icons.restaurant_outlined,
             action: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -477,44 +546,96 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: () => _showAddStationDialog(context, ctrl),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add Station'),
+              onPressed: () {
+                final sysSettingsCtrl = context.read<SystemSettingsController>();
+                DevicePrinterRouting.showRoutingDialog(
+                  context: context,
+                  settings: sysSettingsCtrl.currentSettings,
+                  sectionKey: 'kots',
+                  title: 'Kitchen KOT Printer Routing',
+                  currentMachineId: _currentMachineId,
+                  onSaved: () async {
+                    await sysSettingsCtrl.save(sysSettingsCtrl.currentSettings);
+                    if (mounted) setState(() {});
+                  },
+                );
+              },
+              icon: const Icon(Icons.print, size: 16),
+              label: const Text('Map KOT Printers'),
             ),
           ),
           const SizedBox(height: 12),
-          _cardWrapper(
-            child: ctrl.kitchenStations.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: Text('No counter stations mapped.', style: TextStyle(color: Colors.grey))),
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: ctrl.kitchenStations.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1, color: borderGray),
-                    itemBuilder: (context, index) {
-                      final station = ctrl.kitchenStations[index];
-                      return ListTile(
-                        title: Text(station['station_name'], style: const TextStyle(fontWeight: FontWeight.bold, color: primaryDark)),
-                        subtitle: Text('Mapped Printer: ${station['printer']?['printer_name'] ?? 'None'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, color: primaryBlue, size: 18),
-                              onPressed: () => _showAddStationDialog(context, ctrl, station: station),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                              onPressed: () => ctrl.deleteKitchenStation(station['id']),
-                            ),
-                          ],
+          Builder(
+            builder: (context) {
+              final sysSettingsCtrl = context.watch<SystemSettingsController>();
+              final sysSettings = sysSettingsCtrl.currentSettings;
+              final kotMappings = DevicePrinterRouting.getSectionMappings(sysSettings, 'kots');
+
+              return _cardWrapper(
+                child: kotMappings.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(
+                          child: Text(
+                            'No KOT kitchen station printers mapped yet. Click "Map KOT Printers" above to add.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
                         ),
-                      );
-                    },
-                  ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: kotMappings.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1, color: borderGray),
+                        itemBuilder: (context, index) {
+                          final item = kotMappings[index];
+                          return ListTile(
+                            title: Row(
+                              children: [
+                                Text(
+                                  item.location,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: primaryDark),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.blue.shade200),
+                                  ),
+                                  child: Text(
+                                    item.machineId,
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: primaryBlue),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            subtitle: Text(
+                              'Mapped Printer: ${item.printer.isEmpty ? "Default Printer" : item.printer} (${item.copies} Cop${item.copies > 1 ? "ies" : "y"})',
+                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: primaryBlue, size: 18),
+                              onPressed: () {
+                                DevicePrinterRouting.showRoutingDialog(
+                                  context: context,
+                                  settings: sysSettings,
+                                  sectionKey: 'kots',
+                                  title: 'Kitchen KOT Printer Routing',
+                                  currentMachineId: _currentMachineId,
+                                  onSaved: () async {
+                                    await sysSettingsCtrl.save(sysSettings);
+                                    if (mounted) setState(() {});
+                                  },
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              );
+            },
           ),
         ],
       ),
@@ -1373,7 +1494,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
   void _showAddStationDialog(BuildContext context, RestaurantController ctrl, {Map<String, dynamic>? station}) {
     final nameCtrl = TextEditingController(text: station?['station_name'] ?? '');
     int? selectedPrinter = station?['printer_id'];
-    List<String> itemLocations = ['Kitchen', 'Bar', 'Bakery', 'Dessert', 'Pantry'];
+    List<String> itemLocations = [];
     bool isFetched = false;
 
     showDialog(
@@ -1388,7 +1509,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                 ApiClient.get(ApiEndpoints.items).catchError((_) => {}),
               ]).then((results) {
                 if (!context.mounted) return;
-                final Set<String> locs = {'Kitchen', 'Bar', 'Bakery', 'Dessert', 'Pantry'};
+                final Set<String> locs = <String>{};
 
                 // 1. Stock locations from database master table (stock_locations)
                 final stockLocRes = results[0];

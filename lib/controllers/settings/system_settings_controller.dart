@@ -9,6 +9,30 @@ class SystemSettingsController extends ChangeNotifier {
   bool loading = false;
   SystemSettings? settings;
 
+  SystemSettingsController() {
+    _initFromCache();
+  }
+
+  Future<void> _initFromCache() async {
+    final cachedMappings = await LocalPreferences.getDevicePrinterMappings();
+    if (settings == null) {
+      settings = SystemSettings.fromJson({});
+      if (cachedMappings.isNotEmpty) {
+        settings!.devicePrinterMappings = Map<String, dynamic>.from(cachedMappings);
+      }
+    } else if (settings!.devicePrinterMappings.isEmpty && cachedMappings.isNotEmpty) {
+      settings!.devicePrinterMappings = Map<String, dynamic>.from(cachedMappings);
+    }
+  }
+
+  SystemSettings get currentSettings {
+    if (settings == null) {
+      settings = SystemSettings.fromJson({});
+      _initFromCache();
+    }
+    return settings!;
+  }
+
   /// LOAD SETTINGS
   Future<void> load() async {
     loading = true;
@@ -16,44 +40,39 @@ class SystemSettingsController extends ChangeNotifier {
 
     try {
       final res = await ApiClient.get(ApiEndpoints.settings);
-      settings = SystemSettings.fromJson(res['data']);
-    } catch (_) {
-      settings ??= SystemSettings(
-        autoReorder: true,
-        allowNegativeStock: false,
-        damageApprovalRequired: true,
-        enableAuditLog: true,
-        autoPrintOnSave: false,
-        enableItemImagesInSales: false,
-        printMode: 'PRINT_DIALOG',
-        defaultPrinterName: '',
-        defaultPrinterUrl: '',
-        billingCountry: 'India',
-        billingTaxMode: 'CGST_SGST',
-        billFormat: 'A4',
-        defaultCharges: const [],
-        isCloudEnabled: false,
-        enableAppSubscription: false,
-        enablePaymentGateway: false,
-        paymentGatewayProvider: 'SANDBOX',
-        paymentGatewayApiKey: '',
-        paymentGatewaySecretKey: '',
-        merchantUpiId: '',
-        subDeliveryChargeEnabled: false,
-        subDeliveryChargeName: '',
-        subDeliveryChargeAmount: 0,
-        subDeliveryChargeType: 'FLAT',
-        subDeliveryChargeGstPercent: 0,
-        subDeliveryFreeAbove: 0,
-        enableSalespersonTagging: false,
-        billCopiesCount: 1,
-        showBrandName: true,
-      );
+      if (res['data'] != null && res['data'] is Map) {
+        settings = SystemSettings.fromJson(res['data']);
+      }
+    } catch (_) {}
+
+    settings ??= SystemSettings.fromJson({});
+
+    // Read cached local device printer mappings as fallback / merge
+    final cachedMappings = await LocalPreferences.getDevicePrinterMappings();
+    if (settings!.devicePrinterMappings.isEmpty && cachedMappings.isNotEmpty) {
+      settings!.devicePrinterMappings = Map<String, dynamic>.from(cachedMappings);
+    } else if (settings!.devicePrinterMappings.isNotEmpty) {
+      final merged = Map<String, dynamic>.from(cachedMappings);
+      merged.addAll(settings!.devicePrinterMappings);
+      settings!.devicePrinterMappings = merged;
+      await LocalPreferences.setDevicePrinterMappings(merged);
+    } else if (cachedMappings.isNotEmpty) {
+      settings!.devicePrinterMappings = Map<String, dynamic>.from(cachedMappings);
     }
 
     final localCopies = await LocalPreferences.getBillCopiesCount();
     if (localCopies != null && localCopies > 0 && settings != null) {
       settings!.billCopiesCount = localCopies;
+    }
+
+    final localTokenSys = await LocalPreferences.getEnableTokenSystem();
+    if (localTokenSys != null && settings != null) {
+      settings!.enableTokenSystem = localTokenSys;
+    }
+
+    final localTokenCopies = await LocalPreferences.getTokenCopiesCount();
+    if (localTokenCopies != null && localTokenCopies > 0 && settings != null) {
+      settings!.tokenCopiesCount = localTokenCopies;
     }
 
     loading = false;
@@ -62,19 +81,31 @@ class SystemSettingsController extends ChangeNotifier {
 
   /// SAVE SETTINGS
   Future<void> save(SystemSettings payload) async {
+    settings = payload;
     loading = true;
     notifyListeners();
 
     await LocalPreferences.setBillCopiesCount(payload.billCopiesCount);
+    await LocalPreferences.setEnableTokenSystem(payload.enableTokenSystem);
+    await LocalPreferences.setTokenCopiesCount(payload.tokenCopiesCount);
+    await LocalPreferences.setDevicePrinterMappings(payload.devicePrinterMappings);
 
     try {
-      await ApiClient.post(
+      final res = await ApiClient.post(
         ApiEndpoints.settings,
         payload.toJson(),
       );
+      if (res['data'] != null && res['data'] is Map) {
+        final serverSettings = SystemSettings.fromJson(res['data']);
+        if (serverSettings.devicePrinterMappings.isNotEmpty) {
+          final merged = Map<String, dynamic>.from(payload.devicePrinterMappings);
+          merged.addAll(serverSettings.devicePrinterMappings);
+          settings!.devicePrinterMappings = merged;
+          await LocalPreferences.setDevicePrinterMappings(merged);
+        }
+      }
     } catch (_) {}
 
-    settings = payload;
     loading = false;
     notifyListeners();
   }

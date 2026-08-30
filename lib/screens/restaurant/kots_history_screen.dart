@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
 import '../../controllers/restaurant/restaurant_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
+import '../../core/printing/device_printer_routing.dart';
+import '../../core/settings/local_preferences.dart';
 
 class KotsHistoryScreen extends StatefulWidget {
   const KotsHistoryScreen({super.key});
@@ -191,50 +193,54 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,
-            child: Row(
-              children: [
-                // Date Pickers
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.date_range, size: 16),
-                  label: Text('From: ${DateFormat('dd MMM yy').format(_fromDate)}'),
-                  onPressed: () => _pickDate(isFrom: true),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.date_range, size: 16),
-                  label: Text('To: ${DateFormat('dd MMM yy').format(_toDate)}'),
-                  onPressed: () => _pickDate(isFrom: false),
-                ),
-                const SizedBox(width: 14),
-                // Search field
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'Search KOT No...',
-                      prefixIcon: const Icon(Icons.search, size: 18),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onChanged: (val) => setState(() => _searchQuery = val),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  // Date Pickers
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.date_range, size: 16),
+                    label: Text('From: ${DateFormat('dd MMM yy').format(_fromDate)}'),
+                    onPressed: () => _pickDate(isFrom: true),
                   ),
-                ),
-                const SizedBox(width: 12),
-                // Status Dropdown
-                DropdownButton<String>(
-                  value: _selectedStatus,
-                  items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-                  onChanged: (val) => setState(() => _selectedStatus = val ?? 'All'),
-                ),
-                const SizedBox(width: 12),
-                // Type Dropdown
-                DropdownButton<String>(
-                  value: _selectedType,
-                  items: _types.map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 13)))).toList(),
-                  onChanged: (val) => setState(() => _selectedType = val ?? 'All'),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.date_range, size: 16),
+                    label: Text('To: ${DateFormat('dd MMM yy').format(_toDate)}'),
+                    onPressed: () => _pickDate(isFrom: false),
+                  ),
+                  const SizedBox(width: 14),
+                  // Search field
+                  SizedBox(
+                    width: 180,
+                    child: TextField(
+                      controller: _searchCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Search KOT No...',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Status Dropdown
+                  DropdownButton<String>(
+                    value: _selectedStatus,
+                    items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
+                    onChanged: (val) => setState(() => _selectedStatus = val ?? 'All'),
+                  ),
+                  const SizedBox(width: 12),
+                  // Type Dropdown
+                  DropdownButton<String>(
+                    value: _selectedType,
+                    items: _types.map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 13)))).toList(),
+                    onChanged: (val) => setState(() => _selectedType = val ?? 'All'),
+                  ),
+                ],
+              ),
             ),
           ),
           const Divider(height: 1),
@@ -270,21 +276,35 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                                   title: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(kotNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                                      Expanded(
+                                        child: Text(
+                                          kotNo,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
                                       Text(displayStatus,
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                             color: (rawStatus.toLowerCase() == 'cancelled' || rawStatus.toLowerCase() == 'rejected')
-                                                 ? Colors.red
-                                                 : (rawStatus.toLowerCase() == 'closed' ? Colors.grey : Colors.green.shade700),
-                                          )),
+                                            color: (rawStatus.toLowerCase() == 'cancelled' || rawStatus.toLowerCase() == 'rejected')
+                                                ? Colors.red
+                                                : (rawStatus.toLowerCase() == 'closed' ? Colors.grey : Colors.green.shade700),
+                                         )),
                                     ],
                                   ),
                                   subtitle: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text('Table: $table • $serviceType', style: const TextStyle(fontSize: 12)),
+                                      Expanded(
+                                        child: Text(
+                                          'Table: $table • $serviceType',
+                                          style: const TextStyle(fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
                                       Text(dateStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                     ],
                                   ),
@@ -333,23 +353,26 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(kotNo, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text('Dispatched on $created', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(kotNo, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text('Dispatched on $created', style: const TextStyle(color: Colors.grey, fontSize: 12), overflow: TextOverflow.ellipsis),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade700,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: const Icon(Icons.print, size: 18),
-                label: const Text('Reprint KOT Ticket', style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text('Reprint', style: TextStyle(fontWeight: FontWeight.bold)),
                 onPressed: () => _printKot(kot),
               ),
             ],
@@ -486,70 +509,158 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
     if (items.isEmpty) return;
 
     try {
-      final restCtrl = Provider.of<RestaurantController>(context, listen: false);
-      final kitchenStations = restCtrl.kitchenStations;
-      final printers = restCtrl.printers;
+      final sysSettingsCtrl = Provider.of<SystemSettingsController>(context, listen: false);
+      final sysSettings = sysSettingsCtrl.currentSettings;
+      final currentMachineId = await LocalPreferences.getMachineId();
 
-      // Split items by station location
+      final allKotMappings = DevicePrinterRouting.getSectionMappings(sysSettings, 'kots');
+      final configuredLocs = allKotMappings
+          .map((m) => m.location.trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+
       final Map<String, List<dynamic>> locationGroups = {};
       for (final item in items) {
-        final String loc = (item['location'] ?? item['station_name'] ?? 'Kitchen').toString().trim();
-        final String key = loc.isEmpty ? 'Kitchen' : loc;
-        locationGroups.putIfAbsent(key, () => []).add(item);
+        String rawLoc = (item['station']?['station_name'] ??
+                item['station_name'] ??
+                item['location'] ??
+                item['item_location'] ??
+                item['kitchen_location'] ??
+                item['item']?['location'] ??
+                (item['item'] is Map ? item['item']['location'] ?? item['item']['kitchen_location'] : null) ??
+                '')
+            .toString()
+            .trim();
+
+        if (rawLoc.isEmpty) {
+          rawLoc = (item['item_group'] ??
+                  item['category'] ??
+                  item['item']?['item_group'] ??
+                  item['item']?['category'] ??
+                  (item['item'] is Map ? item['item']['item_group'] ?? item['item']['category'] : null) ??
+                  '')
+              .toString()
+              .trim();
+        }
+
+        String targetStation = rawLoc;
+        if (rawLoc.isNotEmpty) {
+          for (final cLoc in configuredLocs) {
+            if (cLoc.toLowerCase() == rawLoc.toLowerCase() ||
+                rawLoc.toLowerCase().contains(cLoc.toLowerCase()) ||
+                cLoc.toLowerCase().contains(rawLoc.toLowerCase())) {
+              targetStation = cLoc;
+              break;
+            }
+          }
+        }
+
+        if (targetStation.isEmpty) {
+          targetStation = configuredLocs.isNotEmpty ? configuredLocs.first : 'Main Kitchen';
+        }
+
+        locationGroups.putIfAbsent(targetStation, () => []).add(item);
       }
 
-      // Reprint station KOTs
-      for (final locationName in locationGroups.keys) {
-        final List<dynamic> stationItems = locationGroups[locationName]!;
-        
-        final station = kitchenStations.firstWhere(
-          (s) => (s['station_name'] ?? '').toString().toLowerCase() == locationName.toLowerCase(),
-          orElse: () => null,
+      final availablePrinters = await Printing.listPrinters();
+      final String rawKotNo = (kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}').toString();
+
+      for (final entry in locationGroups.entries) {
+        final String locationName = entry.key;
+        final List<dynamic> stationItems = entry.value;
+
+        final routings = DevicePrinterRouting.resolvePrinters(
+          settings: sysSettings,
+          machineId: currentMachineId,
+          sectionKey: 'kots',
+          location: locationName,
         );
-        
-        String printerName = '';
-        if (station != null && station['printer_id'] != null) {
-          final pConfig = printers.firstWhere(
-            (p) => p['id'] == station['printer_id'],
-            orElse: () => null,
-          );
-          if (pConfig != null) {
-            printerName = pConfig['printer_name'] ?? '';
-          }
-        }
 
         final pdfBytes = await _generateKotPdfForPrint(kot, stationItems, locationName);
-        
-        if (printerName.isNotEmpty) {
-          final systemPrinters = await Printing.listPrinters();
-          Printer? targetPrinter;
-          try {
-            targetPrinter = systemPrinters.firstWhere(
-              (p) => p.name.toLowerCase() == printerName.toLowerCase(),
-            );
-          } catch (_) {
-            targetPrinter = null;
-          }
-          if (targetPrinter != null) {
-            await Printing.directPrintPdf(
-              printer: targetPrinter,
-              name: kot['kot_number'] ?? 'KOT_${kot['id']}',
-              onLayout: (_) async => pdfBytes,
-            );
-            continue;
+        final String jobName = 'REPRINT_KOT_${rawKotNo}_$locationName';
+
+        bool printedDirectly = false;
+        if (routings.isNotEmpty) {
+          for (final routing in routings) {
+            final String targetPrinterName = routing.printer.trim();
+            if (targetPrinterName.isEmpty) continue;
+
+            Printer? matchedPrinter;
+            try {
+              matchedPrinter = availablePrinters.firstWhere(
+                (p) => p.name.toLowerCase() == targetPrinterName.toLowerCase() || p.url.toLowerCase() == targetPrinterName.toLowerCase(),
+              );
+            } catch (_) {
+              try {
+                matchedPrinter = availablePrinters.firstWhere(
+                  (p) => p.name.toLowerCase().contains(targetPrinterName.toLowerCase()) || targetPrinterName.toLowerCase().contains(p.name.toLowerCase()),
+                );
+              } catch (_) {}
+            }
+
+            if (matchedPrinter != null) {
+              try {
+                final int copyCount = routing.copies > 0 ? routing.copies : 1;
+                for (int c = 0; c < copyCount; c++) {
+                  await Printing.directPrintPdf(
+                    printer: matchedPrinter,
+                    name: jobName,
+                    onLayout: (_) async => pdfBytes,
+                  );
+                }
+                printedDirectly = true;
+              } catch (pErr) {
+                debugPrint('Direct print printer error for station "$locationName": $pErr');
+              }
+            }
           }
         }
 
-        // Fallback to preview print dialog
-        await Printing.layoutPdf(
-          name: kot['kot_number'] ?? 'KOT_${kot['id']}',
-          onLayout: (_) async => pdfBytes,
+        if (!printedDirectly) {
+          Printer? fallbackPrinter;
+          if (sysSettings.defaultPrinterName.trim().isNotEmpty) {
+            try {
+              fallbackPrinter = availablePrinters.firstWhere(
+                (p) => p.name.toLowerCase() == sysSettings.defaultPrinterName.trim().toLowerCase(),
+              );
+            } catch (_) {}
+          }
+          fallbackPrinter ??= availablePrinters.where((p) => p.isDefault).firstOrNull ?? availablePrinters.firstOrNull;
+
+          if (fallbackPrinter != null) {
+            try {
+              await Printing.directPrintPdf(
+                printer: fallbackPrinter,
+                name: jobName,
+                onLayout: (_) async => pdfBytes,
+              );
+            } catch (e) {
+              debugPrint('Direct print fallback error: $e');
+              await Printing.layoutPdf(
+                name: jobName,
+                onLayout: (_) async => pdfBytes,
+              );
+            }
+          } else {
+            await Printing.layoutPdf(
+              name: jobName,
+              onLayout: (_) async => pdfBytes,
+            );
+          }
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('KOT Reprint sent to printer!')),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error reprinting KOT: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error reprinting KOT: $e')),
+        );
+      }
     }
   }
 
@@ -557,7 +668,11 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
     final pdf = pw.Document();
     
     final String tableName = kot['table']?['table_name'] ?? 'Takeaway';
-    final int guestCount = kot['guest_count'] ?? 1;
+    
+    final rawGuest = kot['guest_count'] ?? kot['guests'] ?? kot['table']?['current_guest_count'] ?? kot['table']?['guest_count'] ?? kot['table']?['pax'];
+    final parsedGuest = rawGuest != null ? int.tryParse(rawGuest.toString()) : null;
+    final int guestCount = (parsedGuest != null && parsedGuest > 0) ? parsedGuest : (tableName.toLowerCase().contains('takeaway') ? 1 : 2);
+
     final String nowStr = DateTime.now().toString().substring(0, 16);
     final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}';
     
@@ -579,9 +694,28 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
                 ),
               ),
+              if (locationName.isNotEmpty)
+                pw.Container(
+                  margin: const pw.EdgeInsets.symmetric(vertical: 3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.black, width: 1.5),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Center(
+                    child: pw.Text(
+                      'LOCATION / STATION: ${locationName.toUpperCase()}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11.5, color: PdfColors.black),
+                    ),
+                  ),
+                ),
               pw.Center(
                 child: pw.Text(
-                  '*** REPRINT K O T ($locationName) ***',
+                  (kot['kottype'] == 'nc' || kot['kottype'] == 'NC')
+                      ? '*** NC (NON-CHARGEABLE) REPRINT K O T ***'
+                      : ((kot['kottype'] == 'packing' || (kot['service_type'] ?? '').toString().toLowerCase().contains('takeaway'))
+                          ? '*** PACKING REPRINT K O T ***'
+                          : '*** REPRINT K O T ***'),
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
                 ),
               ),
@@ -657,6 +791,24 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                 ],
               ),
               pw.SizedBox(height: 10),
+              pw.Row(
+                children: [
+                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  pw.SizedBox(width: 4),
+                  pw.Expanded(
+                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                  ),
+                  pw.SizedBox(width: 4),
+                  pw.Text('CUT HERE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  pw.SizedBox(width: 4),
+                  pw.Expanded(
+                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                  ),
+                  pw.SizedBox(width: 4),
+                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                ],
+              ),
+              pw.SizedBox(height: 6),
             ],
           );
         },

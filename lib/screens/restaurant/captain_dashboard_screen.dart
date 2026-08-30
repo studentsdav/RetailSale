@@ -13,6 +13,9 @@ import 'package:printing/printing.dart';
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'kots_history_screen.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import '../../core/settings/local_preferences.dart';
+import '../../core/printing/device_printer_routing.dart';
 
 class CaptainDashboardScreen extends StatefulWidget {
   const CaptainDashboardScreen({super.key});
@@ -112,7 +115,8 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
 
         for (final kot in kots) {
           final bool isDismissed = kot['kds_dismissed'] == true || kot['kds_dismissed'] == 1;
-          if (isDismissed) {
+          final tableId = kot['table_id'];
+          if (isDismissed && tableId == null) {
             continue;
           }
 
@@ -140,7 +144,6 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
             continue;
           }
 
-          final tableId = kot['table_id'];
           if ((tableId == null && !isNc) || kottypeLower == 'packing' || serviceTypeLower.contains('packing') || serviceTypeLower.contains('takeaway')) {
             takeawayList.add(kot);
             continue;
@@ -284,157 +287,155 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildLegendDot(
-                    color: Colors.teal.shade600,
-                    label: 'Available',
-                    count: availableCount,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildLegendDot(
-                    color: Colors.pink.shade500,
-                    label: 'Occupied',
-                    count: occupiedCount,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildLegendDot(
-                    color: Colors.amber.shade700,
-                    label: 'Billed',
-                    count: billedCount,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildLegendDot(
-                    color: const Color(0xFF334155),
-                    label: 'Needs Cleaning',
-                    count: dirtyCount,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildLegendDot(
-                    color: Colors.indigo.shade500,
-                    label: 'Reserved',
-                    count: reservedCount,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // View Mode Switcher (Floor Canvas vs Grid View)
-          Container(
-            height: 32,
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFCBD5E1)),
-            ),
-            child: Row(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            Row(
               children: [
-                InkWell(
-                  onTap: () => _updateViewPreference(true),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isVisualCanvasView
-                          ? const Color(0xFFFF7A1A)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.architecture,
-                            size: 14,
-                            color: isVisualCanvasView
-                                ? Colors.white
-                                : const Color(0xFF64748B)),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Floor Canvas',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: isVisualCanvasView
-                                ? Colors.white
-                                : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                _buildLegendDot(
+                  color: Colors.teal.shade600,
+                  label: 'Available',
+                  count: availableCount,
                 ),
-                InkWell(
-                  onTap: () => _updateViewPreference(false),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: !isVisualCanvasView
-                          ? const Color(0xFFFF7A1A)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.grid_view,
-                            size: 14,
-                            color: !isVisualCanvasView
-                                ? Colors.white
-                                : const Color(0xFF64748B)),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Grid View',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: !isVisualCanvasView
-                                ? Colors.white
-                                : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                const SizedBox(width: 16),
+                _buildLegendDot(
+                  color: Colors.pink.shade500,
+                  label: 'Occupied',
+                  count: occupiedCount,
+                ),
+                const SizedBox(width: 16),
+                _buildLegendDot(
+                  color: Colors.amber.shade700,
+                  label: 'Billed',
+                  count: billedCount,
+                ),
+                const SizedBox(width: 16),
+                _buildLegendDot(
+                  color: const Color(0xFF334155),
+                  label: 'Needs Cleaning',
+                  count: dirtyCount,
+                ),
+                const SizedBox(width: 16),
+                _buildLegendDot(
+                  color: Colors.indigo.shade500,
+                  label: 'Reserved',
+                  count: reservedCount,
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => _showStatusGuideDialog(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            const SizedBox(width: 16),
+            // View Mode Switcher (Floor Canvas vs Grid View)
+            Container(
+              height: 32,
+              padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF8F1),
-                border: Border.all(color: const Color(0xFFFF7A1A)),
+                color: const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 16, color: Color(0xFFFF7A1A)),
-                  SizedBox(width: 4),
-                  Text(
-                    'Color Guide & Rules',
-                    style: TextStyle(
-                        color: Color(0xFFFF7A1A),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12),
+                  InkWell(
+                    onTap: () => _updateViewPreference(true),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isVisualCanvasView
+                            ? const Color(0xFFFF7A1A)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.architecture,
+                              size: 14,
+                              color: isVisualCanvasView
+                                  ? Colors.white
+                                  : const Color(0xFF64748B)),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Floor Canvas',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isVisualCanvasView
+                                  ? Colors.white
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => _updateViewPreference(false),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: !isVisualCanvasView
+                            ? const Color(0xFFFF7A1A)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.grid_view,
+                              size: 14,
+                              color: !isVisualCanvasView
+                                  ? Colors.white
+                                  : const Color(0xFF64748B)),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Grid View',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: !isVisualCanvasView
+                                  ? Colors.white
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => _showStatusGuideDialog(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF8F1),
+                  border: Border.all(color: const Color(0xFFFF7A1A)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Color(0xFFFF7A1A)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Color Guide & Rules',
+                      style: TextStyle(
+                          color: Color(0xFFFF7A1A),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1902,8 +1903,10 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                                                           ? q.toInt().toString()
                                                           : q.toStringAsFixed(
                                                               1);
+                                                      final String itemBrand = (item['brand'] ?? item['item']?['brand'] ?? '').toString().trim();
+                                                      final String brandSuffix = itemBrand.isNotEmpty ? ' ($itemBrand)' : '';
                                                       return Text(
-                                                        '$qtyStr x ${item['item_name']}',
+                                                        '$qtyStr x ${item['item_name']}$brandSuffix',
                                                         style: const TextStyle(
                                                             color: Colors.white,
                                                             fontSize: 11,
@@ -2087,6 +2090,8 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                 final guests = int.tryParse(guestsCtrl.text) ?? 2;
                 await ctrl.updateTableStatus(table['id'], 'Occupied',
                     guestCount: guests);
+                table['current_guest_count'] = guests;
+                table['status'] = 'Occupied';
                 Navigator.pop(context);
                 _openOrderSheet(table);
               },
@@ -2098,17 +2103,17 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
     );
   }
 
-  void _showTableOptionsDialog(BuildContext context, Map<String, dynamic> table,
+  void _showTableOptionsDialog(BuildContext parentContext, Map<String, dynamic> table,
       RestaurantController ctrl) {
     showDialog(
-      context: context,
-      builder: (context) {
+      context: parentContext,
+      builder: (dialogContext) {
         return SimpleDialog(
           title: Text('Table: ${table['table_name']} (${table['status']})'),
           children: [
             SimpleDialogOption(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 _openOrderSheet(table, isFreshOrder: true);
               },
               child: const ListTile(
@@ -2120,7 +2125,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
             ),
             SimpleDialogOption(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -2139,7 +2144,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
             ),
             SimpleDialogOption(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 _showBillingCheckoutDialog(context, table, ctrl);
               },
               child: const ListTile(
@@ -2149,7 +2154,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
             ),
             SimpleDialogOption(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 _showTransferDialog(context, table, ctrl);
               },
               child: const ListTile(
@@ -2159,7 +2164,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
             ),
             SimpleDialogOption(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 _showMergeDialog(context, table, ctrl);
               },
               child: const ListTile(
@@ -2173,7 +2178,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
     );
   }
 
-  void _showTransferDialog(BuildContext context,
+  void _showTransferDialog(BuildContext parentContext,
       Map<String, dynamic> sourceTable, RestaurantController ctrl) {
     int? selectedTargetTable;
     final availableTables = ctrl.tables
@@ -2182,10 +2187,10 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
         .toList();
 
     showDialog(
-      context: context,
-      builder: (context) {
+      context: parentContext,
+      builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (dialogContext, setState) {
             return AlertDialog(
               title: Text('Transfer ${sourceTable['table_name']} to...'),
               content: DropdownButtonFormField<int>(
@@ -2200,14 +2205,14 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
               ),
               actions: [
                 TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.pop(dialogContext),
                     child: const Text('Cancel')),
                 ElevatedButton(
                   onPressed: () async {
                     if (selectedTargetTable == null) return;
                     await ctrl.transferTable(
                         sourceTable['id'], selectedTargetTable!);
-                    Navigator.pop(context);
+                    Navigator.pop(dialogContext);
                   },
                   child: const Text('Transfer'),
                 )
@@ -2219,7 +2224,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
     );
   }
 
-  void _showMergeDialog(BuildContext context, Map<String, dynamic> mainTable,
+  void _showMergeDialog(BuildContext parentContext, Map<String, dynamic> mainTable,
       RestaurantController ctrl) {
     int? selectedMergeTable;
     final occupiedTables = ctrl.tables
@@ -2227,10 +2232,10 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
         .toList();
 
     showDialog(
-      context: context,
-      builder: (context) {
+      context: parentContext,
+      builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (dialogContext, setState) {
             return AlertDialog(
               title: Text('Merge Table with ${mainTable['table_name']}'),
               content: DropdownButtonFormField<int>(
@@ -2245,14 +2250,14 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
               ),
               actions: [
                 TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.pop(dialogContext),
                     child: const Text('Cancel')),
                 ElevatedButton(
                   onPressed: () async {
                     if (selectedMergeTable == null) return;
                     await ctrl.mergeTables(
                         mainTable['id'], selectedMergeTable!);
-                    Navigator.pop(context);
+                    Navigator.pop(dialogContext);
                   },
                   child: const Text('Merge'),
                 )
@@ -2264,99 +2269,121 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
     );
   }
 
-  Future<void> _showBillingCheckoutDialog(BuildContext context,
+  Future<void> _showBillingCheckoutDialog(BuildContext ctx,
       Map<String, dynamic> table, RestaurantController ctrl) async {
-    // Show a loading dialog first
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
+    final int tableId = int.tryParse((table['id'] ?? table['table_id'] ?? 0).toString()) ?? 0;
+    final targetContext = mounted ? context : ctx;
 
+    if (tableId <= 0) {
+      if (targetContext.mounted) {
+        ScaffoldMessenger.of(targetContext).showSnackBar(
+          const SnackBar(content: Text('Invalid table ID selected.')),
+        );
+      }
+      return;
+    }
+
+    dynamic res;
     try {
-      // Fetch active KOTs for this table
-      final res = await ApiClient.get(
-          '/api/restaurant/kots?table_id=${table['id']}&active_only=true');
-      Navigator.pop(context); // Pop loading indicator
+      res = await ApiClient.get('/api/restaurant/kots?table_id=$tableId&active_only=true');
+      if (res == null || res['success'] != true || (res['data'] is List && (res['data'] as List).isEmpty)) {
+        res = await ApiClient.get('/api/restaurant/kots?table_id=$tableId');
+      }
+    } catch (e) {
+      debugPrint('Error loading table orders: $e');
+    }
 
-      if (res['success'] == true) {
-        final List kots = res['data'] ?? [];
-        if (kots.isEmpty) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('No active KOTs'),
-              content: const Text(
-                  'There are no active orders placed on this table to bill.'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('OK')),
-              ],
+    if (!mounted) return;
+
+    if (res != null && res['success'] == true) {
+      final List kotsRaw = res['data'] ?? [];
+      final List kots = kotsRaw.where((kot) {
+        if (kot['sales_header_id'] != null) return false;
+        final String status = (kot['status'] ?? '').toString().toLowerCase().trim();
+        return status != 'billed' && status != 'closed' && status != 'cancelled' && status != 'rejected' && status != 'nc cleared' && status != 'nc_cleared';
+      }).toList();
+
+      if (kots.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('There are no active orders placed on Table ${table['table_name'] ?? tableId} to bill.'),
+              backgroundColor: Colors.orange.shade700,
             ),
           );
-          return;
+        }
+        return;
+      }
+
+      final Map<dynamic, Map<String, dynamic>> grouped = {};
+      final List<int> kotIds = [];
+
+      for (final kot in kots) {
+        final int kId = int.tryParse((kot['id'] ?? 0).toString()) ?? 0;
+        if (kId > 0 && !kotIds.contains(kId)) {
+          kotIds.add(kId);
         }
 
-        // Group same items and sum quantities
-        final Map<int, Map<String, dynamic>> grouped = {};
-        for (final kot in kots) {
-          final String kotStatus = (kot['status'] ?? '').toString().toUpperCase().trim();
-          if (kotStatus == 'CANCELLED') continue;
+        final List items = kot['items'] as List? ?? [];
+        for (final item in items) {
+          final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
+          if (itemStatus == 'CANCELLED' || itemStatus == 'REJECTED') continue;
 
-          final List items = kot['items'] ?? [];
-          for (final item in items) {
-            final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
-            if (itemStatus == 'CANCELLED') continue;
+          final int itemId = int.tryParse((item['item_id'] ?? item['itemId'] ?? item['id'] ?? 0).toString()) ?? 0;
+          final String itemName = (item['item_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().trim();
+          final double qty = double.tryParse((item['quantity'] ?? item['qty'] ?? 1.0).toString()) ?? 1.0;
+          final double rate = double.tryParse((item['rate'] ?? item['item_rate'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
 
-            final int itemId = item['item_id'];
-            final double qty = double.tryParse(item['qty'].toString()) ?? 1.0;
-            final double rate =
-                double.tryParse(item['rate']?.toString() ?? '') ??
-                    double.tryParse(item['item_rate']?.toString() ?? '') ??
-                    0.0;
+          final dynamic groupKey = itemId > 0 ? itemId : (itemName.isNotEmpty ? itemName : 'Item_$kId');
 
-            if (grouped.containsKey(itemId)) {
-              grouped[itemId]!['qty'] = grouped[itemId]!['qty'] + qty;
-            } else {
-              grouped[itemId] = {
-                'item_id': itemId,
-                'item_name': item['item_name'],
-                'qty': qty,
-                'rate': rate,
-              };
-            }
+          if (grouped.containsKey(groupKey)) {
+            grouped[groupKey]!['qty'] = (grouped[groupKey]!['qty'] as double) + qty;
+          } else {
+            grouped[groupKey] = {
+              'item_id': itemId,
+              'item_name': itemName,
+              'qty': qty,
+              'rate': rate,
+            };
           }
         }
+      }
 
-        final consolidatedItems = grouped.values.toList();
+      final consolidatedItems = grouped.values.toList();
 
-        final List<int> kotIds = kots
-            .where((k) => (k['status'] ?? '').toString().toUpperCase().trim() != 'CANCELLED' && (k['status'] ?? '').toString().toUpperCase().trim() != 'REJECTED')
-            .map<int>((k) => int.parse(k['id'].toString()))
-            .toList();
+      if (consolidatedItems.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No active items found in the orders on Table ${table['table_name'] ?? tableId} to bill.'),
+              backgroundColor: Colors.orange.shade700,
+            ),
+          );
+        }
+        return;
+      }
 
-        // Redirect to main Retail POS checkout screen
+      if (context.mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => SaleScreen(
-              preloadedTableId: table['id'],
+              preloadedTableId: tableId,
               preloadedItems: consolidatedItems,
               preloadedKotIds: kotIds,
             ),
           ),
         ).then((_) {
-          // Refresh table status on return
           ctrl.loadTables();
+          _refreshData();
         });
-      } else {
-        throw Exception('Failed to load active orders');
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading orders: $e')),
-      );
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load active orders for this table.')),
+        );
+      }
     }
   }
 
@@ -2895,17 +2922,152 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
     if (items.isEmpty) return;
 
     try {
-      final pdfBytes = await _generateKotPdfForPrint(kot, items);
-      await Printing.layoutPdf(
-        name: kot['kot_number'] ?? 'KOT_${kot['id']}',
-        onLayout: (_) async => pdfBytes,
-      );
+      final sysSettingsCtrl = Provider.of<SystemSettingsController>(context, listen: false);
+      final sysSettings = sysSettingsCtrl.currentSettings;
+      final currentMachineId = await LocalPreferences.getMachineId();
+
+      final allKotMappings = DevicePrinterRouting.getSectionMappings(sysSettings, 'kots');
+      final configuredLocs = allKotMappings
+          .map((m) => m.location.trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+
+      final Map<String, List<dynamic>> locationGroups = {};
+      for (final item in items) {
+        String rawLoc = (item['station']?['station_name'] ??
+                item['station_name'] ??
+                item['location'] ??
+                item['item_location'] ??
+                item['kitchen_location'] ??
+                item['item']?['location'] ??
+                (item['item'] is Map ? item['item']['location'] ?? item['item']['kitchen_location'] : null) ??
+                '')
+            .toString()
+            .trim();
+
+        if (rawLoc.isEmpty) {
+          rawLoc = (item['item_group'] ??
+                  item['category'] ??
+                  item['item']?['item_group'] ??
+                  item['item']?['category'] ??
+                  (item['item'] is Map ? item['item']['item_group'] ?? item['item']['category'] : null) ??
+                  '')
+              .toString()
+              .trim();
+        }
+
+        String targetStation = rawLoc;
+        if (rawLoc.isNotEmpty) {
+          for (final cLoc in configuredLocs) {
+            if (cLoc.toLowerCase() == rawLoc.toLowerCase() ||
+                rawLoc.toLowerCase().contains(cLoc.toLowerCase()) ||
+                cLoc.toLowerCase().contains(rawLoc.toLowerCase())) {
+              targetStation = cLoc;
+              break;
+            }
+          }
+        }
+
+        if (targetStation.isEmpty) {
+          targetStation = configuredLocs.isNotEmpty ? configuredLocs.first : 'Main Kitchen';
+        }
+
+        locationGroups.putIfAbsent(targetStation, () => []).add(item);
+      }
+
+      final availablePrinters = await Printing.listPrinters();
+      final String rawKotNo = (kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}').toString();
+
+      for (final entry in locationGroups.entries) {
+        final String locationName = entry.key;
+        final List<dynamic> stationItems = entry.value;
+
+        final routings = DevicePrinterRouting.resolvePrinters(
+          settings: sysSettings,
+          machineId: currentMachineId,
+          sectionKey: 'kots',
+          location: locationName,
+        );
+
+        final pdfBytes = await _generateKotPdfForPrint(kot, stationItems, locationName);
+        final String jobName = 'KOT_${rawKotNo}_$locationName';
+
+        bool printedDirectly = false;
+        if (routings.isNotEmpty) {
+          for (final routing in routings) {
+            final String targetPrinterName = routing.printer.trim();
+            if (targetPrinterName.isEmpty) continue;
+
+            Printer? matchedPrinter;
+            try {
+              matchedPrinter = availablePrinters.firstWhere(
+                (p) => p.name.toLowerCase() == targetPrinterName.toLowerCase() || p.url.toLowerCase() == targetPrinterName.toLowerCase(),
+              );
+            } catch (_) {
+              try {
+                matchedPrinter = availablePrinters.firstWhere(
+                  (p) => p.name.toLowerCase().contains(targetPrinterName.toLowerCase()) || targetPrinterName.toLowerCase().contains(p.name.toLowerCase()),
+                );
+              } catch (_) {}
+            }
+
+            if (matchedPrinter != null) {
+              try {
+                final int copyCount = routing.copies > 0 ? routing.copies : 1;
+                for (int c = 0; c < copyCount; c++) {
+                  await Printing.directPrintPdf(
+                    printer: matchedPrinter,
+                    name: jobName,
+                    onLayout: (_) async => pdfBytes,
+                  );
+                }
+                printedDirectly = true;
+              } catch (pErr) {
+                debugPrint('Direct print printer error for station "$locationName": $pErr');
+              }
+            }
+          }
+        }
+
+        if (!printedDirectly) {
+          Printer? fallbackPrinter;
+          if (sysSettings.defaultPrinterName.trim().isNotEmpty) {
+            try {
+              fallbackPrinter = availablePrinters.firstWhere(
+                (p) => p.name.toLowerCase() == sysSettings.defaultPrinterName.trim().toLowerCase(),
+              );
+            } catch (_) {}
+          }
+          fallbackPrinter ??= availablePrinters.where((p) => p.isDefault).firstOrNull ?? availablePrinters.firstOrNull;
+
+          if (fallbackPrinter != null) {
+            try {
+              await Printing.directPrintPdf(
+                printer: fallbackPrinter,
+                name: jobName,
+                onLayout: (_) async => pdfBytes,
+              );
+            } catch (e) {
+              debugPrint('Direct print fallback error: $e');
+              await Printing.layoutPdf(
+                name: jobName,
+                onLayout: (_) async => pdfBytes,
+              );
+            }
+          } else {
+            await Printing.layoutPdf(
+              name: jobName,
+              onLayout: (_) async => pdfBytes,
+            );
+          }
+        }
+      }
     } catch (e) {
       debugPrint('Error printing KOT: $e');
     }
   }
 
-  Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items) async {
+  Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items, String locationName) async {
     final pdf = pw.Document();
     
     final String kottypeLower = (kot['kottype'] ?? '').toString().toLowerCase();
@@ -2914,9 +3076,9 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
     final bool isNc = kottypeLower == 'nc' || serviceTypeLower.contains('nc') || remarksLower.contains('nc');
 
     final String tableName = isNc ? 'NC Order' : (kot['table']?['table_name'] ?? 'Takeaway');
-    final String subHeader = isNc ? '*** NC ORDER (NO CHARGE) ***' : '*** TAKEAWAY K O T ***';
+    final String subHeader = isNc ? '*** NC ORDER (NO CHARGE) ***' : '*** PACKING K O T ***';
     final String nowStr = DateTime.now().toString().substring(0, 16);
-    final String kotNo = kot['kot_number'] ?? '#KOT-${kot['id']}';
+    final String kotNo = (kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}').toString();
     
     double totalQty = 0;
     for (final item in items) {
@@ -2936,6 +3098,21 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
                 ),
               ),
+              if (locationName.isNotEmpty)
+                pw.Container(
+                  margin: const pw.EdgeInsets.symmetric(vertical: 3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.black, width: 1.5),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Center(
+                    child: pw.Text(
+                      'LOCATION / STATION: ${locationName.toUpperCase()}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11.5, color: PdfColors.black),
+                    ),
+                  ),
+                ),
               pw.Center(
                 child: pw.Text(
                   subHeader,
@@ -2963,7 +3140,8 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
               ...items.map((item) {
                 final double q = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '0') ?? 0.0;
                 final String qtyStr = (q % 1 == 0) ? q.toInt().toString() : q.toStringAsFixed(1);
-                final String displayName = item['item_name'] ?? '';
+                final String itemBrand = (item['brand'] ?? item['brand_name'] ?? item['item_brand'] ?? item['item']?['brand'] ?? (item['item'] is Map ? item['item']['brand'] : null) ?? '').toString().trim();
+                final String displayName = itemBrand.isNotEmpty ? '${item['item_name'] ?? ''} ($itemBrand)' : (item['item_name'] ?? '');
                 final String remark = (item['notes'] ?? item['item_remark'] ?? '').toString();
                 
                 return pw.Padding(
@@ -3008,6 +3186,24 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                 ],
               ),
               pw.SizedBox(height: 10),
+              pw.Row(
+                children: [
+                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  pw.SizedBox(width: 4),
+                  pw.Expanded(
+                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                  ),
+                  pw.SizedBox(width: 4),
+                  pw.Text('CUT HERE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  pw.SizedBox(width: 4),
+                  pw.Expanded(
+                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                  ),
+                  pw.SizedBox(width: 4),
+                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                ],
+              ),
+              pw.SizedBox(height: 6),
             ],
           );
         },

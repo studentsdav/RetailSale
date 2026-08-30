@@ -7,7 +7,10 @@ import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/api/api_client.dart';
+import 'package:printing/printing.dart';
+import '../../core/settings/local_preferences.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../core/printing/device_printer_routing.dart';
 import '../../models/auth/permission_service.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../inventory/salescreen.dart';
@@ -192,6 +195,47 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
       reprintJson['repayments'] = _selectedDetails!['repayments'];
     }
     final reprintOrder = SaleOrder.fromJson(reprintJson);
+
+    final settings = settingsCtrl.settings;
+    if (settings?.printMode == 'DIRECT_DEFAULT') {
+      try {
+        final machineId = await LocalPreferences.getMachineId();
+        final machineBillPrinter = DevicePrinterRouting.getBillPrinter(settings!, machineId).trim();
+        final targetName = machineBillPrinter.isNotEmpty ? machineBillPrinter : settings.defaultPrinterName.trim();
+        final targetUrl = settings.defaultPrinterUrl.trim();
+
+        if (targetName.isNotEmpty || targetUrl.isNotEmpty) {
+          final printers = await Printing.listPrinters();
+          final printer = printers.cast<Printer?>().firstWhere(
+                (p) =>
+                    (targetName.isNotEmpty && p?.name.trim().toLowerCase() == targetName.toLowerCase()) ||
+                    (targetUrl.isNotEmpty && p?.url == targetUrl),
+                orElse: () => null,
+              );
+          if (printer != null) {
+            final pdfBytes = await PosInvoicePrinter.buildSaleInvoicePdf(
+              order: reprintOrder,
+              property: propertyCtrl.data,
+              copyCount: settings.billCopiesCount,
+              termsAndConditions: paymentInfo,
+            );
+            await Printing.directPrintPdf(
+              printer: printer,
+              name: reprintOrder.saleNo,
+              onLayout: (_) async => pdfBytes,
+            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Reprint sent to ${printer.name}')),
+              );
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('Direct reprint error: $e');
+      }
+    }
 
     await showPdfPreviewDialog(
       context: context,

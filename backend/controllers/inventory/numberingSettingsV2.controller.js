@@ -8,27 +8,48 @@ function toWholeNumber(value, fallback = 1) {
 }
 
 function normalizeDate(value) {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return date;
+    if (!value) return new Date();
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? new Date() : value;
+    }
+    const str = String(value).trim();
+    let d = new Date(str);
+    if (!Number.isNaN(d.getTime())) return d;
+
+    const dmy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (dmy) {
+        d = new Date(`${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`);
+        if (!Number.isNaN(d.getTime())) return d;
+    }
+
+    const dMonY = str.match(/^(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{4})/);
+    if (dMonY) {
+        d = new Date(`${dMonY[1]} ${dMonY[2]} ${dMonY[3]}`);
+        if (!Number.isNaN(d.getTime())) return d;
+    }
+
+    return new Date();
 }
 
 function extractNumericPart(value, setting) {
-    const raw = String(value || '');
-    const prefix = String(setting.prefix || '');
-    const postfix = String(setting.postfix || '');
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    const prefix = String(setting.prefix || '').trim();
+    const postfix = String(setting.postfix || '').trim();
     let middle = raw;
 
     if (prefix) {
-        if (!middle.startsWith(prefix)) return null;
-        middle = middle.substring(prefix.length);
+        if (middle.toLowerCase().startsWith(prefix.toLowerCase())) {
+            middle = middle.substring(prefix.length);
+        } else {
+            return null;
+        }
     }
     if (postfix) {
-        if (middle.endsWith(postfix)) {
+        if (middle.toLowerCase().endsWith(postfix.toLowerCase())) {
             middle = middle.substring(0, middle.length - postfix.length);
         } else {
-            // Fallback for financial year postfix pattern like -26/27 or -26/28
-            const fyMatch = middle.match(/^(.*?)(-\d{2}\/\d{2}|-\d{4}\/\d{2}|-\d{2}-\d{2})$/);
+            const fyMatch = middle.match(/^(.*?)(-\d{2}\/\d{2}|-\d{4}\/\d{2}|-\d{2}-\d{2}|-\d{2})$/);
             if (fyMatch) {
                 middle = fyMatch[1];
             } else {
@@ -43,22 +64,29 @@ function extractNumericPart(value, setting) {
 
 async function getEffectiveSetting({ db, outlet_id, module, date }) {
     const docDate = normalizeDate(date);
-    if (!docDate) {
-        throw new Error('Invalid date');
-    }
 
     const settings = await db.models.numbering_settings.findAll({
-        where: { outlet_id, module },
+        where: { outlet_id: Number(outlet_id), module: String(module).trim().toUpperCase() },
         order: [['start_date', 'DESC']]
     });
 
-    const effective = settings.find(setting => docDate >= new Date(setting.start_date));
+    if (!settings || settings.length === 0) {
+        return null;
+    }
+
+    const docDateStr = docDate.toISOString().substring(0, 10);
+
+    const effective = settings.find(setting => {
+        const startDateStr = String(setting.start_date || '').substring(0, 10);
+        return docDateStr >= startDateStr;
+    }) || settings[0];
+
     if (!effective) {
         return null;
     }
 
     const nextSetting = settings
-        .filter(setting => new Date(setting.start_date) > new Date(effective.start_date))
+        .filter(setting => String(setting.start_date || '').substring(0, 10) > String(effective.start_date || '').substring(0, 10))
         .sort((a, b) => new Date(a.start_date) - new Date(b.start_date))[0] || null;
 
     return { effective, nextSetting };
@@ -96,6 +124,10 @@ async function getExistingNumbersForModule({ req, module, outlet_id }) {
         case 'SALES':
             Model = req.propertyDb.models.sales_headers;
             numberField = 'sale_no';
+            break;
+        case 'TOKEN':
+            Model = req.propertyDb.models.sales_headers;
+            numberField = 'token_no';
             break;
         default:
             throw new Error(`Unsupported module ${module}`);
@@ -198,6 +230,7 @@ exports.saveSettings = async (req, res) => {
             const prefixRaw = String(row?.prefix || '').trim();
 
             const conflictWhere = {
+                outlet_id: outlet_id,
                 [Op.and]: [
                     req.propertyDb.where(
                         req.propertyDb.fn('UPPER', req.propertyDb.fn('TRIM', req.propertyDb.col('prefix'))),

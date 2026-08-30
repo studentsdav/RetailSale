@@ -29,6 +29,8 @@ class SaleItem {
   final double? originalRate;
   final double? schemeDiscountPerUnit;
   final double mrp;
+  final String? location;
+  final String? notes;
 
   SaleItem({
     required this.itemId,
@@ -59,6 +61,8 @@ class SaleItem {
     this.originalRate,
     this.schemeDiscountPerUnit,
     this.mrp = 0.0,
+    this.location,
+    this.notes,
   })  : originalQty = originalQty ?? qty,
         referenceRate = referenceRate ?? rate,
         taxableAmount = taxableAmount ?? ((qty * rate) - lineDiscount),
@@ -92,6 +96,8 @@ class SaleItem {
     double? originalRate,
     double? schemeDiscountPerUnit,
     double? mrp,
+    String? location,
+    String? notes,
   }) {
     return SaleItem(
       itemId: itemId,
@@ -122,6 +128,8 @@ class SaleItem {
       originalRate: originalRate ?? this.originalRate,
       schemeDiscountPerUnit: schemeDiscountPerUnit ?? this.schemeDiscountPerUnit,
       mrp: mrp ?? this.mrp,
+      location: location ?? this.location,
+      notes: notes ?? this.notes,
     );
   }
 
@@ -157,6 +165,8 @@ class SaleItem {
       'original_rate': originalRate,
       'scheme_discount_per_unit': schemeDiscountPerUnit,
       'mrp': mrp,
+      'location': location,
+      'notes': notes,
     };
   }
 
@@ -218,6 +228,8 @@ class SaleItem {
       originalRate: json['original_rate'] != null ? parseNum(json['original_rate']) : null,
       schemeDiscountPerUnit: json['scheme_discount_per_unit'] != null ? parseNum(json['scheme_discount_per_unit']) : null,
       mrp: json['mrp'] != null ? parseNum(json['mrp']) : (json['item'] is Map ? parseNum(json['item']['mrp']) : 0.0),
+      location: json['location']?.toString() ?? (json['item'] is Map ? json['item']['location']?.toString() : null),
+      notes: json['notes']?.toString() ?? json['remarks']?.toString() ?? json['item_notes']?.toString(),
     );
   }
 }

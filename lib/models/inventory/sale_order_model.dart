@@ -77,6 +77,7 @@ class SaleOrder {
   final int? salesmanId;
   final int? tableId;
   final List<int>? kotIds;
+  final String? tokenNo;
 
   SaleOrder({
     required this.saleNo,
@@ -150,6 +151,7 @@ class SaleOrder {
     this.salesmanId,
     this.tableId,
     this.kotIds,
+    this.tokenNo,
   });
 
   SaleOrder copyWith({
@@ -222,6 +224,7 @@ class SaleOrder {
     int? salesmanId,
     int? tableId,
     List<int>? kotIds,
+    String? tokenNo,
   }) {
     return SaleOrder(
       saleNo: saleNo ?? this.saleNo,
@@ -293,6 +296,7 @@ class SaleOrder {
       salesmanId: salesmanId ?? this.salesmanId,
       tableId: tableId ?? this.tableId,
       kotIds: kotIds ?? this.kotIds,
+      tokenNo: tokenNo ?? this.tokenNo,
     );
   }
 
@@ -362,6 +366,7 @@ class SaleOrder {
         'items_pre_split': itemsPreSplit,
         'lucky_draw_vouchers': luckyDrawVouchers,
         'salesman_id': salesmanId,
+        'token_no': tokenNo,
       },
       'items': items.map((e) => e.toJson()).toList(),
       if (tableId != null) 'table_id': tableId,
@@ -525,6 +530,7 @@ class SaleOrder {
       itemsPreSplit: json['items_pre_split'] == true,
       luckyDrawVouchers: json['lucky_draw_vouchers'] as List?,
       salesmanId: json['salesman_id'] != null ? int.tryParse(json['salesman_id'].toString()) : null,
+      tokenNo: json['token_no']?.toString() ?? json['tokenNo']?.toString(),
       items: (json['items'] as List? ?? const [])
           .map((entry) => SaleItem.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),

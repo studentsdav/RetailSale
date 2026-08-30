@@ -13,8 +13,11 @@ import '../../core/theme/app_theme.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../models/auth/permission_service.dart';
 import '../../models/inventory/billing_charge_model.dart';
+import '../../models/inventory/settings/system_settings_model.dart';
 import '../../models/settings/app_branding_model.dart';
+import '../../core/printing/device_printer_routing.dart';
 import '../../controllers/sales/sales_controller.dart';
+import 'document_sequence_screen.dart';
 import 'commission_rules_screen.dart';
 import 'happy_hour_config_screen.dart';
 import 'bill_value_promo_config_screen.dart';
@@ -32,6 +35,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  String _currentMachineId = LocalPreferences.getSystemHardwareId();
   static const _taxModes = [
     'CGST_SGST',
     'IGST',
@@ -94,13 +98,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadLocalPreferences() async {
     final showNotifications = await LocalPreferences.getShowNotifications();
+    final machineId = await LocalPreferences.getMachineId();
     final userMap = await TokenStorage.getUser();
     final mod = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
     if (!mounted) return;
     setState(() {
       _showNotifications = showNotifications;
       _currentActiveModule = mod;
+      _currentMachineId = machineId;
     });
+  }
+
+  String getMachineBillPrinter(SystemSettings s, String machineId) {
+    final mKey = machineId.trim().toUpperCase();
+    final machineData = s.devicePrinterMappings[mKey] is Map
+        ? s.devicePrinterMappings[mKey]
+        : s.devicePrinterMappings['DEFAULT'];
+    if (machineData is Map) {
+      return (machineData['bill_printer'] ?? '').toString();
+    }
+    return '';
+  }
+
+  void setMachineBillPrinter(SystemSettings s, String machineId, String printerName) {
+    final mKey = machineId.trim().toUpperCase();
+    final current = s.devicePrinterMappings[mKey] is Map
+        ? Map<String, dynamic>.from(s.devicePrinterMappings[mKey])
+        : <String, dynamic>{};
+    current['bill_printer'] = printerName;
+    s.devicePrinterMappings[mKey] = current;
+  }
+
+  String getMachineTokenPrinter(SystemSettings s, String machineId, String station) {
+    final mKey = machineId.trim().toUpperCase();
+    final machineData = s.devicePrinterMappings[mKey] is Map
+        ? s.devicePrinterMappings[mKey]
+        : s.devicePrinterMappings['DEFAULT'];
+    if (machineData is Map && machineData['tokens'] is Map) {
+      final tokensMap = Map<String, dynamic>.from(machineData['tokens']);
+      return (tokensMap[station] ?? '').toString();
+    }
+    return '';
+  }
+
+  void setMachineTokenPrinter(SystemSettings s, String machineId, String station, String printerName) {
+    final mKey = machineId.trim().toUpperCase();
+    final currentMachine = s.devicePrinterMappings[mKey] is Map
+        ? Map<String, dynamic>.from(s.devicePrinterMappings[mKey])
+        : <String, dynamic>{};
+    final currentTokens = currentMachine['tokens'] is Map
+        ? Map<String, dynamic>.from(currentMachine['tokens'])
+        : <String, dynamic>{};
+    currentTokens[station] = printerName;
+    currentMachine['tokens'] = currentTokens;
+    s.devicePrinterMappings[mKey] = currentMachine;
   }
 
   Future<void> _openFavoritesManager() async {
@@ -1246,6 +1297,148 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                  _customSection(
+                    'Device Identity & Machine Printer Routing',
+                    'Configure Machine ID and per-device bill printer mapping for multi-terminal food court / retail setups.',
+                    [
+                      _settingRow(
+                        title: 'This Machine / Terminal ID',
+                        description: 'Auto-detected Hardware Device ID: ${LocalPreferences.getSystemHardwareId()}. Select active terminal ID for this device.',
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: DevicePrinterRouting.getKnownMachineIds(s).contains(_currentMachineId)
+                                ? _currentMachineId
+                                : DevicePrinterRouting.getKnownMachineIds(s).first,
+                            decoration: const InputDecoration(
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            items: DevicePrinterRouting.getKnownMachineIds(s)
+                                .map((m) => DropdownMenuItem(
+                                      value: m,
+                                      child: Text(m == LocalPreferences.getSystemHardwareId() ? '$m (This Device)' : m),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v != null && v.isNotEmpty) {
+                                setState(() {
+                                  _currentMachineId = v;
+                                });
+                                LocalPreferences.setMachineId(v);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Bill Printer for $_currentMachineId',
+                        description: 'Specific printer assigned to print customer checkout invoices from this machine',
+                        isLast: true,
+                        control: SizedBox(
+                          width: 280,
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: _printers.any((p) => p.name == DevicePrinterRouting.getBillPrinter(s, _currentMachineId))
+                                ? DevicePrinterRouting.getBillPrinter(s, _currentMachineId)
+                                : null,
+                            decoration: const InputDecoration(
+                              hintText: 'Use Outlet Default',
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: '', child: Text('Use Outlet Default')),
+                              ..._printers.map((printer) => DropdownMenuItem(
+                                    value: printer.name,
+                                    child: Text(printer.name, overflow: TextOverflow.ellipsis),
+                                  )),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                DevicePrinterRouting.setBillPrinter(s, _currentMachineId, val ?? '');
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Token System (Sweet Shop / Food Court Case)',
+                    'Generate sequential Token Numbers on bills and print station token slips per counter.',
+                    [
+                      _settingRow(
+                        title: 'Enable Token System',
+                        description: 'Automatically allocate Token Numbers (e.g. TK-101) on checkout and print token slips',
+                        control: Switch.adaptive(
+                          value: s.enableTokenSystem,
+                          onChanged: (v) => setState(() => s.enableTokenSystem = v),
+                        ),
+                      ),
+                      if (s.enableTokenSystem) ...[
+                        _settingRow(
+                          title: 'Token Slip Copy Count',
+                          description: 'Default token slips printed for pickup counters if not overridden in station routing (1, 2, 3...)',
+                          control: SizedBox(
+                            width: 280,
+                            child: DropdownButtonFormField<int>(
+                              value: s.tokenCopiesCount,
+                              items: List.generate(5, (i) => i + 1)
+                                  .map((val) => DropdownMenuItem(
+                                        value: val,
+                                        child: Text('$val Cop${val > 1 ? "ies" : "y"}'),
+                                      ))
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => s.tokenCopiesCount = val);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        _settingRow(
+                          title: 'Configure Token Sequence',
+                          description: 'Set Token number prefixes, start numbers, and daily reset rules',
+                          control: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0D9488),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const DocumentSequenceScreen()),
+                            ),
+                            icon: const Icon(Icons.numbers, size: 16),
+                            label: const Text('Configure Token Sequence'),
+                          ),
+                        ),
+                        _settingRow(
+                          title: 'Station Token Printer Routing',
+                          description: 'Map physical printers & copy counts for Item Master locations dynamically per machine',
+                          isLast: true,
+                          control: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0B5CAD),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () => DevicePrinterRouting.showRoutingDialog(
+                              context: context,
+                              settings: s,
+                              sectionKey: 'tokens',
+                              title: 'Station Token Printer Routing',
+                              currentMachineId: _currentMachineId,
+                              onSaved: () => setState(() {}),
+                            ),
+                            icon: const Icon(Icons.print, size: 16),
+                            label: const Text('Map Token Station Printers'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   _customSection(
@@ -2562,6 +2755,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shortcutRow('Delete', 'Remove the currently selected/highlighted cart line item (or last item if none selected)'),
         shortcutRow('Escape', 'Close checkout popup / Clear barcode scanner input'),
       ],
+    );
+  }
+
+  void _showTokenStationPrinterMappingDialog(BuildContext context, SystemSettings s) {
+    final stations = [
+      'Sweets Counter',
+      'Chaat Counter',
+      'Bakery & Cakes',
+      'Beverages & Juice Bar',
+      'Snacks & Fast Food',
+      'General Counter',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.print_rounded, color: Color(0xFF0B5CAD)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Station Token Printer Routing ($_currentMachineId)',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 520,
+                height: 400,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Assign physical printers to item station locations (Item Master Location) when printing token slips from machine $_currentMachineId:',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: stations.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                        itemBuilder: (context, index) {
+                          final station = stations[index];
+                          final currentPrinter = getMachineTokenPrinter(s, _currentMachineId, station);
+                          final selectedVal = _printers.any((p) => p.name == currentPrinter) ? currentPrinter : '';
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        station,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                      const Text(
+                                        'Item Master Location',
+                                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 3,
+                                  child: DropdownButtonFormField<String>(
+                                    isExpanded: true,
+                                    value: selectedVal.isNotEmpty ? selectedVal : null,
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      hintText: 'Default Printer',
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem(value: '', child: Text('Default Printer')),
+                                      ..._printers.map(
+                                        (printer) => DropdownMenuItem(
+                                          value: printer.name,
+                                          child: Text(printer.name, overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ),
+                                    ],
+                                    onChanged: (val) {
+                                      setDialogState(() {
+                                        setMachineTokenPrinter(s, _currentMachineId, station, val ?? '');
+                                      });
+                                      setState(() {});
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Done & Close', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

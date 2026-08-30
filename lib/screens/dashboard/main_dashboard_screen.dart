@@ -60,6 +60,7 @@ import '../inventory/approval_center_screen.dart';
 import '../inventory/submitted_status_screen.dart';
 import '../settings/property_info_screen.dart';
 import '../settings/outlet_detail_modification_screen.dart';
+import '../settings/outlet_setup_checklist_screen.dart';
 import 'customer_app_screen.dart';
 import 'lynx_feature_testing_screen.dart';
 import 'autonomous_agent_screen.dart';
@@ -1356,90 +1357,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           ),
         ],
       ),
-      body: property == null
-          ? Center(
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 450),
-                padding: const EdgeInsets.all(40.0),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.storefront_outlined,
-                          size: 56, color: Colors.blue.shade700),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      "Business Profile Incomplete",
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "Your property details have not been configured yet. Please update your business information to ensure invoices and reports are generated correctly.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.black54,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => const PropertyInfoScreen(
-                                        outletid: 0,
-                                      )));
-                        },
-                        icon: const Icon(Icons.edit_document),
-                        label: const Text(
-                          "Update Property Info",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        style: FilledButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: SingleChildScrollView(
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
                 child: Column(
                   children: [
                     Consumer<NightAuditController>(
@@ -2484,6 +2404,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.checklist_rounded,
+        'label': 'Store Setup Checklist & Guide',
+        'permission': 'PROPERTY_INFORMATION',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OutletSetupChecklistScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
         'icon': Icons.business_outlined,
         'label': 'Property Information',
         'permission': 'PROPERTY_INFORMATION',
@@ -2907,6 +2834,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       */
 
       // System
+      /*
       {
         'category': 'System',
         'icon': Icons.science_rounded,
@@ -2914,6 +2842,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'isNew': true,
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LynxFeatureTestingScreen())),
       },
+      */
       {
         'category': 'System',
         'icon': Icons.help_outline,

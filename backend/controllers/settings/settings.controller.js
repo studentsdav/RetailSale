@@ -174,12 +174,24 @@ exports.getSettings = async (req, res) => {
                     sub_delivery_free_above: 0.0,
                     enable_salesperson_tagging: false,
                     bill_copies_count: 1,
-                    show_brand_name: true
+                    show_brand_name: true,
+                    enable_token_system: false,
+                    token_copies_count: 1,
+                    device_printer_mappings: {}
                 }
             });
         }
 
-        res.json({ success: true, data: settings });
+        let settingsData = settings.toJSON ? settings.toJSON() : settings;
+        if (typeof settingsData.device_printer_mappings === 'string') {
+            try {
+                settingsData.device_printer_mappings = JSON.parse(settingsData.device_printer_mappings);
+            } catch (e) {
+                settingsData.device_printer_mappings = {};
+            }
+        }
+
+        res.json({ success: true, data: settingsData });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -200,6 +212,15 @@ exports.saveSettings = async (req, res) => {
         });
 
         const oldData = existing ? existing.toJSON() : null;
+
+        let rawMappings = req.body.device_printer_mappings;
+        if (typeof rawMappings === 'string') {
+            try {
+                rawMappings = JSON.parse(rawMappings);
+            } catch (e) {
+                rawMappings = null;
+            }
+        }
 
         const payload = {
             outlet_id,
@@ -236,7 +257,12 @@ exports.saveSettings = async (req, res) => {
             sub_delivery_free_above: req.body.sub_delivery_free_above ?? 0.0,
             enable_salesperson_tagging: req.body.enable_salesperson_tagging ?? false,
             bill_copies_count: req.body.bill_copies_count ?? 1,
-            show_brand_name: req.body.show_brand_name ?? true
+            show_brand_name: req.body.show_brand_name ?? true,
+            enable_token_system: req.body.enable_token_system ?? false,
+            token_copies_count: req.body.token_copies_count ?? 1,
+            device_printer_mappings: (rawMappings && typeof rawMappings === 'object' && Object.keys(rawMappings).length > 0)
+                ? rawMappings
+                : (existing?.device_printer_mappings || {})
         };
 
         let record;
@@ -260,7 +286,7 @@ exports.saveSettings = async (req, res) => {
 
 
         await t.commit();
-        res.json({ success: true, message: 'Settings saved successfully' });
+        res.json({ success: true, message: 'Settings saved successfully', data: record });
 
     } catch (err) {
         await t.rollback();

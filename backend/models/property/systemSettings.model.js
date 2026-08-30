@@ -138,6 +138,18 @@ module.exports = (sequelize, DataTypes) => {
         show_brand_name: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
+        },
+        enable_token_system: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        token_copies_count: {
+            type: DataTypes.INTEGER,
+            defaultValue: 1
+        },
+        device_printer_mappings: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
         }
     }, {
         tableName: 'system_settings',

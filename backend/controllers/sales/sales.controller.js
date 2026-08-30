@@ -3024,6 +3024,7 @@ async function createSaleVersion({
         outlet_id,
         sale_no: header.sale_no,
         sale_date: header.sale_date,
+        token_no: header.token_no || null,
         customer_name: normalizedIdentity.customer_name || null,
         customer_phone: normalizedIdentity.customer_phone || null,
         order_type: header.order_type || header.orderType || 'STORE',
@@ -3537,6 +3538,47 @@ exports.createSale = async (req, res) => {
         const hasSchemeFreeRows = splitItems.free.some((row) => row.is_scheme_free === true && !(row._subscription_free === true || row.is_advance_free === true));
         const paidSaleNo = String(headerForCreate.sale_no || '').trim();
         const freeSaleNo = splitItems.paid.length > 0 ? incrementSaleNo(paidSaleNo) : paidSaleNo;
+
+        const reqEnableToken = req.body.enable_token_system || req.body.header?.enable_token_system;
+        let isTokenEnabled = reqEnableToken === true || reqEnableToken === 'true' || reqEnableToken === 1;
+
+        if (!isTokenEnabled) {
+            try {
+                const sysSettings = await req.propertyDb.models.system_settings.findOne({
+                    where: { outlet_id: req.user.outlet_id },
+                    transaction: t
+                });
+                if (sysSettings) {
+                    const rawFlag = sysSettings.enable_token_system ?? sysSettings.enableTokenSystem;
+                    isTokenEnabled = rawFlag === true || rawFlag === 'true' || rawFlag === 1 || rawFlag == '1';
+                }
+            } catch (tErr) {}
+        }
+
+        if (!headerForCreate.token_no) {
+            try {
+                const tokenRes = await numberingHelper.resolveNextNumber({
+                    req,
+                    module: 'TOKEN',
+                    date: headerForCreate.sale_date || new Date(),
+                    outlet_id: req.user.outlet_id
+                });
+                if (tokenRes && tokenRes.number) {
+                    headerForCreate.token_no = tokenRes.number;
+                } else {
+                    const tokenCount = await req.propertyDb.models.sales_headers.count({
+                        where: { outlet_id: req.user.outlet_id },
+                        transaction: t
+                    });
+                    const num = String(tokenCount + 1).padStart(3, '0');
+                    headerForCreate.token_no = `TK-${num}`;
+                }
+            } catch (tErr) {
+                const rnd = Math.floor(100 + Math.random() * 900);
+                headerForCreate.token_no = `TK-${rnd}`;
+            }
+        }
+
         const buildBillHeader = (saleNo, extra = {}) => ({
             ...headerForCreate,
             sale_no: saleNo,
@@ -3996,11 +4038,13 @@ exports.createSale = async (req, res) => {
         res.json({
             success: true,
             sale_id: referenceSale.id,
+            token_no: referenceSale.token_no || primarySale?.token_no || null,
             sale_ids: createdSales.map((sale) => sale.id),
             sale_nos: createdSales.map((sale) => sale.sale_no),
             data: {
                 primary_sale_id: primarySale?.id || null,
                 primary_sale_no: primarySale?.sale_no || null,
+                token_no: referenceSale.token_no || primarySale?.token_no || null,
                 free_sale_id: freeSale?.id || null,
                 free_sale_no: freeSale?.sale_no || null,
                 sale_ids: createdSales.map((sale) => sale.id),

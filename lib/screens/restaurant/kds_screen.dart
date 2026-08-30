@@ -77,11 +77,12 @@ class _KdsScreenState extends State<KdsScreen> {
     }
   }
 
-  Future<void> _updateKotStatus(int id, String status, {bool? kdsDismissed}) async {
+  Future<void> _updateKotStatus(int id, String status, {bool? kdsDismissed, String? location}) async {
     try {
       final payload = {
         'status': status,
         if (kdsDismissed != null) 'kds_dismissed': kdsDismissed,
+        if (location != null && location.isNotEmpty && location != 'All') 'location': location,
       };
       final res = await ApiClient.put('/api/restaurant/kots/$id/status', payload);
       if (res['success'] == true) {
@@ -89,6 +90,28 @@ class _KdsScreenState extends State<KdsScreen> {
       }
     } catch (e) {
       debugPrint('Error updating KOT: $e');
+    }
+  }
+
+  Future<void> _toggleItemStatus(int itemId, String currentStatus) async {
+    String nextStatus = 'Ready';
+    final s = currentStatus.trim().toLowerCase();
+    if (s == 'new' || s == 'pending' || s == 'preparing') {
+      nextStatus = 'Ready';
+    } else if (s == 'ready') {
+      nextStatus = 'Served';
+    } else if (s == 'served') {
+      nextStatus = 'Preparing';
+    }
+    try {
+      final res = await ApiClient.put('/api/restaurant/kots/items/$itemId/status', {
+        'status': nextStatus,
+      });
+      if (res['success'] == true) {
+        _fetchKots();
+      }
+    } catch (e) {
+      debugPrint('Error toggling item status: $e');
     }
   }
 
@@ -200,6 +223,46 @@ class _KdsScreenState extends State<KdsScreen> {
     return q.toStringAsFixed(2);
   }
 
+  String _getItemLocation(dynamic item) {
+    if (item is! Map) return 'Main Kitchen';
+    String loc = (item['station']?['station_name'] ??
+            item['station_name'] ??
+            item['location'] ??
+            item['item_location'] ??
+            item['kitchen_location'] ??
+            item['item']?['location'] ??
+            (item['item'] is Map ? item['item']['location'] ?? item['item']['kitchen_location'] : null) ??
+            '')
+        .toString()
+        .trim();
+
+    if (loc.isEmpty) {
+      loc = (item['item_group'] ??
+              item['category'] ??
+              item['item']?['item_group'] ??
+              item['item']?['category'] ??
+              (item['item'] is Map ? item['item']['item_group'] ?? item['item']['category'] : null) ??
+              '')
+          .toString()
+          .trim();
+    }
+
+    return loc.isEmpty ? 'Main Kitchen' : loc;
+  }
+
+  String _getItemBrand(dynamic item) {
+    if (item is! Map) return '';
+    String brand = (item['brand'] ??
+            item['brand_name'] ??
+            item['item_brand'] ??
+            item['item']?['brand'] ??
+            (item['item'] is Map ? item['item']['brand'] : null) ??
+            '')
+        .toString()
+        .trim();
+    return brand;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -210,7 +273,7 @@ class _KdsScreenState extends State<KdsScreen> {
     for (final kot in activeKotsList) {
       final items = (kot['items'] as List?) ?? [];
       for (final item in items) {
-        final loc = (item['location'] ?? (item['station'] != null ? item['station']['station_name'] : null) ?? (item['item'] != null ? item['item']['location'] : null) ?? '-').toString().trim();
+        final loc = _getItemLocation(item);
         if (loc.isNotEmpty) locations.add(loc);
       }
     }
@@ -220,8 +283,19 @@ class _KdsScreenState extends State<KdsScreen> {
       if (selectedLocationFilter == 'All') return true;
       final items = (kot['items'] as List?) ?? [];
       return items.any((it) {
-        final loc = (it['location'] ?? (it['station'] != null ? it['station']['station_name'] : null) ?? (it['item'] != null ? it['item']['location'] : null) ?? '-').toString().trim();
-        return loc.toLowerCase() == selectedLocationFilter.toLowerCase();
+        final loc = _getItemLocation(it);
+        final bool matchesLoc = loc.toLowerCase() == selectedLocationFilter.toLowerCase() ||
+            loc.toLowerCase().contains(selectedLocationFilter.toLowerCase()) ||
+            selectedLocationFilter.toLowerCase().contains(loc.toLowerCase());
+
+        if (!matchesLoc) return false;
+
+        if (!_showServedOrders) {
+          final String itemSt = (it['status'] ?? 'New').toString().trim().toLowerCase();
+          if (itemSt == 'served') return false;
+        }
+
+        return true;
       });
     }).toList();
 
@@ -368,8 +442,10 @@ class _KdsScreenState extends State<KdsScreen> {
                               final List displayItems = selectedLocationFilter == 'All'
                                   ? allKotItems
                                   : allKotItems.where((it) {
-                                      final loc = (it['location'] ?? it['station_name'] ?? it['kitchen_station'] ?? 'Kitchen').toString().trim();
-                                      return loc.toLowerCase() == selectedLocationFilter.toLowerCase();
+                                      final loc = _getItemLocation(it);
+                                      return loc.toLowerCase() == selectedLocationFilter.toLowerCase() ||
+                                          loc.toLowerCase().contains(selectedLocationFilter.toLowerCase()) ||
+                                          selectedLocationFilter.toLowerCase().contains(loc.toLowerCase());
                                     }).toList();
 
                               return Card(
@@ -448,7 +524,8 @@ class _KdsScreenState extends State<KdsScreen> {
                                           final item = displayItems[iIdx];
                                           final isCancelled = item['status'] == 'Cancelled' || item['status'] == 'Rejected';
                                           final isNewItem = item['status'] == 'New';
-                                          final String itemLoc = (item['location'] ?? (item['station'] != null ? item['station']['station_name'] : null) ?? (item['item'] != null ? item['item']['location'] : null) ?? '-').toString();
+                                          final String itemLoc = _getItemLocation(item);
+                                          final String itemBrand = _getItemBrand(item);
 
                                           // Calculate quantity changes from revision logs
                                           String? qtyChangeMessage;
@@ -506,13 +583,27 @@ class _KdsScreenState extends State<KdsScreen> {
                                                     Row(
                                                       children: [
                                                         Expanded(
-                                                          child: Text(
-                                                            item['item_name'] ?? '',
-                                                            style: TextStyle(
-                                                              fontWeight: FontWeight.w600,
-                                                              fontSize: 14,
-                                                              decoration: isCancelled ? TextDecoration.lineThrough : null,
-                                                              color: isCancelled ? Colors.red : null,
+                                                          child: Text.rich(
+                                                            TextSpan(
+                                                              text: item['item_name'] ?? '',
+                                                              style: TextStyle(
+                                                                fontWeight: FontWeight.w600,
+                                                                fontSize: 14,
+                                                                decoration: isCancelled ? TextDecoration.lineThrough : null,
+                                                                color: isCancelled ? Colors.red : null,
+                                                              ),
+                                                              children: [
+                                                                if (itemBrand.isNotEmpty)
+                                                                  TextSpan(
+                                                                    text: ' ($itemBrand)',
+                                                                    style: TextStyle(
+                                                                      fontWeight: FontWeight.bold,
+                                                                      color: Colors.indigo.shade700,
+                                                                      fontSize: 13,
+                                                                      decoration: TextDecoration.none,
+                                                                    ),
+                                                                  ),
+                                                              ],
                                                             ),
                                                           ),
                                                         ),
@@ -563,9 +654,9 @@ class _KdsScreenState extends State<KdsScreen> {
                                                   constraints: const BoxConstraints(),
                                                   onPressed: () => _cancelKotItemDialog(item['id'], item['item_name']),
                                                 ),
-                                              const SizedBox(width: 6),
+                                              const SizedBox(width: 4),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                                 decoration: BoxDecoration(
                                                   color: Colors.blue.shade50,
                                                   borderRadius: BorderRadius.circular(4),
@@ -573,18 +664,91 @@ class _KdsScreenState extends State<KdsScreen> {
                                                 ),
                                                 child: Text(
                                                   itemLoc,
-                                                  style: TextStyle(color: Colors.blue.shade800, fontSize: 9.5, fontWeight: FontWeight.bold),
+                                                  style: TextStyle(color: Colors.blue.shade800, fontSize: 9, fontWeight: FontWeight.bold),
                                                 ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Builder(
+                                                builder: (context) {
+                                                  final String st = (item['status'] ?? 'New').toString().trim().toLowerCase();
+                                                  final bool isItServed = st == 'served';
+                                                  final bool isItReady = st == 'ready';
+                                                  return InkWell(
+                                                    onTap: isCancelled ? null : () => _toggleItemStatus(item['id'], st),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: isItServed
+                                                            ? Colors.teal.shade50
+                                                            : (isItReady ? Colors.green.shade50 : Colors.orange.shade50),
+                                                        borderRadius: BorderRadius.circular(4),
+                                                        border: Border.all(
+                                                          color: isItServed
+                                                              ? Colors.teal.shade300
+                                                              : (isItReady ? Colors.green.shade300 : Colors.orange.shade300),
+                                                          width: 0.8,
+                                                        ),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Icon(
+                                                            isItServed ? Icons.check_circle : (isItReady ? Icons.task_alt : Icons.hourglass_top),
+                                                            size: 10,
+                                                            color: isItServed ? Colors.teal.shade800 : (isItReady ? Colors.green.shade800 : Colors.orange.shade800),
+                                                          ),
+                                                          const SizedBox(width: 2),
+                                                          Text(
+                                                            isItServed ? 'Served' : (isItReady ? 'Ready' : 'Pending'),
+                                                            style: TextStyle(
+                                                              color: isItServed ? Colors.teal.shade800 : (isItReady ? Colors.green.shade800 : Colors.orange.shade800),
+                                                              fontSize: 9,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
                                               ),
                                             ],
                                           );
                                         },
                                       ),
                                     ),
-                                    // Action Bar
+                                     // Action Bar
                                      Builder(
                                        builder: (context) {
-                                         final bool isServed = kot['status'] == 'Served' || kot['status'] == 'SERVED';
+                                         final String stationStatus = (() {
+                                           if (displayItems.isEmpty) return 'New';
+                                           final nonCancelled = displayItems.where((it) {
+                                             final s = (it['status'] ?? '').toString().toLowerCase();
+                                             return s != 'cancelled' && s != 'rejected';
+                                           }).toList();
+                                           if (nonCancelled.isEmpty) return 'Cancelled';
+
+                                           final allServed = nonCancelled.every((it) => (it['status'] ?? '').toString().toLowerCase() == 'served');
+                                           if (allServed) return 'Served';
+
+                                           final allReadyOrServed = nonCancelled.every((it) {
+                                             final s = (it['status'] ?? '').toString().toLowerCase();
+                                             return s == 'ready' || s == 'served';
+                                           });
+                                           if (allReadyOrServed) return 'Ready';
+
+                                           final anyPreparingOrReady = nonCancelled.any((it) {
+                                             final s = (it['status'] ?? '').toString().toLowerCase();
+                                             return s == 'preparing' || s == 'ready' || s == 'served';
+                                           });
+                                           if (anyPreparingOrReady) return 'Preparing';
+
+                                           return 'New';
+                                         })();
+
+                                         final bool isServed = stationStatus == 'Served';
+                                         final bool isKotCancelled = stationStatus == 'Cancelled';
                                          return Container(
                                            padding: const EdgeInsets.all(8),
                                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
@@ -620,37 +784,46 @@ class _KdsScreenState extends State<KdsScreen> {
                                                  Expanded(
                                                    child: ElevatedButton.icon(
                                                      style: ElevatedButton.styleFrom(
-                                                       backgroundColor: kot['status'] == 'Ready' ? Colors.green.shade700 : Colors.orange.shade700,
+                                                       backgroundColor: stationStatus == 'Ready' ? Colors.green.shade700 : Colors.orange.shade700,
                                                        foregroundColor: Colors.white,
                                                      ),
                                                      onPressed: () => _updateKotStatus(
                                                        kot['id'],
-                                                       kot['status'] == 'Ready' ? 'Served' : 'Ready',
+                                                       stationStatus == 'Ready' ? 'Served' : 'Ready',
+                                                       location: selectedLocationFilter,
                                                      ),
-                                                     icon: Icon(kot['status'] == 'Ready' ? Icons.check_circle_outline : Icons.check, size: 16),
-                                                     label: Text(kot['status'] == 'Ready' ? 'Mark Served' : 'Mark Ready'),
+                                                     icon: Icon(stationStatus == 'Ready' ? Icons.check_circle_outline : Icons.check, size: 16),
+                                                     label: Text(stationStatus == 'Ready' ? 'Mark Served' : 'Mark Ready'),
                                                    ),
                                                  ),
-                                               if (!_oneOptionMode && !isKotCancelled && !isServed && kot['status'] != 'Preparing' && kot['status'] != 'Ready')
+                                               if (!_oneOptionMode && !isKotCancelled && !isServed && stationStatus != 'Preparing' && stationStatus != 'Ready')
                                                  Expanded(
                                                    child: ElevatedButton.icon(
                                                      style: ElevatedButton.styleFrom(
                                                        backgroundColor: Colors.blue.shade700,
                                                        foregroundColor: Colors.white,
                                                      ),
-                                                     onPressed: () => _updateKotStatus(kot['id'], 'Preparing'),
+                                                     onPressed: () => _updateKotStatus(
+                                                       kot['id'], 
+                                                       'Preparing',
+                                                       location: selectedLocationFilter,
+                                                     ),
                                                      icon: const Icon(Icons.restaurant, size: 16),
                                                      label: const Text('Preparing'),
                                                    ),
                                                  ),
-                                               if (!_oneOptionMode && !isKotCancelled && !isServed && kot['status'] == 'Preparing')
+                                               if (!_oneOptionMode && !isKotCancelled && !isServed && stationStatus == 'Preparing')
                                                  Expanded(
                                                    child: ElevatedButton.icon(
                                                      style: ElevatedButton.styleFrom(
                                                        backgroundColor: Colors.orange.shade700,
                                                        foregroundColor: Colors.white,
                                                      ),
-                                                     onPressed: () => _updateKotStatus(kot['id'], 'Ready'),
+                                                     onPressed: () => _updateKotStatus(
+                                                       kot['id'], 
+                                                       'Ready',
+                                                       location: selectedLocationFilter,
+                                                     ),
                                                      icon: const Icon(Icons.check, size: 16),
                                                      label: const Text('Mark Ready'),
                                                    ),
@@ -662,19 +835,28 @@ class _KdsScreenState extends State<KdsScreen> {
                                                        backgroundColor: Colors.grey.shade700,
                                                        foregroundColor: Colors.white,
                                                      ),
-                                                     onPressed: () => _updateKotStatus(kot['id'], kot['status'], kdsDismissed: true),
+                                                     onPressed: () => _updateKotStatus(
+                                                       kot['id'], 
+                                                       kot['status'], 
+                                                       kdsDismissed: true,
+                                                       location: selectedLocationFilter,
+                                                     ),
                                                      icon: const Icon(Icons.clear_all, size: 16),
                                                      label: Text(kot['status'] == 'Rejected' ? 'Dismiss Rejected' : 'Dismiss Cancelled'),
                                                    ),
                                                  ),
-                                               if (!_oneOptionMode && !isKotCancelled && !isServed && kot['status'] == 'Ready')
+                                               if (!_oneOptionMode && !isKotCancelled && !isServed && stationStatus == 'Ready')
                                                  Expanded(
                                                    child: ElevatedButton.icon(
                                                      style: ElevatedButton.styleFrom(
                                                        backgroundColor: Colors.green.shade700,
                                                        foregroundColor: Colors.white,
                                                      ),
-                                                     onPressed: () => _updateKotStatus(kot['id'], 'Served'),
+                                                     onPressed: () => _updateKotStatus(
+                                                       kot['id'], 
+                                                       'Served',
+                                                       location: selectedLocationFilter,
+                                                     ),
                                                      icon: const Icon(Icons.check_circle_outline, size: 16),
                                                      label: const Text('Mark Served'),
                                                    ),
@@ -683,7 +865,7 @@ class _KdsScreenState extends State<KdsScreen> {
                                            ),
                                          );
                                        },
-                                     )
+                                     ),
                                   ],
                                 ),
                               );

@@ -22,10 +22,12 @@ import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/settings/ui_preferences_controller.dart';
+import '../../core/settings/local_preferences.dart';
 import '../../core/billing/pos_billing_engine.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../core/printing/device_printer_routing.dart';
 import '../../core/printing/pdf_preview_dialog.dart';
 import '../../utils/branding_storage.dart';
 import '../../models/inventory/billing_charge_model.dart';
@@ -246,31 +248,38 @@ class _SaleScreenState extends State<SaleScreen> {
     try {
       _preloadedTableId = widget.preloadedTableId;
       _preloadedKotIds = widget.preloadedKotIds;
-      await ctrl.loadInitialData();
-      await propertyCtrl.load();
+
+      // Run independent initial HTTP requests in parallel for 10x faster screen launch
+      await Future.wait([
+        ctrl.loadInitialData().catchError((_) => null),
+        propertyCtrl.load().catchError((_) => null),
+        settingsCtrl.load().catchError((_) => null),
+        _loadCashierName().catchError((_) => null),
+        _loadSaleSettings().catchError((_) => null),
+        _fetchSalespersons().catchError((_) => null),
+        _fetchHappyHours().catchError((_) => null),
+        _fetchBillValuePromos().catchError((_) => null),
+      ]);
+
       // Pre-warm the PDF logo cache in the background so printing is instant
       if (propertyCtrl.data?.logoPath != null) {
         BrandingStorage.loadPdfLogo(propertyCtrl.data!.logoPath).catchError((_) => null);
       }
-      await settingsCtrl.load();
       // Load default printer in the background so printing is instant
       _resolveDefaultPrinter().then((printer) {
         _defaultPrinter = printer;
       }).catchError((_) => null);
-      await _loadCashierName();
-      await _loadSaleSettings();
-      await _fetchSalespersons();
-      await _fetchHappyHours();
-      await _fetchBillValuePromos();
-      _saleNo.text = await ctrl.getNextSaleNo();
+
+      try {
+        _saleNo.text = await ctrl.getNextSaleNo();
+      } catch (_) {}
+
       _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
       _applyBillingDefaults();
+
       if (widget.editSaleId != null) {
         _editingSaleId = widget.editSaleId;
         await _loadExistingSaleForEdit(widget.editSaleId!);
-      } else {
-        _saleNo.text = await ctrl.getNextSaleNo();
-        _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
       }
 
       if (widget.preloadedCustomerName != null && widget.preloadedCustomerName!.trim().isNotEmpty) {
@@ -613,7 +622,6 @@ class _SaleScreenState extends State<SaleScreen> {
     _categoryScrollController.dispose();
     _schemeSelectionScrollController.dispose();
     _schemeStripScrollController.dispose();
-    settingsCtrl.dispose();
     super.dispose();
   }
 
@@ -1897,6 +1905,7 @@ class _SaleScreenState extends State<SaleScreen> {
       schemeApplicable: seed?.schemeApplicable ?? item.schemeApplicable,
       brand: seed?.brand ?? item.brand,
       isTaxInclusive: item.isTaxInclusive,
+      location: seed?.location ?? (item.location.trim() != '-' ? item.location.trim() : null),
     );
   }
 
@@ -2181,11 +2190,15 @@ class _SaleScreenState extends State<SaleScreen> {
     _addOrUpdateItemDirect(item, qty: qty);
   }
 
+  bool get _isKotOrderLocked {
+    return _preloadedTableId != null || (_preloadedKotIds != null && _preloadedKotIds!.isNotEmpty);
+  }
+
   void _addOrUpdateItemDirect(Item item, {required double qty}) {
-    if (_preloadedTableId != null) {
+    if (_isKotOrderLocked) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Table order items and quantities are locked to KOTs. Modify items via KOT screen.'),
+          content: Text('Order items and quantities are locked to KOTs. Modify order via KOT screen.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -2397,10 +2410,10 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   void _updateLineQty(int index, double qty, {bool isTotalQty = false}) {
-    if (_preloadedTableId != null) {
+    if (_isKotOrderLocked) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Table order quantities are locked to KOTs. Modify order via KOT screen.'),
+          content: Text('Order quantities are locked to KOTs. Modify order via KOT screen.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -2495,10 +2508,10 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   void _removeCartItemGroupById(int itemId) {
-    if (_preloadedTableId != null) {
+    if (_isKotOrderLocked) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Table order items are locked to KOTs. Modify order via KOT screen.'),
+          content: Text('Order items are locked to KOTs. Modify order via KOT screen.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -6740,16 +6753,22 @@ class _SaleScreenState extends State<SaleScreen> {
             saveResponse?['data']?['sale_no'] ??
             saveResponse?['sale_no'] ??
             order.saleNo).toString();
+        final String primaryTokenNo = (saveResponse?['data']?['token_no'] ??
+            saveResponse?['token_no'] ??
+            order.tokenNo ??
+            '').toString();
         final printOrder = order.copyWith(
           saleNo: primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo,
+          tokenNo: primaryTokenNo.trim().isNotEmpty ? primaryTokenNo : order.tokenNo,
           status: status,
           hasBillNo: (primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo).isNotEmpty &&
               !primarySaleNo.toUpperCase().startsWith('DRAFT-'),
           orderId: targetPrintId,
         );
+
         _handlePrintAfterSave(
           printOrder,
-          preBuildPdfFuture: preBuildPdfFuture,
+          preBuildPdfFuture: null,
         ).catchError((e) {
           debugPrint('Printing error: $e');
         });
@@ -8509,21 +8528,28 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   Future<Printer?> _resolveDefaultPrinter() async {
-    if (_defaultPrinter != null) return _defaultPrinter;
     final settings = settingsCtrl.settings;
-    if (settings == null ||
-        (settings.defaultPrinterUrl.trim().isEmpty &&
-            settings.defaultPrinterName.trim().isEmpty)) {
-      return null;
-    }
+    if (settings == null) return null;
+
     try {
+      final machineId = await LocalPreferences.getMachineId();
+      final machineBillPrinter = DevicePrinterRouting.getBillPrinter(settings, machineId).trim();
+
+      final targetName = machineBillPrinter.isNotEmpty
+          ? machineBillPrinter
+          : settings.defaultPrinterName.trim();
+      final targetUrl = settings.defaultPrinterUrl.trim();
+
+      if (targetName.isEmpty && targetUrl.isEmpty) {
+        return null;
+      }
+
       final printers = await Printing.listPrinters();
       final printer = printers.cast<Printer?>().firstWhere(
-            (printer) =>
-                (settings.defaultPrinterUrl.trim().isNotEmpty &&
-                    printer?.url == settings.defaultPrinterUrl) ||
-                (settings.defaultPrinterName.trim().isNotEmpty &&
-                    printer?.name == settings.defaultPrinterName),
+            (p) =>
+                (targetName.isNotEmpty &&
+                    p?.name.trim().toLowerCase() == targetName.toLowerCase()) ||
+                (targetUrl.isNotEmpty && p?.url == targetUrl),
             orElse: () => null,
           );
       if (printer != null) {
@@ -8538,6 +8564,28 @@ class _SaleScreenState extends State<SaleScreen> {
   Future<void> _handlePrintAfterSave(SaleOrder order,
       {Future<Uint8List>? preBuildPdfFuture}) async {
     final settings = settingsCtrl.settings;
+
+    final bool isRestaurantOrder = order.tableId != null ||
+        (order.kotIds != null && order.kotIds!.isNotEmpty) ||
+        order.orderType.toUpperCase().contains('DINE') ||
+        order.orderType.toUpperCase().contains('TABLE') ||
+        order.orderType.toUpperCase().contains('RESTAURANT');
+
+    // Trigger Station Token Tickets printing only for Counter / Pickup sales when Token System is enabled
+    if (settings?.enableTokenSystem == true && !isRestaurantOrder) {
+      try {
+        final machineId = await LocalPreferences.getMachineId();
+        await PosInvoicePrinter.printTokenTickets(
+          order: order,
+          property: propertyCtrl.data,
+          settings: settings!,
+          currentMachineId: machineId,
+        );
+      } catch (tErr) {
+        debugPrint('Token printing error: $tErr');
+      }
+    }
+
     final printMode = settings?.printMode ?? 'PRINT_DIALOG';
 
     if (printMode == 'ASK_BEFORE_PRINT') {

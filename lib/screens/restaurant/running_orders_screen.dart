@@ -1,5 +1,12 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
+import '../../core/printing/device_printer_routing.dart';
+import '../../core/settings/local_preferences.dart';
 import '../inventory/salescreen.dart';
 import 'kot_builder_screen.dart';
 import '../../controllers/settings/system_settings_controller.dart';
@@ -174,23 +181,317 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
 
   Future<void> _reprintKot(Map<String, dynamic> kot) async {
     final String kotNo = (kot['kot_number'] ?? kot['kot_no'] ?? kot['id']).toString();
+    final items = kot['items'] as List? ?? [];
+    if (items.isEmpty) return;
+
     try {
+      final sysSettingsCtrl = Provider.of<SystemSettingsController>(context, listen: false);
+      final sysSettings = sysSettingsCtrl.currentSettings;
+      final currentMachineId = await LocalPreferences.getMachineId();
+
+      final allKotMappings = DevicePrinterRouting.getSectionMappings(sysSettings, 'kots');
+      final configuredLocs = allKotMappings
+          .map((m) => m.location.trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+
+      final Map<String, List<dynamic>> locationGroups = {};
+      for (final item in items) {
+        String rawLoc = (item['station']?['station_name'] ??
+                item['station_name'] ??
+                item['location'] ??
+                item['item_location'] ??
+                item['kitchen_location'] ??
+                item['item']?['location'] ??
+                (item['item'] is Map ? item['item']['location'] ?? item['item']['kitchen_location'] : null) ??
+                '')
+            .toString()
+            .trim();
+
+        if (rawLoc.isEmpty) {
+          rawLoc = (item['item_group'] ??
+                  item['category'] ??
+                  item['item']?['item_group'] ??
+                  item['item']?['category'] ??
+                  (item['item'] is Map ? item['item']['item_group'] ?? item['item']['category'] : null) ??
+                  '')
+              .toString()
+              .trim();
+        }
+
+        String targetStation = rawLoc;
+        if (rawLoc.isNotEmpty) {
+          for (final cLoc in configuredLocs) {
+            if (cLoc.toLowerCase() == rawLoc.toLowerCase() ||
+                rawLoc.toLowerCase().contains(cLoc.toLowerCase()) ||
+                cLoc.toLowerCase().contains(rawLoc.toLowerCase())) {
+              targetStation = cLoc;
+              break;
+            }
+          }
+        }
+
+        if (targetStation.isEmpty) {
+          targetStation = configuredLocs.isNotEmpty ? configuredLocs.first : 'Main Kitchen';
+        }
+
+        locationGroups.putIfAbsent(targetStation, () => []).add(item);
+      }
+
+      final availablePrinters = await Printing.listPrinters();
+
+      for (final entry in locationGroups.entries) {
+        final String locationName = entry.key;
+        final List<dynamic> stationItems = entry.value;
+
+        final routings = DevicePrinterRouting.resolvePrinters(
+          settings: sysSettings,
+          machineId: currentMachineId,
+          sectionKey: 'kots',
+          location: locationName,
+        );
+
+        final pdfBytes = await _generateKotPdfForPrint(kot, stationItems, locationName);
+        final String jobName = 'REPRINT_KOT_${kotNo}_$locationName';
+
+        bool printedDirectly = false;
+        if (routings.isNotEmpty) {
+          for (final routing in routings) {
+            final String targetPrinterName = routing.printer.trim();
+            if (targetPrinterName.isEmpty) continue;
+
+            Printer? matchedPrinter;
+            try {
+              matchedPrinter = availablePrinters.firstWhere(
+                (p) => p.name.toLowerCase() == targetPrinterName.toLowerCase() || p.url.toLowerCase() == targetPrinterName.toLowerCase(),
+              );
+            } catch (_) {
+              try {
+                matchedPrinter = availablePrinters.firstWhere(
+                  (p) => p.name.toLowerCase().contains(targetPrinterName.toLowerCase()) || targetPrinterName.toLowerCase().contains(p.name.toLowerCase()),
+                );
+              } catch (_) {}
+            }
+
+            if (matchedPrinter != null) {
+              try {
+                final int copyCount = routing.copies > 0 ? routing.copies : 1;
+                for (int c = 0; c < copyCount; c++) {
+                  await Printing.directPrintPdf(
+                    printer: matchedPrinter,
+                    name: jobName,
+                    onLayout: (_) async => pdfBytes,
+                  );
+                }
+                printedDirectly = true;
+              } catch (pErr) {
+                debugPrint('Direct print printer error for station "$locationName": $pErr');
+              }
+            }
+          }
+        }
+
+        if (!printedDirectly) {
+          Printer? fallbackPrinter;
+          if (sysSettings.defaultPrinterName.trim().isNotEmpty) {
+            try {
+              fallbackPrinter = availablePrinters.firstWhere(
+                (p) => p.name.toLowerCase() == sysSettings.defaultPrinterName.trim().toLowerCase(),
+              );
+            } catch (_) {}
+          }
+          fallbackPrinter ??= availablePrinters.where((p) => p.isDefault).firstOrNull ?? availablePrinters.firstOrNull;
+
+          if (fallbackPrinter != null) {
+            try {
+              await Printing.directPrintPdf(
+                printer: fallbackPrinter,
+                name: jobName,
+                onLayout: (_) async => pdfBytes,
+              );
+            } catch (e) {
+              debugPrint('Direct print fallback error: $e');
+              await Printing.layoutPdf(
+                name: jobName,
+                onLayout: (_) async => pdfBytes,
+              );
+            }
+          } else {
+            await Printing.layoutPdf(
+              name: jobName,
+              onLayout: (_) async => pdfBytes,
+            );
+          }
+        }
+      }
+
+      await ApiClient.post('/api/restaurant/kots/${kot['id']}/reprint', {
+        'is_reprint': true,
+        'reprinted_at': DateTime.now().toIso8601String(),
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Reprinting KOT Ticket #$kotNo...'),
+            content: Text('Reprinted KOT Ticket #$kotNo location-wise!'),
             backgroundColor: Colors.teal.shade700,
             duration: const Duration(seconds: 2),
           ),
         );
       }
-      await ApiClient.post('/api/restaurant/kots/${kot['id']}/reprint', {
-        'is_reprint': true,
-        'reprinted_at': DateTime.now().toIso8601String(),
-      });
     } catch (e) {
       debugPrint('Error triggering KOT reprint: $e');
     }
+  }
+
+  Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items, String locationName) async {
+    final pdf = pw.Document();
+    final String tableName = widget.tableName.isNotEmpty ? widget.tableName : (kot['table']?['table_name'] ?? 'Takeaway');
+    
+    final rawGuest = kot['guest_count'] ?? kot['guests'] ?? kot['table']?['current_guest_count'] ?? kot['table']?['guest_count'] ?? kot['table']?['pax'];
+    final parsedGuest = rawGuest != null ? int.tryParse(rawGuest.toString()) : null;
+    final int guestCount = (parsedGuest != null && parsedGuest > 0) ? parsedGuest : (tableName.toLowerCase().contains('takeaway') ? 1 : 2);
+
+    final String nowStr = DateTime.now().toString().substring(0, 16);
+    final String kotNo = (kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}').toString();
+    
+    pdf.addPage(
+      pw.Page(
+        pageFormat: const PdfPageFormat(80 * PdfPageFormat.mm, double.infinity, marginAll: 4 * PdfPageFormat.mm),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              pw.Center(
+                child: pw.Text(
+                  'KITCHEN ORDER TICKET',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
+                ),
+              ),
+              if (locationName.isNotEmpty)
+                pw.Container(
+                  margin: const pw.EdgeInsets.symmetric(vertical: 3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.black, width: 1.5),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Center(
+                    child: pw.Text(
+                      'LOCATION / STATION: ${locationName.toUpperCase()}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11.5, color: PdfColors.black),
+                    ),
+                  ),
+                ),
+              pw.Center(
+                child: pw.Text(
+                  (kot['kottype'] == 'nc' || kot['kottype'] == 'NC')
+                      ? '*** NC (NON-CHARGEABLE) REPRINT K O T ***'
+                      : ((kot['kottype'] == 'packing' || (kot['service_type'] ?? '').toString().toLowerCase().contains('takeaway'))
+                          ? '*** PACKING REPRINT K O T ***'
+                          : '*** REPRINT K O T ***'),
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                ),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('TABLE: $tableName', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                  pw.Text('GUESTS: $guestCount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('KOT: $kotNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                ],
+              ),
+              pw.Text('Print Time: $nowStr', style: const pw.TextStyle(fontSize: 9)),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.Row(
+                children: [
+                  pw.SizedBox(width: 32, child: pw.Text('QTY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                  pw.Expanded(child: pw.Text('ITEM DESCRIPTION', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                ],
+              ),
+              pw.Divider(thickness: 0.5),
+              ...items.map((item) {
+                final double q = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '0') ?? 0.0;
+                final String qtyStr = (q % 1 == 0) ? q.toInt().toString() : q.toStringAsFixed(1);
+                final String itemBrand = (item['brand'] ?? item['brand_name'] ?? item['item_brand'] ?? item['item']?['brand'] ?? (item['item'] is Map ? item['item']['brand'] : null) ?? '').toString().trim();
+                final String displayName = itemBrand.isNotEmpty ? '${item['item_name'] ?? ''} ($itemBrand)' : (item['item_name'] ?? '');
+                final String remark = (item['item_remark'] ?? item['notes'] ?? '').toString();
+                
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 3),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.SizedBox(
+                            width: 32,
+                            child: pw.Text(
+                              '[ $qtyStr ]',
+                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                          pw.Expanded(
+                            child: pw.Text(
+                              displayName,
+                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (remark.isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(left: 32, top: 1),
+                          child: pw.Text('* Note: $remark', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic)),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Total Qty:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                  pw.Text((items.fold<double>(0, (sum, i) => sum + (double.tryParse(i['quantity']?.toString() ?? i['qty']?.toString() ?? '0') ?? 0)) % 1 == 0)
+                      ? items.fold<double>(0, (sum, i) => sum + (double.tryParse(i['quantity']?.toString() ?? i['qty']?.toString() ?? '0') ?? 0)).toInt().toString()
+                      : items.fold<double>(0, (sum, i) => sum + (double.tryParse(i['quantity']?.toString() ?? i['qty']?.toString() ?? '0') ?? 0)).toStringAsFixed(1),
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Row(
+                children: [
+                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  pw.SizedBox(width: 4),
+                  pw.Expanded(
+                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                  ),
+                  pw.SizedBox(width: 4),
+                  pw.Text('CUT HERE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  pw.SizedBox(width: 4),
+                  pw.Expanded(
+                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                  ),
+                  pw.SizedBox(width: 4),
+                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                ],
+              ),
+              pw.SizedBox(height: 6),
+            ],
+          );
+        },
+      ),
+    );
+    return pdf.save();
   }
 
   Future<void> _cancelKotItem(int itemId, String itemName) async {
@@ -307,26 +608,31 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                 icon: const Icon(Icons.point_of_sale, size: 16),
                 label: const Text('Generate Bill / Checkout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 onPressed: () {
-                  final List<int> kotIds = activeKotsList.map<int>((k) => int.parse(k['id'].toString())).toList();
-                  final Map<int, Map<String, dynamic>> grouped = {};
+                  final List<int> kotIds = [];
+                  final Map<dynamic, Map<String, dynamic>> grouped = {};
                   for (final kot in activeKotsList) {
+                    final int kId = int.tryParse((kot['id'] ?? 0).toString()) ?? 0;
+                    if (kId > 0 && !kotIds.contains(kId)) {
+                      kotIds.add(kId);
+                    }
                     final items = kot['items'] as List? ?? [];
                     for (final item in items) {
                       final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
-                      if (itemStatus == 'CANCELLED') continue;
+                      if (itemStatus == 'CANCELLED' || itemStatus == 'REJECTED') continue;
 
-                      final int itemId = item['item_id'];
-                      final double qty = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '1') ?? 1.0;
-                      final double rate = double.tryParse(item['rate']?.toString() ?? '') ??
-                          double.tryParse(item['item_rate']?.toString() ?? '') ??
-                          0.0;
+                      final int itemId = int.tryParse((item['item_id'] ?? item['itemId'] ?? item['id'] ?? 0).toString()) ?? 0;
+                      final String itemName = (item['item_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().trim();
+                      final double qty = double.tryParse((item['quantity'] ?? item['qty'] ?? 1.0).toString()) ?? 1.0;
+                      final double rate = double.tryParse((item['rate'] ?? item['item_rate'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
 
-                      if (grouped.containsKey(itemId)) {
-                        grouped[itemId]!['qty'] = grouped[itemId]!['qty'] + qty;
+                      final dynamic groupKey = itemId > 0 ? itemId : (itemName.isNotEmpty ? itemName : 'Item_$kId');
+
+                      if (grouped.containsKey(groupKey)) {
+                        grouped[groupKey]!['qty'] = (grouped[groupKey]!['qty'] as double) + qty;
                       } else {
-                        grouped[itemId] = {
+                        grouped[groupKey] = {
                           'item_id': itemId,
-                          'item_name': item['item_name'],
+                          'item_name': itemName,
                           'qty': qty,
                           'rate': rate,
                         };

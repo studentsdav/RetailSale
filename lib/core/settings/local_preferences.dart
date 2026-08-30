@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -268,6 +269,40 @@ class LocalPreferences {
   }
 
   static const _lynxMaxRowsKey = 'lynx_max_rows';
+  static const _machineIdKey = 'pos_machine_id';
+
+  /// Auto-detect physical hardware / OS Device Hostname
+  static String getSystemHardwareId() {
+    try {
+      final host = Platform.localHostname.trim().toUpperCase();
+      if (host.isNotEmpty && host != 'LOCALHOST') return host;
+    } catch (_) {}
+    try {
+      final comp = (Platform.environment['COMPUTERNAME'] ??
+              Platform.environment['HOSTNAME'] ??
+              '')
+          .trim()
+          .toUpperCase();
+      if (comp.isNotEmpty) return comp;
+    } catch (_) {}
+    return 'DEVICE_01';
+  }
+
+  static Future<String> getMachineId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_machineIdKey);
+    if (saved != null && saved.trim().isNotEmpty) {
+      return saved.trim().toUpperCase();
+    }
+    final hwId = getSystemHardwareId();
+    await prefs.setString(_machineIdKey, hwId);
+    return hwId;
+  }
+
+  static Future<void> setMachineId(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_machineIdKey, value.trim().toUpperCase());
+  }
 
   static Future<int> getLynxMaxRows() async {
     final prefs = await SharedPreferences.getInstance();
@@ -283,5 +318,48 @@ class LocalPreferences {
     if (clamped > 1000) clamped = 1000;
     if (clamped < 1) clamped = 1;
     await prefs.setInt(_lynxMaxRowsKey, clamped);
+  }
+
+  static const _devicePrinterMappingsKey = 'device_printer_mappings_cache';
+
+  static Future<Map<String, dynamic>> getDevicePrinterMappings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_devicePrinterMappingsKey);
+    if (raw == null || raw.trim().isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  static Future<void> setDevicePrinterMappings(Map<String, dynamic> mappings) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_devicePrinterMappingsKey, jsonEncode(mappings));
+  }
+
+  static const _enableTokenSystemKey = 'enable_token_system_key';
+  static const _tokenCopiesCountKey = 'token_copies_count_key';
+
+  static Future<bool?> getEnableTokenSystem() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_enableTokenSystemKey);
+  }
+
+  static Future<void> setEnableTokenSystem(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enableTokenSystemKey, value);
+  }
+
+  static Future<int?> getTokenCopiesCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_tokenCopiesCountKey);
+  }
+
+  static Future<void> setTokenCopiesCount(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_tokenCopiesCountKey, value);
   }
 }
