@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'bank_accounts_screen.dart';
+import 'chart_of_accounts_screen.dart';
+import 'loan_emi_screen.dart';
 import 'accounting_vouchers_screen.dart';
 import 'trial_balance_screen.dart';
 import 'profit_loss_screen.dart';
@@ -131,11 +133,18 @@ class AccountingDashboardScreen extends StatelessWidget {
                       subtitle: 'View double-entry ledger accounts hierarchy and opening balances',
                       icon: Icons.account_tree,
                       color: tealColor,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Chart of Accounts is active under system general ledgers.')),
-                        );
-                      },
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChartOfAccountsScreen())),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildTile(
+                      context,
+                      title: 'Loans, Assets & EMI Master',
+                      subtitle: 'Manage loans, capital asset investments, and auto-debit EMI schedules',
+                      icon: Icons.domain,
+                      color: Colors.indigo,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoanEmiScreen())),
                     ),
                   ),
                 ],

@@ -318,6 +318,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                     Theme.of(context).colorScheme.surfaceContainerHighest),
                 columns: const [
                   DataColumn(label: Text('Supplier')),
+                  DataColumn(label: Text('GRN No')),
                   DataColumn(label: Text('Bill No')),
                   DataColumn(label: Text('Bill Date')),
                   DataColumn(label: Text('Bill Amount')),
@@ -331,6 +332,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                     color: WidgetStateProperty.all(_rowColor(b.status)),
                     cells: [
                       DataCell(Text(b.supplier)),
+                      DataCell(Text(b.grnNo.isNotEmpty ? b.grnNo : '-')),
                       DataCell(Text(b.billNo)),
                       DataCell(
                           Text(DateFormat('dd-MMM-yyyy').format(b.billDate))),

@@ -3,6 +3,7 @@ enum PaymentStatus { PAID, UNPAID, PARTIAL }
 class SupplierBill {
   final int id;
   final String supplier;
+  final String grnNo;
   final String billNo;
   final DateTime billDate;
   final double billAmount;
@@ -12,6 +13,7 @@ class SupplierBill {
   SupplierBill({
     required this.id,
     required this.supplier,
+    this.grnNo = '',
     required this.billNo,
     required this.billDate,
     required this.billAmount,
@@ -23,7 +25,8 @@ class SupplierBill {
     return SupplierBill(
       id: json['id'],
       supplier: json['supplier']?['supplier_name'] ?? '',
-      billNo: json['bill_no'],
+      grnNo: json['grn_no']?.toString() ?? '',
+      billNo: json['bill_no'] ?? '',
       billDate: DateTime.parse(json['bill_date']),
       billAmount: (double.parse(json['bill_amount']) ?? 0).toDouble(),
       paidAmount: (double.parse(json['paid_amount']) ?? 0).toDouble(),

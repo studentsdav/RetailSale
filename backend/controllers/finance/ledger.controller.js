@@ -54,6 +54,52 @@ exports.createExpense = async (req, res) => {
             transaction: t
         });
 
+        // Auto-Post Double-Entry Payment Voucher (PV)
+        try {
+            const count = await req.propertyDb.models.accounting_vouchers.count({
+                where: { outlet_id, voucher_type: 'PAYMENT' },
+                transaction: t
+            });
+            const autoNo = `PV-${String(count + 1).padStart(4, '0')}`;
+
+            const header = await req.propertyDb.models.accounting_vouchers.create({
+                outlet_id,
+                voucher_no: autoNo,
+                voucher_type: 'PAYMENT',
+                voucher_date: expense_date,
+                payment_mode: 'CASH',
+                reference_no: `EXP-${expense.id}`,
+                narration: `Auto Payment Voucher for ${category}: ${note || 'Expense Entry'}`,
+                total_debit: amount,
+                total_credit: amount,
+                status: 'POSTED',
+                created_by
+            }, { transaction: t });
+
+            await req.propertyDb.models.voucher_lines.bulkCreate([
+                {
+                    voucher_id: header.id,
+                    line_type: 'DEBIT',
+                    account_name: `${category} Expense A/c`,
+                    account_type: 'EXPENSE',
+                    debit_amount: amount,
+                    credit_amount: 0,
+                    particulars: `Direct Expense: ${category}`
+                },
+                {
+                    voucher_id: header.id,
+                    line_type: 'CREDIT',
+                    account_name: 'Main Cash Drawer',
+                    account_type: 'CASH',
+                    debit_amount: 0,
+                    credit_amount: amount,
+                    particulars: 'Cash Outflow for Expense'
+                }
+            ], { transaction: t });
+        } catch (vErr) {
+            console.error('Auto Voucher Posting Error:', vErr);
+        }
+
         await t.commit();
 
         res.json({ success: true, data: expense });

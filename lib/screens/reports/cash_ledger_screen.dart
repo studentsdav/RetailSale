@@ -64,6 +64,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   String ledgerPaymentMethod = '';
   String deliveryStatus = '';
   String expiryStatus = 'ALL';
+  String openingPaymentMode = 'CASH';
   bool _showOutstandingOnly = false;
 
   final Set<String> _expandedBillsCustomers = {};
@@ -278,12 +279,155 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     );
   }
 
+  void _showUniversalVoucherReceiptModal({
+    required String voucherNo,
+    required String voucherType,
+    required String dateStr,
+    required String partyName,
+    required String paymentMode,
+    required double amount,
+    required String note,
+    String? referenceNo,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Official Voucher Slip: $voucherNo',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0B5CAD),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+        content: Container(
+          width: 420,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Column(
+                    children: [
+                      const Text(
+                        'RETAILSALE ENTERPRISE ACCOUNTING',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B5CAD).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$voucherType VOUCHER RECEIPT',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0B5CAD),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Voucher No: $voucherNo',
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0B5CAD))),
+                    Text('Date: $dateStr',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text('Party / Account: ${partyName.isNotEmpty ? partyName : 'General Account'}',
+                    style: const TextStyle(fontSize: 12)),
+                Text('Payment Mode: $paymentMode',
+                    style: const TextStyle(fontSize: 12)),
+                if (referenceNo != null && referenceNo.isNotEmpty)
+                  Text('Ref / Bill No: $referenceNo',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                const Divider(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total Amount:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(
+                      '₹${amount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        fontFamily: 'monospace',
+                        color: Color(0xFF0B5CAD),
+                      ),
+                    ),
+                  ],
+                ),
+                if (note.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text('Narration / Note: $note',
+                      style: const TextStyle(
+                          fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87)),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0B5CAD)),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await PosInvoicePrinter.printAccountingVoucherReceipt(
+                voucherNo: voucherNo,
+                voucherType: voucherType,
+                dateStr: dateStr,
+                partyName: partyName,
+                paymentMode: paymentMode,
+                amount: amount,
+                note: note,
+                referenceNo: referenceNo,
+              );
+            },
+            icon: const Icon(Icons.print, color: Colors.white, size: 16),
+            label: const Text('Print Voucher Receipt',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _onLedgerRowTapped(CashLedgerEntry entry) async {
-    final isExpense = entry.transactionType.trim().toUpperCase() == 'EXPENSE' ||
-        entry.referenceType.trim().toUpperCase() == 'EXPENSE';
-        
-    if (!isExpense) return;
-    
+    final vNo = _getVoucherNo(entry);
+    final amt = entry.amountOut > 0 ? entry.amountOut : (entry.amountIn > 0 ? entry.amountIn : entry.adjustmentAmount);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -299,24 +443,25 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             children: [
               ListTile(
                 leading: const Icon(Icons.receipt_long_outlined, color: Colors.indigo),
-                title: Text('Expense: ${entry.referenceNo}'),
-                subtitle: Text('Amount: ${_money(entry.amountOut > 0 ? entry.amountOut : entry.adjustmentAmount)}'),
+                title: Text('Voucher No: $vNo'),
+                subtitle: Text('Type: ${entry.transactionType} • Amount: ${_money(amt)}'),
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.edit_outlined, color: Colors.blue),
-                title: const Text('Edit Expense'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  _editExpenseFromLedger(entry.referenceId);
-                },
-              ),
-              ListTile(
                 leading: const Icon(Icons.print_outlined, color: Colors.green),
-                title: const Text('Print Receipt'),
+                title: const Text('Print / Reprint Voucher Receipt'),
                 onTap: () async {
                   Navigator.pop(context);
-                  _printExpenseFromLedger(entry.referenceId);
+                  _showUniversalVoucherReceiptModal(
+                    voucherNo: vNo,
+                    voucherType: entry.transactionType.toUpperCase(),
+                    dateStr: _fmtDateTime(entry.txnDate),
+                    partyName: entry.partyName,
+                    paymentMode: entry.paymentMethod,
+                    amount: amt,
+                    note: entry.notes ?? '',
+                    referenceNo: entry.referenceNo,
+                  );
                 },
               ),
             ],
@@ -1370,6 +1515,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     await ctrl.saveOpeningBalance(
       balanceDate: openingDate,
       openingBalance: double.tryParse(openingAmountCtrl.text.trim()) ?? 0,
+      paymentMode: openingPaymentMode,
       note: openingNoteCtrl.text.trim(),
     );
     await ctrl.loadOpeningBalances(fromDate: fromDate, toDate: toDate);
@@ -2739,10 +2885,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                               ),
                                                             ),
                                                             Text(
-                                                              '${_fmtDate(payment.paymentDate)} - Ref: ${payment.referenceNo}',
+                                                              '${_fmtDate(payment.paymentDate)} - Voucher No: ${payment.referenceNo.startsWith('RV-') ? payment.referenceNo : (payment.referenceNo.isNotEmpty ? 'RV-${payment.referenceNo}' : 'RV-PAY-${payment.id}')}',
                                                               style: const TextStyle(
                                                                 fontSize: 10,
-                                                                color: Color(0xFF64748B),
+                                                                fontWeight: FontWeight.w600,
+                                                                color: Color(0xFF0B5CAD),
                                                               ),
                                                             ),
                                                             if (payment.note.trim().isNotEmpty)
@@ -2856,11 +3003,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                       ),
                                                     );
                                                   })(),
-                                                  if (advance.referenceNo.trim().isNotEmpty)
-                                                    Text(
-                                                      'Ref: ${advance.referenceNo}',
-                                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                                    ),
+                                                  Text(
+                                                    'Voucher No: ${advance.referenceNo.startsWith('RV-') ? advance.referenceNo : (advance.referenceNo.isNotEmpty ? 'RV-${advance.referenceNo}' : 'RV-ADV-${advance.id}')}',
+                                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0B5CAD)),
+                                                  ),
                                                   if (_cleanAdvanceNote(advance.note).isNotEmpty)
                                                     Text(
                                                       _cleanAdvanceNote(advance.note),
@@ -3157,101 +3303,143 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     );
   }
 
+  String _getVoucherNo(CashLedgerEntry entry) {
+    final ref = entry.referenceNo.trim();
+    final type = entry.transactionType.trim().toUpperCase();
+    final refType = entry.referenceType.trim().toUpperCase();
+
+    if (ref.startsWith('PV-') ||
+        ref.startsWith('SV-') ||
+        ref.startsWith('RV-') ||
+        ref.startsWith('CN-') ||
+        ref.startsWith('JV-')) {
+      return ref;
+    }
+
+    if (type.contains('SALE') || refType == 'SALE') {
+      return ref.isNotEmpty ? 'SV-$ref' : 'SV-0001';
+    } else if (type.contains('REPAYMENT') || type.contains('CREDIT PAYMENT') || refType == 'REPAYMENT') {
+      return ref.isNotEmpty ? 'RV-$ref' : 'RV-0001';
+    } else if (type.contains('SUBSCRIPTION') || type.contains('ADVANCE') || refType.contains('ADVANCE')) {
+      return ref.isNotEmpty ? (ref.startsWith('RV-') ? ref : 'RV-$ref') : 'RV-0001';
+    } else if (type.contains('SUPPLIER') || type.contains('VENDOR') || type.contains('REFUND') || refType.contains('SUPPLIER')) {
+      return ref.isNotEmpty ? (ref.startsWith('PV-') ? ref : 'PV-$ref') : 'PV-0001';
+    } else if (type == 'EXPENSE' || refType == 'EXPENSE') {
+      return ref.isNotEmpty ? 'PV-$ref' : 'PV-0001';
+    } else if (type == 'INCOME' || refType == 'INCOME') {
+      return ref.isNotEmpty ? 'RV-$ref' : 'RV-0001';
+    } else if (type == 'WITHDRAWAL' || type == 'CONTRA' || refType == 'WITHDRAWAL') {
+      return ref.isNotEmpty ? 'CN-$ref' : 'CN-0001';
+    } else if (type == 'OPENING' || refType == 'OPENING_DEPOSIT') {
+      return ref.isNotEmpty ? (ref.startsWith('RV-') ? ref : 'RV-$ref') : 'RV-OPENING';
+    }
+    return ref.isNotEmpty ? ref : '-';
+  }
+
   Widget _buildLedgerCompactTable({
     required LedgerDayGroup day,
     required double dayOutstandingTotal,
     required double dayCreditTotal,
     required double dayDebitTotal,
   }) {
-    return Table(
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      columnWidths: const {
-        0: FlexColumnWidth(1.25),
-        1: FlexColumnWidth(1.15),
-        2: FlexColumnWidth(0.85),
-        3: FlexColumnWidth(1.2),
-        4: FlexColumnWidth(0.8),
-        5: FlexColumnWidth(1.9),
-        6: FlexColumnWidth(0.95),
-        7: FlexColumnWidth(0.95),
-        8: FlexColumnWidth(0.95),
-        9: FlexColumnWidth(0.95),
-      },
-      children: [
-        TableRow(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
-          children: const [
-            _LedgerHeaderCell('Time'),
-            _LedgerHeaderCell('Type'),
-            _LedgerHeaderCell('Ref'),
-            _LedgerHeaderCell('Party'),
-            _LedgerHeaderCell('Pay'),
-            _LedgerHeaderCell('Note'),
-            _LedgerHeaderCell('Outstanding'),
-            _LedgerHeaderCell('Credit'),
-            _LedgerHeaderCell('Debit'),
-            _LedgerHeaderCell('Balance'),
-          ],
-        ),
-        TableRow(
-          decoration: BoxDecoration(
-            color: Colors.indigo.withOpacity(.08),
-            border: const Border(
-              bottom: BorderSide(color: Color(0xFFE2E8F0)),
-            ),
-          ),
-          children: [
-            _LedgerCell(_fmtDate(day.date)),
-            const _LedgerCell('OPENING', bold: true),
-            const _LedgerCell('-'),
-            const _LedgerCell('-'),
-            const _LedgerCell('-'),
-            const _LedgerCell('Opening deposit carried for business'),
-            const _LedgerCell('-', align: TextAlign.right),
-            _LedgerCell(
-              _money(day.openingBalance),
-              align: TextAlign.right,
-              bold: true,
-              color: Colors.green,
-            ),
-            const _LedgerCell('-', align: TextAlign.right),
-            _LedgerCell(
-              _money(day.openingBalance),
-              align: TextAlign.right,
-              bold: true,
-              color: Colors.indigo,
-            ),
-          ],
-        ),
-        ...day.entries.map((entry) {
-          final debitAmount = entry.amountOut > 0
-              ? entry.amountOut
-              : entry.adjustmentAmount;
-          final isExpense = entry.transactionType.trim().toUpperCase() == 'EXPENSE' ||
-              entry.referenceType.trim().toUpperCase() == 'EXPENSE';
-
-          Widget wrapCell(Widget cell) {
-            if (!isExpense) return cell;
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _onLedgerRowTapped(entry),
-              child: cell,
-            );
-          }
-
-          return TableRow(
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Table(
+        columnWidths: const {
+          0: FlexColumnWidth(1.0),
+          1: FlexColumnWidth(0.85),
+          2: FlexColumnWidth(1.2),
+          3: FlexColumnWidth(1.2),
+          4: FlexColumnWidth(0.8),
+          5: FlexColumnWidth(1.8),
+          6: FlexColumnWidth(0.95),
+          7: FlexColumnWidth(0.95),
+          8: FlexColumnWidth(0.95),
+          9: FlexColumnWidth(0.95),
+        },
+        children: [
+          TableRow(
             decoration: BoxDecoration(
-              color: _ledgerRowColor(entry),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            ),
+            children: const [
+              _LedgerHeaderCell('Time'),
+              _LedgerHeaderCell('Type'),
+              _LedgerHeaderCell('Voucher / Ref'),
+              _LedgerHeaderCell('Party'),
+              _LedgerHeaderCell('Pay'),
+              _LedgerHeaderCell('Note'),
+              _LedgerHeaderCell('Outstanding'),
+              _LedgerHeaderCell('Credit'),
+              _LedgerHeaderCell('Debit'),
+              _LedgerHeaderCell('Balance'),
+            ],
+          ),
+          TableRow(
+            decoration: BoxDecoration(
+              color: Colors.indigo.withOpacity(.08),
               border: const Border(
                 bottom: BorderSide(color: Color(0xFFE2E8F0)),
               ),
             ),
             children: [
-              wrapCell(_LedgerCell(_fmtDateTime(entry.txnDate))),
-              wrapCell(_LedgerCell(_ledgerTypeLabel(entry.transactionType))),
-              wrapCell(_LedgerCell(entry.referenceNo.isEmpty ? '-' : entry.referenceNo)),
+              _LedgerCell(_fmtDate(day.date)),
+              const _LedgerCell('OPENING', bold: true),
+              const _LedgerCell('CN-OPENING', bold: true, color: Colors.indigo),
+              const _LedgerCell('-'),
+              const _LedgerCell('-'),
+              const _LedgerCell('Opening deposit carried for business'),
+              const _LedgerCell('-', align: TextAlign.right),
+              _LedgerCell(
+                _money(day.openingBalance),
+                align: TextAlign.right,
+                bold: true,
+                color: Colors.green,
+              ),
+              const _LedgerCell('-', align: TextAlign.right),
+              _LedgerCell(
+                _money(day.openingBalance),
+                align: TextAlign.right,
+                bold: true,
+                color: Colors.indigo,
+              ),
+            ],
+          ),
+          ...day.entries.map((entry) {
+            final isCreditMode = entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
+            final rawDebit = entry.amountOut > 0
+                ? entry.amountOut
+                : entry.adjustmentAmount;
+            final debitAmount = isCreditMode ? 0.0 : rawDebit;
+            final creditAmount = isCreditMode ? 0.0 : entry.amountIn;
+
+            final isExpense = entry.transactionType.trim().toUpperCase() == 'EXPENSE' ||
+                entry.referenceType.trim().toUpperCase() == 'EXPENSE';
+
+            Widget wrapCell(Widget cell) {
+              if (!isExpense) return cell;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _onLedgerRowTapped(entry),
+                child: cell,
+              );
+            }
+
+            return TableRow(
+              decoration: BoxDecoration(
+                color: _ledgerRowColor(entry),
+                border: const Border(
+                  bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+              ),
+              children: [
+                wrapCell(_LedgerCell(_fmtDateTime(entry.txnDate))),
+                wrapCell(_LedgerCell(_ledgerTypeLabel(entry.transactionType))),
+                wrapCell(_LedgerCell(_getVoucherNo(entry), bold: true, color: Colors.indigo)),
               wrapCell(_LedgerCell(entry.partyName.isEmpty ? '-' : entry.partyName)),
               wrapCell(_LedgerCell(entry.paymentMethod.isEmpty ? '-' : entry.paymentMethod)),
               wrapCell(_LedgerCell(_ledgerNote(entry))),
@@ -3262,10 +3450,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 bold: _ledgerOutstanding(entry) > 0,
               )),
               wrapCell(_LedgerCell(
-                entry.amountIn <= 0 ? '-' : _money(entry.amountIn),
+                creditAmount <= 0 ? '-' : _money(creditAmount),
                 align: TextAlign.right,
-                color: entry.amountIn > 0 ? Colors.green : null,
-                bold: entry.amountIn > 0,
+                color: creditAmount > 0 ? Colors.green : null,
+                bold: creditAmount > 0,
               )),
               wrapCell(_LedgerCell(
                 debitAmount <= 0 ? '-' : _money(debitAmount),
@@ -3315,8 +3503,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           ],
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 
   Widget _expenseTab() {
 
@@ -3444,7 +3633,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       title: Text('${expense.category} (${expense.vendorName})',
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(
-                        '${_fmtDate(expense.expenseDate)}  -  ${expense.note}\n'
+                        'Voucher No: ${expense.voucherNo}  •  ${_fmtDate(expense.expenseDate)}  -  ${expense.note}\n'
                         'Method: ${expense.paymentMethod} | Status: ${expense.status}\n'
                         'Base: ${_money(expense.baseAmount)} | Tax: ${_money(expense.totalTaxAmount)} | Ded: ${_money(expense.totalDeductionAmount)}'
                       ),
@@ -3561,7 +3750,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      '${_fmtDate(income.incomeDate)}  -  ${income.partyName.isEmpty ? income.note : income.partyName}',
+                      'Voucher No: ${income.voucherNo}  •  ${_fmtDate(income.incomeDate)}  -  ${income.partyName.isEmpty ? income.note : income.partyName}',
                     ),
                     trailing: Wrap(
                       spacing: 8,
@@ -3574,6 +3763,18 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
                           ),
+                        ),
+                        IconButton(
+                          onPressed: () => _showUniversalVoucherReceiptModal(
+                            voucherNo: income.voucherNo,
+                            voucherType: 'RECEIPT / INCOME',
+                            dateStr: DateFormat('dd-MMM-yyyy').format(income.incomeDate),
+                            partyName: income.partyName.isNotEmpty ? income.partyName : income.source,
+                            paymentMode: income.paymentMethod,
+                            amount: income.amount,
+                            note: income.note,
+                          ),
+                          icon: const Icon(Icons.print_outlined, color: Colors.green),
                         ),
                         IconButton(
                           onPressed: () => _showIncomeDialog(income: income),
@@ -3680,7 +3881,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      '${_fmtDate(withdrawal.withdrawalDate)}  -  ${withdrawal.note}',
+                      'Voucher No: ${withdrawal.voucherNo}  •  ${_fmtDate(withdrawal.withdrawalDate)}  -  ${withdrawal.note}',
                     ),
                     trailing: Wrap(
                       spacing: 8,
@@ -3693,6 +3894,18 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
                           ),
+                        ),
+                        IconButton(
+                          onPressed: () => _showUniversalVoucherReceiptModal(
+                            voucherNo: withdrawal.voucherNo,
+                            voucherType: 'CONTRA / WITHDRAWAL',
+                            dateStr: DateFormat('dd-MMM-yyyy').format(withdrawal.withdrawalDate),
+                            partyName: withdrawal.purpose,
+                            paymentMode: withdrawal.paymentMethod,
+                            amount: withdrawal.amount,
+                            note: withdrawal.note,
+                          ),
+                          icon: const Icon(Icons.print_outlined, color: Colors.indigo),
                         ),
                         IconButton(
                           onPressed: () =>
@@ -3804,22 +4017,57 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         if (picked != null) setState(() => openingDate = picked);
                       },
                     ),
-                    TextField(
-                        controller: openingAmountCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Opening Deposit')),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: TextField(
+                            controller: openingAmountCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Opening Deposit (₹)',
+                              prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<String>(
+                            value: openingPaymentMode,
+                            decoration: const InputDecoration(labelText: 'Payment Mode'),
+                            items: const [
+                              DropdownMenuItem(value: 'CASH', child: Text('CASH')),
+                              DropdownMenuItem(value: 'BANK TRANSFER', child: Text('BANK TRANSFER')),
+                              DropdownMenuItem(value: 'ONLINE / UPI', child: Text('ONLINE / UPI')),
+                              DropdownMenuItem(value: 'CARD', child: Text('CARD')),
+                              DropdownMenuItem(value: 'CHEQUE', child: Text('CHEQUE')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) setState(() => openingPaymentMode = val);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     TextField(
-                        controller: openingNoteCtrl,
-                        maxLines: 2,
-                        decoration: const InputDecoration(labelText: 'Note')),
+                      controller: openingNoteCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Note / Remarks',
+                        hintText: 'Enter deposit reference or notes...',
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                            onPressed: _saveOpeningBalance,
-                            icon: const Icon(Icons.save_outlined),
-                            label: const Text('Save'))),
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        onPressed: _saveOpeningBalance,
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Save Deposit'),
+                      ),
+                    ),
                   ]),
                 ),
               ),
@@ -3834,11 +4082,32 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   color: Colors.white,
                   child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      title: Text(_fmtDate(item.balanceDate),
+                      title: Text('${_fmtDate(item.balanceDate)}  •  Voucher No: ${item.voucherNo}',
                           style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(item.note),
-                      trailing: Text(_money(item.openingBalance),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))))),
+                      subtitle: Text('Mode: ${item.paymentMode}${item.note.isNotEmpty ? " • ${item.note}" : ""}'),
+                      trailing: Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(_money(item.openingBalance),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.blue)),
+                          IconButton(
+                            tooltip: 'Print Voucher Slip',
+                            icon: const Icon(Icons.print_outlined, color: Colors.teal),
+                            onPressed: () {
+                              _showUniversalVoucherReceiptModal(
+                                voucherNo: item.voucherNo,
+                                voucherType: 'OPENING DEPOSIT VOUCHER',
+                                dateStr: _fmtDate(item.balanceDate),
+                                partyName: 'Business Opening Deposit',
+                                paymentMode: item.paymentMode,
+                                amount: item.openingBalance,
+                                note: item.note,
+                              );
+                            },
+                          ),
+                        ],
+                      )))),
               const SizedBox(height: 80),
             ],
           ),
@@ -4106,32 +4375,112 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     }
   }
 
-  String _ledgerNote(CashLedgerEntry entry) {
+  String _ledgerNote(CashLedgerEntry entry, [List<CashLedgerEntry>? allEntries]) {
+    String rawNote = entry.notes.trim();
+
     if (entry.transactionType.toUpperCase() == 'INCOME' &&
-        entry.notes.startsWith('SOURCE:')) {
+        rawNote.startsWith('SOURCE:')) {
       String source = '';
       String note = '';
-      for (final line in entry.notes.split('\n')) {
+      for (final line in rawNote.split('\n')) {
         if (line.startsWith('SOURCE:')) {
           source = line.substring(7).trim();
         } else if (line.startsWith('NOTE:')) {
           note = line.substring(5).trim();
         }
       }
-      if (note.isEmpty) return source;
-      return '$source - $note';
+      rawNote = note.isEmpty ? source : '$source - $note';
     }
-    return entry.notes.trim().isEmpty ? '-' : entry.notes.trim();
+
+    if (rawNote.isEmpty) return '-';
+
+    if (rawNote.toLowerCase().contains('outstanding') &&
+        !rawNote.contains('Settled') &&
+        !rawNote.contains('Paid')) {
+      final remOut = _ledgerOutstanding(entry, allEntries);
+      if (remOut <= 0.009) {
+        rawNote = rawNote
+            .replaceAll(
+              RegExp(r'with\s+outstanding\s+[0-9]+(?:\.[0-9]+)?',
+                  caseSensitive: false),
+              '(Settled / Paid)',
+            )
+            .replaceAll(
+              RegExp(r'-?\s*outstanding\s+[0-9]+(?:\.[0-9]+)?',
+                  caseSensitive: false),
+              '(Settled / Paid)',
+            );
+      }
+    }
+
+    return rawNote;
   }
 
-  double _ledgerOutstanding(CashLedgerEntry entry) {
+  List<CashLedgerEntry> get _allLedgerEntries {
+    final list = <CashLedgerEntry>[];
+    for (final d in ctrl.ledgerDays) {
+      list.addAll(d.entries);
+    }
+    return list;
+  }
+
+  double _ledgerOutstanding(CashLedgerEntry entry, [List<CashLedgerEntry>? allEntries]) {
     final text = entry.notes.trim();
     if (text.isEmpty) return 0;
+    if (text.contains('Settled') || text.contains('Paid')) return 0;
+
     final match =
         RegExp(r'outstanding\s+([0-9]+(?:\.[0-9]+)?)', caseSensitive: false)
             .firstMatch(text);
     if (match == null) return 0;
-    return double.tryParse(match.group(1) ?? '') ?? 0;
+    final initialAmt = double.tryParse(match.group(1) ?? '') ?? 0;
+    if (initialAmt <= 0) return 0;
+
+    final pool = (allEntries != null && allEntries.isNotEmpty)
+        ? allEntries
+        : _allLedgerEntries;
+
+    if (pool.isNotEmpty) {
+      final rawRef = entry.referenceNo.isNotEmpty ? entry.referenceNo : (entry.referenceId ?? '');
+      final ref = rawRef
+          .replaceAll('SV-', '')
+          .replaceAll('RV-', '')
+          .replaceAll('PV-', '')
+          .replaceAll('CN-', '')
+          .trim();
+
+      if (ref.isNotEmpty) {
+        double paidForThisRef = 0;
+        for (final item in pool) {
+          final itemType = item.transactionType.trim().toUpperCase();
+          final isPaymentType = itemType.contains('REPAYMENT') ||
+              itemType.contains('CREDIT PAYMENT') ||
+              itemType.contains('SUPPLIER_PAYMENT') ||
+              itemType.contains('WAIVE_OFF');
+
+          if (!isPaymentType) continue;
+
+          final itemRef = (item.referenceNo.isNotEmpty ? item.referenceNo : (item.referenceId ?? ''))
+              .replaceAll('SV-', '')
+              .replaceAll('RV-', '')
+              .replaceAll('PV-', '')
+              .replaceAll('CN-', '')
+              .trim();
+
+          if (itemRef == ref || item.notes.contains(ref)) {
+            final pAmt = item.amountIn > 0
+                ? item.amountIn
+                : (item.amountOut > 0 ? item.amountOut : item.adjustmentAmount);
+            paidForThisRef += pAmt;
+          }
+        }
+
+        final rem = initialAmt - paidForThisRef;
+        return rem <= 0.009 ? 0 : rem;
+      }
+    }
+
+    return initialAmt;
   }
 
   String _ledgerTypeLabel(String type) {
@@ -4156,6 +4505,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         return 'Expense';
       case 'SUPPLIER_PAYMENT':
         return 'Supplier Payment';
+      case 'PURCHASE_GRN':
+        return 'Purchase GRN';
       case 'SALE_SCHEME_FREE_EXPENSE':
       case 'SUBSCRIPTION_SCHEME_FREE_EXPENSE':
       case 'SALE_SUBSCRIPTION_FREE_EXPENSE':
@@ -4353,7 +4704,7 @@ class ExpenseEntryDialog extends StatefulWidget {
                 ),
               ),
               divider(),
-              kvLine('Receipt No:', expense.invoiceRefNo.isNotEmpty ? expense.invoiceRefNo : 'EXP-${expense.id.length >= 8 ? expense.id.substring(0, 8).toUpperCase() : expense.id.toUpperCase()}'),
+              kvLine('Voucher No:', expense.voucherNo, boldFont: true),
               kvLine('Date:', DateFormat('dd-MMM-yyyy').format(expense.expenseDate)),
               kvLine('Category:', expense.category),
               kvLine('Vendor:', displayVendor.isNotEmpty ? displayVendor : '-'),
@@ -5296,6 +5647,15 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                           setState(() => paymentDate = picked);
                                         }
                                       },
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: invoiceRefNoCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Vendor Bill / Invoice Ref No (Optional)',
+                                        hintText: 'e.g. BILL-9921',
+                                        prefixIcon: Icon(Icons.receipt_long_outlined),
+                                      ),
                                     ),
                                     const SizedBox(height: 12),
                                     TextField(

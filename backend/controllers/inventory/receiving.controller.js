@@ -1,5 +1,6 @@
 const audit = require('../../services/audit.service');
 const { insertLedger } = require('../../services/stockLedger.service');
+const { createLedgerEntry } = require('../../services/cashLedger.service');
 const numberingHelper = require('./numberingSettingsV2.controller');
 const { normalizeDateKey } = require('../../utils/dateQuery');
 
@@ -156,7 +157,7 @@ exports.createReceiving = async (req, res) => {
 
 
         // 3️⃣ CREATE SUPPLIER BILL (UNPAID)
-        await req.propertyDb.models.supplier_bills.create({
+        const createdBill = await req.propertyDb.models.supplier_bills.create({
             outlet_id,
             supplier_id,
             bill_no: supplier_bill_no,
@@ -165,6 +166,25 @@ exports.createReceiving = async (req, res) => {
             paid_amount: 0,
             status: 'UNPAID'
         }, { transaction: t });
+
+        // 4️⃣ CREATE CASH LEDGER ENTRY FOR RECEIVING (OUTSTANDING)
+        const supplier = await req.propertyDb.models.supplier_master.findByPk(supplier_id, { transaction: t });
+        await createLedgerEntry({
+            db: req.propertyDb,
+            outlet_id,
+            txn_date: receipt_date,
+            transaction_type: 'PURCHASE_GRN',
+            reference_type: 'SUPPLIER_BILL',
+            reference_id: createdBill.id,
+            reference_no: grn_no,
+            party_name: supplier?.supplier_name || null,
+            payment_method: 'CREDIT',
+            amount_in: 0,
+            amount_out: 0,
+            notes: `Stock received against GRN #${grn_no} (Bill #${supplier_bill_no || 'N/A'}) - outstanding ${netAmount}`,
+            created_by: req.user.id,
+            transaction: t
+        });
 
         if (po_no && po_no.toString().trim() !== '') {
             for (const item of items) {
@@ -211,9 +231,48 @@ exports.createReceiving = async (req, res) => {
         });
         await t.commit();
 
+        // Auto-create accounting voucher for Purchase GRN after transaction commit
+        try {
+            const supplier = await req.propertyDb.models.supplier_master.findByPk(supplier_id);
+            const header = await req.propertyDb.models.accounting_vouchers.create({
+                outlet_id,
+                voucher_no: grn_no,
+                voucher_type: 'PURCHASE',
+                voucher_date: receipt_date,
+                total_debit: netAmount,
+                total_credit: netAmount,
+                narration: `Purchase GRN #${grn_no} received from ${supplier?.supplier_name || 'Vendor'} (Bill No: ${supplier_bill_no || 'N/A'})`,
+                payment_mode: 'CREDIT',
+                status: 'POSTED',
+                created_by: req.user.id
+            });
+
+            await req.propertyDb.models.voucher_lines.bulkCreate([
+                {
+                    voucher_id: header.id,
+                    line_type: 'DEBIT',
+                    account_name: 'Purchase Account',
+                    account_type: 'EXPENSE',
+                    debit_amount: netAmount,
+                    credit_amount: 0
+                },
+                {
+                    voucher_id: header.id,
+                    line_type: 'CREDIT',
+                    account_name: supplier?.supplier_name || 'Accounts Payable',
+                    account_type: 'LIABILITY',
+                    debit_amount: 0,
+                    credit_amount: netAmount
+                }
+            ]);
+        } catch (vErr) {
+            console.error('Error auto-creating purchase GRN voucher:', vErr);
+        }
+
         res.json({
             success: true,
-            message: 'Stock received & supplier bill created'
+            message: 'Stock received & supplier bill created',
+            grn_no
         });
 
     } catch (err) {

@@ -17,6 +17,7 @@ import 'device_printer_routing.dart';
 import '../config/app_brand.dart';
 import '../../utils/branding_storage.dart';
 import '../../controllers/settings/system_settings_controller.dart';
+import '../../controllers/settings/property_info_controller.dart';
 
 class PosInvoicePrinter {
   PosInvoicePrinter._();
@@ -2596,6 +2597,141 @@ class PosInvoicePrinter {
           ],
         ),
       ),
+    );
+  }
+
+  static Future<void> printAccountingVoucherReceipt({
+    required String voucherNo,
+    required String voucherType,
+    required String dateStr,
+    required String partyName,
+    required String paymentMode,
+    required double amount,
+    String note = '',
+    String? referenceNo,
+    List<dynamic> lines = const [],
+  }) async {
+    final propertyCtrl = PropertyInfoController();
+    await propertyCtrl.load();
+    final property = propertyCtrl.data;
+    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
+
+    await Printing.layoutPdf(
+      name: 'Voucher_${voucherNo.replaceAll('/', '_')}',
+      onLayout: (format) async {
+        final pdf = pw.Document();
+        final mono = pw.Font.courier();
+        final bold = pw.Font.helveticaBold();
+        final regular = pw.Font.helvetica();
+
+        pw.Widget divider() => pw.Container(
+              margin: const pw.EdgeInsets.symmetric(vertical: 4),
+              width: double.infinity,
+              height: 1,
+              color: PdfColors.black,
+            );
+
+        pw.Widget kvLine(String label, String value, {bool boldFont = false}) {
+          final style = pw.TextStyle(
+            font: mono,
+            fontSize: 9,
+            fontWeight: boldFont ? pw.FontWeight.bold : pw.FontWeight.normal,
+          );
+          return pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(label, style: style),
+              pw.Text(value, style: style),
+            ],
+          );
+        }
+
+        pdf.addPage(
+          pw.MultiPage(
+            pageFormat: const PdfPageFormat(
+              80 * PdfPageFormat.mm,
+              220 * PdfPageFormat.mm,
+              marginLeft: 3 * PdfPageFormat.mm,
+              marginRight: 3 * PdfPageFormat.mm,
+              marginTop: 4 * PdfPageFormat.mm,
+              marginBottom: 4 * PdfPageFormat.mm,
+            ),
+            build: (context) => [
+              buildStandardThermalHeader(
+                property: property,
+                logo: logo,
+                fontRegular: regular,
+                fontBold: bold,
+              ),
+              pw.SizedBox(height: 4),
+              pw.Center(
+                child: pw.Text(
+                  '${voucherType.toUpperCase()} VOUCHER',
+                  style: pw.TextStyle(
+                    font: mono,
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              divider(),
+              kvLine('Voucher No:', voucherNo, boldFont: true),
+              kvLine('Date:', dateStr),
+              kvLine('Party / Account:', partyName.isNotEmpty ? partyName : 'General Account'),
+              kvLine('Payment Mode:', paymentMode),
+              if (referenceNo != null && referenceNo.isNotEmpty)
+                kvLine('Reference No:', referenceNo),
+              divider(),
+              if (lines.isNotEmpty) ...[
+                pw.Text('LEDGER BREAKDOWN:',
+                    style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 2),
+                ...lines.map((l) {
+                  final lineMap = l is Map ? l : (l.toJson != null ? l.toJson() : {});
+                  final lineType = (lineMap['line_type'] ?? lineMap['lineType'] ?? 'DEBIT').toString().toUpperCase();
+                  final accName = (lineMap['account_name'] ?? lineMap['accountName'] ?? '').toString();
+                  final dr = double.tryParse((lineMap['debit_amount'] ?? lineMap['debitAmount'] ?? 0).toString()) ?? 0;
+                  final cr = double.tryParse((lineMap['credit_amount'] ?? lineMap['creditAmount'] ?? 0).toString()) ?? 0;
+                  final lineAmt = dr > 0 ? dr : cr;
+                  final prefix = lineType == 'DEBIT' ? 'Dr' : 'Cr';
+                  return pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Text('[$prefix] $accName', style: pw.TextStyle(font: mono, fontSize: 8.5)),
+                      ),
+                      pw.Text('Rs. ${lineAmt.toStringAsFixed(2)}', style: pw.TextStyle(font: mono, fontSize: 8.5)),
+                    ],
+                  );
+                }),
+                divider(),
+              ],
+              kvLine('Total Amount:', 'Rs. ${amount.toStringAsFixed(2)}', boldFont: true),
+              divider(),
+              if (note.isNotEmpty) ...[
+                pw.Text('Narration / Note:', style: pw.TextStyle(font: mono, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                pw.Text(note, style: pw.TextStyle(font: mono, fontSize: 8)),
+                divider(),
+              ],
+              pw.SizedBox(height: 12),
+              pw.Center(
+                child: pw.Text(
+                  'Signature / Authorized Sign',
+                  style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Center(
+                child: pw.Text(
+                  'Thank you!',
+                  style: pw.TextStyle(font: mono, fontSize: 8),
+                ),
+              ),
+            ],
+          ),
+        );
+        return pdf.save();
+      },
     );
   }
 

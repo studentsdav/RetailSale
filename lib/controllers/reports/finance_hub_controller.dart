@@ -392,10 +392,16 @@ class FinanceHubController extends ChangeNotifier {
     });
   }
 
-  Future<void> saveOpeningBalance({required DateTime balanceDate, required double openingBalance, String note = ''}) async {
+  Future<void> saveOpeningBalance({
+    required DateTime balanceDate,
+    required double openingBalance,
+    String paymentMode = 'CASH',
+    String note = '',
+  }) async {
     await ApiClient.post(ApiEndpoints.financeOpeningBalance, {
       'balance_date': DateFormat('yyyy-MM-dd').format(balanceDate),
       'opening_balance': openingBalance,
+      'payment_mode': paymentMode,
       'note': note,
     });
   }

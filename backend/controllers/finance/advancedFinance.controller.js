@@ -1,4 +1,5 @@
 const { Op, Sequelize } = require('sequelize');
+const { getNextNumber } = require('../../services/numbering.service');
 const {
     createLedgerEntry,
     updateLedgerEntry,
@@ -14,6 +15,103 @@ const {
     getRepaymentTotal,
     resolvePaymentStatus
 } = require('../../services/salesFinance.service');
+
+async function createAutoAccountingVoucher({
+    req,
+    outlet_id,
+    created_by,
+    voucher_type,
+    voucher_date,
+    payment_mode,
+    reference_no,
+    narration,
+    total_amount,
+    debit_account_name,
+    debit_account_type = 'GENERAL',
+    credit_account_name,
+    credit_account_type = 'GENERAL',
+    transaction
+}) {
+    let autoNo;
+    try {
+        autoNo = await getNextNumber(req.propertyDb, outlet_id, voucher_type);
+    } catch (_) {
+        const prefixMap = { CONTRA: 'CN', PAYMENT: 'PV', RECEIPT: 'RV', JOURNAL: 'JV', SALES: 'SV', PURCHASE: 'PV' };
+        const count = await req.propertyDb.models.accounting_vouchers.count({
+            where: { outlet_id, voucher_type },
+            transaction
+        });
+        autoNo = `${prefixMap[voucher_type] || 'VC'}-${String(count + 1).padStart(4, '0')}`;
+    }
+
+    const vDate = voucher_date || new Date().toISOString().split('T')[0];
+    const amountVal = Number(total_amount || 0);
+
+    const header = await req.propertyDb.models.accounting_vouchers.create({
+        outlet_id,
+        voucher_no: autoNo,
+        voucher_type,
+        voucher_date: vDate,
+        payment_mode: payment_mode || 'CASH',
+        reference_no: reference_no ? String(reference_no).trim() : null,
+        narration: narration ? String(narration).trim() : null,
+        total_debit: amountVal,
+        total_credit: amountVal,
+        status: 'POSTED',
+        created_by
+    }, { transaction });
+
+    const detailRows = [
+        {
+            voucher_id: header.id,
+            line_type: 'DEBIT',
+            account_name: String(debit_account_name || 'General Account').trim(),
+            account_type: debit_account_type,
+            debit_amount: amountVal,
+            credit_amount: 0,
+            particulars: narration ? String(narration).trim() : null
+        },
+        {
+            voucher_id: header.id,
+            line_type: 'CREDIT',
+            account_name: String(credit_account_name || 'Cash / Bank').trim(),
+            account_type: credit_account_type,
+            debit_amount: 0,
+            credit_amount: amountVal,
+            particulars: narration ? String(narration).trim() : null
+        }
+    ];
+
+    await req.propertyDb.models.voucher_lines.bulkCreate(detailRows, { transaction });
+
+    return header;
+}
+
+async function updateSaleLedgerOutstanding({ db, outlet_id, sale, balance, transaction }) {
+    try {
+        const saleEntry = await db.models.cash_ledger.findOne({
+            where: {
+                outlet_id,
+                [Op.or]: [
+                    { reference_id: String(sale.id) },
+                    { reference_no: sale.sale_no }
+                ]
+            },
+            transaction
+        });
+        if (saleEntry) {
+            let updatedNotes = saleEntry.notes || '';
+            if (balance <= 0.009) {
+                updatedNotes = updatedNotes.replace(/-?\s*outstanding\s+[0-9]+(?:\.[0-9]+)?/gi, '(Settled / Paid)');
+            } else {
+                updatedNotes = updatedNotes.replace(/outstanding\s+[0-9]+(?:\.[0-9]+)?/gi, `outstanding ${balance.toFixed(2)}`);
+            }
+            await saleEntry.update({ notes: updatedNotes }, { transaction });
+        }
+    } catch (err) {
+        console.error('Error updating sale ledger outstanding:', err);
+    }
+}
 
 function parseDateOnly(value, fallback = null) {
     if (!value) return fallback;
@@ -126,7 +224,7 @@ function formatIncomeNotes(source, note) {
 
 async function findLinkedLedgerEntry(db, outlet_id, reference_type, reference_id, transaction) {
     return db.models.cash_ledger.findOne({
-        where: { outlet_id, reference_type, reference_id },
+        where: { outlet_id, reference_type, reference_id: String(reference_id) },
         transaction
     });
 }
@@ -394,13 +492,37 @@ exports.createIncome = async (req, res) => {
         if (!source) throw new Error('Income source is required');
         if (amount <= 0) throw new Error('Income amount must be greater than 0');
 
+        let autoVoucher = null;
+        try {
+            autoVoucher = await createAutoAccountingVoucher({
+                req,
+                outlet_id: req.user.outlet_id,
+                created_by: req.user.id,
+                voucher_type: 'RECEIPT',
+                voucher_date: income_date,
+                payment_mode: payment_method,
+                reference_no,
+                narration: formatIncomeNotes(source, note),
+                total_amount: amount,
+                debit_account_name: payment_method || 'CASH',
+                debit_account_type: 'ASSET',
+                credit_account_name: party_name || source || 'Other Income',
+                credit_account_type: 'INCOME',
+                transaction: t
+            });
+        } catch (vErr) {
+            console.error('Error auto-creating income voucher:', vErr);
+        }
+
+        const finalRefNo = autoVoucher ? autoVoucher.voucher_no : (reference_no && reference_no.startsWith('RV-') ? reference_no : `RV-${reference_no || 'INC'}`);
+
         const entry = await createLedgerEntry({
             db: req.propertyDb,
             outlet_id: req.user.outlet_id,
             txn_date: income_date,
             transaction_type: 'INCOME',
             reference_type: 'INCOME',
-            reference_no,
+            reference_no: finalRefNo,
             party_name: party_name || source,
             payment_method,
             amount_in: amount,
@@ -410,9 +532,17 @@ exports.createIncome = async (req, res) => {
         });
 
         await t.commit();
-        res.json({ success: true, data: entry });
+        res.json({
+            success: true,
+            data: {
+                ...serializeLedgerEntry(entry),
+                voucher_no: finalRefNo
+            }
+        });
     } catch (error) {
-        await t.rollback();
+        if (t && !t.finished) {
+            await t.rollback();
+        }
         res.status(400).json({ success: false, error: error.message });
     }
 };
@@ -522,13 +652,37 @@ exports.createWithdrawal = async (req, res) => {
         if (!purpose) throw new Error('Withdrawal purpose is required');
         if (amount <= 0) throw new Error('Withdrawal amount must be greater than 0');
 
+        let autoVoucher = null;
+        try {
+            autoVoucher = await createAutoAccountingVoucher({
+                req,
+                outlet_id: req.user.outlet_id,
+                created_by: req.user.id,
+                voucher_type: 'CONTRA',
+                voucher_date: withdrawal_date,
+                payment_mode: payment_method,
+                reference_no,
+                narration: note ? `${purpose} - ${note}` : purpose,
+                total_amount: amount,
+                debit_account_name: purpose || 'Cash Withdrawal',
+                debit_account_type: 'EQUITY',
+                credit_account_name: payment_method || 'CASH',
+                credit_account_type: 'ASSET',
+                transaction: t
+            });
+        } catch (vErr) {
+            console.error('Error auto-creating withdrawal voucher:', vErr);
+        }
+
+        const finalRefNo = autoVoucher ? autoVoucher.voucher_no : (reference_no && reference_no.startsWith('CN-') ? reference_no : `CN-${reference_no || 'WTH'}`);
+
         const entry = await createLedgerEntry({
             db: req.propertyDb,
             outlet_id: req.user.outlet_id,
             txn_date: withdrawal_date,
             transaction_type: 'WITHDRAWAL',
             reference_type: 'WITHDRAWAL',
-            reference_no,
+            reference_no: finalRefNo,
             party_name: purpose,
             payment_method,
             amount_out: amount,
@@ -538,9 +692,17 @@ exports.createWithdrawal = async (req, res) => {
         });
 
         await t.commit();
-        res.json({ success: true, data: entry });
+        res.json({
+            success: true,
+            data: {
+                ...serializeLedgerEntry(entry),
+                voucher_no: finalRefNo
+            }
+        });
     } catch (error) {
-        await t.rollback();
+        if (t && !t.finished) {
+            await t.rollback();
+        }
         res.status(400).json({ success: false, error: error.message });
     }
 };
@@ -643,6 +805,7 @@ exports.createExpense = async (req, res) => {
     const t = await req.propertyDb.transaction();
 
     try {
+        let autoVoucher = null;
         const amount = toAmount(req.body.amount);
         const is_tax_inclusive = req.body.is_tax_inclusive === true || req.body.is_tax_inclusive === 'true';
         const taxes = req.body.taxes || [];
@@ -726,6 +889,29 @@ exports.createExpense = async (req, res) => {
         }
 
         if (status === 'Paid') {
+            try {
+                autoVoucher = await createAutoAccountingVoucher({
+                    req,
+                    outlet_id: req.user.outlet_id,
+                    created_by: req.user.id,
+                    voucher_type: 'PAYMENT',
+                    voucher_date: payment_date,
+                    payment_mode: payment_method,
+                    reference_no: invoice_ref_no,
+                    narration: expense_note ? `Expense: ${categoryRow.category_name} - ${expense_note}` : `Expense: ${categoryRow.category_name}`,
+                    total_amount: net_payable_amount,
+                    debit_account_name: categoryRow.category_name,
+                    debit_account_type: 'EXPENSE',
+                    credit_account_name: payment_method || 'CASH',
+                    credit_account_type: 'ASSET',
+                    transaction: t
+                });
+            } catch (vErr) {
+                console.error('Error auto-creating expense voucher:', vErr);
+            }
+
+            const finalVNo = autoVoucher ? autoVoucher.voucher_no : (invoice_ref_no && invoice_ref_no.startsWith('PV-') ? invoice_ref_no : `PV-${expense.id.slice(0, 8)}`);
+
             await createLedgerEntry({
                 db: req.propertyDb,
                 outlet_id: req.user.outlet_id,
@@ -733,7 +919,7 @@ exports.createExpense = async (req, res) => {
                 transaction_type: 'EXPENSE',
                 reference_type: 'EXPENSE',
                 reference_id: expense.id,
-                reference_no: invoice_ref_no || `EXP-${expense.id.slice(0, 8)}`,
+                reference_no: finalVNo,
                 party_name: categoryRow.category_name,
                 payment_method: payment_method,
                 amount_out: net_payable_amount,
@@ -744,9 +930,17 @@ exports.createExpense = async (req, res) => {
         }
 
         await t.commit();
-        res.json({ success: true, data: expense });
+        res.json({
+            success: true,
+            data: {
+                ...expense.toJSON(),
+                voucher_no: autoVoucher ? autoVoucher.voucher_no : null
+            }
+        });
     } catch (error) {
-        await t.rollback();
+        if (t && !t.finished) {
+            await t.rollback();
+        }
         res.status(400).json({ success: false, error: error.message });
     }
 };
@@ -919,6 +1113,32 @@ exports.createRepayment = async (req, res) => {
         const sale = await getSaleOrFail(req, sale_id, t);
         const waiveOff = isWaiveOffMode(payment_mode);
 
+        let autoVoucher = null;
+        if (!waiveOff) {
+            try {
+                autoVoucher = await createAutoAccountingVoucher({
+                    req,
+                    outlet_id: req.user.outlet_id,
+                    created_by: req.user.id,
+                    voucher_type: 'RECEIPT',
+                    voucher_date: payment_date,
+                    payment_mode: payment_mode,
+                    reference_no: sale.sale_no,
+                    narration: note || `Credit Payment received for ${sale.sale_no} from ${getCustomerLabel(sale)}`,
+                    total_amount: amount,
+                    debit_account_name: payment_mode || 'CASH',
+                    debit_account_type: 'ASSET',
+                    credit_account_name: getCustomerLabel(sale),
+                    credit_account_type: 'RECEIVABLE',
+                    transaction: t
+                });
+            } catch (vErr) {
+                console.error('Error auto-creating repayment voucher:', vErr);
+            }
+        }
+
+        const repaymentVoucherNo = sale ? sale.sale_no : (reference_no || 'REC');
+
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id, transaction: t });
         const isCreditMode9 = String(sale.payment_mode || '').trim().toUpperCase().includes('CREDIT');
         const initialPaid = (sale.initial_amount_paid !== null && sale.initial_amount_paid !== undefined && isCreditMode9)
@@ -958,7 +1178,7 @@ exports.createRepayment = async (req, res) => {
                     transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
                     reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
                     reference_id: currentBillRepayment.id,
-                    reference_no: sale.sale_no,
+                    reference_no: repaymentVoucherNo,
                     party_name: getCustomerLabel(sale),
                     payment_method: payment_mode,
                     amount_in: waiveOff ? 0 : applyToCurrent,
@@ -971,6 +1191,7 @@ exports.createRepayment = async (req, res) => {
                 });
 
                 balance = await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
+                await updateSaleLedgerOutstanding({ db: req.propertyDb, outlet_id: req.user.outlet_id, sale, balance, transaction: t });
             } else {
                 balance = 0;
             }
@@ -1004,27 +1225,10 @@ exports.createRepayment = async (req, res) => {
 
             const otherRepaymentsCreated = [];
             for (const otherSale of otherSales) {
-                if (extraAmount <= 0) break;
+                if (extraAmount <= 0.009) break;
 
-                const otherOutstanding = toAmount(otherSale.balance_due);
-                if (otherOutstanding <= 0) continue;
-
-                // Exclude delivery orders that are not credit payment
-                if (otherSale.order_type === 'DELIVERY' && otherSale.payment_mode !== 'CREDIT') {
-                    continue;
-                }
-
-                const applyAmount = Math.min(extraAmount, otherOutstanding);
-
-                await ensureRepaymentDuplicateFree({
-                    req,
-                    sale_id: otherSale.id,
-                    payment_date,
-                    amount: applyAmount,
-                    payment_mode,
-                    reference_no,
-                    transaction: t
-                });
+                const applyAmount = Math.min(extraAmount, toAmount(otherSale.balance_due));
+                if (applyAmount <= 0.009) continue;
 
                 const otherRepayment = await req.propertyDb.models.customer_repayments.create({
                     outlet_id: req.user.outlet_id,
@@ -1047,7 +1251,7 @@ exports.createRepayment = async (req, res) => {
                     transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
                     reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
                     reference_id: otherRepayment.id,
-                    reference_no: otherSale.sale_no,
+                    reference_no: repaymentVoucherNo,
                     party_name: getCustomerLabel(otherSale),
                     payment_method: payment_mode,
                     amount_in: waiveOff ? 0 : applyAmount,
@@ -1059,7 +1263,8 @@ exports.createRepayment = async (req, res) => {
                     transaction: t
                 });
 
-                await refreshSaleOutstanding({ db: req.propertyDb, sale: otherSale, transaction: t });
+                const otherBal = await refreshSaleOutstanding({ db: req.propertyDb, sale: otherSale, transaction: t });
+                await updateSaleLedgerOutstanding({ db: req.propertyDb, outlet_id: req.user.outlet_id, sale: otherSale, balance: otherBal, transaction: t });
                 extraAmount = roundAmount(extraAmount - applyAmount);
             }
 
@@ -1094,7 +1299,7 @@ exports.createRepayment = async (req, res) => {
                     transaction_type: 'CUSTOMER_ADVANCE',
                     reference_type: 'ADVANCE',
                     reference_id: advanceCreated.id,
-                    reference_no,
+                    reference_no: repaymentVoucherNo,
                     party_name: getCustomerLabelFromIdentity(identity),
                     payment_method: payment_mode,
                     amount_in: extraAmount,
@@ -1111,7 +1316,8 @@ exports.createRepayment = async (req, res) => {
                     repayment: currentBillRepayment || (otherRepaymentsCreated.length > 0 ? otherRepaymentsCreated[0] : null),
                     balance,
                     adjusted_other_bills_count: otherRepaymentsCreated.length,
-                    excess_advance: advanceCreated
+                    excess_advance: advanceCreated,
+                    voucher_no: repaymentVoucherNo
                 }
             });
         } else {
@@ -1136,7 +1342,7 @@ exports.createRepayment = async (req, res) => {
                 transaction_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
                 reference_type: waiveOff ? 'WAIVE_OFF' : 'REPAYMENT',
                 reference_id: repayment.id,
-                reference_no: sale.sale_no,
+                reference_no: repaymentVoucherNo,
                 party_name: getCustomerLabel(sale),
                 payment_method: payment_mode,
                 amount_in: waiveOff ? 0 : amount,
@@ -1149,8 +1355,10 @@ exports.createRepayment = async (req, res) => {
             });
 
             balance = await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
+            await updateSaleLedgerOutstanding({ db: req.propertyDb, outlet_id: req.user.outlet_id, sale, balance, transaction: t });
+
             await t.commit();
-            res.json({ success: true, data: { repayment, balance } });
+            res.json({ success: true, data: { repayment, balance, voucher_no: repaymentVoucherNo } });
         }
     } catch (error) {
         await t.rollback();
@@ -1549,6 +1757,7 @@ exports.setOpeningBalance = async (req, res) => {
     try {
         const balance_date = dateKey(req.body.balance_date || new Date());
         const opening_balance = toAmount(req.body.opening_balance);
+        const payment_mode = String(req.body.payment_mode || req.body.payment_method || 'CASH').trim().toUpperCase();
         const note = String(req.body.note || '').trim() || null;
 
         const openingRow = await upsertOpeningBalance({
@@ -1561,21 +1770,45 @@ exports.setOpeningBalance = async (req, res) => {
             transaction: t
         });
 
+        let autoVoucher = null;
+        try {
+            autoVoucher = await createAutoAccountingVoucher({
+                req,
+                outlet_id: req.user.outlet_id,
+                created_by: req.user.id,
+                voucher_type: 'RECEIPT',
+                voucher_date: balance_date,
+                payment_mode: payment_mode,
+                reference_no: `OPN-${balance_date}`,
+                narration: note ? `Opening Deposit: ${note}` : `Opening Deposit for ${balance_date}`,
+                total_amount: opening_balance,
+                debit_account_name: payment_mode === 'CASH' ? 'Cash Drawer' : 'Bank / Account',
+                debit_account_type: 'ASSET',
+                credit_account_name: 'Opening Balance Capital',
+                credit_account_type: 'EQUITY',
+                transaction: t
+            });
+        } catch (vErr) {
+            console.error('Error auto-creating opening deposit voucher:', vErr);
+        }
+
+        const voucherNo = autoVoucher ? autoVoucher.voucher_no : `OPN-${balance_date}`;
+
         const existingLedgerEntry = await findLinkedLedgerEntry(
             req.propertyDb,
             req.user.outlet_id,
             'OPENING_DEPOSIT',
-            openingRow.id,
+            String(openingRow.id),
             t
         );
 
         const ledgerValues = {
             txn_date: balance_date,
             reference_type: 'OPENING_DEPOSIT',
-            reference_id: openingRow.id,
-            reference_no: `OPN-${balance_date}`,
+            reference_id: String(openingRow.id),
+            reference_no: voucherNo,
             party_name: 'Business Deposit',
-            payment_method: 'CASH',
+            payment_method: payment_mode,
             amount_in: opening_balance,
             amount_out: 0,
             adjustment_amount: 0,
@@ -1602,9 +1835,11 @@ exports.setOpeningBalance = async (req, res) => {
         }
 
         await t.commit();
-        res.json({ success: true, data: { balance_date, opening_balance, note } });
+        res.json({ success: true, data: { balance_date, opening_balance, payment_mode, note, voucher_no: voucherNo } });
     } catch (error) {
-        await t.rollback();
+        if (t && !t.finished) {
+            await t.rollback();
+        }
         res.status(400).json({ success: false, error: error.message });
     }
 };
@@ -1625,6 +1860,28 @@ exports.getOpeningBalances = async (req, res) => {
             order: [['balance_date', 'DESC'], ['id', 'DESC']]
         });
 
+        const rowIds = rows.map(r => String(r.id));
+        const ledgerEntries = rowIds.length > 0 ? await req.propertyDb.models.cash_ledger.findAll({
+            where: {
+                outlet_id: req.user.outlet_id,
+                reference_type: 'OPENING_DEPOSIT',
+                reference_id: { [Op.in]: rowIds }
+            }
+        }) : [];
+
+        const ledgerMap = new Map();
+        ledgerEntries.forEach(l => {
+            ledgerMap.set(String(l.reference_id), l);
+        });
+
+        const formattedRows = rows.map(r => {
+            const json = r.toJSON();
+            const linkedLedger = ledgerMap.get(String(r.id));
+            json.voucher_no = linkedLedger ? linkedLedger.reference_no : `OPN-${r.balance_date}`;
+            json.payment_mode = linkedLedger ? linkedLedger.payment_method : 'CASH';
+            return json;
+        });
+
         const targetDate = req.query.date || req.query.from_date || new Date();
         const carriedOpening = await getOpeningBalanceForDate({
             db: req.propertyDb,
@@ -1632,7 +1889,7 @@ exports.getOpeningBalances = async (req, res) => {
             balanceDate: targetDate
         });
 
-        res.json({ success: true, summary: { carried_opening_balance: carriedOpening }, data: rows });
+        res.json({ success: true, summary: { carried_opening_balance: carriedOpening }, data: formattedRows });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -1677,6 +1934,26 @@ exports.getExpenseReport = async (req, res) => {
 
         console.log("getExpenseReport query returned count:", data.length);
 
+        const expenseIds = data.map(e => String(e.id));
+        const ledgerEntries = expenseIds.length > 0 ? await req.propertyDb.models.cash_ledger.findAll({
+            where: {
+                outlet_id: req.user.outlet_id,
+                reference_type: 'EXPENSE',
+                reference_id: { [Op.in]: expenseIds }
+            }
+        }) : [];
+
+        const ledgerMap = new Map();
+        ledgerEntries.forEach(l => {
+            ledgerMap.set(String(l.reference_id), l.reference_no);
+        });
+
+        const formattedData = data.map(e => {
+            const json = e.toJSON();
+            json.voucher_no = ledgerMap.get(String(e.id)) || (e.invoice_ref_no && e.invoice_ref_no.startsWith('PV-') ? e.invoice_ref_no : null);
+            return json;
+        });
+
         const totalAmount = data.reduce((sum, entry) => sum + Number(entry.net_payable_amount || 0), 0);
         res.json({ 
             success: true, 
@@ -1684,7 +1961,7 @@ exports.getExpenseReport = async (req, res) => {
                 totalAmount: Math.round(totalAmount * 100) / 100, 
                 totalCount: data.length 
             }, 
-            data 
+            data: formattedData 
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

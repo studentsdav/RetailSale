@@ -5,6 +5,7 @@ const license = require('../middlewares/license.middleware');
 const bankCtrl = require('../controllers/finance/bankAccount.controller');
 const voucherCtrl = require('../controllers/finance/accountingVoucher.controller');
 const reportsCtrl = require('../controllers/finance/financialReports.controller');
+const loanCtrl = require('../controllers/finance/loanEmi.controller');
 
 router.use(auth, license('REPORTS'));
 
@@ -17,6 +18,10 @@ router.put('/banks/:id', bankCtrl.updateBankAccount);
 router.get('/vouchers', voucherCtrl.getVouchers);
 router.get('/vouchers/:id', voucherCtrl.getVoucherById);
 router.post('/vouchers', voucherCtrl.createVoucher);
+
+// Loan, Asset & EMI Endpoints
+router.get('/loans-assets', loanCtrl.getLoansAndAssets);
+router.post('/loans/pay-emi', loanCtrl.payLoanEmi);
 
 // Financial Statements Endpoints
 router.get('/reports/trial-balance', reportsCtrl.getTrialBalance);

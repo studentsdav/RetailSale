@@ -47,6 +47,26 @@ exports.getSupplierBills = async (req, res) => {
                 s + (Number(b.bill_amount) - Number(b.paid_amount)), 0
         );
 
+        const grns = await req.propertyDb.models.goods_receipts.findAll({
+            where: { outlet_id },
+            attributes: ['grn_no', 'supplier_id', 'supplier_bill_no']
+        });
+
+        const grnMap = {};
+        for (const g of grns) {
+            if (g.supplier_id && g.supplier_bill_no) {
+                const key = `${g.supplier_id}_${String(g.supplier_bill_no).trim()}`;
+                grnMap[key] = g.grn_no;
+            }
+        }
+
+        const billsWithGrn = bills.map(b => {
+            const json = b.toJSON();
+            const key = `${b.supplier_id}_${String(b.bill_no || '').trim()}`;
+            json.grn_no = grnMap[key] || '';
+            return json;
+        });
+
         res.json({
             success: true,
             summary: {
@@ -54,7 +74,7 @@ exports.getSupplierBills = async (req, res) => {
                 totalPaid,
                 totalUnpaid
             },
-            data: bills
+            data: billsWithGrn
         });
 
     } catch (err) {
@@ -241,6 +261,44 @@ exports.paySupplierBill = async (req, res) => {
             { transaction: t }
         );
 
+        const grnRecord = await req.propertyDb.models.goods_receipts.findOne({
+            where: {
+                outlet_id,
+                supplier_id: bill.supplier_id,
+                supplier_bill_no: bill.bill_no
+            },
+            transaction: t
+        });
+
+        const grnNo = grnRecord?.grn_no || '';
+        const grnTag = grnNo ? ` (GRN: ${grnNo})` : '';
+        const supplierVNo = bill.bill_no
+            ? (bill.bill_no.startsWith('PV-') ? bill.bill_no : `PV-${bill.bill_no}${grnTag}`)
+            : (grnNo ? `PV-${grnNo}` : `PV-SUP`);
+
+        const remainingBal = Math.max(0, totalBill - totalPaid);
+        try {
+            const originalGrnEntry = await req.propertyDb.models.cash_ledger.findOne({
+                where: {
+                    outlet_id,
+                    reference_type: 'SUPPLIER_BILL',
+                    reference_id: String(bill.id)
+                },
+                transaction: t
+            });
+            if (originalGrnEntry) {
+                let updatedNotes = originalGrnEntry.notes || '';
+                if (remainingBal <= 0.009) {
+                    updatedNotes = updatedNotes.replace(/-?\s*outstanding\s+[0-9]+(?:\.[0-9]+)?/gi, '(Settled / Paid)');
+                } else {
+                    updatedNotes = updatedNotes.replace(/outstanding\s+[0-9]+(?:\.[0-9]+)?/gi, `outstanding ${remainingBal.toFixed(2)}`);
+                }
+                await originalGrnEntry.update({ notes: updatedNotes }, { transaction: t });
+            }
+        } catch (uErr) {
+            console.error('Error updating GRN ledger entry notes:', uErr);
+        }
+
         if (amount > 0) {
             await createLedgerEntry({
                 db: req.propertyDb,
@@ -249,11 +307,11 @@ exports.paySupplierBill = async (req, res) => {
                 transaction_type: 'SUPPLIER_PAYMENT',
                 reference_type: 'SUPPLIER_BILL',
                 reference_id: bill.id,
-                reference_no: bill.bill_no,
+                reference_no: supplierVNo,
                 party_name: supplier?.supplier_name || null,
                 payment_method: paymentMode,
                 amount_out: amount,
-                notes: note || `Supplier payment for bill ${bill.bill_no}`,
+                notes: note || `Supplier payment for bill ${bill.bill_no}${grnTag}`,
                 created_by: req.user.id,
                 transaction: t
             });
@@ -272,6 +330,52 @@ exports.paySupplierBill = async (req, res) => {
         });
 
         await t.commit();
+
+        // Auto-create accounting voucher safely after transaction commit
+        if (amount > 0) {
+            try {
+                const { getNextNumber } = require('../../services/numbering.service');
+                let vNo;
+                try {
+                    vNo = await getNextNumber(req.propertyDb, outlet_id, 'PAYMENT');
+                } catch (_) {
+                    vNo = supplierVNo;
+                }
+                const header = await req.propertyDb.models.accounting_vouchers.create({
+                    outlet_id,
+                    voucher_no: vNo,
+                    voucher_type: 'PAYMENT',
+                    voucher_date: paymentDate,
+                    total_debit: amount,
+                    total_credit: amount,
+                    narration: note || `Supplier payment for bill ${bill.bill_no} (${supplier?.supplier_name || 'Vendor'})`,
+                    payment_mode: paymentMode,
+                    status: 'POSTED',
+                    created_by: req.user.id
+                });
+
+                await req.propertyDb.models.voucher_lines.bulkCreate([
+                    {
+                        voucher_id: header.id,
+                        line_type: 'DEBIT',
+                        account_name: supplier?.supplier_name || 'Accounts Payable',
+                        account_type: 'LIABILITY',
+                        debit_amount: amount,
+                        credit_amount: 0
+                    },
+                    {
+                        voucher_id: header.id,
+                        line_type: 'CREDIT',
+                        account_name: paymentMode || 'CASH',
+                        account_type: 'ASSET',
+                        debit_amount: 0,
+                        credit_amount: amount
+                    }
+                ]);
+            } catch (vErr) {
+                console.error('Error auto-creating supplier payment voucher:', vErr);
+            }
+        }
 
         res.json({ success: true });
 

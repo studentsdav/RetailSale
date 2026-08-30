@@ -161,7 +161,7 @@ exports.getVouchers = async (req, res) => {
         const { voucher_type, from_date, to_date, search } = req.query;
         const where = { outlet_id };
 
-        if (voucher_type) {
+        if (voucher_type && voucher_type !== 'ALL') {
             where.voucher_type = voucher_type;
         }
         if (from_date && to_date) {
@@ -175,12 +175,92 @@ exports.getVouchers = async (req, res) => {
             ];
         }
 
-        const data = await req.propertyDb.models.accounting_vouchers.findAll({
+        let vouchers = await req.propertyDb.models.accounting_vouchers.findAll({
             where,
             order: [['voucher_date', 'DESC'], ['id', 'DESC']]
         });
 
-        res.json({ success: true, data });
+        const list = vouchers.map(v => v.toJSON());
+        const existingVNoSet = new Set(list.map(v => v.voucher_no));
+
+        // If querying SALES or ALL, fallback to include Sales Headers
+        if (!voucher_type || voucher_type === 'SALES' || voucher_type === 'ALL') {
+            try {
+                const sales = await req.propertyDb.models.sales_headers.findAll({
+                    where: {
+                        outlet_id,
+                        is_latest: true,
+                        is_deleted: false,
+                        status: 'COMPLETED'
+                    },
+                    order: [['sale_date', 'DESC'], ['id', 'DESC']],
+                    limit: 100
+                });
+                for (const s of sales) {
+                    const vNo = s.sale_no.startsWith('SV-') ? s.sale_no : `SV-${s.sale_no}`;
+                    if (!existingVNoSet.has(vNo) && !existingVNoSet.has(s.sale_no)) {
+                        list.push({
+                            id: s.id,
+                            outlet_id: s.outlet_id,
+                            voucher_no: vNo,
+                            voucher_type: 'SALES',
+                            voucher_date: s.sale_date,
+                            total_debit: Number(s.net_amount || 0),
+                            total_credit: Number(s.net_amount || 0),
+                            narration: `POS Sale to ${s.customer_name || s.customer_phone || 'Walk-in Customer'}`,
+                            payment_mode: s.payment_mode || 'CASH',
+                            reference_no: s.sale_no,
+                            status: 'POSTED',
+                            lines: []
+                        });
+                    }
+                }
+            } catch (sErr) {
+                console.error('Error fetching fallback sales vouchers:', sErr);
+            }
+        }
+
+        // If querying PURCHASE or ALL, fallback to include Goods Receipts
+        if (!voucher_type || voucher_type === 'PURCHASE' || voucher_type === 'ALL') {
+            try {
+                const grns = await req.propertyDb.models.goods_receipts.findAll({
+                    where: { outlet_id },
+                    order: [['receipt_date', 'DESC'], ['id', 'DESC']],
+                    limit: 100
+                });
+                for (const g of grns) {
+                    const vNo = g.grn_no.startsWith('PV-') ? g.grn_no : `PV-${g.grn_no}`;
+                    if (!existingVNoSet.has(vNo) && !existingVNoSet.has(g.grn_no)) {
+                        list.push({
+                            id: g.id,
+                            outlet_id: g.outlet_id,
+                            voucher_no: vNo,
+                            voucher_type: 'PURCHASE',
+                            voucher_date: g.receipt_date,
+                            total_debit: Number(g.total_amount || 0),
+                            total_credit: Number(g.total_amount || 0),
+                            narration: `Purchase GRN #${g.grn_no} (Bill #${g.supplier_bill_no || 'N/A'})`,
+                            payment_mode: 'CREDIT',
+                            reference_no: g.grn_no,
+                            status: 'POSTED',
+                            lines: []
+                        });
+                    }
+                }
+            } catch (gErr) {
+                console.error('Error fetching fallback purchase vouchers:', gErr);
+            }
+        }
+
+        // Sort combined list descending by date and id
+        list.sort((a, b) => {
+            const dA = new Date(a.voucher_date).getTime();
+            const dB = new Date(b.voucher_date).getTime();
+            if (dB !== dA) return dB - dA;
+            return (b.id || 0) - (a.id || 0);
+        });
+
+        res.json({ success: true, data: list });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 DateTime _parseApiDate(dynamic raw) {
   final text = (raw ?? '').toString().trim();
   if (text.isEmpty) return DateTime.now();
@@ -316,6 +318,7 @@ class ExpenseEntryReport {
   final int? vendorId;
   final String? categoryId;
   final String invoiceRefNo;
+  final String systemVoucherNo;
   final String paymentMethod;
   final bool isTaxInclusive;
   final double baseAmount;
@@ -336,6 +339,7 @@ class ExpenseEntryReport {
     this.vendorId,
     this.categoryId,
     required this.invoiceRefNo,
+    this.systemVoucherNo = '',
     required this.paymentMethod,
     required this.isTaxInclusive,
     required this.baseAmount,
@@ -393,6 +397,7 @@ class ExpenseEntryReport {
 
     // Map base/net amounts
     final double netAmount = numVal(json['net_payable_amount'] ?? json['amount']);
+    final String sysVNo = (json['voucher_no'] ?? json['voucherNo'] ?? '').toString();
 
     return ExpenseEntryReport(
       id: (json['id'] ?? '').toString(),
@@ -403,6 +408,7 @@ class ExpenseEntryReport {
       vendorId: int.tryParse((json['vendor_id'] ?? '').toString()),
       categoryId: (json['category_id'] ?? '').toString(),
       invoiceRefNo: (json['invoice_ref_no'] ?? '').toString(),
+      systemVoucherNo: sysVNo,
       paymentMethod: (json['payment_method'] ?? json['payment_mode'] ?? 'CASH').toString(),
       isTaxInclusive: json['is_tax_inclusive'] == true || json['is_tax_inclusive'] == 1,
       baseAmount: numVal(json['base_amount'] ?? json['amount']),
@@ -414,6 +420,12 @@ class ExpenseEntryReport {
       taxes: parsedTaxes,
       deductions: parsedDeductions,
     );
+  }
+
+  String get voucherNo {
+    if (systemVoucherNo.isNotEmpty) return systemVoucherNo;
+    if (invoiceRefNo.startsWith('PV-')) return invoiceRefNo;
+    return 'PV-${id.length >= 8 ? id.substring(0, 8).toUpperCase() : id.toUpperCase()}';
   }
 }
 
@@ -437,6 +449,12 @@ class IncomeEntryReport {
     required this.amount,
     required this.note,
   });
+
+  String get voucherNo {
+    if (referenceNo.startsWith('RV-') || referenceNo.startsWith('INC-')) return referenceNo;
+    if (referenceNo.isNotEmpty) return 'RV-$referenceNo';
+    return 'RV-$id';
+  }
 
   factory IncomeEntryReport.fromJson(Map<String, dynamic> json) {
     final rawNote = (json['notes'] ?? json['note'] ?? '').toString();
@@ -487,6 +505,12 @@ class WithdrawalEntryReport {
     required this.note,
   });
 
+  String get voucherNo {
+    if (referenceNo.startsWith('CN-') || referenceNo.startsWith('CNT') || referenceNo.startsWith('WTH-')) return referenceNo;
+    if (referenceNo.isNotEmpty) return 'CN-$referenceNo';
+    return 'CN-$id';
+  }
+
   factory WithdrawalEntryReport.fromJson(Map<String, dynamic> json) {
     return WithdrawalEntryReport(
       id: int.tryParse((json['id'] ?? 0).toString()) ?? 0,
@@ -503,20 +527,28 @@ class WithdrawalEntryReport {
 class OpeningBalanceEntry {
   final DateTime balanceDate;
   final double openingBalance;
+  final String paymentMode;
   final String note;
+  final String voucherNo;
 
   const OpeningBalanceEntry({
     required this.balanceDate,
     required this.openingBalance,
+    this.paymentMode = 'CASH',
     required this.note,
+    this.voucherNo = '',
   });
 
   factory OpeningBalanceEntry.fromJson(Map<String, dynamic> json) {
+    final dt = _parseApiDate(json['balance_date']);
+    final dateStr = DateFormat('dd-MMM-yyyy').format(dt);
     return OpeningBalanceEntry(
-      balanceDate: _parseApiDate(json['balance_date']),
+      balanceDate: dt,
       openingBalance:
           double.tryParse((json['opening_balance'] ?? 0).toString()) ?? 0,
+      paymentMode: (json['payment_mode'] ?? json['payment_method'] ?? 'CASH').toString(),
       note: (json['note'] ?? '').toString(),
+      voucherNo: (json['voucher_no'] ?? json['reference_no'] ?? 'OPN-$dateStr').toString(),
     );
   }
 }
