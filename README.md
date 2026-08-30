@@ -26,6 +26,7 @@ For step-by-step setup details, see the new **[Retailer Installation & Update Gu
 - [Init Setup Guide (Dev/Manual)](./Docs/Init-Setup.md)
 - [Frontend Developer Guide](./Docs/Frontend-Guide.md)
 - [Backend Developer Guide](./Docs/Backend-Guide.md)
+- [Render Cloud Deployment & Environment Guide](./Docs/Render-Cloud-Deployment-Guide.md)
 - [Own Server Online Deployment Guide](./Docs/Own-Server-Online-Deployment-Guide.md)
 - [Endpoint Reference](./Docs/Endpoint-Reference.md)
 
