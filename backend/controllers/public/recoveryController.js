@@ -355,23 +355,29 @@ async function verifyAndRecoverConfig(req, res) {
         writeOtpStore(otpStore);
         console.log(`✅ [RECOVERY] OTP Verified! Downloading config.enc from Folder: ${folderId}`);
 
-        const resEnc = await sendToGoogleScript({
-            action: 'download_config',
-            folderId: folderId,
-            filename: "config.enc"
-        });
+        let downloaded = false;
+        try {
+            const resEnc = await sendToGoogleScript({
+                action: 'download_config',
+                folderId: folderId,
+                filename: "config.enc"
+            });
+            if (resEnc && resEnc.base64) {
+                const configPath = path.join(rootDir, 'config.enc');
+                fs.writeFileSync(configPath, Buffer.from(resEnc.base64, 'base64'));
+                downloaded = true;
+            }
+        } catch (e) {
+            console.warn(`⚠️ Cloud config.enc download notice: ${e.message}`);
+        }
 
-        if (!resEnc || !resEnc.base64) {
+        if (!downloaded && !process.env.DATABASE_URL && !process.env.DB_HOST) {
             throw new Error("config.enc file is missing in the cloud backup.");
         }
 
-        const configPath = path.join(rootDir, 'config.enc');
-
-        fs.writeFileSync(configPath, Buffer.from(resEnc.base64, 'base64'));
-
         res.json({
             success: true,
-            message: "System configuration recovered successfully! Please restart the System."
+            message: "System configuration recovered successfully!"
         });
 
     } catch (error) {

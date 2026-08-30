@@ -12,11 +12,13 @@ exports.internalCheckOutlet = async (outlet_code, propertyDb) => {
     const sysConfigPath = path.join(rootDir, 'sysConfig.enc');
     const configPath = path.join(rootDir, 'config.enc');
 
-    if (!fs.existsSync(sysConfigPath) || !fs.existsSync(configPath)) {
-        return {
-            success: false,
-            message: "System files corrupted. Please reinstall the software."
-        };
+    if (!process.env.DATABASE_URL && !process.env.DB_HOST) {
+        if (!fs.existsSync(sysConfigPath) || !fs.existsSync(configPath)) {
+            return {
+                success: false,
+                message: "System files corrupted. Please reinstall the software."
+            };
+        }
     }
 
     if (!outlet_code) {
