@@ -6,18 +6,25 @@ const sysConfig = require('../utils/configManager');
 function getTransporter() {
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
     const emailPass = process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || (sysConfig ? sysConfig.emailPass : null);
-    const emailService = process.env.EMAIL_SERVICE || 'gmail';
+    const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
+    const emailPort = Number(process.env.EMAIL_PORT) || 587;
 
     if (!emailUser || !emailPass) {
         return null;
     }
 
     return nodemailer.createTransport({
-        service: emailService,
+        host: emailHost,
+        port: emailPort,
+        secure: emailPort === 465,
+        requireTLS: emailPort === 587,
         auth: {
             user: emailUser,
             pass: emailPass
-        }
+        },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000
     });
 }
 
