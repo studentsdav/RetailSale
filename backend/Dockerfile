@@ -4,6 +4,9 @@ FROM node:20-alpine
 # Set working directory inside container
 WORKDIR /app
 
+# Install postgresql-client for pg_dump support
+RUN apk add --no-cache postgresql-client
+
 # Copy package definition files
 COPY package*.json ./
 

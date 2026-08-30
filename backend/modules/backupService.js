@@ -4,7 +4,22 @@ const path = require("path");
 const fs = require("fs").promises;
 const loadConfig = require("../utils/decryptConfig");
 
-const pgDumpPath = "C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe";
+const fsSync = require("fs");
+
+let pgDumpPath = "pg_dump";
+if (process.platform === "win32") {
+    const candidateWinPaths = [
+        "C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe",
+        "C:\\Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe",
+        "C:\\Program Files\\PostgreSQL\\16\\bin\\pg_dump.exe",
+        "C:\\Program Files\\PostgreSQL\\15\\bin\\pg_dump.exe"
+    ];
+    const foundWinPath = candidateWinPaths.find(p => fsSync.existsSync(p));
+    if (foundWinPath) {
+        pgDumpPath = foundWinPath;
+    }
+}
+
 const isCompiled = typeof process.pkg !== "undefined";
 const baseDir = isCompiled ? path.dirname(process.execPath) : path.join(__dirname, "..");
 
