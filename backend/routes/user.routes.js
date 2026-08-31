@@ -9,6 +9,7 @@ router.get('/:id/permissions', ctrl.getPermissions);
 router.put('/:id/permissionsupdate', ctrl.updatePermissions);
 router.get('/', ctrl.listUsers);
 router.post('/', ctrl.createUser);
+router.post('/check-username', ctrl.checkUsernameAvailability);
 router.put('/:id', ctrl.updateUser);
 router.put('/:id/status', ctrl.toggleStatus);
 router.put('/:id/reset-password', ctrl.resetPassword);

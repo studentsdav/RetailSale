@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1154,58 +1155,67 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
           orElse: () => null,
         );
 
-    final String? vendorEmail = supplier?.email;
+    final String initialEmail = (supplier?.email ?? '').trim();
     final String vendorName = supplier?.supplierName ?? 'Vendor';
 
-    if (vendorEmail == null || vendorEmail.trim().isEmpty) {
-      final emailCtrl = TextEditingController();
-      final addedEmail = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          title: const Row(
-            children: [
-              Icon(Icons.email_outlined, color: Color(0xFFFF7A1A)),
-              SizedBox(width: 8),
-              Text('Vendor Email Missing'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Vendor "$vendorName" does not have an email registered in Vendor Master.'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Enter Vendor Email Address',
-                  hintText: 'vendor@supplier.com',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                ),
+    final emailCtrl = TextEditingController(text: initialEmail);
+
+    final String? recipientEmail = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
+          children: [
+            const Icon(Icons.email_outlined, color: Color(0xFFFF7A1A)),
+            const SizedBox(width: 8),
+            Text(initialEmail.isNotEmpty ? 'Email Purchase Order' : 'Vendor Email Missing'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              initialEmail.isNotEmpty
+                  ? 'Confirm recipient email address for "$vendorName":'
+                  : 'Vendor "$vendorName" does not have an email registered in Vendor Master. Enter email:',
+              style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Recipient Email Address',
+                hintText: 'vendor@supplier.com',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email_outlined),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7A1A), foregroundColor: Colors.white),
-              icon: const Icon(Icons.send_rounded, size: 16),
-              label: const Text('Send Email'),
-              onPressed: () => Navigator.pop(context, emailCtrl.text.trim()),
             ),
           ],
         ),
-      );
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7A1A),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            icon: const Icon(Icons.send_rounded, size: 16),
+            label: const Text('Send Email'),
+            onPressed: () => Navigator.pop(context, emailCtrl.text.trim()),
+          ),
+        ],
+      ),
+    );
 
-      if (addedEmail == null || addedEmail.isEmpty) return;
-      await _sendPoEmailToAddress(addedEmail, vendorName);
-      return;
-    }
-
-    await _sendPoEmailToAddress(vendorEmail, vendorName);
+    if (recipientEmail == null || recipientEmail.isEmpty) return;
+    await _sendPoEmailToAddress(recipientEmail, vendorName);
   }
 
   Future<void> _sendPoEmailToAddress(String emailAddr, String vendorName) async {
@@ -1214,11 +1224,22 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
           0, (sum, item) => sum + ((item.qty * item.rate) * (item.tax / 100)));
       final grandTotal = totalAmount + totalGST;
 
+      String? pdfBase64;
+      try {
+        final pdfDoc = await _buildPurchaseOrderPdf();
+        final bytes = await pdfDoc.save();
+        pdfBase64 = base64Encode(bytes);
+      } catch (err) {
+        debugPrint('Error generating PO PDF for email: $err');
+      }
+
       final res = await ApiClient.post('/api/inventory/purchase-orders/send-email', {
         'to_email': emailAddr,
         'po_no': _poNo.text,
         'vendor_name': vendorName,
         'total_amount': grandTotal,
+        if (pdfBase64 != null) 'pdf_base64': pdfBase64,
+        'pdf_filename': 'PO_${_poNo.text.replaceAll(' ', '_')}.pdf',
         'items': _items.map((e) => {
           'item_name': e.itemName,
           'qty': e.qty,
@@ -1248,58 +1269,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     }
   }
 
-  pw.Widget _tableCell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
-    return pw.Container(
-      alignment: alignment,
-      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          fontSize: 8,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
-        ),
-      ),
-    );
-  }
-
-  pw.Widget _totalRow(String label, double value, {bool bold = false}) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [
-        pw.Text(label,
-            style: pw.TextStyle(
-                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        pw.Text(value.toStringAsFixed(2),
-            style: pw.TextStyle(
-                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-      ],
-    );
-  }
-
-  pw.Widget _metaRow(String label, String value) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 2),
-      child: pw.Row(
-        mainAxisSize: pw.MainAxisSize.min,
-        children: [
-          pw.SizedBox(
-            width: 45,
-            child: pw.Text(
-              "$label:",
-              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
-            ),
-          ),
-          pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _printPurchaseOrder() async {
+  Future<pw.Document> _buildPurchaseOrderPdf() async {
     final pdf = pw.Document();
 
     final Supplier? supplier = supplierCtrl.list.cast<Supplier?>().firstWhere(
@@ -1486,7 +1456,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                 children: [
                   pw.Text("Authorized Signature", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                   pw.SizedBox(height: 30),
-                  pw.Text(property!.legalName,
+                  pw.Text(property?.legalName ?? '',
                       style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
                 ],
               ),
@@ -1503,6 +1473,62 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
       ),
     );
 
+    return pdf;
+  }
+
+  pw.Widget _tableCell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: alignment,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 8,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: bold ? PdfColors.blueGrey900 : PdfColors.grey900,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _totalRow(String label, double value, {bool bold = false}) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label,
+            style: pw.TextStyle(
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+        pw.Text(value.toStringAsFixed(2),
+            style: pw.TextStyle(
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+      ],
+    );
+  }
+
+  pw.Widget _metaRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 45,
+            child: pw.Text(
+              "$label:",
+              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _printPurchaseOrder() async {
+    final pdf = await _buildPurchaseOrderPdf();
     await Printing.layoutPdf(name: _poNo.text.isNotEmpty ? 'PO_${_poNo.text}' : 'Purchase_Order', onLayout: (format) async => pdf.save());
   }
 }

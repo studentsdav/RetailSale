@@ -893,7 +893,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
       );
     }
 
-    final drawDate = DateTime.parse(_activeCampaign['draw_date']);
+    final drawDate = DateTime.parse(_activeCampaign['draw_date']).toLocal();
     final isResultDayOrAfter = DateTime.now().isAfter(drawDate);
     final daysLeft = drawDate.difference(DateTime.now()).inDays;
     final daysLeftText = daysLeft <= 0 ? 'Draw Day Reached!' : '$daysLeft Days Left';
@@ -1033,7 +1033,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                       selected: isSelected,
                       selectedTileColor: Colors.blue.shade50,
                       title: Text(c['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      subtitle: Text(DateFormat('dd-MMM-yy').format(DateTime.parse(c['draw_date'])), style: const TextStyle(fontSize: 11)),
+                      subtitle: Text(DateFormat('dd-MMM-yy').format(DateTime.parse(c['draw_date']).toLocal()), style: const TextStyle(fontSize: 11)),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 12),
                       onTap: () => _selectCompletedCampaign(c),
                     );
@@ -1119,8 +1119,11 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
           const Divider(),
           const SizedBox(height: 8),
           _detailRow('Raffle Threshold', 'Spend ${_inr.format(double.parse(campaign['threshold_amount'].toString()))} per ticket'),
-          _detailRow('Start Date', DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(campaign['start_date']))),
-          _detailRow('Draw Date', DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(campaign['draw_date']))),
+          _detailRow('Start Date', DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(campaign['start_date']).toLocal())),
+          _detailRow('Draw Date', DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(campaign['draw_date']).toLocal())),
+          if (_completedStats != null && campaign['id'] == _selectedCompletedCampaign?['id']) ...[
+            _detailRow('Total Campaign Sales', '₹${_inr.format(double.tryParse((_completedStats!['total_campaign_sales'] ?? _completedStats!['total_revenue'] ?? 0).toString()) ?? 0.0)}'),
+          ],
           
           if (campaign['id'] == _activeCampaign?['id'] && (campaign['status'] == 'ACTIVE' || campaign['status'] == 'PAUSED')) ...[
             const SizedBox(height: 16),
@@ -1175,7 +1178,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
   Widget _buildRaffleDrawerConsole(dynamic campaign, bool isResultDayOrAfter) {
     final status = campaign['status'];
     final hasWinner = campaign['winner'] != null;
-    final drawDate = DateTime.parse(campaign['draw_date']);
+    final drawDate = DateTime.parse(campaign['draw_date']).toLocal();
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -1356,10 +1359,12 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
   Widget _buildSalesTrendChartCard(List<dynamic> salesTrendData) {
     // Map backend response into Syncfusion-compatible data
     final List<SalesDayPoint> dataPoints = salesTrendData.map((s) {
-      final date = DateTime.parse(s['date'].toString());
-      final sales = double.parse(s['total_sales'].toString());
-      return SalesDayPoint(date, sales);
+      final date = DateTime.parse(s['date'].toString()).toLocal();
+      final sales = double.tryParse(s['total_sales'].toString()) ?? 0.0;
+      final label = DateFormat('dd MMM').format(date);
+      return SalesDayPoint(label, date, sales);
     }).toList();
+    dataPoints.sort((a, b) => a.date.compareTo(b.date));
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -1382,27 +1387,40 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
             child: dataPoints.isEmpty
                 ? const Center(child: Text('No sales records registered during this campaign timeline.', style: TextStyle(color: Colors.grey)))
                 : SfCartesianChart(
-                    primaryXAxis: DateTimeAxis(
-                      dateFormat: DateFormat('dd MMM'),
-                      intervalType: DateTimeIntervalType.days,
+                    primaryXAxis: const CategoryAxis(
+                      labelIntersectAction: AxisLabelIntersectAction.rotate45,
+                      majorGridLines: MajorGridLines(width: 0.5),
                     ),
                     primaryYAxis: const NumericAxis(
                       title: AxisTitle(text: 'Revenue'),
                     ),
                     series: <CartesianSeries>[
-                      SplineAreaSeries<SalesDayPoint, DateTime>(
+                      ColumnSeries<SalesDayPoint, String>(
                         dataSource: dataPoints,
-                        xValueMapper: (SalesDayPoint p, _) => p.date,
+                        xValueMapper: (SalesDayPoint p, _) => p.dateLabel,
                         yValueMapper: (SalesDayPoint p, _) => p.sales,
-                        gradient: LinearGradient(
-                          colors: [Colors.blue.withOpacity(0.4), Colors.blue.withOpacity(0.03)],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+                        color: Colors.blue.shade400,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                        width: dataPoints.length == 1 ? 0.2 : 0.5,
+                        dataLabelSettings: const DataLabelSettings(
+                          isVisible: true,
+                          textStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
                         ),
-                        borderColor: Colors.blue,
-                        borderWidth: 2,
-                        name: 'Sales',
                       ),
+                      if (dataPoints.length > 1)
+                        SplineAreaSeries<SalesDayPoint, String>(
+                          dataSource: dataPoints,
+                          xValueMapper: (SalesDayPoint p, _) => p.dateLabel,
+                          yValueMapper: (SalesDayPoint p, _) => p.sales,
+                          gradient: LinearGradient(
+                            colors: [Colors.blue.withOpacity(0.3), Colors.blue.withOpacity(0.02)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderColor: Colors.blue,
+                          borderWidth: 2,
+                          markerSettings: const MarkerSettings(isVisible: true),
+                        ),
                     ],
                   ),
           ),
@@ -1594,9 +1612,10 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
 
 // Chart Data Point class
 class SalesDayPoint {
+  final String dateLabel;
   final DateTime date;
   final double sales;
-  SalesDayPoint(this.date, this.sales);
+  SalesDayPoint(this.dateLabel, this.date, this.sales);
 }
 
 // Blinking Dot Widget for PENDING RESULT

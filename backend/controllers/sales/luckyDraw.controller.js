@@ -149,9 +149,17 @@ exports.getDrawStats = async (req, res) => {
         let totalRevenue = 0;
         if (saleIds.length > 0) {
             totalRevenue = await req.propertyDb.models.sales_headers.sum('net_amount', {
-                where: { id: { [Op.in]: saleIds } }
+                where: { id: { [Op.in]: saleIds }, status: 'COMPLETED' }
             }) || 0;
         }
+
+        const endDate = campaign.status === 'COMPLETED' ? (campaign.updated_at || campaign.draw_date) : new Date();
+        const totalCampaignSales = await req.propertyDb.models.sales_headers.sum('net_amount', {
+            where: {
+                created_at: { [Op.between]: [campaign.start_date, endDate] },
+                status: 'COMPLETED'
+            }
+        }) || 0;
 
         res.json({
             success: true,
@@ -163,7 +171,8 @@ exports.getDrawStats = async (req, res) => {
                 draw_date: campaign.draw_date,
                 total_tickets: totalTickets,
                 participating_customers: participatingCustomers,
-                total_revenue: Number(totalRevenue)
+                total_revenue: Number(totalRevenue),
+                total_campaign_sales: Number(totalCampaignSales) > 0 ? Number(totalCampaignSales) : Number(totalRevenue)
             }
         });
     } catch (error) {
@@ -369,20 +378,33 @@ exports.getCampaignSalesTrend = async (req, res) => {
         }
 
         const startDate = campaign.start_date;
-        const endDate = campaign.status === 'COMPLETED' ? campaign.draw_date : new Date();
+        const endDate = campaign.status === 'COMPLETED' ? (campaign.updated_at || campaign.draw_date) : new Date();
+
+        // Get sale IDs linked to tickets issued under this campaign
+        const vouchers = await req.propertyDb.models.draw_vouchers.findAll({
+            where: { campaign_id: id, sale_id: { [Op.ne]: null } },
+            attributes: ['sale_id'],
+            raw: true
+        });
+        const saleIds = [...new Set(vouchers.map(v => v.sale_id))];
 
         const sequelize = req.propertyDb;
+        const whereClause = {
+            status: 'COMPLETED'
+        };
+
+        if (saleIds.length > 0) {
+            whereClause.id = { [Op.in]: saleIds };
+        } else {
+            whereClause.created_at = { [Op.between]: [startDate, endDate] };
+        }
+
         const sales = await req.propertyDb.models.sales_headers.findAll({
             attributes: [
                 [sequelize.fn('DATE', sequelize.col('created_at')), 'date'],
                 [sequelize.fn('SUM', sequelize.col('net_amount')), 'total_sales']
             ],
-            where: {
-                created_at: {
-                    [Op.between]: [startDate, endDate]
-                },
-                status: 'COMPLETED'
-            },
+            where: whereClause,
             group: [sequelize.fn('DATE', sequelize.col('created_at'))],
             order: [[sequelize.fn('DATE', sequelize.col('created_at')), 'ASC']],
             raw: true

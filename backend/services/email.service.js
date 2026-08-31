@@ -13,7 +13,7 @@ const nodemailer = require('nodemailer');
 exports.sendMail = async ({ db, outlet_id, to, subject, text, html, attachments }) => {
     try {
         const config = await db.models.email_configurations.findOne({
-            where: { outlet_id, is_active: true }
+            where: { outlet_id }
         });
 
         if (!config) {
@@ -21,18 +21,26 @@ exports.sendMail = async ({ db, outlet_id, to, subject, text, html, attachments 
             return false;
         }
 
+        const isSecure = Number(config.smtp_port) === 465 || (config.encryption_type && String(config.encryption_type).includes('SSL'));
+
         const transporter = nodemailer.createTransport({
             host: config.smtp_host,
             port: Number(config.smtp_port),
-            secure: config.encryption_type === 'SSL',
+            secure: isSecure,
             auth: {
                 user: config.smtp_user,
                 pass: config.smtp_pass
+            },
+            tls: {
+                rejectUnauthorized: false
             }
         });
 
+        const fromEmail = config.from_email || config.smtp_user;
+        const fromName = config.from_name || 'Retail POS';
+
         const mailOptions = {
-            from: `"${config.from_name || 'Retail POS'}" <${config.from_email}>`,
+            from: `"${fromName}" <${fromEmail}>`,
             to,
             subject,
             text,

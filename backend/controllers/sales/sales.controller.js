@@ -3640,7 +3640,7 @@ exports.createSale = async (req, res) => {
                     invoice_discount_amount: 0,
                     force_invoice_discount: false
                 }),
-                items: splitItems.paid,
+                items: saleItems,
                 overrides: {},
                 affectStock,
                 itemMasterMap: itemMetaMap
@@ -3650,12 +3650,10 @@ exports.createSale = async (req, res) => {
 
         }
 
-        if (freeBillItems.length > 0) {
-            const freeBillCharges = splitItems.paid.length === 0
-                ? (Array.isArray(headerForCreate.charges) ? headerForCreate.charges : [])
-                : [];
-            const freeBillChargeTotal = splitItems.paid.length === 0 ? toAmount(headerForCreate.charge_total) : 0;
-            const freeBillChargeTaxTotal = splitItems.paid.length === 0 ? toAmount(headerForCreate.charge_tax_total) : 0;
+        if (freeBillItems.length > 0 && splitItems.paid.length === 0) {
+            const freeBillCharges = Array.isArray(headerForCreate.charges) ? headerForCreate.charges : [];
+            const freeBillChargeTotal = toAmount(headerForCreate.charge_total);
+            const freeBillChargeTaxTotal = toAmount(headerForCreate.charge_tax_total);
             const freeBillNetAmount = freeBillChargeTotal + freeBillChargeTaxTotal;
 
             freeSale = await createSaleVersion({
@@ -3712,7 +3710,7 @@ exports.createSale = async (req, res) => {
                 invoiceDiscountAmount: freeBillDiscount
             });
             await freeSale.update({
-                original_sale_id: freeSale.id
+                original_sale_id: primarySale ? primarySale.id : freeSale.id
             }, { transaction: t });
             createdSales.push(freeSale);
         }
@@ -4663,6 +4661,12 @@ exports.listSales = async (req, res) => {
         } else if (latestOnly) {
             where.is_latest = true;
             where.is_deleted = false;
+            where.notes = {
+                [Op.or]: [
+                    { [Op.eq]: null },
+                    { [Op.notILike]: '%Auto-generated free bill%' }
+                ]
+            };
         }
 
         if (fromDate || toDate) {

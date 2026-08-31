@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
     return sequelize.define('users', {
-        username: { type: DataTypes.STRING, unique: true },
+        username: { type: DataTypes.STRING, allowNull: false },
         outlet_id: {
             type: DataTypes.INTEGER,
             allowNull: false
@@ -20,6 +20,13 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'users',
         timestamps: true,
         createdAt: 'created_at',
-        updatedAt: 'updated_at'
+        updatedAt: 'updated_at',
+        indexes: [
+            {
+                name: 'users_outlet_username_unique',
+                unique: true,
+                fields: ['outlet_id', 'username']
+            }
+        ]
     });
 };

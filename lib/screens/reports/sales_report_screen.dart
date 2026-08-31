@@ -808,6 +808,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       } catch (_) {}
     }
 
+    final double subCoverage = (sale.paymentMode.toUpperCase() != 'SUBSCRIPTION')
+        ? (sale.advanceAdjustmentAmount > 0.009
+            ? sale.advanceAdjustmentAmount
+            : (sale.subscription > 0.009 ? sale.subscription : 0.0))
+        : 0.0;
+
     if (splits.isEmpty) {
       if (sale.cashAmount > 0.009) splits.add({'mode': 'CASH', 'amount': sale.cashAmount});
       if (sale.cardAmount > 0.009) splits.add({'mode': 'CARD', 'amount': sale.cardAmount});
@@ -815,20 +821,37 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       if (sale.otherAmount > 0.009) splits.add({'mode': 'OTHER', 'amount': sale.otherAmount});
       if (sale.advanceAmount > 0.009) splits.add({'mode': 'ADVANCE_DEPOSIT', 'amount': sale.advanceAmount});
       if (sale.advanceAdjustmentAmount > 0.009) splits.add({'mode': 'ADVANCE_ADJUSTMENT', 'amount': sale.advanceAdjustmentAmount});
-      if (sale.subscription > 0.009 && sale.paymentMode != 'SUBSCRIPTION') splits.add({'mode': 'SUBSCRIPTION', 'amount': sale.subscription});
     }
 
+    if (subCoverage > 0.009) {
+      final bool hasSubSplit = splits.any((s) => s['mode'] == 'ADVANCE_ADJUSTMENT' || s['mode'] == 'SUBSCRIPTION');
+      if (!hasSubSplit) {
+        splits.add({'mode': 'ADVANCE_ADJUSTMENT', 'amount': subCoverage});
+        final cashIndex = splits.indexWhere((s) => s['mode'] == 'CASH');
+        if (cashIndex != -1) {
+          final double curCash = (splits[cashIndex]['amount'] as num).toDouble();
+          final double newCash = curCash - subCoverage;
+          if (newCash > 0.009) {
+            splits[cashIndex]['amount'] = newCash;
+          } else {
+            splits.removeAt(cashIndex);
+          }
+        }
+      }
+    }
+
+    final double targetGrossNet = sale.netAmount;
     final double paidSum = splits.fold<double>(0, (sum, item) => sum + (item['amount'] as double));
-    final double rem = sale.netAmount - paidSum;
+    final double rem = targetGrossNet - paidSum;
     if (rem > 0.009) {
-      final String mode = (sale.paymentMode.isNotEmpty && sale.paymentMode != 'SPLIT') ? sale.paymentMode : 'CREDIT';
+      final String mode = (sale.paymentMode.isNotEmpty && sale.paymentMode != 'SPLIT') ? sale.paymentMode : 'CASH';
       splits.add({'mode': mode, 'amount': rem});
     }
 
-    if (splits.isEmpty && sale.netAmount > 0) {
+    if (splits.isEmpty && targetGrossNet > 0) {
       splits.add({
         'mode': (sale.paymentMode.isNotEmpty && sale.paymentMode != 'SPLIT') ? sale.paymentMode : 'CASH',
-        'amount': sale.netAmount
+        'amount': targetGrossNet
       });
     }
 

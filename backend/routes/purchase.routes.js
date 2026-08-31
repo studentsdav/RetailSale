@@ -13,6 +13,7 @@ router.get('/:id/details', ctrl.getPurchaseOrderDetails);
 router.put('/:id/modify', ctrl.modifyPurchaseOrder);
 router.get('/:id', ctrl.getPurchaseOrder);
 router.put('/:id', ctrl.updatePurchaseOrder);
+router.post('/send-email', ctrl.sendPoEmail);
 router.post('/:id/close', ctrl.closePurchaseOrder);
 router.post('/:id/cancel', ctrl.cancelPurchaseOrder);
 

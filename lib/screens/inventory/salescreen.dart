@@ -6802,6 +6802,7 @@ class _SaleScreenState extends State<SaleScreen> {
             saveResponse?['token_no'] ??
             order.tokenNo ??
             '').toString();
+        final luckyVouchers = saveResponse?['data']?['lucky_draw_vouchers'] ?? saveResponse?['lucky_draw_vouchers'];
         final printOrder = order.copyWith(
           saleNo: primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo,
           tokenNo: isTokenSystemEnabled ? (primaryTokenNo.trim().isNotEmpty ? primaryTokenNo : order.tokenNo) : null,
@@ -6809,6 +6810,7 @@ class _SaleScreenState extends State<SaleScreen> {
           hasBillNo: (primarySaleNo.trim().isNotEmpty ? primarySaleNo : order.saleNo).isNotEmpty &&
               !primarySaleNo.toUpperCase().startsWith('DRAFT-'),
           orderId: targetPrintId,
+          luckyDrawVouchers: luckyVouchers is List ? luckyVouchers : order.luckyDrawVouchers,
         );
 
         _handlePrintAfterSave(

@@ -16,7 +16,11 @@ exports.getEmailConfig = async (req, res) => {
 exports.saveEmailConfig = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-        const { smtp_host, smtp_port, smtp_user, smtp_pass, encryption_type, from_name, from_email, is_active } = req.body;
+        const { smtp_host, smtp_port, smtp_user, smtp_pass, encryption_type, from_name, from_email, sender_name, security_type, is_active } = req.body;
+
+        const effectiveFromEmail = from_email || smtp_user;
+        const effectiveFromName = from_name || sender_name || 'Retail POS';
+        const effectiveEncryption = encryption_type || security_type || 'STARTTLS';
 
         let config = await req.propertyDb.models.email_configurations.findOne({
             where: { outlet_id }
@@ -28,10 +32,10 @@ exports.saveEmailConfig = async (req, res) => {
                 smtp_port,
                 smtp_user,
                 smtp_pass,
-                encryption_type,
-                from_name,
-                from_email,
-                is_active
+                encryption_type: effectiveEncryption,
+                from_name: effectiveFromName,
+                from_email: effectiveFromEmail,
+                is_active: is_active ?? true
             });
         } else {
             config = await req.propertyDb.models.email_configurations.create({
@@ -40,9 +44,9 @@ exports.saveEmailConfig = async (req, res) => {
                 smtp_port,
                 smtp_user,
                 smtp_pass,
-                encryption_type,
-                from_name,
-                from_email,
+                encryption_type: effectiveEncryption,
+                from_name: effectiveFromName,
+                from_email: effectiveFromEmail,
                 is_active: is_active ?? true
             });
         }
@@ -55,39 +59,61 @@ exports.saveEmailConfig = async (req, res) => {
 
 exports.testEmail = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
-        const { to_email } = req.body;
+        const outlet_id = req.user?.outlet_id;
+        const { to_email, smtp_host, smtp_port, smtp_user, smtp_pass, sender_name, security_type } = req.body;
 
-        const config = await req.propertyDb.models.email_configurations.findOne({
-            where: { outlet_id, is_active: true }
-        });
+        let host = smtp_host;
+        let port = Number(smtp_port) || 587;
+        let user = smtp_user;
+        let pass = smtp_pass;
+        let fromName = sender_name || 'Retail POS';
 
-        if (!config) {
-            return res.status(400).json({ success: false, message: 'Email configuration is inactive or not found' });
+        if (!host || !user) {
+            const config = await req.propertyDb.models.email_configurations.findOne({
+                where: { outlet_id }
+            });
+
+            if (!config) {
+                return res.status(400).json({ success: false, message: 'Email configuration is inactive or not found' });
+            }
+            host = config.smtp_host;
+            port = Number(config.smtp_port) || 587;
+            user = config.smtp_user;
+            pass = config.smtp_pass;
+            fromName = config.from_name || 'Retail POS';
         }
 
+        if (!to_email) {
+            return res.status(400).json({ success: false, message: 'Recipient email address is required' });
+        }
+
+        const isSecure = port === 465 || (security_type && String(security_type).includes('465'));
         const transporter = nodemailer.createTransport({
-            host: config.smtp_host,
-            port: Number(config.smtp_port),
-            secure: config.encryption_type === 'SSL',
+            host: host,
+            port: Number(port),
+            secure: isSecure,
             auth: {
-                user: config.smtp_user,
-                pass: config.smtp_pass
+                user: user,
+                pass: pass
+            },
+            tls: {
+                rejectUnauthorized: false
             }
         });
 
         const mailOptions = {
-            from: `"${config.from_name || 'Retail POS'}" <${config.from_email}>`,
+            from: `"${fromName}" <${user}>`,
             to: to_email,
             subject: 'Test Email from Retail POS',
-            text: 'Hello, this is a test email confirming that SMTP is working properly.',
-            html: '<p>Hello, this is a test email confirming that SMTP is working properly.</p>'
+            text: 'Hello, this is a test email confirming that SMTP parameters are working properly.',
+            html: '<h3>SMTP Configuration Test</h3><p>Hello, this is a test email confirming that SMTP parameters are working properly on your POS system.</p>'
         };
 
         await transporter.sendMail(mailOptions);
-        res.json({ success: true, message: 'Test email sent successfully' });
+        res.json({ success: true, message: 'Test email sent successfully! Please check recipient inbox.' });
     } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        console.error('[TEST EMAIL ERROR]', err);
+        res.status(500).json({ success: false, message: `Email test failed: ${err.message}` });
     }
 };
 

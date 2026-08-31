@@ -528,7 +528,7 @@ class SaleOrder {
           .map((entry) => SaleScheme.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),
       itemsPreSplit: json['items_pre_split'] == true,
-      luckyDrawVouchers: json['lucky_draw_vouchers'] as List?,
+      luckyDrawVouchers: (json['lucky_draw_vouchers'] ?? json['luckyDrawVouchers']) as List?,
       salesmanId: json['salesman_id'] != null ? int.tryParse(json['salesman_id'].toString()) : null,
       tokenNo: json['token_no']?.toString() ?? json['tokenNo']?.toString(),
       items: (json['items'] as List? ?? const [])

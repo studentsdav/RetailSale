@@ -475,3 +475,77 @@ exports.cancelPurchaseOrder = async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
+const emailService = require('../../services/email.service');
+
+exports.sendPoEmail = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id;
+        const { to_email, po_no, vendor_name, total_amount, items, pdf_base64, pdf_filename } = req.body;
+
+        if (!to_email) {
+            return res.status(400).json({ success: false, message: 'Recipient email address is required.' });
+        }
+
+        let attachments = [];
+        if (pdf_base64) {
+            attachments.push({
+                filename: pdf_filename || `PO_${po_no || 'Document'}.pdf`,
+                content: Buffer.from(pdf_base64, 'base64')
+            });
+        }
+
+        const formattedItems = (items || []).map(i => `
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">${i.item_name || i.itemName || 'Item'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${i.qty}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹${Number(i.unit_rate || i.rate || 0).toFixed(2)}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${i.tax || 0}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹${Number(i.total || 0).toFixed(2)}</td>
+            </tr>
+        `).join('');
+
+        const htmlContent = `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                <h2>Purchase Order: ${po_no || 'Draft'}</h2>
+                <p>Dear <strong>${vendor_name || 'Vendor'}</strong>,</p>
+                <p>Please find attached the official Purchase Order document <strong>${po_no}</strong> for your review and fulfillment.</p>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                    <thead>
+                        <tr style="background-color: #f2f2f2;">
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Item</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">Qty</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Rate</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Tax %</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${formattedItems}
+                    </tbody>
+                </table>
+                <h3 style="margin-top: 20px;">Grand Total: ₹${Number(total_amount || 0).toFixed(2)}</h3>
+                <p style="margin-top: 30px; font-size: 12px; color: #777;">Sent via Store POS System</p>
+            </div>
+        `;
+
+        const sent = await emailService.sendMail({
+            db: req.propertyDb,
+            outlet_id,
+            to: to_email,
+            subject: `Purchase Order ${po_no || ''} - ${vendor_name || 'Store'}`,
+            text: `Purchase Order ${po_no} for ${vendor_name}. Total: ₹${Number(total_amount || 0).toFixed(2)}`,
+            html: htmlContent,
+            attachments
+        });
+
+        if (sent) {
+            res.json({ success: true, message: `Purchase Order emailed successfully to ${to_email}!` });
+        } else {
+            res.status(400).json({ success: false, message: 'SMTP settings not configured or inactive. Please check Email Configuration.' });
+        }
+    } catch (err) {
+        console.error('[PO EMAIL ERROR]', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};

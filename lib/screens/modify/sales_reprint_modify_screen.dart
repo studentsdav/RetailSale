@@ -194,6 +194,10 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     if (_selectedDetails!['repayments'] != null) {
       reprintJson['repayments'] = _selectedDetails!['repayments'];
     }
+    final luckyVouchers = _selectedDetails!['lucky_draw_vouchers'] ?? _selectedDetails!['luckyDrawVouchers'];
+    if (luckyVouchers != null) {
+      reprintJson['lucky_draw_vouchers'] = luckyVouchers;
+    }
     final reprintOrder = SaleOrder.fromJson(reprintJson);
 
     final settings = settingsCtrl.settings;
@@ -1091,14 +1095,34 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           subTotalNote = '(Pre-tax: ${_fmtAmount(preTaxSum)}, Post-tax: ${_fmtAmount(postTaxSum)})';
                                         }
 
+                                        double subscriptionAdjustment = 0;
+                                        for (final item in _selectedOrder!.items) {
+                                          if (item.isAdvanceFree) {
+                                            final double baseVal = item.amount > 0 ? item.amount : (item.rate * item.qty);
+                                            final double grossVal = item.isTaxInclusive
+                                                ? baseVal
+                                                : baseVal * (1.0 + (item.taxPercent / 100.0));
+                                            subscriptionAdjustment += grossVal;
+                                          }
+                                        }
+                                        if (subscriptionAdjustment <= 0) {
+                                          final diff = (displaySubTotal - displayDiscount) - _selectedOrder!.netAmount;
+                                          if (diff > 0.01 && (_selectedOrder!.paymentMode.toUpperCase() == 'SUBSCRIPTION' || _selectedOrder!.items.any((item) => item.isAdvanceFree || item.rate == 0 || item.lineTotal == 0))) {
+                                            subscriptionAdjustment = diff;
+                                          }
+                                        }
+
                                         return [
                                           _metricCard('Sub Total',
                                               _fmtAmount(displaySubTotal), subtitle: subTotalNote),
                                           _metricCard('Discount',
                                               _fmtAmount(displayDiscount)),
+                                          if (subscriptionAdjustment > 0.009)
+                                            _metricCard('Subscription Adjustment',
+                                                _fmtAmount(subscriptionAdjustment)),
                                           if (allInclusive)
                                             _metricCard('Net Amount (Incl. GST)',
-                                                _fmtAmount((displaySubTotal - displayDiscount).clamp(0.0, double.infinity))),
+                                                _fmtAmount((displaySubTotal - displayDiscount - subscriptionAdjustment).clamp(0.0, double.infinity))),
                                           _metricCard('Taxable Value',
                                               _fmtAmount(displayTaxableAmount)),
                                           _metricCard('Charges',

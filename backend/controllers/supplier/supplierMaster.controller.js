@@ -13,6 +13,7 @@ function mapVendorPayload(body = {}) {
         supplier_name,
         address,
         phone: String(body.phone ?? '').trim(),
+        email: String(body.email ?? '').trim() || null,
         state: String(body.state ?? '').trim() || null,
         gstin: String(body.gstin ?? body.tax_id_number ?? '')
             .trim()
@@ -27,6 +28,7 @@ function normalizeSupplierPayload(body = {}) {
         supplier_name: String(body.supplier_name || body.vendor_name || '').trim(),
         address: String(body.address || '').trim(),
         phone: String(body.phone || '').trim(),
+        email: String(body.email || '').trim() || null,
         state: String(body.state || '').trim() || null,
         gstin: String(body.gstin || body.tax_id_number || '').trim().toUpperCase() || null,
         tax_id_number: String(body.tax_id_number || body.gstin || '').trim().toUpperCase() || null,
@@ -56,6 +58,7 @@ exports.createSupplier = async (req, res) => {
             supplier_name: payload.supplier_name,
             address: payload.address,
             phone: payload.phone,
+            email: payload.email,
             state: payload.state,
             gstin: payload.gstin,
             tax_id_number: payload.tax_id_number,
@@ -241,6 +244,7 @@ exports.updateSupplier = async (req, res) => {
             supplier_name: payload.supplier_name,
             address: payload.address,
             phone: payload.phone,
+            email: payload.email,
             state: payload.state,
             gstin: payload.gstin,
             tax_id_number: payload.tax_id_number,

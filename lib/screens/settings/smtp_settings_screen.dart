@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/restaurant/restaurant_controller.dart';
 import '../../core/api/api_client.dart';
+import '../../core/api/endpoints.dart';
 
 class SmtpSettingsScreen extends StatefulWidget {
   const SmtpSettingsScreen({super.key});
@@ -175,12 +176,14 @@ class _SmtpSettingsScreenState extends State<SmtpSettingsScreen> {
                           if (testEmailCtrl.text.trim().isEmpty) return;
                           setDialogState(() => isSending = true);
                           try {
-                            final res = await ApiClient.post('/api/settings/smtp/test', {
+                            final res = await ApiClient.post('${ApiEndpoints.emailConfigurations}/test', {
                               'to_email': testEmailCtrl.text.trim(),
                               'smtp_host': _hostCtrl.text.trim(),
                               'smtp_port': int.tryParse(_portCtrl.text.trim()) ?? 587,
                               'smtp_user': _userCtrl.text.trim(),
                               'smtp_pass': _passCtrl.text.trim(),
+                              'sender_name': _senderNameCtrl.text.trim(),
+                              'security_type': _securityType,
                             });
 
                             if (context.mounted) {

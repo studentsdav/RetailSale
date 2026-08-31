@@ -483,16 +483,24 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     return LayoutBuilder(builder: (context, constraints) {
       return SizedBox(
         height: constraints.maxHeight,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.vertical,
+        child: Scrollbar(
+          controller: _verticalController,
+          thumbVisibility: true,
+          notificationPredicate: (notification) =>
+              notification.metrics.axis == Axis.vertical,
           child: Scrollbar(
             controller: _horizontalController,
             thumbVisibility: true,
             trackVisibility: true,
+            notificationPredicate: (notification) =>
+                notification.metrics.axis == Axis.horizontal,
             child: SingleChildScrollView(
               controller: _horizontalController,
               scrollDirection: Axis.horizontal,
-              child: DataTable(
+              child: SingleChildScrollView(
+                controller: _verticalController,
+                scrollDirection: Axis.vertical,
+                child: DataTable(
                 headingRowColor: WidgetStateProperty.all(
                   Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
@@ -505,6 +513,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                   DataColumn(label: Text('Email')),
                   DataColumn(label: Text('Address')),
                   DataColumn(label: Text('State')),
+                  DataColumn(label: Text('Country')),
                   DataColumn(label: Text('GSTIN')),
                   DataColumn(label: Text('Status')),
                   DataColumn(label: Text('Action')),
@@ -522,6 +531,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                       DataCell(Text(s.email ?? '')),
                       DataCell(Text(s.address ?? '')),
                       DataCell(Text(s.state ?? '')),
+                      DataCell(Text(s.taxCountryCode ?? 'IN')),
                       DataCell(Text(s.gstin ?? '')),
                       DataCell(
                         InkWell(
@@ -598,9 +608,10 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
             ),
           ),
         ),
-      );
-    });
-  }
+      ),
+    );
+  });
+}
 
   // ================= COMMON =================
   Widget _card({String? title, required Widget child}) {

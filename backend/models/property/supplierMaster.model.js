@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: ''
         },
         phone: DataTypes.STRING(20),
+        email: DataTypes.STRING(255),
         state: DataTypes.STRING(100),
         gstin: DataTypes.STRING(20),
         tax_id_number: DataTypes.STRING(100),
