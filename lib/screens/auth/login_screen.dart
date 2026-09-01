@@ -133,6 +133,11 @@ class _LoginScreenState extends State<LoginScreen>
       if (!mounted) return;
 
       if (result.success) {
+        if (_selectedOutlet != null && !AppConfig.outlets.contains(_selectedOutlet)) {
+          final updated = List<String>.from(AppConfig.outlets)..add(_selectedOutlet!);
+          await AppConfig.saveConfig(AppConfig.baseUrl, updated);
+        }
+
         if (result.licenseStatus == 'WARNING') {
           await _showExpiryWarningDialog(result.daysRemaining);
         }

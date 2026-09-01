@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppConfig {
   static String baseUrl = 'http://127.0.0.1:3000';
@@ -42,7 +43,11 @@ class AppConfig {
           baseUrl = origin;
         }
 
-        await fetchOutletsFromServer();
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final saved = prefs.getStringList('web_linked_outlets') ?? [];
+          outlets = saved;
+        } catch (_) {}
         return true;
       }
       final file = File(_configPath);
@@ -71,7 +76,11 @@ class AppConfig {
       baseUrl = url;
       outlets = newOutlets;
 
-      if (kIsWeb) return;
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('web_linked_outlets', newOutlets);
+        return;
+      }
 
       final file = File(_configPath);
       await file
@@ -96,6 +105,7 @@ class AppConfig {
   }
 
   static Future<void> fetchOutletsFromServer() async {
+    if (kIsWeb) return; // Do NOT pull global server outlets on Web for privacy & security
     try {
       final res = await http
           .get(Uri.parse('$baseUrl/api/public/outlets'))
