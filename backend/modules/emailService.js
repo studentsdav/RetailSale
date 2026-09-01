@@ -1,5 +1,6 @@
 const nodemailer = require("nodemailer");
 const dns = require("dns");
+const https = require("https");
 const sysConfig = require('../utils/configManager');
 
 // Force Node.js DNS to prefer IPv4 over IPv6 on cloud hosts like Render
@@ -22,23 +23,35 @@ function ipv4Lookup(hostname, options, callback) {
     });
 }
 
-function getTransporter() {
+function getTransporter(overridePort = null) {
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
     const emailPass = process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || (sysConfig ? sysConfig.emailPass : null);
     const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
-    const emailPort = Number(process.env.EMAIL_PORT) || 587;
-
+    
     if (!emailUser || !emailPass) {
         return null;
     }
 
-    const timeoutMs = Number(process.env.EMAIL_TIMEOUT) || 30000;
+    const isZoho = emailHost.toLowerCase().includes('zoho');
+    let emailPort = overridePort || Number(process.env.EMAIL_PORT);
+
+    if (!emailPort) {
+        emailPort = isZoho ? 465 : 587;
+    }
+
+    // Auto-adjust Zoho port 587 -> 465 for cloud hosting compatibility (Render blocks port 587)
+    if (isZoho && emailPort === 587 && !overridePort) {
+        console.log(`[EMAIL NOTICE] Auto-adjusting Zoho SMTP port from 587 to 465 (SSL) for Render cloud compatibility.`);
+        emailPort = 465;
+    }
+
+    const isSecure = emailPort === 465;
+    const timeoutMs = Number(process.env.EMAIL_TIMEOUT) || 20000;
 
     return nodemailer.createTransport({
         host: emailHost,
         port: emailPort,
-        secure: emailPort === 465,
-        requireTLS: emailPort === 587,
+        secure: isSecure,
         auth: {
             user: emailUser,
             pass: emailPass
@@ -51,8 +64,6 @@ function getTransporter() {
         dnsTimeout: timeoutMs
     });
 }
-
-const https = require("https");
 
 async function sendViaResendApi(apiKey, to, subject, htmlContent) {
     const fromAddress = process.env.EMAIL_FROM || "Retail POS <onboarding@resend.dev>";
@@ -112,7 +123,7 @@ async function sendEmail(to, subject, htmlContent) {
 
     console.log(`🔍 [EMAIL DEBUG] Target: ${to} | User Configured: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Pass Configured: ${emailPass ? 'YES (length=' + emailPass.length + ')' : 'NO'} | Host: ${emailHost}:${emailPort} | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'}`);
 
-    const transporter = getTransporter();
+    let transporter = getTransporter();
 
     if (!transporter) {
         console.warn(`⚠️ [EMAIL NOTICE] SMTP credentials not configured (EMAIL_USER / EMAIL_PASS missing). Email to ${to} bypassed.`);
@@ -129,6 +140,26 @@ async function sendEmail(to, subject, htmlContent) {
         console.log(`[EMAIL] Sent to ${to}: ${info.messageId}`);
         return true;
     } catch (error) {
+        // Fallback: If port 587 timed out on Zoho or cloud host, retry via SSL Port 465
+        if ((error.code === 'ETIMEDOUT' || error.code === 'ESOCKET' || error.message.includes('ETIMEDOUT')) && emailPort !== 465) {
+            console.warn(`[EMAIL TIMEOUT FALLBACK] Retrying email to ${to} via SSL Port 465...`);
+            try {
+                const fallbackTransporter = getTransporter(465);
+                if (fallbackTransporter) {
+                    const info = await fallbackTransporter.sendMail({
+                        from: `"System Admin" <${emailUser}>`,
+                        to: to,
+                        subject: subject,
+                        html: htmlContent
+                    });
+                    console.log(`[EMAIL SUCCESS via Port 465] Sent to ${to}: ${info.messageId}`);
+                    return true;
+                }
+            } catch (fallbackErr) {
+                console.error(`[EMAIL FALLBACK ERROR] ${fallbackErr.message}`);
+            }
+        }
+
         console.error(`[EMAIL ERROR DETAILED] Failed to send to ${to}: ${error.code || ''} ${error.message}`);
         throw new Error(`Failed to send email. ${error.code || error.message}`);
     }
@@ -189,7 +220,6 @@ async function sendSystemAlert(to, alertMessage) {
 }
 
 async function sendUsernameRecoveryEmail(to, usernames, outletName) {
-    // Convert the array of usernames into a nice HTML list
     const usernameListHtml = usernames.map(un => `<li style="font-size: 16px; font-weight: bold; color: #0056b3; margin-bottom: 5px;">${un}</li>`).join('');
 
     const html = `
@@ -205,6 +235,7 @@ async function sendUsernameRecoveryEmail(to, usernames, outletName) {
     `;
     return await sendEmail(to, "Your Recovered Usernames", html);
 }
+
 async function sendOutletRecoveryEmail(to, outlets) {
     const outletListHtml = outlets.map(o => `
         <li style="margin-bottom: 10px;">
