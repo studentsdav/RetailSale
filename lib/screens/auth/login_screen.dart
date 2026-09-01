@@ -566,6 +566,30 @@ class _LoginScreenState extends State<LoginScreen>
               onPressed: _login,
             ),
           ),
+          const SizedBox(height: 12),
+          Center(
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const OutletSetupScreen()),
+                ).then((_) {
+                  setState(() {
+                    if (AppConfig.outlets.isNotEmpty) {
+                      _selectedOutlet = AppConfig.outlets.first;
+                    }
+                  });
+                  _loadOutletLogo();
+                });
+              },
+              icon: const Icon(Icons.add_business_outlined, size: 18),
+              label: const Text(
+                'Register New Business / Outlet',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
           const SizedBox(height: 14),
           const Spacer(),
           Align(

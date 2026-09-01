@@ -77,9 +77,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (!mounted) return;
 
-    if (!hasOutlet) {
-      _navigate(const OutletSetupScreen());
-    } else if (token == null) {
+    if (token == null) {
       _navigate(const LoginScreen());
     } else {
       _navigate(await HomeRouteHelper.resolve());
