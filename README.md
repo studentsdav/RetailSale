@@ -1,11 +1,50 @@
-# Retailer Store POS & Inventory Management System
+# Enterprise Retail & Restaurant ERP & POS System
 
-A production-ready POS system with a Flutter client and Node.js backend for inventory, sales billing, purchase orders, receiving, suppliers, finance, reporting, and recovery workflows.
+A comprehensive, production-ready ERP and Multi-Module POS solution built with a cross-platform **Flutter** client and high-performance **Node.js / PostgreSQL** backend. Designed for hybrid retail stores, restaurants, multi-branch operations, and enterprise inventory management.
 
 ---
 
 > [!NOTE]
 > This repository is actively maintained and sponsored by **Famalth Technologies**.
+
+---
+
+## 🌟 Core Enterprise Modules
+
+### 🍽️ 1. Restaurant POS & Dining Suite
+- **Interactive Floor & Table Management**: Live visual floor plan, table reservations, occupancy status, and quick table transfers or bill merging.
+- **Kitchen Display System (KDS) & KOT**: Instant Kitchen Order Ticket generation, real-time KDS routing by preparation stations, and kitchen status sync.
+- **Dine-In, Takeaway & Delivery**: Streamlined order type management supporting dine-in, express takeaway, online order dispatch, and rider tracking.
+- **Recipe & Menu Engineering**: Dish variant management, modifier options, item additions, ingredient recipe costing, and automatic inventory deduction per order.
+
+### 🛒 2. Retail POS & Smart Inventory Management
+- **High-Speed Barcode Billing**: Rapid checkout terminal supporting barcode scanners, item shortcuts, wholesale/retail pricing, thermal receipt & A4 invoice printing.
+- **Advanced Batch & Expiry Tracking**: Batch-wise stock accounting, serial number tracking, manufacturing/expiry dates, and FEFO/FIFO stock dispatch rules.
+- **Purchase Orders & GRN**: Purchase order generation, Goods Receiving Notes (GRN), supplier price list comparison, stock return management, and vendor credit ledgers.
+- **Multi-Outlet & Warehouse Sync**: Stock transfers between stores/warehouses, low-stock reorder triggers, automated stock adjustments, and live balance audits.
+
+### 💼 3. Financial Accounting & Double-Entry Ledger
+- **Complete Double-Entry System**: Chart of Accounts (Assets, Liabilities, Equity, Revenue, Expenses), automated journal posting from sales & purchases.
+- **General Ledger & Vouchers**: Journal Vouchers (JV), Payment/Receipt Vouchers, Contra Vouchers, Daybook, and Cash/Bank book management.
+- **Financial Statement Reporting**: Real-time Trial Balance, Profit & Loss (P&L) statements, Balance Sheet, GST/Tax breakdown, and financial year-end closing.
+- **Debt Recovery & Credit Collections**: Customer credit tracking, aging analysis reports, automated recovery notifications, and payment collection logging.
+
+### 👥 4. HR & Payroll Management (HRMS)
+- **Employee Management**: Employee profiles, department mapping, role-based access control, designation tiers, and document records.
+- **Attendance & Leave System**: Daily clock-in/out tracking, shift management, leave application workflows, and attendance summary logs.
+- **Automated Payroll Processing**: Salary slip generation, base pay calculations, custom allowances/deductions, overtime, advances, and commission tracking.
+
+### 📱 5. Multi-Application Ecosystem
+- **Main POS Admin App (`lib/main.dart`)**: Complete administrative suite for managers, cashiers, accountants, and HR officers.
+- **Delivery Rider App (`lib/main_rider.dart`)**: Dedicated mobile interface for delivery drivers to receive order dispatches, navigate routes, and collect payments.
+- **Customer Self-Ordering App (`main_customer.dart`)**: Digital menu and ordering portal for customers at tables or for online ordering.
+- **Supplier Portal (`main_supplier.dart`)**: Dedicated vendor dashboard to track purchase orders, pending deliveries, and invoice reconciliations.
+
+### 💬 6. Automation, AI & Cloud Sync
+- **WhatsApp Integration**: Automated instant billing receipts, invoices, order status alerts, and payment reminders via WhatsApp Webhooks.
+- **Cloud & Offline Resilience**: Runs locally on Windows POS terminals with offline fallback, and synchronizes automatically with PostgreSQL cloud deployments.
+- **Google Drive & Sheets Sync**: Automated database backups to Google Drive and continuous cloud reporting sync via Google Apps Script.
+- **Night Audit Engine**: Automatic end-of-day reconciliation, cash drawer audit, and automated daily performance summary reporting.
 
 ---
 
@@ -65,7 +104,7 @@ Deploy the backend seamlessly on [Render.com](https://render.com) or custom clou
 
 ---
 
-## Quick Start
+## ⚡ Quick Start
 
 1. Install Flutter dependencies with `flutter pub get`.
 2. Install backend dependencies with `cd backend && npm install`.
@@ -73,7 +112,7 @@ Deploy the backend seamlessly on [Render.com](https://render.com) or custom clou
 4. Run the backend with `cd backend && npm start`.
 5. Run the Flutter app with `flutter run`.
 
-## Default API URL
+## 🌐 Default API URL
 
 The Flutter app reads its backend URL from `server_config.json`.
 
@@ -83,14 +122,22 @@ Default:
 http://127.0.0.1:3000
 ```
 
-## Project Layout
+## 📁 Project Layout
 
-- `lib/` - Flutter app
-- `backend/` - Express API server
-- `Docs/` - Documentation files
-- `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/` - Platform targets
+- `lib/` - Flutter application (POS, Restaurant, Accounts, HRMS, Recovery)
+  - `main.dart` - Main POS Admin application
+  - `main_rider.dart` - Delivery Rider mobile application
+  - `main_customer.dart` - Customer Self-Ordering portal
+  - `main_supplier.dart` - Supplier & Vendor portal
+- `backend/` - Node.js Express API server & PostgreSQL database modules
+  - `routes/` - Module endpoints (restaurant, sales, inventory, accounting, hrms, etc.)
+  - `controllers/` - Business logic controllers
+- `Docs/` - User & Developer documentation guides
+- `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/` - Cross-platform build targets
 
-## Screenshots
+---
+
+## 📸 Screenshots
 
 ### Dashboard
 
@@ -112,6 +159,9 @@ http://127.0.0.1:3000
 
 ![Brand Analysis](./assets/Screenshot%202026-07-25%20204949.png)
 
-## Contributing
+---
+
+## 🤝 Contributing
 
 Please update the relevant guide when setup, runtime behavior, or APIs change.
+
