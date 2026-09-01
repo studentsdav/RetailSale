@@ -604,20 +604,33 @@ class _LoginScreenState extends State<LoginScreen>
             ],
           ),
           const SizedBox(height: 18),
+          // LOGIN Button (LinkedIn-style Stadium Pill Button)
           SizedBox(
             width: double.infinity,
-            child: FilledButton.icon(
-              icon: const Icon(Icons.login),
-              label: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 14),
-                child: Text('LOGIN'),
+            height: 48,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                shape: const StadiumBorder(),
+                elevation: 0,
               ),
               onPressed: _login,
+              child: const Text(
+                'LOGIN',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 12),
-          Center(
-            child: TextButton.icon(
+          // Register Button (LinkedIn-style Outlined Pill Button)
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: OutlinedButton.icon(
               onPressed: () {
                 Navigator.push(
                   context,
@@ -632,10 +645,14 @@ class _LoginScreenState extends State<LoginScreen>
                   _loadOutletLogo();
                 });
               },
+              style: OutlinedButton.styleFrom(
+                shape: const StadiumBorder(),
+                side: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.6)),
+              ),
               icon: const Icon(Icons.add_business_outlined, size: 18),
               label: const Text(
                 'Register New Business / Outlet',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               ),
             ),
           ),
