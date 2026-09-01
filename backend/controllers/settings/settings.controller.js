@@ -344,89 +344,148 @@ exports.clearTransactionData = async (req, res) => {
             });
         }
 
+        const outletId = Number(
+            req.outlet_id ||
+            req.user?.outlet_id ||
+            req.headers['x-outlet-id'] ||
+            req.body?.outlet_id ||
+            req.query?.outlet_id
+        );
+
+        if (!outletId || isNaN(outletId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Outlet ID is required to clear transaction data'
+            });
+        }
+
         const isPostgres = req.propertyDb.options?.dialect === 'postgres';
 
-        const wipeTableList = [
-            'kot_revisions',
-            'kot_items',
-            'kot_headers',
-            'restaurant_audit_trail',
-            'table_reservations',
-            'draw_vouchers',
-            'customer_draw_progress',
-            'lucky_draw_campaigns',
-            'whatsapp_logs',
-            'whatsapp_campaigns',
-            'supplier_return_refunds',
-            'supplier_return_items',
-            'supplier_return_headers',
-            'goods_receipt_items',
-            'goods_receipts',
-            'supplier_payments',
-            'supplier_bills',
-            'purchase_order_items',
-            'purchase_orders',
-            'return_items',
-            'return_headers',
-            'issue_items',
-            'issue_headers',
-            'damage_items',
-            'damage_headers',
-            'assembly_items',
-            'assembly_headers',
-            'request_items',
-            'request_headers',
-            'milk_subscription_consumptions',
-            'milk_subscription_settlements',
-            'milk_subscription_schemes',
-            'milk_subscriptions',
-            'sales_items',
-            'sales_refunds',
-            'sales_credit_notes',
-            'customer_repayments',
-            'customer_item_advances',
-            'customer_advances',
-            'customer_orders',
-            'sales_headers',
-            'sales_scheme_customers',
-            'customer_loyalty_ledger',
-            'loyalty_master_config',
-            'cash_ledger',
-            'expense_entries',
-            'expense_taxes',
-            'expense_deductions',
-            'expenses',
-            'expense_categories',
-            'daily_opening_balances',
-            'stock_ledger',
-            'system_notifications',
-            'audit_logs',
-            'commission_rules'
+        // Order matters: child/dependent tables deleted first
+        const deleteQueries = [
+            // 1. Restaurant / KOT child & header tables
+            `DELETE FROM "kot_revisions" WHERE kot_header_id IN (SELECT id FROM "kot_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "kot_items" WHERE outlet_id = :outletId OR kot_header_id IN (SELECT id FROM "kot_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "kot_headers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "restaurant_audit_trail" WHERE outlet_id = :outletId`,
+            `DELETE FROM "table_reservations" WHERE outlet_id = :outletId`,
+
+            // 2. Lucky Draw Campaign & WhatsApp tables
+            `DELETE FROM "draw_vouchers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "customer_draw_progress" WHERE outlet_id = :outletId`,
+            `DELETE FROM "lucky_draw_campaigns" WHERE outlet_id = :outletId`,
+            `DELETE FROM "whatsapp_logs" WHERE outlet_id = :outletId`,
+            `DELETE FROM "whatsapp_campaigns" WHERE outlet_id = :outletId`,
+
+            // 3. Supplier Returns & Goods Receipts
+            `DELETE FROM "supplier_return_refunds" WHERE outlet_id = :outletId OR return_id IN (SELECT id FROM "supplier_return_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "supplier_return_items" WHERE return_id IN (SELECT id FROM "supplier_return_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "supplier_return_headers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "goods_receipt_items" WHERE grn_id IN (SELECT id FROM "goods_receipts" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "goods_receipts" WHERE outlet_id = :outletId`,
+            `DELETE FROM "supplier_payments" WHERE outlet_id = :outletId`,
+            `DELETE FROM "supplier_bills" WHERE outlet_id = :outletId`,
+
+            // 4. Purchase Orders
+            `DELETE FROM "purchase_order_items" WHERE po_id IN (SELECT id FROM "purchase_orders" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "purchase_orders" WHERE outlet_id = :outletId`,
+
+            // 5. Stock Issues / Returns / Damages / Assembly / Requests / Delivery Challans
+            `DELETE FROM "return_items" WHERE return_id IN (SELECT id FROM "return_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "return_headers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "issue_items" WHERE issue_id IN (SELECT id FROM "issue_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "issue_headers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "damage_items" WHERE damage_id IN (SELECT id FROM "damage_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "damage_headers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "assembly_items" WHERE outlet_id = :outletId OR assembly_id IN (SELECT id FROM "assembly_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "assembly_headers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "request_items" WHERE request_id IN (SELECT id FROM "request_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "request_headers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "delivery_challan_items" WHERE challan_id IN (SELECT id FROM "delivery_challan_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "delivery_challan_headers" WHERE outlet_id = :outletId`,
+
+            // 6. Milk Subscriptions
+            `DELETE FROM "milk_subscription_consumptions" WHERE outlet_id = :outletId`,
+            `DELETE FROM "milk_subscription_settlements" WHERE outlet_id = :outletId`,
+            `DELETE FROM "milk_subscription_schemes" WHERE outlet_id = :outletId`,
+            `DELETE FROM "milk_subscriptions" WHERE outlet_id = :outletId`,
+
+            // 7. HRMS Transactional Tables
+            `DELETE FROM "hr_loan_transactions" WHERE loan_id IN (SELECT id FROM "hr_loans" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "hr_loans" WHERE outlet_id = :outletId`,
+            `DELETE FROM "hr_sales_commissions" WHERE outlet_id = :outletId`,
+            `DELETE FROM "hr_cashier_handovers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "hr_payroll_details" WHERE payroll_run_id IN (SELECT id FROM "hr_payroll_runs" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "hr_payroll_runs" WHERE outlet_id = :outletId`,
+            `DELETE FROM "hr_salary_revisions" WHERE outlet_id = :outletId`,
+            `DELETE FROM "hr_arrears" WHERE outlet_id = :outletId`,
+            `DELETE FROM "hr_attendance_punches" WHERE outlet_id = :outletId`,
+            `DELETE FROM "hr_leave_balances" WHERE outlet_id = :outletId`,
+            `DELETE FROM "hr_leave_applications" WHERE outlet_id = :outletId`,
+
+            // 8. Sales & Customer Transactions
+            `DELETE FROM "sales_items" WHERE sale_id IN (SELECT id FROM "sales_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "sales_refunds" WHERE outlet_id = :outletId OR sale_id IN (SELECT id FROM "sales_headers" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "sales_credit_notes" WHERE outlet_id = :outletId`,
+            `DELETE FROM "customer_repayments" WHERE outlet_id = :outletId`,
+            `DELETE FROM "customer_item_advances" WHERE outlet_id = :outletId`,
+            `DELETE FROM "customer_advances" WHERE outlet_id = :outletId`,
+            `DELETE FROM "customer_orders" WHERE outlet_id = :outletId`,
+            `DELETE FROM "sales_headers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "sales_scheme_customers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "customer_loyalty_ledger" WHERE outlet_id = :outletId`,
+            `DELETE FROM "loyalty_master_config" WHERE outlet_id = :outletId`,
+
+            // 9. Finance, Expenses & Accounting
+            `DELETE FROM "cash_ledger" WHERE outlet_id = :outletId`,
+            `DELETE FROM "expense_taxes" WHERE expense_id IN (SELECT id FROM "expenses" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "expense_deductions" WHERE expense_id IN (SELECT id FROM "expenses" WHERE outlet_id = :outletId)`,
+            `DELETE FROM "expense_entries" WHERE outlet_id = :outletId`,
+            `DELETE FROM "expenses" WHERE outlet_id = :outletId`,
+            `DELETE FROM "expense_categories" WHERE outlet_id = :outletId`,
+            `DELETE FROM "daily_opening_balances" WHERE outlet_id = :outletId`,
+            `DELETE FROM "accounting_vouchers" WHERE outlet_id = :outletId`,
+            `DELETE FROM "business_day_status" WHERE outlet_id = :outletId`,
+
+            // 10. Stock Ledger, Notifications, Audits, Night Audit
+            `DELETE FROM "stock_ledger" WHERE outlet_id = :outletId`,
+            `DELETE FROM "system_notifications" WHERE outlet_id = :outletId`,
+            `DELETE FROM "audit_logs" WHERE outlet_id = :outletId`,
+            `DELETE FROM "commission_rules" WHERE outlet_id = :outletId`,
+            `DELETE FROM "night_audit_details" WHERE audit_run_id IN (SELECT id FROM "night_audit_runs" WHERE outlet_id = :outletId) OR outlet_id = :outletId`,
+            `DELETE FROM "night_audit_runs" WHERE outlet_id = :outletId`
         ];
 
-        if (isPostgres) {
-            const tableNamesQuoted = wipeTableList.map(t => `"${t}"`).join(', ');
-            try {
-                await req.propertyDb.query(`TRUNCATE TABLE ${tableNamesQuoted} RESTART IDENTITY CASCADE;`);
-            } catch (truncErr) {
-                console.warn('⚠️ TRUNCATE CASCADE failed, falling back to individual deletes:', truncErr.message);
-                for (const tableName of wipeTableList) {
-                    await req.propertyDb.query(`DELETE FROM "${tableName}"`).catch(() => {});
-                }
-            }
-        } else {
+        if (!isPostgres) {
             await req.propertyDb.query('PRAGMA foreign_keys = OFF;').catch(() => {});
-            for (const tableName of wipeTableList) {
-                await req.propertyDb.query(`DELETE FROM "${tableName}"`).catch(() => {});
-                await req.propertyDb.query(`DELETE FROM ${tableName}`).catch(() => {});
+        }
+
+        for (const queryStr of deleteQueries) {
+            try {
+                await req.propertyDb.query(queryStr, {
+                    replacements: { outletId }
+                });
+            } catch (err) {
+                // Ignore errors if table or column doesn't exist in a specific schema
+                console.warn(`[ClearData] Warning executing query on outlet #${outletId}: ${err.message}`);
             }
+        }
+
+        if (!isPostgres) {
             await req.propertyDb.query('PRAGMA foreign_keys = ON;').catch(() => {});
         }
 
+        try {
+            await audit.log(req, 'CLEAR_TRANSACTION_DATA', {
+                details: `Cleared transaction data specifically for outlet ID #${outletId}`
+            });
+        } catch (_) {}
+
         res.json({
             success: true,
-            message: 'All transaction data cleared successfully',
-            preserved: ['masters', 'customer_master', 'system_settings', 'schema_version']
+            message: `All transaction data for outlet #${outletId} cleared successfully`,
+            outlet_id: outletId,
+            preserved: ['masters', 'customer_master', 'system_settings', 'other_outlets']
         });
     } catch (err) {
         console.error("❌ Error clearing transaction data:", err);

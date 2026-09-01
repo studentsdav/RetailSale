@@ -340,7 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'This permanently removes stock, sales, purchase, finance, and report records for the current database. Master data, settings, and schema version are preserved.',
+                    'This permanently removes stock, sales, purchase, finance, and report records ONLY for the current outlet. Other outlets data will not be affected. Master data, settings, and schema version are preserved.',
                     style: TextStyle(color: Color(0xFF64748B), height: 1.4),
                   ),
                   const SizedBox(height: 18),
