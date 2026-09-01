@@ -8572,3 +8572,55 @@ SyntaxError: Identifier 'transporter' has already been declared
 2026-09-01T14:30:11.603Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-09-01T14:30:11.649Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-09-01T14:30:11.655Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:30:00.133Z [INFO] Hourly backup job started.
+2026-09-01T15:30:00.170Z [INFO] Hourly backup job started.
+2026-09-01T15:30:00.190Z [INFO] Hourly backup job started.
+2026-09-01T15:30:00.870Z [INFO] Backup created. File size: 0.07 MB
+2026-09-01T15:30:00.871Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-01T15:30:00.880Z [INFO] Backup created. File size: 0.07 MB
+2026-09-01T15:30:00.881Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-01T15:30:00.888Z [INFO] Backup created. File size: 0.07 MB
+2026-09-01T15:30:00.889Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-01T15:30:00.955Z [INFO] Cloud Sync disabled for outlet [OUTLET202605102056]. Bypassing upload.
+2026-09-01T15:30:00.972Z [INFO] Hourly backup job execution finished.
+2026-09-01T15:30:00.982Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-09-01T15:30:01.070Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-09-01T15:30:01.084Z [INFO] Hourly backup job execution finished.
+2026-09-01T15:30:11.845Z [INFO] Cloud upload sequence completed successfully.
+2026-09-01T15:30:11.870Z [INFO] Hourly backup job execution finished.
+2026-09-01T15:30:14.221Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:30:14.250Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:30:14.255Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:41:56.233Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:41:56.262Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:41:56.268Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:44:10.881Z [ERROR] [FATAL] Uncaught Exception: Missing parameter name at index 1: *; visit https://git.new/pathToRegexpError for info
+TypeError: Missing parameter name at index 1: *; visit https://git.new/pathToRegexpError for info
+    at name (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\path-to-regexp\dist\index.js:96:19)
+    at parse (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\path-to-regexp\dist\index.js:113:68)
+    at pathToRegexp (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\path-to-regexp\dist\index.js:267:58)
+    at Object.match (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\path-to-regexp\dist\index.js:237:30)
+    at matcher (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\layer.js:86:23)
+    at new Layer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\layer.js:93:62)
+    at Function.route (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:428:17)
+    at Function.route (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\express\lib\application.js:257:22)
+    at app.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\express\lib\application.js:478:22)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\server.js:441:9)
+2026-09-01T15:44:16.660Z [ERROR] [FATAL] Uncaught Exception: Missing parameter name at index 1: *; visit https://git.new/pathToRegexpError for info
+TypeError: Missing parameter name at index 1: *; visit https://git.new/pathToRegexpError for info
+    at name (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\path-to-regexp\dist\index.js:96:19)
+    at parse (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\path-to-regexp\dist\index.js:113:68)
+    at pathToRegexp (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\path-to-regexp\dist\index.js:267:58)
+    at Object.match (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\path-to-regexp\dist\index.js:237:30)
+    at matcher (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\layer.js:86:23)
+    at new Layer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\layer.js:93:62)
+    at Function.route (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:428:17)
+    at Function.route (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\express\lib\application.js:257:22)
+    at app.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\express\lib\application.js:478:22)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\server.js:441:9)
+2026-09-01T15:44:22.999Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:44:23.028Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:44:23.039Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:44:26.015Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:44:26.043Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-01T15:44:26.049Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

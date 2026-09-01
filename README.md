@@ -60,7 +60,9 @@ For step-by-step setup details, see the **[Retailer Installation & Update Guide]
 
 ## ☁️ Cloud Deployment & Environment Variables
 
-Deploy the backend seamlessly on [Render.com](https://render.com) or custom cloud hosting. For complete deployment steps, read the **[Render Cloud Deployment & Environment Guide](./Docs/Render-Cloud-Deployment-Guide.md)**.
+Deploy the web application and backend seamlessly on [Render.com](https://render.com) or custom cloud hosting.
+* 🌐 **[Web Deployment Guide (Local & Render Cloud)](./Docs/Web-Deployment-Guide.md)** - Step-by-step guide for local web testing and deploying the Web App + Backend on Render.com.
+* ☁️ **[Render Cloud Deployment Guide](./Docs/Render-Cloud-Deployment-Guide.md)** - Complete backend environment variables and database reference.
 
 ### Environment Variables Reference Table
 

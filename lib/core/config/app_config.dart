@@ -23,11 +23,16 @@ class AppConfig {
   }
 
   static Future<bool> configExists() async {
+    if (kIsWeb) return true;
     return File(_configPath).exists();
   }
 
   static Future<bool> loadConfig() async {
     try {
+      if (kIsWeb) {
+        baseUrl = Uri.base.origin;
+        return true;
+      }
       final file = File(_configPath);
       if (await file.exists()) {
         final String contents = await file.readAsString();
@@ -53,6 +58,8 @@ class AppConfig {
     try {
       baseUrl = url;
       outlets = newOutlets;
+
+      if (kIsWeb) return;
 
       final file = File(_configPath);
       await file

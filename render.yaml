@@ -2,7 +2,7 @@ services:
   - type: web
     name: retail-sale-backend
     env: docker
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./Dockerfile.web
     dockerContext: .
     plan: free
     envVars:

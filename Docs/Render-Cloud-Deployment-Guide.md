@@ -2,6 +2,10 @@
 
 This guide provides a comprehensive, step-by-step walkthrough for deploying the **Retail POS Backend** to [Render.com](https://render.com) with PostgreSQL database integration, cloud backup sync, and full multi-tenant SaaS capability.
 
+> [!TIP]
+> **Deploying the Web UI?**
+> To test and host the **Flutter Web interface** alongside the backend, see the **[Web Deployment Guide](./Web-Deployment-Guide.md)**.
+
 ---
 
 ## 📋 Prerequisites

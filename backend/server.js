@@ -434,7 +434,17 @@ app.use('/api/v1/workflows', require('./routes/workflow.routes'));
 app.use('/api/v1/agent', require('./routes/autonomous_agent.routes'));
 app.use('/api/v1/developer', require('./routes/developer.routes'));
 app.use('/api/v1/plugins', require('./routes/plugin.routes'));
-app.use('/api/notes', require('./routes/userNote.routes'));
+// Web SPA static file serving (Only active if public/ directory exists)
+const webBuildPath = path.join(rootDir, 'public');
+if (fs.existsSync(webBuildPath)) {
+    app.use(express.static(webBuildPath));
+    app.use((req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/health') && !req.path.startsWith('/uploads') && !req.path.startsWith('/webhooks')) {
+            return res.sendFile(path.join(webBuildPath, 'index.html'));
+        }
+        next();
+    });
+}
 
 // not found
 app.use((req, res) => {
