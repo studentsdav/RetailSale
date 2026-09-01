@@ -384,37 +384,46 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Scaffold(
       backgroundColor: const Color(0xffF5F7FB),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            width: 580,
-            padding: const EdgeInsets.all(36),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(blurRadius: 30, color: Colors.black.withOpacity(.08))
-              ],
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 24,
+              vertical: isMobile ? 12 : 32,
             ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 32),
-                  _buildModeSelector(),
-                  const Divider(height: 40),
-
-                  // Dynamic Form Rendering
-                  if (_mode == SetupMode.newClient) _buildNewSetupForm(),
-                  if (_mode == SetupMode.existingClient)
-                    _buildExistingClientForm(),
-                  if (_mode == SetupMode.recoverId) _buildRecoverIdForm(),
-                  if (_mode == SetupMode.restoreLocal) _buildRestoreLocalForm(),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 580),
+              padding: EdgeInsets.all(isMobile ? 18 : 36),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(blurRadius: 30, color: Colors.black.withOpacity(.08))
                 ],
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    SizedBox(height: isMobile ? 20 : 32),
+                    _buildModeSelector(),
+                    Divider(height: isMobile ? 24 : 40),
+
+                    // Dynamic Form Rendering
+                    if (_mode == SetupMode.newClient) _buildNewSetupForm(),
+                    if (_mode == SetupMode.existingClient)
+                      _buildExistingClientForm(),
+                    if (_mode == SetupMode.recoverId) _buildRecoverIdForm(),
+                    if (_mode == SetupMode.restoreLocal) _buildRestoreLocalForm(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -441,32 +450,93 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
   }
 
   Widget _buildModeSelector() {
-    final segments = <ButtonSegment<SetupMode>>[
-      const ButtonSegment(
-          value: SetupMode.newClient,
-          label: Text("New Registration"),
-          icon: Icon(Icons.add_business)),
-      const ButtonSegment(
-          value: SetupMode.existingClient,
-          label: Text("Link Existing"),
-          icon: Icon(Icons.link)),
-      const ButtonSegment(
-          value: SetupMode.recoverId,
-          label: Text("Recover Business ID"),
-          icon: Icon(Icons.search)),
+    final options = <_ModeOption>[
+      const _ModeOption(
+        mode: SetupMode.newClient,
+        label: "New Registration",
+        icon: Icons.add_business_rounded,
+      ),
+      const _ModeOption(
+        mode: SetupMode.existingClient,
+        label: "Link Existing",
+        icon: Icons.link_rounded,
+      ),
+      const _ModeOption(
+        mode: SetupMode.recoverId,
+        label: "Recover Business ID",
+        icon: Icons.search_rounded,
+      ),
       if (_isLocalSetupServer)
-        const ButtonSegment(
-            value: SetupMode.restoreLocal,
-            label: Text("Restore"),
-            icon: Icon(Icons.restore)),
+        const _ModeOption(
+          mode: SetupMode.restoreLocal,
+          label: "Restore",
+          icon: Icons.restore_rounded,
+        ),
     ];
-    return SegmentedButton<SetupMode>(
-      segments: segments,
-      selected: {_mode},
-      onSelectionChanged: (Set<SetupMode> newSelection) =>
-          _switchMode(newSelection.first),
-      style: SegmentedButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: options.map((opt) {
+          final isSelected = _mode == opt.mode;
+          return Expanded(
+            child: InkWell(
+              onTap: () => _switchMode(opt.mode),
+              borderRadius: BorderRadius.circular(8),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      opt.icon,
+                      size: 15,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        opt.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : const Color(0xFF475569),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -1006,6 +1076,9 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
       width: double.infinity,
       height: 48,
       child: FilledButton(
+        style: FilledButton.styleFrom(
+          shape: const StadiumBorder(),
+        ),
         onPressed: (_isLoading || _isRestoringLocalEnc) ? null : onPressed,
         child: (_isLoading || _isRestoringLocalEnc)
             ? const SizedBox(
@@ -1013,7 +1086,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                 width: 20,
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: Colors.white))
-            : Text(label, style: const TextStyle(fontSize: 16)),
+            : Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -1062,6 +1135,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
 
   Widget _dropdown() {
     return DropdownButtonFormField<String>(
+      isExpanded: true,
       initialValue: _outletType,
       decoration: InputDecoration(
           labelText: "Business Type",
@@ -1092,6 +1166,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
 
   Widget _moduleDropdown() {
     return DropdownButtonFormField<String>(
+      isExpanded: true,
       initialValue: _businessModule,
       decoration: InputDecoration(
           labelText: "Business Module Feature Set *",
@@ -1407,4 +1482,16 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                   color: Colors.black87)))
     ]);
   }
+}
+
+class _ModeOption {
+  final SetupMode mode;
+  final String label;
+  final IconData icon;
+
+  const _ModeOption({
+    required this.mode,
+    required this.label,
+    required this.icon,
+  });
 }
