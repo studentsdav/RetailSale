@@ -318,10 +318,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   bool get _showRetailSalesSection => true;
   bool get _showRetailSalesReportSection => true;
   String get _dashboardTitle {
-    if (_isWarehouseBusiness) return 'Warehouse Retailpos Dashboard';
-    if (_isRetailBusiness) return 'Retailpos Dashboard';
-    if (_isHospitalityBusiness) return 'Department Retailpos Dashboard';
-    return 'Retailpos Dashboard';
+    if (_isWarehouseBusiness) return 'Warehouse FAMALTH LYNX Dashboard';
+    if (_isRetailBusiness) return 'FAMALTH LYNX Dashboard';
+    if (_isHospitalityBusiness) return 'Department FAMALTH LYNX Dashboard';
+    return 'FAMALTH LYNX Dashboard';
   }
 
   @override

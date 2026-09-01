@@ -9,6 +9,7 @@ import 'package:retailpos/core/config/app_brand.dart';
 import 'package:retailpos/core/config/app_config.dart';
 import 'package:retailpos/core/config/app_constants.dart';
 import 'package:retailpos/core/navigation/home_route_helper.dart';
+import 'package:retailpos/widgets/famalth_watermark.dart';
 import 'package:retailpos/screens/settings/outlet_setup_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -321,7 +322,7 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Retailpos, billing, accounting, and reporting in one secure flow.',
+                  'FAMALTH LYNX - POS, billing, accounting, and reporting in one secure flow.',
                   style: TextStyle(
                     color: Colors.white70,
                     height: 1.4,
@@ -397,11 +398,59 @@ class _LoginScreenState extends State<LoginScreen>
                   const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           const Text(
-            'Retailpos, billing, accounting, and reporting in one secure flow.',
+            'FAMALTH LYNX - POS, billing, accounting, and reporting in one secure flow.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Color(0xFF64748B), height: 1.35),
           ),
           const SizedBox(height: 16),
+          // Desktop Mode Warning / Recommendation Banner for Mobile
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.6)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.amber.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.desktop_windows_outlined, color: Color(0xFFD97706), size: 24),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Desktop Mode Required for Best POS Experience',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF92400E),
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'This application is optimized for Desktop PC & POS terminals. On mobile browsers, please turn on "Desktop Site" in your browser menu.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFB45309),
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
           _loginForm(),
         ],
       ),
@@ -592,23 +641,11 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 14),
           const Spacer(),
-          Align(
+          const Align(
             alignment: Alignment.centerLeft,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Powered by @Famalth • Since 2024',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${AppBrand.productName} v$currentVersion',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+            child: FamalthWatermark(
+              showVersion: true,
+              fontSize: 11,
             ),
           ),
         ],

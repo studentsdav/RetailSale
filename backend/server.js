@@ -40,6 +40,8 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(contextMiddleware);
 app.use((req, res, next) => {
+    res.setHeader('X-Powered-By', 'Famalth Business Solutions • FAMALTH LYNX');
+    res.setHeader('X-Platform-Vendor', 'Famalth Ecosystem');
     console.log(`[REQUEST] ${req.method} ${req.originalUrl || req.url}`);
     next();
 });

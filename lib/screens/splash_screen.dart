@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../core/auth/token_storage.dart';
+import '../core/config/app_brand.dart';
 import '../core/config/app_config.dart';
 import '../core/config/server_check.dart';
 import '../core/navigation/home_route_helper.dart';
 import '../models/auth/permission_service.dart';
+import '../widgets/famalth_watermark.dart';
 import 'auth/login_screen.dart';
 import 'dashboard/server_config_screen.dart';
 import 'recovery/auto_reinstall_screen.dart';
@@ -117,7 +119,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    AppConfig.outlets.isNotEmpty ? "RETAILPOS" : "SETUP",
+                    AppBrand.productName,
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           letterSpacing: 2.0,
@@ -142,10 +144,7 @@ class _SplashScreenState extends State<SplashScreen> {
             // Footer
             const Padding(
               padding: EdgeInsets.only(bottom: 24.0),
-              child: Text(
-                "Version 1.1.32 • Initiating Secure Boot...",
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
+              child: FamalthWatermark(showVersion: true),
             ),
           ],
         ),

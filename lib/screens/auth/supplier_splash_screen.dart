@@ -132,7 +132,7 @@ class _SupplierAppSplashScreenState extends State<SupplierAppSplashScreen> {
               CircularProgressIndicator(strokeWidth: 3, color: accentColor),
               const SizedBox(height: 32),
               const Text(
-                "Powered by RetailPOS",
+                "Powered by FAMALTH LYNX",
                 style: TextStyle(
                   color: Colors.grey,
                   fontSize: 12,
