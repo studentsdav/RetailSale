@@ -78,14 +78,14 @@ exports.checkUsernameAvailability = async (req, res) => {
 
         const cleanUsername = username.trim();
         const existing = await req.propertyDb.models.users.findOne({
-            where: { outlet_id, username: cleanUsername }
+            where: { username: cleanUsername }
         });
 
         if (existing) {
             return res.json({
                 success: true,
                 available: false,
-                message: `Username '${cleanUsername}' is already in use in your store.`
+                message: `Username '${cleanUsername}' is already taken. Please choose a unique username.`
             });
         }
 
@@ -113,15 +113,15 @@ exports.createUser = async (req, res) => {
 
     const cleanUsername = username.trim();
 
-    // Check if username is already taken within this outlet
+    // Check if username is already taken globally
     const existing = await req.propertyDb.models.users.findOne({
-        where: { outlet_id, username: cleanUsername }
+        where: { username: cleanUsername }
     });
 
     if (existing) {
         return res.status(400).json({
             success: false,
-            message: `Username '${cleanUsername}' is already registered in your store. Please choose a different username.`
+            message: `Username '${cleanUsername}' is already taken. Please choose a unique username.`
         });
     }
 

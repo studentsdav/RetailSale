@@ -32,6 +32,7 @@ class _SmtpSettingsScreenState extends State<SmtpSettingsScreen> {
   final _resendApiKeyCtrl = TextEditingController();
 
   bool _obscurePass = true;
+  bool _obscureClientId = true;
   bool _obscureClientSecret = true;
   bool _obscureRefreshToken = true;
   bool _obscureResendKey = true;
@@ -569,11 +570,16 @@ class _SmtpSettingsScreenState extends State<SmtpSettingsScreen> {
             const SizedBox(height: 14),
             TextFormField(
               controller: _gmailClientIdCtrl,
-              decoration: const InputDecoration(
+              obscureText: _obscureClientId,
+              decoration: InputDecoration(
                 labelText: 'Google OAuth Client ID',
                 hintText: '123456789-xyz.apps.googleusercontent.com',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.vpn_key_outlined),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.vpn_key_outlined),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureClientId ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscureClientId = !_obscureClientId),
+                ),
               ),
               validator: (v) => _providerType == 'GMAIL_OAUTH' && (v == null || v.trim().isEmpty) ? 'Enter Client ID' : null,
             ),
