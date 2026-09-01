@@ -36,6 +36,11 @@ module.exports = async (req, res, next) => {
                     ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS token_copies_count INTEGER DEFAULT 1;
                     ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS device_printer_mappings JSONB DEFAULT '{}';
                     ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS token_no VARCHAR(50) NULL;
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS provider_type VARCHAR(50) DEFAULT 'SMTP';
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS gmail_client_id TEXT NULL;
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS gmail_client_secret TEXT NULL;
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS gmail_refresh_token TEXT NULL;
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS resend_api_key TEXT NULL;
                 `);
                 console.log('✅ Self-healed: Checked and added missing columns to tables');
 

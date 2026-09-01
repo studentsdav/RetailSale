@@ -30,16 +30,19 @@ Deploy the backend seamlessly on [Render.com](https://render.com) or custom clou
 | **Database** | `DATABASE_URL` | `postgresql://user:pass@dpg-xyz.render.com/dbname` | PostgreSQL connection string (Triggers Cloud SaaS mode) |
 | | `DB_SSL` | `true` | Required for SSL connection to Cloud PostgreSQL |
 | **Authentication**| `JWT_SECRET` | `super-secret-jwt-key-2026-prod` | Secret key used to sign JWT tokens |
-| **SMTP / Email** | `EMAIL_PROVIDER` | `RESEND` | Explicit provider mode: **`RESEND`** (Resend API only), **`SMTP`** (SMTP only), or **`AUTO`** (SMTP primary + Resend fallback) |
-| | `EMAIL_HOST` | `smtp.zoho.com` | SMTP Server Host (`smtp.zoho.com` / `smtp.gmail.com`) |
-| | `EMAIL_PORT` | `465` | SMTP Port (`465` for SSL, `587` for STARTTLS, `25` for None) |
-| | `EMAIL_SECURITY` | `SSL` | Security Protocol: **`SSL`** (465), **`STARTTLS`** (587), or **`NONE`** (25) |
-| | `EMAIL_SECURE` | `false` | Set `true` for Port 465 SSL, `false` for Port 587 STARTTLS |
-| | `EMAIL_USER` | `famalth.retail@famalth.com` | SMTP Sender Email Address |
-| | `EMAIL_PASS` | `abcd1234efgh` | Zoho / Gmail 16-character App Password |
-| | `EMAIL_TIMEOUT` | `20000` | Connection timeout in milliseconds (Default: 20000) |
+| **Email Provider Mode** | `EMAIL_PROVIDER` | `RESEND` | Provider mode: **`RESEND`** (Resend API), **`GMAIL`** (Gmail OAuth2), **`SMTP`** (SMTP only), or **`AUTO`** |
 | **Resend API** | `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails over Port 443 |
 | | `EMAIL_FROM` | `"Retail POS" <noreply@famalth.com>` | Custom verified sender header name & email address |
+| **Gmail OAuth2** | `GMAIL_CLIENT_ID` | `1234567-xyz.apps.googleusercontent.com` | Google Cloud OAuth2 Client ID |
+| | `GMAIL_CLIENT_SECRET` | `GOCSPX-your_secret` | Google Cloud OAuth2 Client Secret |
+| | `GMAIL_REFRESH_TOKEN` | `1//04_your_token` | Google OAuth2 Refresh Token |
+| **SMTP Config** | `EMAIL_HOST` | `smtp.zoho.in` | SMTP Server Host (`smtp.zoho.in` / `smtp.gmail.com`) |
+| | `EMAIL_PORT` | `587` | SMTP Port (`587` for STARTTLS, `465` for SSL) |
+| | `EMAIL_SECURITY` | `STARTTLS` | Security Protocol: **`STARTTLS`** (587), **`SSL`** (465), or **`NONE`** (25) |
+| | `EMAIL_SECURE` | `false` | Set `false` for Port 587 STARTTLS, `true` for Port 465 SSL |
+| | `EMAIL_USER` | `famalth.retail@famalth.com` | SMTP / OAuth2 Sender Email Address |
+| | `EMAIL_PASS` | `abcd1234efgh` | Zoho / Gmail 16-character App Password (for password auth) |
+| | `EMAIL_TIMEOUT` | `20000` | Connection timeout in milliseconds (Default: 20000) |
 | **Google Sync** | `ROOT_FOLDER_ID` | `1A2B3C4D5E6F7G8H` | Google Drive Root Folder ID for automated backups |
 | | `SCRIPT_URL` | `https://script.google.com/macros/s/exec` | Google Apps Script Sync Endpoint URL |
 | | `SHEET_ID` | `1XYZ2ABC3DEF4GHI` | Google Sheets Sync Database Spreadsheet ID |
@@ -50,6 +53,7 @@ Deploy the backend seamlessly on [Render.com](https://render.com) or custom clou
 
 - [Retailer Installation & Update Guide](./Docs/Retailer-Installation-Guide.md)
 - [Render Cloud Deployment & Environment Guide](./Docs/Render-Cloud-Deployment-Guide.md)
+- [Google Gmail OAuth2 Setup Guide](./Docs/Google-Gmail-OAuth2-Setup-Guide.md)
 - [Own Server Online Deployment Guide](./Docs/Own-Server-Online-Deployment-Guide.md)
 - [User Guide](./Docs/User-Guide.md)
 - [Complete Help File](./Docs/Help-File.md)

@@ -16,38 +16,55 @@ exports.getEmailConfig = async (req, res) => {
 exports.saveEmailConfig = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
-        const { smtp_host, smtp_port, smtp_user, smtp_pass, encryption_type, from_name, from_email, sender_name, security_type, is_active } = req.body;
+        const {
+            smtp_host,
+            smtp_port,
+            smtp_user,
+            smtp_pass,
+            encryption_type,
+            from_name,
+            from_email,
+            sender_name,
+            security_type,
+            provider_type,
+            gmail_client_id,
+            gmail_client_secret,
+            gmail_refresh_token,
+            resend_api_key,
+            is_active
+        } = req.body;
 
         const effectiveFromEmail = from_email || smtp_user;
         const effectiveFromName = from_name || sender_name || 'Retail POS';
         const effectiveEncryption = encryption_type || security_type || 'STARTTLS';
+        const effectiveProvider = provider_type || 'SMTP';
 
         let config = await req.propertyDb.models.email_configurations.findOne({
             where: { outlet_id }
         });
 
+        const updateData = {
+            smtp_host: smtp_host || 'smtp.gmail.com',
+            smtp_port: Number(smtp_port) || 587,
+            smtp_user,
+            smtp_pass,
+            encryption_type: effectiveEncryption,
+            from_name: effectiveFromName,
+            from_email: effectiveFromEmail,
+            provider_type: effectiveProvider,
+            gmail_client_id,
+            gmail_client_secret,
+            gmail_refresh_token,
+            resend_api_key,
+            is_active: is_active ?? true
+        };
+
         if (config) {
-            await config.update({
-                smtp_host,
-                smtp_port,
-                smtp_user,
-                smtp_pass,
-                encryption_type: effectiveEncryption,
-                from_name: effectiveFromName,
-                from_email: effectiveFromEmail,
-                is_active: is_active ?? true
-            });
+            await config.update(updateData);
         } else {
             config = await req.propertyDb.models.email_configurations.create({
                 outlet_id,
-                smtp_host,
-                smtp_port,
-                smtp_user,
-                smtp_pass,
-                encryption_type: effectiveEncryption,
-                from_name: effectiveFromName,
-                from_email: effectiveFromEmail,
-                is_active: is_active ?? true
+                ...updateData
             });
         }
 
@@ -60,53 +77,89 @@ exports.saveEmailConfig = async (req, res) => {
 exports.testEmail = async (req, res) => {
     try {
         const outlet_id = req.user?.outlet_id;
-        const { to_email, smtp_host, smtp_port, smtp_user, smtp_pass, sender_name, security_type } = req.body;
-
-        let host = smtp_host;
-        let port = Number(smtp_port) || 587;
-        let user = smtp_user;
-        let pass = smtp_pass;
-        let fromName = sender_name || 'Retail POS';
-
-        if (!host || !user) {
-            const config = await req.propertyDb.models.email_configurations.findOne({
-                where: { outlet_id }
-            });
-
-            if (!config) {
-                return res.status(400).json({ success: false, message: 'Email configuration is inactive or not found' });
-            }
-            host = config.smtp_host;
-            port = Number(config.smtp_port) || 587;
-            user = config.smtp_user;
-            pass = config.smtp_pass;
-            fromName = config.from_name || 'Retail POS';
-        }
+        const {
+            to_email,
+            smtp_host,
+            smtp_port,
+            smtp_user,
+            smtp_pass,
+            sender_name,
+            security_type,
+            provider_type,
+            gmail_client_id,
+            gmail_client_secret,
+            gmail_refresh_token,
+            resend_api_key
+        } = req.body;
 
         if (!to_email) {
             return res.status(400).json({ success: false, message: 'Recipient email address is required' });
         }
 
-        const isSecure = port === 465 || (security_type && String(security_type).includes('465'));
-        const transporter = nodemailer.createTransport({
-            host: host,
-            port: Number(port),
-            secure: isSecure,
-            auth: {
-                user: user,
-                pass: pass
-            },
-            tls: {
-                rejectUnauthorized: false
+        let provider = provider_type || 'SMTP';
+        let user = smtp_user;
+        let pass = smtp_pass;
+        let host = smtp_host || 'smtp.gmail.com';
+        let port = Number(smtp_port) || 587;
+        let fromName = sender_name || 'Retail POS';
+        let clientId = gmail_client_id;
+        let clientSecret = gmail_client_secret;
+        let refreshToken = gmail_refresh_token;
+
+        if (!user && !resend_api_key && outlet_id) {
+            const config = await req.propertyDb.models.email_configurations.findOne({
+                where: { outlet_id }
+            });
+
+            if (config) {
+                provider = config.provider_type || 'SMTP';
+                host = config.smtp_host || 'smtp.gmail.com';
+                port = Number(config.smtp_port) || 587;
+                user = config.smtp_user;
+                pass = config.smtp_pass;
+                fromName = config.from_name || 'Retail POS';
+                clientId = config.gmail_client_id;
+                clientSecret = config.gmail_client_secret;
+                refreshToken = config.gmail_refresh_token;
             }
-        });
+        }
+
+        let transporter;
+
+        if (provider === 'GMAIL_OAUTH' || (clientId && refreshToken)) {
+            console.log(`[TEST EMAIL] Testing via Gmail OAuth2 for ${user}...`);
+            transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    type: 'OAuth2',
+                    user: user,
+                    clientId: clientId,
+                    clientSecret: clientSecret,
+                    refreshToken: refreshToken
+                },
+                tls: { rejectUnauthorized: false }
+            });
+        } else {
+            console.log(`[TEST EMAIL] Testing via SMTP ${host}:${port} for ${user}...`);
+            const isSecure = port === 465 || (security_type && String(security_type).includes('465'));
+            transporter = nodemailer.createTransport({
+                host: host,
+                port: Number(port),
+                secure: isSecure,
+                auth: {
+                    user: user,
+                    pass: pass
+                },
+                tls: { rejectUnauthorized: false }
+            });
+        }
 
         const mailOptions = {
             from: `"${fromName}" <${user}>`,
             to: to_email,
             subject: 'Test Email from Retail POS',
-            text: 'Hello, this is a test email confirming that SMTP parameters are working properly.',
-            html: '<h3>SMTP Configuration Test</h3><p>Hello, this is a test email confirming that SMTP parameters are working properly on your POS system.</p>'
+            text: 'Hello, this is a test email confirming that email configuration parameters are working properly.',
+            html: '<h3>Email Configuration Test</h3><p>Hello, this is a test email confirming that email configuration parameters are working properly on your POS system.</p>'
         };
 
         await transporter.sendMail(mailOptions);

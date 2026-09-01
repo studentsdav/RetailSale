@@ -11,19 +11,19 @@ module.exports = (sequelize, DataTypes) => {
         },
         smtp_host: {
             type: DataTypes.STRING(255),
-            allowNull: false
+            allowNull: true
         },
         smtp_port: {
             type: DataTypes.INTEGER,
-            allowNull: false
+            allowNull: true
         },
         smtp_user: {
             type: DataTypes.STRING(255),
-            allowNull: false
+            allowNull: true
         },
         smtp_pass: {
             type: DataTypes.STRING(255),
-            allowNull: false
+            allowNull: true
         },
         encryption_type: {
             type: DataTypes.STRING(20),
@@ -35,7 +35,27 @@ module.exports = (sequelize, DataTypes) => {
         },
         from_email: {
             type: DataTypes.STRING(255),
-            allowNull: false
+            allowNull: true
+        },
+        provider_type: {
+            type: DataTypes.STRING(50),
+            defaultValue: 'SMTP'
+        },
+        gmail_client_id: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        gmail_client_secret: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        gmail_refresh_token: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        resend_api_key: {
+            type: DataTypes.TEXT,
+            allowNull: true
         },
         is_active: {
             type: DataTypes.BOOLEAN,

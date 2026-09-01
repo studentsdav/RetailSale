@@ -38,6 +38,12 @@ services:
         sync: false
       - key: EMAIL_PASS
         sync: false
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REFRESH_TOKEN
+        sync: false
       - key: ROOT_FOLDER_ID
         sync: false
       - key: SCRIPT_URL

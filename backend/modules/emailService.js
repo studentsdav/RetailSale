@@ -27,7 +27,33 @@ function getTransporter(overridePort = null) {
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
     const emailPass = process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || (sysConfig ? sysConfig.emailPass : null);
     const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
-    
+    const timeoutMs = Number(process.env.EMAIL_TIMEOUT) || 20000;
+
+    // Check for Gmail OAuth2 credentials
+    const gmailClientId = process.env.GMAIL_CLIENT_ID || process.env.GMAIL_OAUTH_CLIENT_ID;
+    const gmailClientSecret = process.env.GMAIL_CLIENT_SECRET || process.env.GMAIL_OAUTH_CLIENT_SECRET;
+    const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN || process.env.GMAIL_OAUTH_REFRESH_TOKEN;
+
+    if (emailUser && gmailClientId && gmailClientSecret && gmailRefreshToken) {
+        console.log(`[EMAIL OAUTH2] Initializing Gmail OAuth2 transporter for ${emailUser}...`);
+        return nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                type: 'OAuth2',
+                user: emailUser,
+                clientId: gmailClientId,
+                clientSecret: gmailClientSecret,
+                refreshToken: gmailRefreshToken
+            },
+            lookup: ipv4Lookup,
+            family: 4,
+            connectionTimeout: timeoutMs,
+            greetingTimeout: timeoutMs,
+            socketTimeout: timeoutMs,
+            dnsTimeout: timeoutMs
+        });
+    }
+
     if (!emailUser || !emailPass) {
         return null;
     }
@@ -66,8 +92,6 @@ function getTransporter(overridePort = null) {
         isSecure = emailPort === 465;
         requireTLS = emailPort === 587;
     }
-
-    const timeoutMs = Number(process.env.EMAIL_TIMEOUT) || 20000;
 
     return nodemailer.createTransport({
         host: emailHost,
@@ -139,11 +163,11 @@ async function sendEmail(to, subject, htmlContent) {
 
     const providerMode = (process.env.EMAIL_PROVIDER || process.env.EMAIL_DRIVER || '').toString().trim().toUpperCase();
     const useResendOnly = providerMode === 'RESEND' || process.env.USE_RESEND === 'true';
-    const useSmtpOnly = providerMode === 'SMTP' || process.env.USE_SMTP === 'true';
+    const useSmtpOnly = providerMode === 'SMTP' || providerMode === 'GMAIL' || providerMode === 'OAUTH' || process.env.USE_SMTP === 'true';
 
     console.log(`🔍 [EMAIL DEBUG] Target: ${to} | Provider Mode: ${providerMode || 'AUTO'} | User: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Host: ${emailHost}:${emailPort} (${secProtocolStr}) | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'}`);
 
-    // MODE 1: RESEND ONLY (Does NOT request SMTP)
+    // MODE 1: RESEND ONLY (Does NOT request SMTP/OAuth2)
     if (useResendOnly) {
         if (!process.env.RESEND_API_KEY) {
             throw new Error("EMAIL_PROVIDER is set to RESEND, but RESEND_API_KEY is missing in environment variables.");
@@ -152,21 +176,25 @@ async function sendEmail(to, subject, htmlContent) {
         return await sendViaResendApi(process.env.RESEND_API_KEY, to, subject, htmlContent);
     }
 
-    // MODE 2: SMTP ONLY (Does NOT request Resend API)
+    // MODE 2: SMTP / GMAIL OAUTH2 ONLY (Does NOT request Resend API)
     if (useSmtpOnly) {
-        if (!emailUser || !emailPass) {
-            throw new Error("EMAIL_PROVIDER is set to SMTP, but EMAIL_USER / EMAIL_PASS credentials are missing.");
+        const gmailClientId = process.env.GMAIL_CLIENT_ID || process.env.GMAIL_OAUTH_CLIENT_ID;
+        const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN || process.env.GMAIL_OAUTH_REFRESH_TOKEN;
+        const hasAuth = (emailUser && emailPass) || (emailUser && gmailClientId && gmailRefreshToken);
+
+        if (!hasAuth) {
+            throw new Error("EMAIL_PROVIDER is set to SMTP/GMAIL, but email credentials (EMAIL_USER/EMAIL_PASS or GMAIL OAuth2) are missing.");
         }
-        console.log(`[EMAIL MODE] Sending strictly via SMTP to ${to}...`);
+        console.log(`[EMAIL MODE] Sending strictly via SMTP/OAuth2 to ${to}...`);
         const transporter = getTransporter();
-        if (!transporter) throw new Error("Could not initialize SMTP transporter.");
+        if (!transporter) throw new Error("Could not initialize email transporter.");
         const info = await transporter.sendMail({
             from: `"System Admin" <${emailUser}>`,
             to: to,
             subject: subject,
             html: htmlContent
         });
-        console.log(`[EMAIL SMTP SUCCESS] Sent to ${to}: ${info.messageId}`);
+        console.log(`[EMAIL SUCCESS] Sent to ${to}: ${info.messageId}`);
         return true;
     }
 
