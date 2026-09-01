@@ -35,23 +35,45 @@ function getTransporter(overridePort = null) {
     const isZoho = emailHost.toLowerCase().includes('zoho');
     let emailPort = overridePort || Number(process.env.EMAIL_PORT);
 
-    if (!emailPort) {
-        emailPort = isZoho ? 465 : 587;
+    const secEnv = (process.env.EMAIL_SECURITY || process.env.EMAIL_SECURE_MODE || '').toString().trim().toUpperCase();
+    const isSecureEnvBool = process.env.EMAIL_SECURE === 'true' || process.env.EMAIL_SECURE === '1';
+
+    let isSecure = isSecureEnvBool;
+    let requireTLS = false;
+
+    if (secEnv === 'SSL' || secEnv === '465') {
+        isSecure = true;
+        if (!emailPort) emailPort = 465;
+    } else if (secEnv === 'STARTTLS' || secEnv === 'TLS' || secEnv === '587') {
+        isSecure = false;
+        requireTLS = true;
+        if (!emailPort) emailPort = 587;
+    } else if (secEnv === 'NONE' || secEnv === '25') {
+        isSecure = false;
+        requireTLS = false;
+        if (!emailPort) emailPort = 25;
+    } else {
+        if (!emailPort) {
+            emailPort = isZoho ? 465 : 587;
+        }
+
+        // Auto-adjust Zoho port 587 -> 465 for cloud hosting compatibility (Render blocks port 587)
+        if (isZoho && emailPort === 587 && !overridePort) {
+            console.log(`[EMAIL NOTICE] Auto-adjusting Zoho SMTP port from 587 to 465 (SSL) for Render cloud compatibility.`);
+            emailPort = 465;
+        }
+
+        isSecure = emailPort === 465;
+        requireTLS = emailPort === 587;
     }
 
-    // Auto-adjust Zoho port 587 -> 465 for cloud hosting compatibility (Render blocks port 587)
-    if (isZoho && emailPort === 587 && !overridePort) {
-        console.log(`[EMAIL NOTICE] Auto-adjusting Zoho SMTP port from 587 to 465 (SSL) for Render cloud compatibility.`);
-        emailPort = 465;
-    }
-
-    const isSecure = emailPort === 465;
     const timeoutMs = Number(process.env.EMAIL_TIMEOUT) || 20000;
 
     return nodemailer.createTransport({
         host: emailHost,
         port: emailPort,
         secure: isSecure,
+        requireTLS: requireTLS,
         auth: {
             user: emailUser,
             pass: emailPass
@@ -121,7 +143,11 @@ async function sendEmail(to, subject, htmlContent) {
     const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
     const emailPort = Number(process.env.EMAIL_PORT) || 587;
 
-    console.log(`🔍 [EMAIL DEBUG] Target: ${to} | User Configured: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Pass Configured: ${emailPass ? 'YES (length=' + emailPass.length + ')' : 'NO'} | Host: ${emailHost}:${emailPort} | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'}`);
+    const secEnv = (process.env.EMAIL_SECURITY || process.env.EMAIL_SECURE_MODE || '').toString().trim().toUpperCase();
+    const isSecureBool = process.env.EMAIL_SECURE === 'true' || process.env.EMAIL_SECURE === '1' || emailPort === 465 || secEnv === 'SSL';
+    const secProtocolStr = isSecureBool ? 'SSL (465)' : (secEnv === 'NONE' ? 'NONE (25)' : 'STARTTLS (587)');
+
+    console.log(`🔍 [EMAIL DEBUG] Target: ${to} | User: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Pass: ${emailPass ? 'YES (len=' + emailPass.length + ')' : 'NO'} | Host: ${emailHost}:${emailPort} | Security: ${secProtocolStr} | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'}`);
 
     let transporter = getTransporter();
 

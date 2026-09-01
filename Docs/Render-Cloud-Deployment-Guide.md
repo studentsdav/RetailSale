@@ -61,16 +61,18 @@ In your Web Service, go to **Environment** tab and add the following keys:
 ### 2. Email Service & OTP Delivery (Optional)
 
 > [!IMPORTANT]
-> Render Free Web Services block outbound TCP ports 25, 465, and 587 (`ETIMEDOUT`). For outbound OTP emails on Render, use `RESEND_API_KEY` over HTTPS port 443, or check OTP directly from Render Live Logs (`🔑 [OTP GENERATED]`).
+> Render Web Services block outbound TCP port 587 (`ETIMEDOUT`). For Zoho Mail or custom SMTP on Render, set **`EMAIL_PORT=465`** and **`EMAIL_SECURITY=SSL`** (or use **`RESEND_API_KEY`** over HTTPS port 443).
 
 | Variable | Example Value | Description |
 | :--- | :--- | :--- |
-| `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for outbound OTP emails (Recommended for Render) |
-| `EMAIL_USER` | `studentsdav6@gmail.com` | SMTP Email address (Gmail / SendGrid / Custom SMTP) |
-| `EMAIL_PASS` | `abcd efgh ijkl mnop` | Gmail 16-character App Password |
-| `EMAIL_HOST` | `smtp.gmail.com` | SMTP Server Host |
-| `EMAIL_PORT` | `587` | SMTP Port (587 TLS or 465 SSL) |
-| `EMAIL_TIMEOUT` | `30000` | Connection timeout in milliseconds (Default: 30000) |
+| `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails (Recommended for Render) |
+| `EMAIL_HOST` | `smtp.zoho.com` | SMTP Server Host (`smtp.zoho.com` / `smtp.gmail.com`) |
+| `EMAIL_PORT` | `465` | SMTP Port (`465` for SSL, `587` for STARTTLS, `25` for None) |
+| `EMAIL_SECURITY` | `SSL` | Security Protocol: `SSL` (465), `STARTTLS` (587), or `NONE` (25) |
+| `EMAIL_SECURE` | `true` | Set `true` for Port 465 SSL, `false` for Port 587 STARTTLS |
+| `EMAIL_USER` | `famalth.retail@famalth.com` | SMTP Sender Email Address |
+| `EMAIL_PASS` | `abcd1234efgh` | SMTP App Password generated in Zoho / Gmail |
+| `EMAIL_TIMEOUT` | `20000` | Connection timeout in milliseconds (Default: 20000) |
 
 ---
 
