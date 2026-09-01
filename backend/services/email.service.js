@@ -43,6 +43,8 @@ async function getGmailAccessToken(clientId, clientSecret, refreshToken) {
     });
 }
 
+exports.sendViaGmailOAuthApi = sendViaGmailOAuthApi;
+
 /**
  * Send email strictly via Gmail OAuth2 REST API (HTTPS Port 443)
  */

@@ -124,35 +124,34 @@ exports.testEmail = async (req, res) => {
             }
         }
 
-        let transporter;
-
         if (provider === 'GMAIL_OAUTH' || (clientId && refreshToken)) {
-            console.log(`[TEST EMAIL] Testing via Gmail OAuth2 for ${user}...`);
-            transporter = nodemailer.createTransport({
-                service: 'gmail',
-                auth: {
-                    type: 'OAuth2',
-                    user: user,
-                    clientId: clientId,
-                    clientSecret: clientSecret,
-                    refreshToken: refreshToken
-                },
-                tls: { rejectUnauthorized: false }
+            console.log(`[TEST EMAIL] Testing via Gmail OAuth2 REST API (Port 443) for ${user}...`);
+            const emailService = require('../../services/email.service');
+            await emailService.sendViaGmailOAuthApi({
+                clientId: clientId,
+                clientSecret: clientSecret,
+                refreshToken: refreshToken,
+                user: user,
+                fromName: fromName,
+                to: to_email,
+                subject: 'Test Email from Retail POS',
+                htmlContent: '<h3>Email Configuration Test</h3><p>Hello, this is a test email confirming that your Gmail OAuth2 parameters are working properly on your POS system over HTTPS Port 443.</p>'
             });
-        } else {
-            console.log(`[TEST EMAIL] Testing via SMTP ${host}:${port} for ${user}...`);
-            const isSecure = port === 465 || (security_type && String(security_type).includes('465'));
-            transporter = nodemailer.createTransport({
-                host: host,
-                port: Number(port),
-                secure: isSecure,
-                auth: {
-                    user: user,
-                    pass: pass
-                },
-                tls: { rejectUnauthorized: false }
-            });
+            return res.json({ success: true, message: 'Test email sent successfully via Gmail OAuth2 REST API! Please check recipient inbox.' });
         }
+
+        console.log(`[TEST EMAIL] Testing via SMTP ${host}:${port} for ${user}...`);
+        const isSecure = port === 465 || (security_type && String(security_type).includes('465'));
+        const transporter = nodemailer.createTransport({
+            host: host,
+            port: Number(port),
+            secure: isSecure,
+            auth: {
+                user: user,
+                pass: pass
+            },
+            tls: { rejectUnauthorized: false }
+        });
 
         const mailOptions = {
             from: `"${fromName}" <${user}>`,

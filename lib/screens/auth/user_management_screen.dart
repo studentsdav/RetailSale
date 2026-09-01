@@ -395,6 +395,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     bool isOtpSent = false;
     bool isLoading = false;
     bool obscurePass = true;
+    String? dialogError;
 
     showDialog(
       context: context,
@@ -404,12 +405,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           builder: (ctx, setDialogState) {
             Future<void> sendOtp() async {
               if (email.text.trim().isEmpty || !email.text.contains('@')) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Enter a valid email first'),
-                    backgroundColor: Colors.red));
+                setDialogState(() => dialogError = 'Enter a valid email address first');
                 return;
               }
-              setDialogState(() => isLoading = true);
+              setDialogState(() {
+                isLoading = true;
+                dialogError = null;
+              });
               try {
                 await outletCtrl.sendSetupOtp(email.text.trim());
                 setDialogState(() => isOtpSent = true);
@@ -417,10 +419,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                     content: Text('OTP Sent!'), backgroundColor: Colors.blue));
               } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(e.toString().replaceAll("Exception: ", "")),
-                    backgroundColor: Colors.red));
+                final cleanErr = e.toString().replaceAll("Exception: ", "").replaceAll("Exception", "").trim();
+                setDialogState(() => dialogError = cleanErr);
               } finally {
                 setDialogState(() => isLoading = false);
               }
@@ -428,7 +428,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
             Future<void> verifyOtp() async {
               if (otpCtrl.text.trim().isEmpty) return;
-              setDialogState(() => isLoading = true);
+              setDialogState(() {
+                isLoading = true;
+                dialogError = null;
+              });
               try {
                 await outletCtrl.verifySetupOtp(
                     email.text.trim(), otpCtrl.text.trim());
@@ -441,10 +444,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     content: Text('Email Verified!'),
                     backgroundColor: Colors.green));
               } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(e.toString().replaceAll("Exception: ", "")),
-                    backgroundColor: Colors.red));
+                final cleanErr = e.toString().replaceAll("Exception: ", "").replaceAll("Exception", "").trim();
+                setDialogState(() => dialogError = cleanErr);
               } finally {
                 setDialogState(() => isLoading = false);
               }
@@ -460,6 +461,31 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (dialogError != null) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red.shade300),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    dialogError!,
+                                    style: TextStyle(color: Colors.red.shade900, fontSize: 12.5, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         TextFormField(
                             controller: username,
                             decoration: const InputDecoration(
@@ -639,10 +665,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                                     content: Text('User created'),
                                     backgroundColor: Colors.green));
                           } catch (e) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text(e.toString()),
-                                backgroundColor: Colors.red));
+                            final cleanErr = e.toString().replaceAll("Exception: ", "").replaceAll("Exception", "").trim();
+                            setDialogState(() => dialogError = cleanErr);
                           } finally {
                             setDialogState(() => isLoading = false);
                           }
@@ -1030,7 +1054,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           } catch (e) {
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text(e.toString()),
+                                content: Text(e.toString().replaceAll("Exception: ", "")),
                                 backgroundColor: Colors.red));
                           } finally {
                             setDialogState(() => isLoading = false);
