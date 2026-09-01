@@ -292,36 +292,133 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
 
     if (result == null || result.files.isEmpty) return;
 
-    final bytes = result.files.single.bytes ?? File(result.files.single.path!).readAsBytesSync();
-    final excel = Excel.decodeBytes(bytes);
+    double progress = 0.1;
+    String statusMessage = "Reading Vendor Excel file...";
 
-    List<Map<String, dynamic>> bulkData = [];
+    StateSetter? updateDialogState;
+    bool dialogOpen = true;
 
-    for (var table in excel.tables.keys) {
-      for (int i = 1; i < excel.tables[table]!.rows.length; i++) {
-        final row = excel.tables[table]!.rows[i];
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            updateDialogState = setState;
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              contentPadding: const EdgeInsets.all(24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.drive_folder_upload, color: Color(0xFF2563EB), size: 28),
+                      SizedBox(width: 12),
+                      Text("Importing Vendors", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey.shade200,
+                    color: const Color(0xFF2563EB),
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          statusMessage,
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                        ),
+                      ),
+                      Text(
+                        '${(progress * 100).toInt()}%',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) => dialogOpen = false);
 
-        bulkData.add({
-          "supplier_code": row[0]?.value.toString(),
-          "supplier_name": row[1]?.value.toString(),
-          "address": row[2]?.value.toString(),
-          "phone": row[3]?.value.toString(),
-          "state": row.length > 4 ? row[4]?.value.toString() : null,
-          "gstin": row.length > 5 ? row[5]?.value.toString() : null,
-          "tax_id_number": row.length > 6 ? row[6]?.value.toString() : null,
-          "tax_id_type": row.length > 7 ? row[7]?.value.toString() : null,
-          "tax_country_code": row.length > 8 ? row[8]?.value.toString() : null,
+    try {
+      final bytes = result.files.single.bytes ?? File(result.files.single.path!).readAsBytesSync();
+      final excel = Excel.decodeBytes(bytes);
+
+      if (updateDialogState != null && dialogOpen) {
+        updateDialogState!(() {
+          progress = 0.35;
+          statusMessage = "Parsing vendor fields...";
         });
       }
+
+      List<Map<String, dynamic>> bulkData = [];
+
+      for (var table in excel.tables.keys) {
+        for (int i = 1; i < excel.tables[table]!.rows.length; i++) {
+          final row = excel.tables[table]!.rows[i];
+
+          bulkData.add({
+            "supplier_code": row[0]?.value.toString(),
+            "supplier_name": row[1]?.value.toString(),
+            "address": row[2]?.value.toString(),
+            "phone": row[3]?.value.toString(),
+            "state": row.length > 4 ? row[4]?.value.toString() : null,
+            "gstin": row.length > 5 ? row[5]?.value.toString() : null,
+            "tax_id_number": row.length > 6 ? row[6]?.value.toString() : null,
+            "tax_id_type": row.length > 7 ? row[7]?.value.toString() : null,
+            "tax_country_code": row.length > 8 ? row[8]?.value.toString() : null,
+          });
+        }
+      }
+
+      if (updateDialogState != null && dialogOpen) {
+        updateDialogState!(() {
+          progress = 0.7;
+          statusMessage = "Uploading ${bulkData.length} vendors to database...";
+        });
+      }
+
+      await ApiClient.post('/api/inventory/suppliers/bulk-import', bulkData);
+
+      if (updateDialogState != null && dialogOpen) {
+        updateDialogState!(() {
+          progress = 1.0;
+          statusMessage = "Import completed successfully!";
+        });
+      }
+
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (mounted && dialogOpen) Navigator.of(context).pop();
+
+      await _loadSuppliers();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Successfully imported ${bulkData.length} vendors!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (mounted && dialogOpen) Navigator.of(context).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Import Failed: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
-
-    await ApiClient.post('/api/inventory/suppliers/bulk-import', bulkData);
-
-    await _loadSuppliers();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Import Successful')),
-    );
   }
 
   // ================= UI =================

@@ -909,124 +909,220 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     );
     if (result == null || result.files.isEmpty) return;
 
-    final bytes = result.files.single.bytes ?? File(result.files.single.path!).readAsBytesSync();
-    final excel = Excel.decodeBytes(bytes);
+    double progress = 0.1;
+    String statusMessage = "Reading Excel file...";
 
-    String headerKey(dynamic value) =>
-        value?.toString().trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ') ??
-        '';
+    StateSetter? updateDialogState;
+    bool dialogOpen = true;
 
-    dynamic cellByHeader(List<Data?> row, Map<String, int> headers, String name,
-        {int fallbackIndex = -1}) {
-      final idx = headers[headerKey(name)] ?? fallbackIndex;
-      if (idx < 0 || idx >= row.length) return null;
-      return row[idx]?.value;
-    }
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            updateDialogState = setState;
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              contentPadding: const EdgeInsets.all(24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.drive_folder_upload, color: Color(0xFF008060), size: 28),
+                      SizedBox(width: 12),
+                      Text("Importing Items", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey.shade200,
+                    color: const Color(0xFF008060),
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          statusMessage,
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                        ),
+                      ),
+                      Text(
+                        '${(progress * 100).toInt()}%',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF008060)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) => dialogOpen = false);
 
-    List<Map<String, dynamic>> bulkData = [];
-    for (var table in excel.tables.keys) {
-      final rows = excel.tables[table]!.rows;
-      if (rows.isEmpty) continue;
+    try {
+      final bytes = result.files.single.bytes ?? File(result.files.single.path!).readAsBytesSync();
+      final excel = Excel.decodeBytes(bytes);
 
-      final headerRow = rows.first;
-      final headers = <String, int>{};
-      for (var i = 0; i < headerRow.length; i++) {
-        final key = headerKey(headerRow[i]?.value);
-        if (key.isNotEmpty) headers[key] = i;
-      }
-
-      for (int i = 1; i < rows.length; i++) {
-        final row = rows[i];
-        bulkData.add({
-          "item_code": cellByHeader(row, headers, 'Item Code', fallbackIndex: 0)
-              ?.toString(),
-          "item_name": cellByHeader(row, headers, 'Item Name', fallbackIndex: 1)
-              ?.toString(),
-          "location": cellByHeader(row, headers, 'Location')?.toString() ??
-              cellByHeader(row, headers, 'Kitchen Location')?.toString() ??
-              '-',
-          "hsn_sac_code":
-              cellByHeader(row, headers, 'HSN/SAC', fallbackIndex: 2)?.toString(),
-          "item_group":
-              cellByHeader(row, headers, 'Group', fallbackIndex: 3)?.toString(),
-          "sub_category": cellByHeader(row, headers, 'Sub Category',
-                  fallbackIndex: 4)
-              ?.toString(),
-          "brand": cellByHeader(row, headers, 'Brand', fallbackIndex: 5)
-              ?.toString(),
-          "unit": cellByHeader(row, headers, 'Unit', fallbackIndex: 6)?.toString(),
-          "barcode":
-              cellByHeader(row, headers, 'Barcode', fallbackIndex: 7)?.toString(),
-          "rate": double.tryParse(
-                  cellByHeader(row, headers, 'Rate', fallbackIndex: 8)
-                          ?.toString() ??
-                      '0') ??
-              0,
-          "retail_sale_price": double.tryParse(
-                  cellByHeader(row, headers, 'Sale Rate', fallbackIndex: 9)
-                          ?.toString() ??
-                      '0') ??
-              0,
-          "mrp": double.tryParse(
-                  cellByHeader(row, headers, 'MRP', fallbackIndex: 10)
-                          ?.toString() ??
-                      '0') ??
-              0.0,
-          "tax_type": cellByHeader(row, headers, 'Tax Type', fallbackIndex: 11)
-                  ?.toString() ??
-              'GST',
-          "tax_percent": double.tryParse(
-                  cellByHeader(row, headers, 'Tax Percent', fallbackIndex: 12)
-                          ?.toString() ??
-                      '0') ??
-              0,
-          "is_tax_inclusive": _toBool(
-              cellByHeader(row, headers, 'Tax Inclusive', fallbackIndex: 13),
-              defaultValue: false),
-          "discount_applicable":
-              _toBool(cellByHeader(row, headers, 'Discount Applicable',
-                  fallbackIndex: 14), defaultValue: true),
-          "scheme_applicable": _toBool(
-              cellByHeader(row, headers, 'Scheme Applicable',
-                  fallbackIndex: 15),
-              defaultValue: true),
-          "is_happy_hour": _toBool(
-              cellByHeader(row, headers, 'Happy Hour', fallbackIndex: 16),
-              defaultValue: false),
-          "opening_balance": double.tryParse(
-                  cellByHeader(row, headers, 'Opening', fallbackIndex: 17)
-                          ?.toString() ??
-                      '0') ??
-              0,
-          "min_level": int.tryParse(
-                  cellByHeader(row, headers, 'Min', fallbackIndex: 18)
-                          ?.toString() ??
-                      '0') ??
-              0,
-          "max_level": int.tryParse(
-                  cellByHeader(row, headers, 'Max', fallbackIndex: 19)
-                          ?.toString() ??
-                      '0') ??
-              0,
-          "stockable": _toBool(
-              cellByHeader(row, headers, 'Stockable', fallbackIndex: 20),
-              defaultValue: true),
-          "is_saleable": _toBool(
-              cellByHeader(row, headers, 'Saleable', fallbackIndex: 21),
-              defaultValue: true),
+      if (updateDialogState != null && dialogOpen) {
+        updateDialogState!(() {
+          progress = 0.3;
+          statusMessage = "Parsing rows & validating fields...";
         });
       }
+
+      String headerKey(dynamic value) =>
+          value?.toString().trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ') ??
+          '';
+
+      dynamic cellByHeader(List<Data?> row, Map<String, int> headers, String name,
+          {int fallbackIndex = -1}) {
+        final idx = headers[headerKey(name)] ?? fallbackIndex;
+        if (idx < 0 || idx >= row.length) return null;
+        return row[idx]?.value;
+      }
+
+      List<Map<String, dynamic>> bulkData = [];
+      for (var table in excel.tables.keys) {
+        final rows = excel.tables[table]!.rows;
+        if (rows.isEmpty) continue;
+
+        final headerRow = rows.first;
+        final headers = <String, int>{};
+        for (var i = 0; i < headerRow.length; i++) {
+          final key = headerKey(headerRow[i]?.value);
+          if (key.isNotEmpty) headers[key] = i;
+        }
+
+        for (int i = 1; i < rows.length; i++) {
+          final row = rows[i];
+          bulkData.add({
+            "item_code": cellByHeader(row, headers, 'Item Code', fallbackIndex: 0)
+                ?.toString(),
+            "item_name": cellByHeader(row, headers, 'Item Name', fallbackIndex: 1)
+                ?.toString(),
+            "location": cellByHeader(row, headers, 'Location')?.toString() ??
+                cellByHeader(row, headers, 'Kitchen Location')?.toString() ??
+                '-',
+            "hsn_sac_code":
+                cellByHeader(row, headers, 'HSN/SAC', fallbackIndex: 2)?.toString(),
+            "item_group":
+                cellByHeader(row, headers, 'Group', fallbackIndex: 3)?.toString(),
+            "sub_category": cellByHeader(row, headers, 'Sub Category',
+                    fallbackIndex: 4)
+                ?.toString(),
+            "brand": cellByHeader(row, headers, 'Brand', fallbackIndex: 5)
+                ?.toString(),
+            "unit": cellByHeader(row, headers, 'Unit', fallbackIndex: 6)?.toString(),
+            "barcode":
+                cellByHeader(row, headers, 'Barcode', fallbackIndex: 7)?.toString(),
+            "rate": double.tryParse(
+                    cellByHeader(row, headers, 'Rate', fallbackIndex: 8)
+                            ?.toString() ??
+                        '0') ??
+                0,
+            "retail_sale_price": double.tryParse(
+                    cellByHeader(row, headers, 'Sale Rate', fallbackIndex: 9)
+                            ?.toString() ??
+                        '0') ??
+                0,
+            "mrp": double.tryParse(
+                    cellByHeader(row, headers, 'MRP', fallbackIndex: 10)
+                            ?.toString() ??
+                        '0') ??
+                0.0,
+            "tax_type": cellByHeader(row, headers, 'Tax Type', fallbackIndex: 11)
+                    ?.toString() ??
+                'GST',
+            "tax_percent": double.tryParse(
+                    cellByHeader(row, headers, 'Tax Percent', fallbackIndex: 12)
+                            ?.toString() ??
+                        '0') ??
+                0,
+            "is_tax_inclusive": _toBool(
+                cellByHeader(row, headers, 'Tax Inclusive', fallbackIndex: 13),
+                defaultValue: false),
+            "discount_applicable":
+                _toBool(cellByHeader(row, headers, 'Discount Applicable',
+                    fallbackIndex: 14), defaultValue: true),
+            "scheme_applicable": _toBool(
+                cellByHeader(row, headers, 'Scheme Applicable',
+                    fallbackIndex: 15),
+                defaultValue: true),
+            "is_happy_hour": _toBool(
+                cellByHeader(row, headers, 'Happy Hour', fallbackIndex: 16),
+                defaultValue: false),
+            "opening_balance": double.tryParse(
+                    cellByHeader(row, headers, 'Opening', fallbackIndex: 17)
+                            ?.toString() ??
+                        '0') ??
+                0,
+            "min_level": int.tryParse(
+                    cellByHeader(row, headers, 'Min', fallbackIndex: 18)
+                            ?.toString() ??
+                        '0') ??
+                0,
+            "max_level": int.tryParse(
+                    cellByHeader(row, headers, 'Max', fallbackIndex: 19)
+                            ?.toString() ??
+                        '0') ??
+                0,
+            "stockable": _toBool(
+                cellByHeader(row, headers, 'Stockable', fallbackIndex: 20),
+                defaultValue: true),
+            "is_saleable": _toBool(
+                cellByHeader(row, headers, 'Saleable', fallbackIndex: 21),
+                defaultValue: true),
+          });
+        }
+      }
+
+      if (updateDialogState != null && dialogOpen) {
+        updateDialogState!(() {
+          progress = 0.65;
+          statusMessage = "Uploading ${bulkData.length} items to server...";
+        });
+      }
+
+      await ApiClient.post('/api/inventory/items/bulk-import', bulkData);
+
+      if (updateDialogState != null && dialogOpen) {
+        updateDialogState!(() {
+          progress = 1.0;
+          statusMessage = "Import completed successfully!";
+        });
+      }
+
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (mounted && dialogOpen) Navigator.of(context).pop();
+
+      await _loadItems();
+      await _loadItemImportPermission();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Successfully imported ${bulkData.length} items!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (mounted && dialogOpen) Navigator.of(context).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Import Failed: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
-
-    // Simple flow: backend clears old items first (only when no transactions)
-    // and then imports the new file in one API call.
-    await ApiClient.post('/api/inventory/items/bulk-import', bulkData);
-
-    await _loadItems();
-    await _loadItemImportPermission();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Import Successful')),
-    );
   }
 
   Future<void> _deleteAllAndImportNew() async {
