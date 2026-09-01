@@ -14,6 +14,36 @@ services:
         fromDatabase:
           name: retail-sale-db
           property: connectionString
+      - key: DB_SSL
+        value: "true"
+      - key: IS_CLOUD
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: EMAIL_PROVIDER
+        value: RESEND
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: "Retail POS <noreply@famalth.com>"
+      - key: EMAIL_HOST
+        value: smtp.zoho.in
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_SECURITY
+        value: STARTTLS
+      - key: EMAIL_SECURE
+        value: "false"
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: ROOT_FOLDER_ID
+        sync: false
+      - key: SCRIPT_URL
+        sync: false
+      - key: SHEET_ID
+        sync: false
 
 databases:
   - name: retail-sale-db
