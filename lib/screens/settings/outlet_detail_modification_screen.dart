@@ -191,21 +191,33 @@ class _OutletDetailModificationScreenState extends State<OutletDetailModificatio
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+      withData: true,
     );
 
-    final pickedPath = result?.files.single.path;
-    if (pickedPath == null) return;
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
 
     final user = await TokenStorage.getUser();
     final outletCode = user?['outlet_code']?.toString() ?? '';
     if (outletCode.isEmpty) return;
 
-    final savedPath = await BrandingStorage.saveLogoForOutlet(
-      outletCode: outletCode,
-      sourcePath: pickedPath,
-    );
+    String? savedPath;
+    if (kIsWeb || file.path == null) {
+      if (file.bytes != null) {
+        savedPath = await BrandingStorage.saveLogoBytesForOutlet(
+          outletCode: outletCode,
+          bytes: file.bytes!,
+          extension: file.extension ?? 'png',
+        );
+      }
+    } else {
+      savedPath = await BrandingStorage.saveLogoForOutlet(
+        outletCode: outletCode,
+        sourcePath: file.path!,
+      );
+    }
 
-    if (!mounted) return;
+    if (!mounted || savedPath == null) return;
     setState(() => _logoPath = savedPath);
   }
 
@@ -732,14 +744,21 @@ class _OutletDetailModificationScreenState extends State<OutletDetailModificatio
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFEFF6FF),
                                           borderRadius: BorderRadius.circular(8),
-                                          image: (!kIsWeb && _logoPath != null && File(_logoPath!).existsSync())
-                                              ? DecorationImage(
-                                                  image: FileImage(File(_logoPath!)),
-                                                  fit: BoxFit.cover,
-                                                )
+                                          image: (_logoPath != null && _logoPath!.isNotEmpty)
+                                              ? (_logoPath!.startsWith('data:image') || _logoPath!.startsWith('http')
+                                                  ? DecorationImage(
+                                                      image: NetworkImage(_logoPath!),
+                                                      fit: BoxFit.cover,
+                                                    )
+                                                  : (!kIsWeb && File(_logoPath!).existsSync()
+                                                      ? DecorationImage(
+                                                          image: FileImage(File(_logoPath!)),
+                                                          fit: BoxFit.cover,
+                                                        )
+                                                      : null))
                                               : null,
                                         ),
-                                        child: kIsWeb || _logoPath == null || !File(_logoPath!).existsSync()
+                                        child: (_logoPath == null || _logoPath!.isEmpty)
                                             ? const Icon(Icons.image, color: Color(0xFF2563EB))
                                             : null,
                                       ),

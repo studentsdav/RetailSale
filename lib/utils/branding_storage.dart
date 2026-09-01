@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -29,6 +30,22 @@ class BrandingStorage {
   static String? _cachedPath;
   static pw.MemoryImage? _cachedLogo;
 
+  static Future<String?> saveLogoBytesForOutlet({
+    required String outletCode,
+    required Uint8List bytes,
+    required String extension,
+  }) async {
+    final cleanExt = extension.replaceAll('.', '').toLowerCase();
+    final extName = cleanExt.isEmpty ? 'png' : cleanExt;
+    final base64Str = base64Encode(bytes);
+    final dataUri = 'data:image/$extName;base64,$base64Str';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_logoKey(outletCode), dataUri);
+    _cachedPath = null;
+    _cachedLogo = null;
+    return dataUri;
+  }
+
   static Future<String?> saveLogoForOutlet({
     required String outletCode,
     required String sourcePath,
@@ -59,10 +76,11 @@ class BrandingStorage {
   }
 
   static Future<String?> getLogoPathForOutlet(String outletCode) async {
-    if (kIsWeb) return null;
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_logoKey(outletCode));
     if (path == null || path.isEmpty) return null;
+    if (path.startsWith('data:image') || path.startsWith('http')) return path;
+    if (kIsWeb) return null;
     return await File(path).exists() ? path : null;
   }
 
@@ -94,7 +112,16 @@ class BrandingStorage {
   }
 
   static Future<Uint8List?> readLogoBytes(String? path) async {
-    if (kIsWeb || path == null || path.isEmpty) return null;
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('data:image')) {
+      try {
+        final base64Part = path.split(',').last;
+        return base64Decode(base64Part);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (kIsWeb) return null;
     final file = File(path);
     if (!await file.exists()) return null;
     return file.readAsBytes();

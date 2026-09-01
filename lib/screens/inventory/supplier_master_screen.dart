@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/supplier_controller.dart';
 import '../../core/api/api_client.dart';
@@ -245,17 +247,26 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       ]);
     }
 
-    final directory =
-        Directory('${Platform.environment['USERPROFILE']}\\Downloads');
-
+    final bytes = excel.encode();
+    if (bytes == null) return;
     final fileName =
         'suppliers_export_${DateTime.now().millisecondsSinceEpoch}.xlsx';
 
+    if (kIsWeb) {
+      await Printing.sharePdf(
+        bytes: Uint8List.fromList(bytes),
+        filename: fileName,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Exported Successfully! File downloaded.')),
+      );
+      return;
+    }
+
+    final directory =
+        Directory('${Platform.environment['USERPROFILE']}\\Downloads');
     final path = '${directory.path}\\$fileName';
-
-    final bytes = excel.encode();
-    if (bytes == null) return;
-
     await File(path).writeAsBytes(bytes, flush: true);
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -276,11 +287,12 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx'],
+      withData: true,
     );
 
-    if (result == null) return;
+    if (result == null || result.files.isEmpty) return;
 
-    final bytes = File(result.files.single.path!).readAsBytesSync();
+    final bytes = result.files.single.bytes ?? File(result.files.single.path!).readAsBytesSync();
     final excel = Excel.decodeBytes(bytes);
 
     List<Map<String, dynamic>> bulkData = [];

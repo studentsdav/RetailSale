@@ -4,8 +4,10 @@ import 'dart:io';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/inventory/master_controller.dart';
@@ -535,21 +537,27 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     }
   }
 
+  Uint8List? _pickedImageBytes;
+
   Future<void> _pickItemImage() async {
     final result = await FilePicker.pickFiles(
       type: FileType.image,
       allowMultiple: false,
+      withData: true,
     );
-    if (result == null || result.files.single.path == null) return;
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
     setState(() {
-      _pickedImagePath = result.files.single.path;
-      _imagePath.text = result.files.single.name;
+      _pickedImageBytes = file.bytes;
+      _pickedImagePath = file.path;
+      _imagePath.text = file.name;
     });
   }
 
   Future<void> _removeItemImage() async {
     if (_editIndex == null || _items.isEmpty) {
       setState(() {
+        _pickedImageBytes = null;
         _pickedImagePath = null;
         _currentImagePath = null;
         _imagePath.clear();
@@ -561,6 +569,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     try {
       await ApiClient.delete('/api/inventory/items/$itemId/image');
       setState(() {
+        _pickedImageBytes = null;
         _pickedImagePath = null;
         _currentImagePath = null;
         _imagePath.clear();
@@ -572,8 +581,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   }
 
   Widget _imageWidget(String path) {
-    if (path.startsWith('http') || path.startsWith('/')) {
-      final url = path.startsWith('http')
+    if (_pickedImageBytes != null) {
+      return Image.memory(_pickedImageBytes!, fit: BoxFit.cover);
+    }
+    if (path.startsWith('http') || path.startsWith('/') || path.startsWith('data:image')) {
+      final url = (path.startsWith('http') || path.startsWith('data:image'))
           ? path
           : AppConfig.baseUrl.endsWith('/')
               ? '${AppConfig.baseUrl}${path.startsWith('/') ? path.substring(1) : path}'
@@ -587,9 +599,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         ),
       );
     }
-    final file = File(path);
-    if (file.existsSync()) {
-      return Image.file(file, fit: BoxFit.cover);
+    if (!kIsWeb) {
+      final file = File(path);
+      if (file.existsSync()) {
+        return Image.file(file, fit: BoxFit.cover);
+      }
     }
     return const ColoredBox(
       color: Color(0xFFF1F5F9),
@@ -849,16 +863,27 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       ]);
     }
 
-    final directory =
-        Directory('${Platform.environment['USERPROFILE']}\\Downloads');
+    final bytes = excel.encode();
+    if (bytes == null) return;
     final fileName =
         'items_export_${DateTime.now().millisecondsSinceEpoch}.xlsx';
 
-    final path = '${directory.path}\\$fileName';
+    if (kIsWeb) {
+      await Printing.sharePdf(
+        bytes: Uint8List.fromList(bytes),
+        filename: fileName,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Exported Successfully! File downloaded.')),
+      );
+      return;
+    }
 
+    final directory =
+        Directory('${Platform.environment['USERPROFILE']}\\Downloads');
+    final path = '${directory.path}\\$fileName';
     final file = File(path);
-    final bytes = excel.encode();
-    if (bytes == null) return;
 
     await file.writeAsBytes(bytes, flush: true);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -880,10 +905,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx'],
+      withData: true,
     );
-    if (result == null) return;
+    if (result == null || result.files.isEmpty) return;
 
-    final bytes = File(result.files.single.path!).readAsBytesSync();
+    final bytes = result.files.single.bytes ?? File(result.files.single.path!).readAsBytesSync();
     final excel = Excel.decodeBytes(bytes);
 
     String headerKey(dynamic value) =>

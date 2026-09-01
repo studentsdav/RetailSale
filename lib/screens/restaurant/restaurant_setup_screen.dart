@@ -1367,10 +1367,19 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
         return StatefulBuilder(
           builder: (context, setState) {
             if (loadingSystemPrinters && systemPrinters.isEmpty) {
-              Printing.listPrinters().then((list) {
+              Printing.listPrinters().timeout(const Duration(seconds: 3), onTimeout: () => []).then((list) {
                 if (context.mounted) {
+                  final Set<String> seen = {};
+                  final List<Printer> uniqueList = [];
+                  for (final p in list) {
+                    final k = p.name.trim();
+                    if (k.isNotEmpty && !seen.contains(k)) {
+                      seen.add(k);
+                      uniqueList.add(p);
+                    }
+                  }
                   setState(() {
-                    systemPrinters = list;
+                    systemPrinters = uniqueList;
                     loadingSystemPrinters = false;
                   });
                 }
@@ -1416,7 +1425,9 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                           fillColor: Colors.white,
                           border: OutlineInputBorder(),
                         ),
-                        items: systemPrinters.map((p) {
+                        items: systemPrinters
+                            .where((p) => p.name.trim().isNotEmpty)
+                            .map((p) {
                           return DropdownMenuItem<String>(
                             value: p.name,
                             child: Text(p.name, overflow: TextOverflow.ellipsis),
