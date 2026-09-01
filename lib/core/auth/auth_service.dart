@@ -47,6 +47,7 @@ class AuthService {
       await TokenStorage.saveRole(role);
       await TokenStorage.savePermissions(permissions);
       await TokenStorage.saveUser(user);
+      await TokenStorage.saveLoginTime();
 
       return LoginResult(
         success: true,

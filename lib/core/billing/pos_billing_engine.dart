@@ -157,7 +157,9 @@ class PosBillingEngine {
         )
         .toList(growable: false);
 
-    final double itemsNetTaxable = computedItems.fold<double>(
+    final double itemsNetTaxable = computedItems
+        .where((item) => item.taxPercent > 0)
+        .fold<double>(
       0,
       (sum, item) => sum + item.taxableAmount,
     );

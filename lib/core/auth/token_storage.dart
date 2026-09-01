@@ -8,6 +8,25 @@ class TokenStorage {
   static const _roleKey = 'user_role';
   static const _permKey = 'user_permissions';
   static const _userKey = 'user_data';
+  static const _sessionTimeKey = 'session_login_time';
+
+  static Future<void> saveLoginTime([DateTime? time]) async {
+    final prefs = await SharedPreferences.getInstance();
+    final loginTime = time ?? DateTime.now();
+    await prefs.setString(_sessionTimeKey, loginTime.toIso8601String());
+  }
+
+  static Future<DateTime> getLoginTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final str = prefs.getString(_sessionTimeKey);
+    if (str != null) {
+      final dt = DateTime.tryParse(str);
+      if (dt != null) return dt;
+    }
+    final now = DateTime.now();
+    await prefs.setString(_sessionTimeKey, now.toIso8601String());
+    return now;
+  }
 
   static Future<void> save(String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -42,10 +61,10 @@ class TokenStorage {
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key);
-    await prefs.remove(_key);
     await prefs.remove(_userKey);
     await prefs.remove(_roleKey);
     await prefs.remove(_permKey);
+    await prefs.remove(_sessionTimeKey);
   }
 
   static bool isExpired(String token) {

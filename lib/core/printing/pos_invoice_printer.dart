@@ -415,19 +415,34 @@ class PosInvoicePrinter {
           _thermalAmountRow('Total Qty', order.totalQty),
           ...(() {
             final double preTaxSum = order.items
-                .where((item) => !item.isTaxInclusive)
-                .fold<double>(0, (sum, item) => sum + item.amount);
-            final double postTaxSum = order.items
-                .where((item) => item.isTaxInclusive)
-                .fold<double>(0, (sum, item) => sum + item.amount);
+                .where((item) => !item.isTaxInclusive && item.taxPercent > 0)
+                .fold<double>(0, (sum, item) => sum + (item.rate > 0 ? (item.qty * item.rate) : (item.qty * _displayRate(item))));
+            final double postTaxPreTaxSum = order.items
+                .where((item) => item.isTaxInclusive && item.taxPercent > 0)
+                .fold<double>(0, (sum, item) {
+                  final rate = item.rate > 0 ? item.rate : _displayRate(item);
+                  return sum + ((item.qty * rate) / (1 + item.taxPercent / 100));
+                });
+            final double postTaxGrossSum = order.items
+                .where((item) => item.isTaxInclusive && item.taxPercent > 0)
+                .fold<double>(0, (sum, item) => sum + (item.rate > 0 ? (item.qty * item.rate) : (item.qty * _displayRate(item))));
+            final double nonTaxableSum = order.items
+                .where((item) => item.taxPercent <= 0)
+                .fold<double>(0, (sum, item) => sum + (item.rate > 0 ? (item.qty * item.rate) : (item.qty * _displayRate(item))));
 
             final bool allInclusive = order.items.isNotEmpty && order.items.every((item) => item.isTaxInclusive);
             final String subtotalLabel = allInclusive ? 'Subtotal (Incl. GST)' : 'Subtotal';
-            final double rawSubtotal = order.items.fold<double>(0, (sum, item) => sum + item.amount);
+            final double rawSubtotal = order.subTotal > 0.0009
+                ? order.subTotal
+                : (preTaxSum + postTaxGrossSum + nonTaxableSum);
 
             String? subTotalNote;
-            if (preTaxSum > 0 && postTaxSum > 0) {
-              subTotalNote = '(Pre-tax: ${preTaxSum.toStringAsFixed(2)}, Post-tax: ${postTaxSum.toStringAsFixed(2)})';
+            final List<String> noteParts = [];
+            if (preTaxSum > 0) noteParts.add('Pre-tax: ${_money(preTaxSum)}');
+            if (postTaxGrossSum > 0) noteParts.add('Post-tax: ${_money(postTaxGrossSum)}');
+            if (nonTaxableSum > 0) noteParts.add('Non-taxable: ${_money(nonTaxableSum)}');
+            if (noteParts.length > 1) {
+              subTotalNote = '(${noteParts.join(', ')})';
             }
 
             return [
@@ -1244,7 +1259,7 @@ class PosInvoicePrinter {
       summaryTaxTotal: summaryTaxTotal,
       subscriptionAdjustment: subscriptionAdjustment,
     );
-    final bool anyInclusive = order.items.any((item) => item.isTaxInclusive);
+    final bool allInclusive = order.items.isNotEmpty && order.items.every((item) => item.isTaxInclusive);
     return pw.Container(
       width: double.infinity,
       padding: const pw.EdgeInsets.all(10),
@@ -1253,16 +1268,16 @@ class PosInvoicePrinter {
       ),
       child: pw.Column(
         children: [
-          if (anyInclusive) ...[
+          if (allInclusive) ...[
             _a4AmountRow(
               'Subtotal (Incl. GST)',
-              order.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))),
+              order.items.fold<double>(0, (sum, item) => sum + (item.rate > 0 ? (item.qty * item.rate) : (item.qty * _displayRate(item)))),
             ),
             if (savingsAmount > 0.0009)
               _a4AmountRow(savingsLabel, savingsAmount),
             _a4AmountRow(
               'Net Amount (Incl. GST)',
-              order.items.fold<double>(0, (sum, item) => sum + (item.isTaxInclusive ? item.amount : (item.amount * (1 + item.taxPercent / 100)))) - savingsAmount,
+              order.items.fold<double>(0, (sum, item) => sum + (item.rate > 0 ? (item.qty * item.rate) : (item.qty * _displayRate(item)))) - savingsAmount,
             ),
             if (order.loyaltyPointsRedeemed > 0 &&
                 order.loyaltyDiscountAmount > 0)
@@ -1281,6 +1296,10 @@ class PosInvoicePrinter {
             if (hasTaxData) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
             if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
           ] else ...[
+            _a4AmountRow(
+              'Subtotal',
+              order.subTotal > 0.0009 ? order.subTotal : _adjustedItemTaxableTotal(order),
+            ),
             if (savingsAmount > 0.0009)
               _a4AmountRow(savingsLabel, savingsAmount),
             if (order.loyaltyPointsRedeemed > 0 &&
@@ -1946,29 +1965,21 @@ class PosInvoicePrinter {
   }
 
   static double _itemGrossValueWithTax(SaleItem item) {
-    if (item.isTaxInclusive) {
-      if (item.lineTotal > 0.0009) return item.lineTotal;
-      final baseRate = (item.originalRate != null && item.originalRate! > 0)
-          ? item.originalRate!
-          : ((item.referenceRate > 0) ? item.referenceRate : item.rate);
-      final baseAmount = baseRate * item.qty;
+    final baseRate = (item.originalRate != null && item.originalRate! > 0)
+        ? item.originalRate!
+        : ((item.referenceRate > 0) ? item.referenceRate : item.rate);
+    final baseAmount = baseRate * item.qty;
+    final isInclusive = item.isTaxInclusive || item.taxType.trim().toUpperCase().contains('INCLUSIVE');
+    if (isInclusive) {
       if (baseAmount > 0.0009) return baseAmount;
+      if (item.lineTotal > 0.0009) return item.lineTotal;
       return item.taxableAmount > 0.0009 ? item.taxableAmount : 0.0;
     } else {
-      if (item.lineTotal > 0.0009 && item.lineTotal > item.taxableAmount) {
-        return item.lineTotal;
+      if (item.taxPercent > 0) {
+        return baseAmount > 0.0009 ? (baseAmount * (1.0 + item.taxPercent / 100.0)) : item.lineTotal;
       }
-      final tax = item.taxAmount > 0.0009
-          ? item.taxAmount
-          : (item.taxableAmount > 0.0009 ? (item.taxableAmount * item.taxPercent / 100.0) : 0.0);
-      if (item.taxableAmount > 0.0009) {
-        return item.taxableAmount + tax;
-      }
-      final baseRate = (item.originalRate != null && item.originalRate! > 0)
-          ? item.originalRate!
-          : ((item.referenceRate > 0) ? item.referenceRate : item.rate);
-      final baseAmount = baseRate * item.qty;
-      return baseAmount * (1.0 + item.taxPercent / 100.0);
+      if (baseAmount > 0.0009) return baseAmount;
+      return item.lineTotal > 0.0009 ? item.lineTotal : item.taxableAmount;
     }
   }
 
@@ -2008,10 +2019,11 @@ class PosInvoicePrinter {
 
   static double _adjustedItemTaxableTotal(SaleOrder order) {
     final grouped = _groupedTaxBreakup(order);
+    double groupedTaxableSum = 0;
     if (grouped.isNotEmpty) {
-      return _groupTaxableTotal(grouped);
+      groupedTaxableSum = _groupTaxableTotal(grouped);
     }
-    return _itemTaxableTotal(order);
+    return groupedTaxableSum;
   }
 
   static List<TaxBreakdown> _adjustedItemGroupedTaxes(SaleOrder order, List<TaxBreakdown> original) {
@@ -2173,6 +2185,9 @@ class PosInvoicePrinter {
 
 
   static double _displayItemTaxableAmount(SaleOrder order, SaleItem item) {
+    if (item.taxableAmount > 0.0009) {
+      return item.taxableAmount;
+    }
     final taxable = _taxableAmountForItem(item);
     final isFree = item.isSchemeFree || item.isAdvanceFree;
     if (isFree || item.lineDiscount > 0.0009 || taxable <= 0.0009) {
@@ -2182,14 +2197,25 @@ class PosInvoicePrinter {
     if (totalLineDiscount > 0.0009) {
       return taxable;
     }
+    final totalOrderDiscount = order.manualDiscountAmount + order.schemeDiscount + order.totalDiscount;
+    if (totalOrderDiscount > 0.0009) {
+      final grossItemTotal = order.items.where((i) => !(i.isSchemeFree || i.isAdvanceFree)).fold<double>(
+        0,
+        (sum, entry) => sum + entry.amount,
+      );
+      if (grossItemTotal > 0.0009) {
+        final discountShare = math.min(taxable, (item.amount / grossItemTotal) * totalOrderDiscount);
+        return math.max(0, taxable - discountShare);
+      }
+    }
     if (order.couponDiscountAmount > 0.0009) {
       final grossItemTotal = order.items.where((i) => !(i.isSchemeFree || i.isAdvanceFree)).fold<double>(
         0,
         (sum, entry) => sum + entry.amount,
       );
       if (grossItemTotal > 0.0009) {
-        final couponShare = math.min(item.amount, (item.amount / grossItemTotal) * order.couponDiscountAmount);
-        return math.max(0, item.amount - couponShare);
+        final couponShare = math.min(taxable, (item.amount / grossItemTotal) * order.couponDiscountAmount);
+        return math.max(0, taxable - couponShare);
       }
     }
     return taxable;
@@ -2263,6 +2289,7 @@ class PosInvoicePrinter {
     final double taxableAmount;
     final double taxAmount;
     final isTaxInclusive = item.isTaxInclusive ||
+        item.taxType.trim().toUpperCase().contains('INCLUSIVE') ||
         order.billingTaxMode.trim().toUpperCase().contains('INCLUSIVE') ||
         (order.items.isNotEmpty && order.items.every((i) => i.isTaxInclusive));
     if (item.isAdvanceFree) {
@@ -2387,13 +2414,23 @@ class PosInvoicePrinter {
 
   static double _taxableAmountForItem(SaleItem item) {
     if (item.taxableAmount.abs() > 0.0009) return item.taxableAmount;
-    if (item.referenceRate > 0 && item.qty > 0) {
-      return item.referenceRate * item.qty;
+    final rate = (item.rate > 0)
+        ? item.rate
+        : ((item.referenceRate > 0)
+            ? item.referenceRate
+            : (item.originalRate != null && item.originalRate! > 0 ? item.originalRate! : 0.0));
+    final gross = math.max(0.0, (rate * item.qty) - item.lineDiscount);
+    if (item.isTaxInclusive && item.taxPercent > 0 && gross > 0) {
+      return gross / (1 + item.taxPercent / 100);
     }
+    if (gross > 0) return gross;
     return item.amount;
   }
 
   static double _displayRate(SaleItem item) {
+    if (item.rate > 0) return item.rate;
+    if (item.originalRate != null && item.originalRate! > 0) return item.originalRate!;
+    if (item.referenceRate > 0) return item.referenceRate;
     return item.rate;
   }
 

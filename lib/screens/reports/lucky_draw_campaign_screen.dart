@@ -303,6 +303,45 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
     );
   }
 
+  void _showEarlyDrawConfirmationDialog() {
+    if (_activeCampaign == null) return;
+    final drawDate = DateTime.parse(_activeCampaign['draw_date']).toLocal();
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.stars, color: Colors.amber),
+              SizedBox(width: 8),
+              Text('Declare Result Early?'),
+            ],
+          ),
+          content: Text(
+            'Scheduled Draw Date: ${DateFormat('dd-MMM-yyyy hh:mm a').format(drawDate)}\n\nDeclaring the result early will draw a random winner from all current ticket holders immediately.',
+            style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.black87),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _triggerWinnerDraw();
+              },
+              icon: const Icon(Icons.casino, size: 16),
+              label: const Text('Declare Winner Early'),
+              style: FilledButton.styleFrom(backgroundColor: Colors.blue.shade700),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showCompleteAndResetDialog() {
     final nextNameCtrl = TextEditingController(text: 'Diwali Mega Draw Part II');
     final nextThresholdCtrl = TextEditingController(text: '2000');
@@ -1257,11 +1296,21 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                 child: SizedBox(
                   height: 48,
                   child: OutlinedButton.icon(
-                    onPressed: (_isDrawing || !isResultDayOrAfter) ? null : _triggerWinnerDraw,
+                    onPressed: _isDrawing ? null : () {
+                      if (!isResultDayOrAfter && !hasWinner) {
+                        _showEarlyDrawConfirmationDialog();
+                      } else {
+                        _triggerWinnerDraw();
+                      }
+                    },
                     icon: const Icon(Icons.casino),
-                    label: Text(hasWinner ? 'Re-draw Winner' : 'Pick Random Winner'),
+                    label: Text(
+                      hasWinner
+                          ? 'Re-draw Winner'
+                          : (!isResultDayOrAfter ? 'Declare Result Early' : 'Pick Random Winner'),
+                    ),
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: isResultDayOrAfter ? Colors.blue : Colors.grey.shade300),
+                      side: const BorderSide(color: Colors.blue),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
@@ -1290,12 +1339,12 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.lock_outline, size: 14, color: Colors.grey),
+                const Icon(Icons.info_outline, size: 14, color: Colors.blue),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Winner selection unlocks on result day: ${DateFormat('dd-MMM-yyyy').format(drawDate)}',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    'Scheduled draw date is ${DateFormat('dd-MMM-yyyy').format(drawDate)}. Click "Declare Result Early" above to draw a winner anytime.',
+                    style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
                   ),
                 ),
               ],
@@ -1481,17 +1530,47 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                   DataColumn(label: Text('Mobile', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Address', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Total Purchase', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Current Progress', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Needed for Next Ticket', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Tickets Held', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Ticket Codes', style: TextStyle(fontWeight: FontWeight.bold))),
                 ],
                 rows: participants.map((p) {
                   final List<dynamic> codes = p['voucher_codes'] ?? [];
+                  final double currentProgress = double.tryParse((p['accumulated_spend'] ?? 0.0).toString()) ?? 0.0;
+                  final double threshold = double.tryParse((p['threshold_amount'] ?? 2000.0).toString()) ?? 2000.0;
+                  final double remainingNeeded = double.tryParse((p['remaining_for_next'] ?? (threshold - currentProgress)).toString()) ?? (threshold - currentProgress);
+
                   return DataRow(
                     cells: [
                       DataCell(Text(p['customer_name'] ?? 'Walk-in', style: const TextStyle(fontWeight: FontWeight.w600))),
                       DataCell(Text(p['customer_phone'] ?? '--')),
                       DataCell(Text(p['customer_address'] ?? 'No Address')),
                       DataCell(Text(_inr.format(p['total_purchase'] ?? 0.0))),
+                      DataCell(
+                        Text(
+                          '${_inr.format(currentProgress)} / ${_inr.format(threshold)}',
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.blue),
+                        ),
+                      ),
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: remainingNeeded <= 0 ? Colors.green.shade50 : Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: remainingNeeded <= 0 ? Colors.green.shade200 : Colors.orange.shade200),
+                          ),
+                          child: Text(
+                            remainingNeeded <= 0 ? 'Threshold Reached!' : '${_inr.format(remainingNeeded)} needed',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: remainingNeeded <= 0 ? Colors.green.shade800 : Colors.orange.shade900,
+                            ),
+                          ),
+                        ),
+                      ),
                       DataCell(Text(p['voucher_count'].toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
                       DataCell(
                         Row(

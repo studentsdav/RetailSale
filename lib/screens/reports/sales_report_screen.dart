@@ -1343,7 +1343,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Payment',
           'Taxed Sales',
           'Non-Tax Sales',
-          'Tax',
           'Net Amount',
         ].map(exc.TextCellValue.new).toList(),
       );
@@ -1354,7 +1353,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           exc.TextCellValue(row.paymentMode),
           exc.DoubleCellValue(row.taxedSales),
           exc.DoubleCellValue(row.nonTaxSales),
-          exc.DoubleCellValue(row.tax),
           exc.DoubleCellValue(row.netAmount),
         ]);
       }
@@ -1364,7 +1362,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.TextCellValue(''),
         exc.DoubleCellValue(_paymentReportTaxSaleTotal),
         exc.DoubleCellValue(_paymentReportNonTaxSaleTotal),
-        exc.DoubleCellValue(_paymentReportTaxTotal),
         exc.DoubleCellValue(_paymentReportNetTotal),
       ]);
     } else if (_reportTabIndex == 1) {
@@ -1877,7 +1874,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Payment',
           'Taxed Sales',
           'Non-Tax Sales',
-          'Tax',
           'Net Amount'
         ],
       1 => [
@@ -1974,7 +1970,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               row.paymentMode,
               _money(row.taxedSales),
               _money(row.nonTaxSales),
-              _money(row.tax),
               _money(row.netAmount),
             ],
           )
@@ -1985,7 +1980,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           '',
           _money(_paymentReportTaxSaleTotal),
           _money(_paymentReportNonTaxSaleTotal),
-          _money(_paymentReportTaxTotal),
           _money(_paymentReportNetTotal),
         ]),
       1 => _billWiseSales.map(
@@ -2932,7 +2926,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 DataColumn(label: Text('Payment')),
                 DataColumn(label: Text('Taxed Sales')),
                 DataColumn(label: Text('Non-Tax Sales')),
-                DataColumn(label: Text('Tax')),
                 DataColumn(label: Text('Net Amount')),
               ],
               rows: _paymentBreakdownRows
@@ -2972,7 +2965,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                         DataCell(
                           Text(_money(row.nonTaxSales)),
                         ),
-                        DataCell(Text(_money(row.tax))),
                         DataCell(
                           Text(
                             _money(row.netAmount),
@@ -3004,12 +2996,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       DataCell(
                         Text(
                           _money(_paymentReportNonTaxSaleTotal),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          _money(_paymentReportTaxTotal),
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),

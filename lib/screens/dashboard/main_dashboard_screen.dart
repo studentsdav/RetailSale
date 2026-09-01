@@ -132,8 +132,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   bool _hasPendingDraw = false;
   String _pendingCampaignName = '';
 
-  final DateTime _loginTime =
-      DateTime.now().subtract(const Duration(hours: 3, minutes: 20));
+  DateTime _loginTime = DateTime.now();
 
   UserProfile? user;
   // 🔥 SUPPLIER FINANCE DATA
@@ -349,6 +348,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
     loadUser();
 
+    _loadSessionTime();
     _loadUserRole();
     _loadFavorites();
     _notesCtrl.loadNotes();
@@ -1181,9 +1181,22 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     super.dispose();
   }
 
+  Future<void> _loadSessionTime() async {
+    final loginTime = await TokenStorage.getLoginTime();
+    if (mounted) {
+      setState(() => _loginTime = loginTime);
+    }
+  }
+
   String get sessionDuration {
     final d = DateTime.now().difference(_loginTime);
-    return '${d.inHours}h ${d.inMinutes % 60}m';
+    if (d.inDays > 0) {
+      return '${d.inDays}d ${d.inHours % 24}h';
+    }
+    if (d.inHours > 0) {
+      return '${d.inHours}h ${d.inMinutes % 60}m';
+    }
+    return '${d.inMinutes}m';
   }
 
   void _handleLynxAction(String actionType, Map<String, dynamic>? payload) {
@@ -2168,6 +2181,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         return Icons.folder_shared_outlined;
       case 'HR & Payroll':
         return Icons.people_outline;
+      case 'Finance & Accounting (Beta)':
       case 'Finance & Accounting':
       case 'Finance & Expenses':
       case 'Finance':
@@ -2541,46 +2555,52 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecurringExpensesScreen())),
       },
 
-      // Finance & Accounting Section
+      // Finance & Accounting (Beta) Section
       {
-        'category': 'Finance & Accounting',
+        'category': 'Finance & Accounting (Beta)',
         'icon': Icons.account_balance,
         'label': 'Accounting Section Hub',
+        'isBeta': true,
         'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountingDashboardScreen())),
       },
       {
-        'category': 'Finance & Accounting',
+        'category': 'Finance & Accounting (Beta)',
         'icon': Icons.receipt_long,
         'label': 'Accounting Vouchers (F4 - F9)',
+        'isBeta': true,
         'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountingVouchersScreen())),
       },
       {
-        'category': 'Finance & Accounting',
+        'category': 'Finance & Accounting (Beta)',
         'icon': Icons.account_balance_wallet,
         'label': 'Company Bank Accounts',
+        'isBeta': true,
         'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BankAccountsScreen())),
       },
       {
-        'category': 'Finance & Accounting',
+        'category': 'Finance & Accounting (Beta)',
         'icon': Icons.balance,
         'label': 'Trial Balance Report',
+        'isBeta': true,
         'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TrialBalanceScreen())),
       },
       {
-        'category': 'Finance & Accounting',
+        'category': 'Finance & Accounting (Beta)',
         'icon': Icons.show_chart,
         'label': 'Profit & Loss Statement (P&L)',
+        'isBeta': true,
         'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfitLossScreen())),
       },
       {
-        'category': 'Finance & Accounting',
+        'category': 'Finance & Accounting (Beta)',
         'icon': Icons.assessment,
         'label': 'Balance Sheet Statement',
+        'isBeta': true,
         'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BalanceSheetScreen())),
       },
@@ -2757,6 +2777,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'category': 'Reports',
         'icon': Icons.account_balance_wallet,
         'label': 'Accounting Section',
+        'isBeta': true,
         'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountingDashboardScreen())),
       },
@@ -2894,7 +2915,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
       'HR & Payroll',
       'Restaurant (Beta)',
-      'Finance & Accounting',
+      'Finance & Accounting (Beta)',
       'Finance & Expenses',
       'Stock View',
       'Reports',

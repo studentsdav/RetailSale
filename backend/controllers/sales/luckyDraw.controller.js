@@ -340,6 +340,8 @@ exports.getCampaignParticipants = async (req, res) => {
             const endDate = campaign.status === 'COMPLETED' ? campaign.draw_date : new Date();
 
             const accumulated = Number(record.accumulated_spend || 0);
+            const threshold = Number(campaign.threshold_amount || 2000.00);
+            const remainingForNext = Math.max(0, Number((threshold - accumulated).toFixed(2)));
             const voucherCount = vouchers.length;
 
             const totalPurchase = await req.propertyDb.models.sales_headers.sum('net_amount', {
@@ -356,6 +358,8 @@ exports.getCampaignParticipants = async (req, res) => {
                 customer_name: record.customer_name || 'Walk-in',
                 customer_phone: record.customer_phone,
                 accumulated_spend: accumulated,
+                threshold_amount: threshold,
+                remaining_for_next: remainingForNext,
                 voucher_count: voucherCount,
                 voucher_codes: vouchers.map(v => v.voucher_code),
                 total_purchase: totalPurchase,

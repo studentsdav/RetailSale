@@ -316,6 +316,23 @@ function normalizeTaxBreakupEntry(entry = {}) {
     };
 }
 
+function checkIsTaxInclusive(item, itemMeta) {
+    if (!item && !itemMeta) return false;
+    const taxType = String(
+        item?.tax_type || item?.taxType || item?.original_tax_type || itemMeta?.tax_type || itemMeta?.taxType || ''
+    ).trim().toUpperCase();
+    if (taxType.includes('INCLUSIVE')) return true;
+    const flags = [
+        item?.isTaxInclusive,
+        item?.is_tax_inclusive,
+        item?.is_inclusive,
+        itemMeta?.isTaxInclusive,
+        itemMeta?.is_tax_inclusive,
+        itemMeta?.is_inclusive
+    ];
+    return flags.some(val => val === true || val === 'true' || val === 1 || val == '1' || String(val).toUpperCase() === 'YES');
+}
+
 function buildTaxCompliantFreeRow(row, itemMeta, taxMode) {
     const qty = toAmount(row.qty);
     const resolvedRate = toAmount(
@@ -340,32 +357,57 @@ function buildTaxCompliantFreeRow(row, itemMeta, taxMode) {
         itemMeta?.tax_percent ??
         0
     );
-    const grossAmount = qty * resolvedRate;
+
+    const isTaxInclusive = checkIsTaxInclusive(row, itemMeta);
+
+    const baseAmount = qty * resolvedRate;
+    let taxableAmount = baseAmount;
+    let taxAmount = 0;
+    let lineTotal = baseAmount;
+
+    if (isTaxInclusive) {
+        if (taxPercent > 0) {
+            taxableAmount = toAmount(baseAmount / (1 + (taxPercent / 100)));
+            taxAmount = toAmount(baseAmount - taxableAmount);
+        } else {
+            taxableAmount = baseAmount;
+            taxAmount = 0;
+        }
+        lineTotal = baseAmount;
+    } else {
+        if (taxPercent > 0) {
+            taxAmount = toAmount(baseAmount * (taxPercent / 100));
+        } else {
+            taxAmount = 0;
+        }
+        lineTotal = toAmount(baseAmount + taxAmount);
+    }
+
     const taxBreakup = calculateTaxesForAmount({
         taxMode,
-        taxType,
+        taxType: isTaxInclusive ? 'GST_INCLUSIVE' : 'GST',
         taxPercent,
-        taxableAmount: grossAmount
+        taxableAmount: taxableAmount
     });
-    const taxAmount = taxBreakup.reduce((sum, entry) => sum + toAmount(entry.taxAmount), 0);
-    const lineTotal = grossAmount + taxAmount;
 
     return {
         ...row,
         rate: resolvedRate,
         tax_type: taxType,
         tax_percent: taxPercent,
+        is_tax_inclusive: isTaxInclusive,
+        isTaxInclusive: isTaxInclusive,
         discount_applicable: false,
         scheme_applicable: false,
         line_discount: 0,
-        amount: grossAmount,
-        taxable_amount: grossAmount,
+        amount: baseAmount,
+        taxable_amount: taxableAmount,
         tax_amount: taxAmount,
         line_total: lineTotal,
         tax_breakup: taxBreakup,
         net_amount: lineTotal,
-        is_scheme_free: row.is_scheme_free === true,
-        is_advance_free: row.is_advance_free === true,
+        is_scheme_free: row.is_scheme_free === true && !(row._subscription_free === true || row.is_advance_free === true),
+        is_advance_free: row.is_advance_free === true || row._subscription_free === true,
         _subscription_free: row._subscription_free === true || row.is_advance_free === true,
         applied_scheme_id: null
     };
@@ -1022,10 +1064,7 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
             const preTaxAmount = coveredQty * agreedRate;
             const taxPercent = toAmount(sourceRow.tax_percent || 0);
             // For tax-inclusive items the rate already contains GST — do NOT add tax again
-            const isTaxInclusiveItem = sourceRow.isTaxInclusive === true || sourceRow.is_tax_inclusive === true ||
-                String(sourceRow.tax_type || '').toUpperCase() === 'GST_INCLUSIVE' ||
-                subscription?.item?.is_tax_inclusive === true ||
-                String(subscription?.item?.tax_type || '').toUpperCase() === 'GST_INCLUSIVE';
+            const isTaxInclusiveItem = checkIsTaxInclusive(sourceRow, subscription?.item);
             const taxAmount = isTaxInclusiveItem ? 0 : (preTaxAmount * taxPercent / 100.0);
             const coveredAmount = preTaxAmount + taxAmount;
             console.log(`[SUBSCRIPTION COVERAGE] item_id=${itemId} rate=${agreedRate} qty=${coveredQty} taxPercent=${taxPercent} is_tax_inclusive=${sourceRow.is_tax_inclusive} isTaxInclusive=${sourceRow.isTaxInclusive} tax_type=${sourceRow.tax_type} isTaxInclusiveItem=${isTaxInclusiveItem} coveredAmount=${coveredAmount}`);
@@ -1057,7 +1096,8 @@ async function allocateMilkSubscriptionCoverage({ req, header, items, transactio
                 line_total: 0,
                 tax_breakup: [],
                 net_amount: 0,
-                is_scheme_free: true,
+                is_scheme_free: false,
+                is_advance_free: true,
                 _subscription_free: true,
                 applied_scheme_id: null
             });
@@ -2731,7 +2771,7 @@ async function createSaleVersion({
             if (referenceRate > 0) rate = referenceRate;
             if (itemMaster) {
                 taxPercent = toAmount(itemMaster.tax_percent);
-                taxType = itemMaster.tax_type || 'GST';
+                if (!row.tax_type && itemMaster.tax_type) taxType = itemMaster.tax_type;
             }
         }
 
@@ -2756,14 +2796,31 @@ async function createSaleVersion({
         const amount = toAmount(qty * rate);
         const dbItem = itemMasterMap.get(Number(row.item_id));
         const isTaxInclusiveHeader = String(header.billing_tax_mode || header.billingTaxMode || '').toUpperCase().includes('INCLUSIVE');
-        const isTaxInclusiveRow = isTaxInclusiveHeader || taxType === 'GST_INCLUSIVE' || row.isTaxInclusive === true || row.is_tax_inclusive === true || dbItem?.is_tax_inclusive === true;
+        const isTaxInclusiveRow = isTaxInclusiveHeader || checkIsTaxInclusive(row, dbItem);
         const grossInclusiveAmount = isTaxInclusiveRow ? amount : toAmount(amount * (1 + (taxPercent / 100)));
 
         let taxableAmount = amount;
         let taxAmount = 0;
         let lineTotal = grossInclusiveAmount;
 
-        if (isTaxInclusiveRow) {
+        if (isAdvanceOrSubFree || isSchemeFree) {
+            if (isTaxInclusiveRow) {
+                const netInclusive = Math.max(0, amount - lineDiscount);
+                if (taxPercent > 0) {
+                    taxableAmount = toAmount(netInclusive / (1 + (taxPercent / 100)));
+                    taxAmount = toAmount(netInclusive - taxableAmount);
+                } else {
+                    taxableAmount = netInclusive;
+                    taxAmount = 0;
+                }
+                lineTotal = netInclusive;
+            } else {
+                const netExclusive = Math.max(0, amount - lineDiscount);
+                taxableAmount = netExclusive;
+                taxAmount = taxPercent > 0 ? toAmount(netExclusive * (taxPercent / 100)) : 0;
+                lineTotal = toAmount(taxableAmount + taxAmount);
+            }
+        } else if (isTaxInclusiveRow) {
             const netInclusive = Math.max(0, amount - lineDiscount);
             if (taxPercent > 0) {
                 taxableAmount = toAmount(netInclusive / (1 + (taxPercent / 100)));
@@ -2785,10 +2842,10 @@ async function createSaleVersion({
         }
 
         let itemNetAmount = lineTotal;
-        if (row.is_scheme_free === true) {
+        if (row.is_scheme_free === true && !(row._subscription_free === true || row.is_advance_free === true)) {
             schemeFreeQtyAmount = toAmount(schemeFreeQtyAmount + lineTotal);
             itemNetAmount = 0;
-        } else if (row.is_advance_free === true) {
+        } else if (row.is_advance_free === true || row._subscription_free === true) {
             subscriptionAdjustmentAmount = toAmount(subscriptionAdjustmentAmount + lineTotal);
             advanceSubscriptionDiscount = toAmount(advanceSubscriptionDiscount + lineTotal);
             const rowTaxesForSub = Array.isArray(row.tax_breakup) ? row.tax_breakup : [];
@@ -2803,8 +2860,10 @@ async function createSaleVersion({
         }
 
         totalQty += qty;
-        subTotal += isTaxInclusiveRow ? grossInclusiveAmount : amount;
-        itemsTaxableTotal += taxableAmount;
+        subTotal += amount;
+        if (taxPercent > 0) {
+            itemsTaxableTotal += taxableAmount;
+        }
         itemsTaxTotal += taxAmount;
         itemsLineTotal += lineTotal;
 
@@ -3901,8 +3960,8 @@ exports.createSale = async (req, res) => {
                                 transaction: t
                             });
 
-                            // Check if a voucher already exists for this sale
-                            const existingVoucher = await req.propertyDb.models.draw_vouchers.findOne({
+                            // Check if vouchers already exist for this sale
+                            const existingVouchers = await req.propertyDb.models.draw_vouchers.findAll({
                                 where: {
                                     campaign_id: activeCampaign.id,
                                     sale_id: referenceSale.id
@@ -3910,47 +3969,68 @@ exports.createSale = async (req, res) => {
                                 transaction: t
                             });
 
-                            if (!existingVoucher) {
-                                let code = '';
-                                let attempts = 0;
-                                while (attempts < 10) {
-                                    const randPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-                                    const randPart2 = Math.random().toString(36).substring(2, 5).toUpperCase();
-                                    code = `LD-${randPart1}-${randPart2}`;
-
-                                    const exists = await req.propertyDb.models.draw_vouchers.findOne({
-                                        where: { voucher_code: code },
-                                        transaction: t,
-                                        bypassOutletFilter: true
-                                    });
-                                    if (!exists) break;
-                                    attempts++;
-                                }
-
-                                const voucher = await req.propertyDb.models.draw_vouchers.create({
-                                    outlet_id: req.user.outlet_id,
-                                    campaign_id: activeCampaign.id,
-                                    customer_phone: customerPhone,
-                                    customer_name: customerName,
-                                    sale_id: referenceSale.id,
-                                    voucher_code: code,
-                                    is_winner: false
-                                }, { transaction: t });
-
-                                luckyDrawVouchers = [{
-                                    code: voucher.voucher_code,
+                            if (existingVouchers.length > 0) {
+                                luckyDrawVouchers = existingVouchers.map(v => ({
+                                    code: v.voucher_code,
                                     campaign_name: activeCampaign.name,
                                     campaign_description: activeCampaign.description,
                                     customer_phone: customerPhone,
                                     customer_name: customerName
-                                }];
-                            }
+                                }));
+                            } else if (netAmount > 0) {
+                                const threshold = Number(activeCampaign.threshold_amount || 2000.00);
+                                const currentSpend = Number(progress.accumulated_spend || 0);
+                                const newTotalSpend = Number((currentSpend + netAmount).toFixed(2));
 
-                            // Always accumulate the spend progress total
-                            await progress.update({
-                                customer_name: customerName || progress.customer_name,
-                                accumulated_spend: Number(progress.accumulated_spend || 0) + netAmount
-                            }, { transaction: t });
+                                let vouchersToGenerate = 0;
+                                let remainingSpend = newTotalSpend;
+
+                                if (threshold > 0 && newTotalSpend >= threshold) {
+                                    vouchersToGenerate = Math.floor(newTotalSpend / threshold);
+                                    remainingSpend = Number((newTotalSpend - (vouchersToGenerate * threshold)).toFixed(2));
+                                }
+
+                                for (let i = 0; i < vouchersToGenerate; i++) {
+                                    let code = '';
+                                    let attempts = 0;
+                                    while (attempts < 10) {
+                                        const randPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+                                        const randPart2 = Math.random().toString(36).substring(2, 5).toUpperCase();
+                                        code = `LD-${randPart1}-${randPart2}`;
+
+                                        const exists = await req.propertyDb.models.draw_vouchers.findOne({
+                                            where: { voucher_code: code },
+                                            transaction: t,
+                                            bypassOutletFilter: true
+                                        });
+                                        if (!exists) break;
+                                        attempts++;
+                                    }
+
+                                    const voucher = await req.propertyDb.models.draw_vouchers.create({
+                                        outlet_id: req.user.outlet_id,
+                                        campaign_id: activeCampaign.id,
+                                        customer_phone: customerPhone,
+                                        customer_name: customerName,
+                                        sale_id: referenceSale.id,
+                                        voucher_code: code,
+                                        is_winner: false
+                                    }, { transaction: t });
+
+                                    luckyDrawVouchers.push({
+                                        code: voucher.voucher_code,
+                                        campaign_name: activeCampaign.name,
+                                        campaign_description: activeCampaign.description,
+                                        customer_phone: customerPhone,
+                                        customer_name: customerName
+                                    });
+                                }
+
+                                await progress.update({
+                                    customer_name: customerName || progress.customer_name,
+                                    accumulated_spend: remainingSpend
+                                }, { transaction: t });
+                            }
                         }
                     }
                 }
