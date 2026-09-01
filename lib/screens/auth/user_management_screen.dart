@@ -239,6 +239,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         title: const Text('User Management'),
         centerTitle: true,
         actions: [
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFFFF7A1A)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            icon: const Icon(Icons.shield_outlined, color: Color(0xFFFF7A1A)),
+            label: const Text('Supervisor PIN', style: TextStyle(color: Color(0xFFFF7A1A), fontWeight: FontWeight.bold)),
+            onPressed: _openSupervisorPinDialog,
+          ),
+          const SizedBox(width: 8),
           FilledButton.icon(
             icon: const Icon(Icons.person_add),
             label: const Text('Add User'),
@@ -375,6 +385,160 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// ================= SUPERVISOR PIN SETUP =================
+  void _openSupervisorPinDialog() async {
+    final pinCtrl = TextEditingController();
+    String pinType = 'STATIC';
+    bool obscurePin = true;
+    bool isLoading = true;
+    String? statusMsg;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            if (isLoading) {
+              userCtrl.getSupervisorPin().then((data) {
+                if (ctx.mounted) {
+                  setDialogState(() {
+                    pinCtrl.text = data['pin'] ?? '1234';
+                    pinType = data['type'] ?? 'STATIC';
+                    isLoading = false;
+                  });
+                }
+              });
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.shield_outlined, color: Color(0xFFFF7A1A)),
+                  SizedBox(width: 8),
+                  Text('Supervisor Override Setup'),
+                ],
+              ),
+              content: isLoading
+                  ? const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()))
+                  : SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Configure the security override PIN or One-Time Passcode (OTP) required for supervisor authorizations (e.g. order voids, bill discounts).',
+                            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                          ),
+                          const SizedBox(height: 16),
+                          SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(value: 'STATIC', label: Text('Reusable Store PIN'), icon: Icon(Icons.pin)),
+                              ButtonSegment(value: 'ONE_TIME', label: Text('One-Time Email OTP'), icon: Icon(Icons.mark_email_unread)),
+                            ],
+                            selected: {pinType},
+                            onSelectionChanged: (val) => setDialogState(() => pinType = val.first),
+                          ),
+                          const SizedBox(height: 16),
+                          if (pinType == 'STATIC') ...[
+                            TextField(
+                              controller: pinCtrl,
+                              obscureText: obscurePin,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: 'Store Supervisor Override PIN',
+                                hintText: 'e.g. 1234 or 8888',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.key),
+                                suffixIcon: IconButton(
+                                  icon: Icon(obscurePin ? Icons.visibility_off : Icons.visibility),
+                                  onPressed: () => setDialogState(() => obscurePin = !obscurePin),
+                                ),
+                              ),
+                            ),
+                          ] else ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.amber.shade300),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.info_outline, color: Colors.amber, size: 20),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'When requesting supervisor override, a 6-digit OTP will be dispatched to the store contact email.',
+                                      style: TextStyle(fontSize: 12, color: Colors.black87),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (statusMsg != null) ...[
+                            const SizedBox(height: 10),
+                            Text(statusMsg!, style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 12)),
+                          ],
+                        ],
+                      ),
+                    ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A1A),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.save),
+                  label: const Text('Save PIN Settings'),
+                  onPressed: () async {
+                    final targetPin = pinType == 'ONE_TIME'
+                        ? (pinCtrl.text.trim().isEmpty ? '1234' : pinCtrl.text.trim())
+                        : pinCtrl.text.trim();
+
+                    if (pinType == 'STATIC' && targetPin.isEmpty) {
+                      setDialogState(() {
+                        statusMsg = 'Please enter a valid Supervisor PIN (e.g. 1234)';
+                      });
+                      return;
+                    }
+
+                    setDialogState(() => isLoading = true);
+                    try {
+                      await userCtrl.updateSupervisorPin(targetPin, pinType);
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(pinType == 'ONE_TIME'
+                                ? 'Supervisor One-Time Email OTP mode saved successfully!'
+                                : 'Supervisor Override PIN saved successfully!'),
+                            backgroundColor: Colors.teal,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      setDialogState(() {
+                        isLoading = false;
+                        statusMsg = 'Error saving PIN: ${e.toString().replaceAll("Exception: ", "")}';
+                      });
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

@@ -110,4 +110,37 @@ class UserController extends ChangeNotifier {
       {'permissions': permissions.toList()},
     );
   }
+
+  // ---------- SUPERVISOR PIN ----------
+  Future<Map<String, dynamic>> getSupervisorPin() async {
+    try {
+      final res = await ApiClient.get('${ApiEndpoints.users}/supervisor-pin');
+      return {
+        'pin': res['supervisor_pin'] ?? '1234',
+        'type': res['supervisor_pin_type'] ?? 'STATIC',
+      };
+    } catch (_) {
+      return {'pin': '1234', 'type': 'STATIC'};
+    }
+  }
+
+  Future<void> updateSupervisorPin(String pin, String type) async {
+    await ApiClient.put(
+      '${ApiEndpoints.users}/supervisor-pin',
+      {'supervisor_pin': pin, 'supervisor_pin_type': type},
+    );
+  }
+
+  Future<bool> verifySupervisorPin(String pin) async {
+    final res = await ApiClient.post(
+      '${ApiEndpoints.users}/supervisor-pin/verify',
+      {'pin': pin},
+    );
+    return res['authorized'] == true;
+  }
+
+  Future<String> sendSupervisorOtp() async {
+    final res = await ApiClient.post('${ApiEndpoints.users}/supervisor-pin/send-otp', {});
+    return res['message'] ?? 'OTP sent to supervisor email';
+  }
 }

@@ -10,6 +10,7 @@ import '../../core/settings/local_preferences.dart';
 import '../inventory/salescreen.dart';
 import 'kot_builder_screen.dart';
 import '../../controllers/settings/system_settings_controller.dart';
+import '../../controllers/security/user_controller.dart';
 
 class RunningOrdersScreen extends StatefulWidget {
   final int tableId;
@@ -137,42 +138,102 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.security, color: Colors.orange),
-              SizedBox(width: 8),
-              Text('Supervisor Override'),
-            ],
-          ),
-          content: TextField(
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Enter Supervisor PIN',
-              hintText: 'xxxx',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (val) => enteredPin = val,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (enteredPin == '1234' || enteredPin == '4321' || enteredPin == '9999') {
-                  Navigator.pop(context, true);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Invalid Security PIN! Access Denied.')),
-                  );
-                }
-              },
-              child: const Text('Authorize'),
-            ),
-          ],
+        bool isAuthorizing = false;
+        bool isSendingOtp = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.security, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Supervisor Override'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Enter Supervisor PIN or OTP',
+                      hintText: 'xxxx',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (val) => enteredPin = val,
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: isSendingOtp
+                        ? null
+                        : () async {
+                            setDialogState(() => isSendingOtp = true);
+                            try {
+                              final msg = await context.read<UserController>().sendSupervisorOtp();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(msg), backgroundColor: Colors.teal),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to send OTP: $e'), backgroundColor: Colors.red),
+                                );
+                              }
+                            } finally {
+                              setDialogState(() => isSendingOtp = false);
+                            }
+                          },
+                    icon: isSendingOtp
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.mark_email_unread_outlined, size: 18),
+                    label: const Text('Send One-Time OTP to Supervisor Email', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isAuthorizing ? null : () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isAuthorizing
+                      ? null
+                      : () async {
+                          if (enteredPin.trim().isEmpty) return;
+                          setDialogState(() => isAuthorizing = true);
+                          try {
+                            final isAuthorized = await context.read<UserController>().verifySupervisorPin(enteredPin.trim());
+                            if (context.mounted) {
+                              if (isAuthorized) {
+                                Navigator.pop(context, true);
+                              } else {
+                                setDialogState(() => isAuthorizing = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Invalid Security PIN or OTP! Access Denied.'), backgroundColor: Colors.red),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              setDialogState(() => isAuthorizing = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Verification Error: $e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          }
+                        },
+                  child: isAuthorizing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Authorize'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -495,76 +556,276 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
   }
 
   Future<void> _cancelKotItem(int itemId, String itemName) async {
-    final authorized = await _showPinOverrideDialog();
-    if (!authorized) return;
-
+    String enteredPin = '';
     String reason = 'Removed by Waiter';
+    bool isAuthorizing = false;
+    bool isSendingOtp = false;
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Cancel "$itemName"?'),
-        content: TextField(
-          decoration: const InputDecoration(
-            labelText: 'Cancellation Reason',
-            hintText: 'Customer changed mind, out of stock, etc.',
-            border: OutlineInputBorder(),
-          ),
-          onChanged: (val) => reason = val,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Go Back')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Confirm Cancel'),
-          )
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.security, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Cancel "$itemName"', style: const TextStyle(fontSize: 16))),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Supervisor PIN or OTP *',
+                        hintText: 'xxxx',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.key),
+                      ),
+                      onChanged: (val) => enteredPin = val,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Reason for Cancellation',
+                        hintText: 'Customer changed mind, out of stock, etc.',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.edit_note),
+                      ),
+                      onChanged: (val) => reason = val,
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: isSendingOtp
+                          ? null
+                          : () async {
+                              setDialogState(() => isSendingOtp = true);
+                              try {
+                                final msg = await context.read<UserController>().sendSupervisorOtp();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(msg), backgroundColor: Colors.teal),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed to send OTP: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              } finally {
+                                setDialogState(() => isSendingOtp = false);
+                              }
+                            },
+                      icon: isSendingOtp
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.mark_email_unread_outlined, size: 18),
+                      label: const Text('Send OTP to Supervisor Email', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isAuthorizing ? null : () => Navigator.pop(context, false),
+                  child: const Text('Go Back'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                  onPressed: isAuthorizing
+                      ? null
+                      : () async {
+                          if (enteredPin.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Enter Supervisor PIN or OTP'), backgroundColor: Colors.red),
+                            );
+                            return;
+                          }
+                          setDialogState(() => isAuthorizing = true);
+                          try {
+                            final isAuthorized = await context.read<UserController>().verifySupervisorPin(enteredPin.trim());
+                            if (context.mounted) {
+                              if (isAuthorized) {
+                                Navigator.pop(context, true);
+                              } else {
+                                setDialogState(() => isAuthorizing = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Invalid Security PIN or OTP! Access Denied.'), backgroundColor: Colors.red),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              setDialogState(() => isAuthorizing = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Verification Error: $e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          }
+                        },
+                  child: isAuthorizing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Confirm & Cancel Item'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
     if (confirmed == true) {
       try {
         final res = await ApiClient.put('/api/restaurant/kots/items/$itemId/status', {
           'status': 'Cancelled',
-          'cancel_reason': reason,
+          'cancel_reason': reason.trim().isEmpty ? 'Removed by Waiter' : reason.trim(),
         });
         if (res['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Cancelled "$itemName" successfully.')),
-          );
-          _fetchTableKots();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Cancelled "$itemName" successfully.')),
+            );
+            _fetchTableKots();
+          }
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        }
       }
     }
   }
 
   Future<void> _cancelEntireKot(int kotId, String kotNo) async {
-    final authorized = await _showPinOverrideDialog();
-    if (!authorized) return;
-
+    String enteredPin = '';
     String reason = 'Cancelled by Manager';
+    bool isAuthorizing = false;
+    bool isSendingOtp = false;
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Cancel KOT $kotNo?'),
-        content: TextField(
-          decoration: const InputDecoration(
-            labelText: 'Cancellation Reason',
-            border: OutlineInputBorder(),
-          ),
-          onChanged: (val) => reason = val,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Go Back')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Cancel KOT'),
-          )
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.security, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Cancel KOT $kotNo', style: const TextStyle(fontSize: 16))),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Supervisor PIN or OTP *',
+                        hintText: 'xxxx',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.key),
+                      ),
+                      onChanged: (val) => enteredPin = val,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Cancellation Reason',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.edit_note),
+                      ),
+                      onChanged: (val) => reason = val,
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: isSendingOtp
+                          ? null
+                          : () async {
+                              setDialogState(() => isSendingOtp = true);
+                              try {
+                                final msg = await context.read<UserController>().sendSupervisorOtp();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(msg), backgroundColor: Colors.teal),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed to send OTP: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              } finally {
+                                setDialogState(() => isSendingOtp = false);
+                              }
+                            },
+                      icon: isSendingOtp
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.mark_email_unread_outlined, size: 18),
+                      label: const Text('Send OTP to Supervisor Email', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isAuthorizing ? null : () => Navigator.pop(context, false),
+                  child: const Text('Go Back'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                  onPressed: isAuthorizing
+                      ? null
+                      : () async {
+                          if (enteredPin.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Enter Supervisor PIN or OTP'), backgroundColor: Colors.red),
+                            );
+                            return;
+                          }
+                          setDialogState(() => isAuthorizing = true);
+                          try {
+                            final isAuthorized = await context.read<UserController>().verifySupervisorPin(enteredPin.trim());
+                            if (context.mounted) {
+                              if (isAuthorized) {
+                                Navigator.pop(context, true);
+                              } else {
+                                setDialogState(() => isAuthorizing = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Invalid Security PIN or OTP! Access Denied.'), backgroundColor: Colors.red),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              setDialogState(() => isAuthorizing = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Verification Error: $e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          }
+                        },
+                  child: isAuthorizing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Confirm & Cancel KOT'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
     if (confirmed == true) {

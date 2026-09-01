@@ -407,3 +407,102 @@ exports.getPermissions = async (req, res) => {
     }
 };
 
+// ================= SUPERVISOR OVERRIDE PIN API =================
+
+// Store active supervisor OTPs in-memory (keyed by outlet_id)
+const activeSupervisorOtps = new Map();
+
+exports.getSupervisorPin = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const outlet = await req.propertyDb.models.outlets.findOne({ where: { id: outlet_id } });
+        res.json({
+            success: true,
+            supervisor_pin: outlet?.supervisor_pin || '1234',
+            supervisor_pin_type: outlet?.supervisor_pin_type || 'STATIC'
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+exports.updateSupervisorPin = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const { supervisor_pin, supervisor_pin_type } = req.body;
+        const pinType = supervisor_pin_type || 'STATIC';
+        const pin = (supervisor_pin && supervisor_pin.trim()) ? supervisor_pin.trim() : '1234';
+
+        const outlet = await req.propertyDb.models.outlets.findOne({ where: { id: outlet_id } });
+        if (outlet) {
+            await outlet.update({
+                supervisor_pin: pin,
+                supervisor_pin_type: pinType
+            });
+        }
+        res.json({ success: true, message: 'Supervisor PIN updated successfully!' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+exports.verifySupervisorPin = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id;
+        const { pin } = req.body;
+        if (!pin) {
+            return res.status(400).json({ success: false, authorized: false, message: 'PIN is required' });
+        }
+
+        const inputPin = String(pin).trim();
+        const outlet = outlet_id ? await req.propertyDb.models.outlets.findOne({ where: { id: outlet_id } }) : null;
+        const configuredPin = outlet?.supervisor_pin || '1234';
+        const pinType = outlet?.supervisor_pin_type || 'STATIC';
+
+        // Check 1: Static Configured PIN (Only active if mode is STATIC)
+        const isStaticMatch = pinType === 'STATIC' && inputPin === configuredPin;
+
+        // Check 2: Dynamic One-Time OTP (Active if OTP was generated)
+        const activeOtp = activeSupervisorOtps.get(outlet_id);
+        const isOtpMatch = activeOtp && activeOtp.code === inputPin && (Date.now() - activeOtp.timestamp < 10 * 60 * 1000);
+
+        if (isStaticMatch || isOtpMatch) {
+            if (isOtpMatch) activeSupervisorOtps.delete(outlet_id); // Consume OTP
+            return res.json({ success: true, authorized: true, message: 'Supervisor override authorized!' });
+        }
+
+        res.status(401).json({ success: false, authorized: false, message: 'Invalid Supervisor PIN or OTP!' });
+    } catch (err) {
+        res.status(500).json({ success: false, authorized: false, message: err.message });
+    }
+};
+
+exports.sendSupervisorOtp = async (req, res) => {
+    try {
+        const outlet_id = req.user?.outlet_id;
+        const outlet = await req.propertyDb.models.outlets.findOne({ where: { id: outlet_id } });
+        const targetEmail = outlet?.contact_email || req.user?.contact_email;
+
+        if (!targetEmail) {
+            return res.status(400).json({ success: false, message: 'No contact email found for this outlet.' });
+        }
+
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        activeSupervisorOtps.set(outlet_id, { code: otpCode, timestamp: Date.now() });
+
+        const emailService = require('../../services/email.service');
+        await emailService.sendMail({
+            db: req.propertyDb,
+            outlet_id,
+            to: targetEmail,
+            subject: '🛡️ Supervisor Override One-Time Passcode (OTP)',
+            text: `Your Supervisor Override OTP code is ${otpCode}. Valid for 10 minutes.`,
+            html: `<h3>Supervisor Override Authorization</h3><p>Your one-time supervisor override code is: <strong>${otpCode}</strong></p><p>Valid for 10 minutes.</p>`
+        });
+
+        res.json({ success: true, message: `Supervisor Override OTP sent to ${targetEmail}` });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+

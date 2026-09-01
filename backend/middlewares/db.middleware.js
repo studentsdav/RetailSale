@@ -41,6 +41,8 @@ module.exports = async (req, res, next) => {
                     ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS gmail_client_secret TEXT NULL;
                     ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS gmail_refresh_token TEXT NULL;
                     ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS resend_api_key TEXT NULL;
+                    ALTER TABLE outlets ADD COLUMN IF NOT EXISTS supervisor_pin VARCHAR(100) DEFAULT '1234';
+                    ALTER TABLE outlets ADD COLUMN IF NOT EXISTS supervisor_pin_type VARCHAR(50) DEFAULT 'STATIC';
                 `);
                 console.log('✅ Self-healed: Checked and added missing columns to tables');
 

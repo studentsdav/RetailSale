@@ -40,6 +40,16 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             allowNull: false
         },
+        supervisor_pin: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+            defaultValue: '1234'
+        },
+        supervisor_pin_type: {
+            type: DataTypes.STRING(50),
+            allowNull: true,
+            defaultValue: 'STATIC'
+        },
 
         is_active: {
             type: DataTypes.BOOLEAN,
