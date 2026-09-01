@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1388,11 +1389,11 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
             },
           ),
           Visibility(
-            visible: !Platform.isAndroid && !Platform.isIOS,
+            visible: !kIsWeb && !Platform.isAndroid && !Platform.isIOS,
             child: const Divider(),
           ),
           Visibility(
-            visible: !Platform.isAndroid && !Platform.isIOS,
+            visible: !kIsWeb && !Platform.isAndroid && !Platform.isIOS,
             child: ListTile(
               leading: const Icon(Icons.dashboard_outlined),
               title: const Text('Exit to Dashboard'),

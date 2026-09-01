@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:intl/intl.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/reports/night_audit_controller.dart';
@@ -3241,12 +3242,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                             child: CircleAvatar(
                               radius: 24,
                               backgroundColor: theme.colorScheme.primary,
-                              backgroundImage: (property?.logoPath != null &&
+                              backgroundImage: (!kIsWeb &&
+                                      property?.logoPath != null &&
                                       property!.logoPath!.isNotEmpty &&
                                       File(property!.logoPath!).existsSync())
                                   ? FileImage(File(property!.logoPath!))
                                   : null,
-                              child: (property?.logoPath != null &&
+                              child: (!kIsWeb &&
+                                      property?.logoPath != null &&
                                       property!.logoPath!.isNotEmpty &&
                                       File(property!.logoPath!).existsSync())
                                   ? null

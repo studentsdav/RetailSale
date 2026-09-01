@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -313,7 +314,8 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                                 decoration: BoxDecoration(
                                   color: Colors.blue.shade50,
                                   borderRadius: BorderRadius.circular(8),
-                                  image: (_logoPath != null &&
+                                  image: (!kIsWeb &&
+                                          _logoPath != null &&
                                           File(_logoPath!).existsSync())
                                       ? DecorationImage(
                                           image: FileImage(File(_logoPath!)),
@@ -323,7 +325,8 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                                 ),
                                 width: 48,
                                 height: 48,
-                                child: _logoPath == null ||
+                                child: kIsWeb ||
+                                        _logoPath == null ||
                                         !File(_logoPath!).existsSync()
                                     ? Icon(Icons.image,
                                         color: Colors.blue.shade700)

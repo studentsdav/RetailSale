@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/settings/app_branding_model.dart';
@@ -273,6 +274,7 @@ class LocalPreferences {
 
   /// Auto-detect physical hardware / OS Device Hostname
   static String getSystemHardwareId() {
+    if (kIsWeb) return 'WEB_DEVICE';
     try {
       final host = Platform.localHostname.trim().toUpperCase();
       if (host.isNotEmpty && host != 'LOCALHOST') return host;

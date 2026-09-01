@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -32,6 +33,7 @@ class BrandingStorage {
     required String outletCode,
     required String sourcePath,
   }) async {
+    if (kIsWeb) return null;
     final source = File(sourcePath);
     if (!await source.exists()) return null;
 
@@ -57,6 +59,7 @@ class BrandingStorage {
   }
 
   static Future<String?> getLogoPathForOutlet(String outletCode) async {
+    if (kIsWeb) return null;
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_logoKey(outletCode));
     if (path == null || path.isEmpty) return null;
@@ -91,7 +94,7 @@ class BrandingStorage {
   }
 
   static Future<Uint8List?> readLogoBytes(String? path) async {
-    if (path == null || path.isEmpty) return null;
+    if (kIsWeb || path == null || path.isEmpty) return null;
     final file = File(path);
     if (!await file.exists()) return null;
     return file.readAsBytes();

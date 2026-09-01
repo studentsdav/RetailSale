@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:retailpos/core/api/api_client.dart';
 import 'package:retailpos/core/api/endpoints.dart';
@@ -409,7 +410,7 @@ class _LoginScreenState extends State<LoginScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Visibility(
-            visible: !Platform.isAndroid && !Platform.isIOS,
+            visible: kIsWeb || (!Platform.isAndroid && !Platform.isIOS),
             child: Row(
               children: [
                 Expanded(
@@ -813,7 +814,7 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                             const SizedBox(height: 20),
                             Visibility(
-                              visible: !Platform.isAndroid && !Platform.isIOS,
+                              visible: kIsWeb || (!Platform.isAndroid && !Platform.isIOS),
                               child: TextFormField(
                                 initialValue: _selectedOutlet,
                                 readOnly: true,

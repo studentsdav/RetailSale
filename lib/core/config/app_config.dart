@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class AppConfig {
   static String baseUrl = 'http://127.0.0.1:3000';
@@ -30,7 +31,18 @@ class AppConfig {
   static Future<bool> loadConfig() async {
     try {
       if (kIsWeb) {
-        baseUrl = Uri.base.origin;
+        final origin = Uri.base.origin;
+        final host = Uri.base.host.toLowerCase();
+        final port = Uri.base.port;
+
+        // When running under 'flutter run -d chrome' (e.g. localhost:51617), point API to local backend port 3000
+        if ((host == 'localhost' || host == '127.0.0.1') && port != 3000) {
+          baseUrl = 'http://localhost:3000';
+        } else {
+          baseUrl = origin;
+        }
+
+        await fetchOutletsFromServer();
         return true;
       }
       final file = File(_configPath);
@@ -72,6 +84,7 @@ class AppConfig {
   }
 
   static bool get isLocalServer {
+    if (kIsWeb) return false;
     try {
       final uri = Uri.parse(baseUrl);
       final host = uri.host.toLowerCase();
@@ -80,5 +93,27 @@ class AppConfig {
       final lower = baseUrl.toLowerCase();
       return lower.contains('localhost') || lower.contains('127.0.0.1');
     }
+  }
+
+  static Future<void> fetchOutletsFromServer() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/api/public/outlets'))
+          .timeout(const Duration(seconds: 3));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && data['data'] is List) {
+          final List list = data['data'];
+          final fetched = list
+              .map((item) =>
+                  (item['outlet_code'] ?? item['code'] ?? '').toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          if (fetched.isNotEmpty) {
+            outlets = fetched;
+          }
+        }
+      }
+    } catch (_) {}
   }
 }

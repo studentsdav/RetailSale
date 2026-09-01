@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../controllers/dashboard/dashboard_controller.dart' as dashboard_user;
@@ -25,7 +26,7 @@ class HomeRouteHelper {
       }
     } catch (_) {}
 
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       return const RetailerConsoleScreen();
     }
 

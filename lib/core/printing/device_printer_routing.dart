@@ -344,21 +344,47 @@ class _StationRoutingDialogWidgetState extends State<_StationRoutingDialogWidget
   }
 
   Future<void> _loadData() async {
-    final printerList = await Printing.listPrinters();
-    final locations = await DevicePrinterRouting.fetchItemMasterLocations();
+    try {
+      final printerList = await Printing.listPrinters().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => [],
+      );
+      final locations = await DevicePrinterRouting.fetchItemMasterLocations().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => ['General Counter', 'Main Kitchen'],
+      );
 
-    if (!mounted) return;
-    setState(() {
-      _printers = printerList;
-      _itemLocations = locations;
-      _isLoading = false;
-      if (_itemLocations.isNotEmpty) {
-        _selectedLocation = _itemLocations.first;
+      if (!mounted) return;
+
+      final Set<String> seenPrinters = {};
+      final List<Printer> uniquePrinters = [];
+      for (final p in printerList) {
+        final k = p.name.trim().toLowerCase();
+        if (k.isNotEmpty && !seenPrinters.contains(k)) {
+          seenPrinters.add(k);
+          uniquePrinters.add(p);
+        }
       }
-      if (_printers.isNotEmpty) {
-        _selectedPrinter = _printers.first.name;
+
+      setState(() {
+        _printers = uniquePrinters;
+        _itemLocations = locations.isNotEmpty ? locations : ['General Counter', 'Main Kitchen'];
+        if (_itemLocations.isNotEmpty) {
+          _selectedLocation = _itemLocations.first;
+        }
+        if (_printers.isNotEmpty) {
+          _selectedPrinter = _printers.first.name;
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading station routing data: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
-    });
+    }
   }
 
   void _addOrUpdateMapping() {
@@ -498,7 +524,9 @@ class _StationRoutingDialogWidgetState extends State<_StationRoutingDialogWidget
                                 ),
                                 items: [
                                   const DropdownMenuItem(value: '', child: Text('Default System Printer')),
-                                  ..._printers.map((p) => DropdownMenuItem(value: p.name, child: Text(p.name, overflow: TextOverflow.ellipsis))),
+                                  ..._printers
+                                      .where((p) => p.name.trim().isNotEmpty)
+                                      .map((p) => DropdownMenuItem(value: p.name, child: Text(p.name, overflow: TextOverflow.ellipsis))),
                                 ],
                                 onChanged: (v) => setState(() => _selectedPrinter = v ?? ''),
                               ),

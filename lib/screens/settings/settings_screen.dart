@@ -252,7 +252,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final printers = await Printing.listPrinters();
       if (!mounted) return;
-      setState(() => _printers = printers);
+
+      final Set<String> seen = {};
+      final List<Printer> uniquePrinters = [];
+      for (final p in printers) {
+        final key = (p.url.isNotEmpty ? p.url : p.name).trim().toLowerCase();
+        final nameKey = p.name.trim().toLowerCase();
+        if (nameKey.isNotEmpty && !seen.contains(key) && !seen.contains(nameKey)) {
+          seen.add(key);
+          seen.add(nameKey);
+          uniquePrinters.add(p);
+        }
+      }
+
+      setState(() => _printers = uniquePrinters);
     } catch (_) {
       if (!mounted) return;
       setState(() => _printers = const []);
@@ -1263,6 +1276,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   isExpanded: true,
                                   value: selectedPrinterValue,
                                   items: _printers
+                                      .where((p) => p.url.trim().isNotEmpty)
                                       .map((printer) => DropdownMenuItem(
                                             value: printer.url,
                                             child: Text(
@@ -1352,10 +1366,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             items: [
                               const DropdownMenuItem(value: '', child: Text('Use Outlet Default')),
-                              ..._printers.map((printer) => DropdownMenuItem(
-                                    value: printer.name,
-                                    child: Text(printer.name, overflow: TextOverflow.ellipsis),
-                                  )),
+                              ..._printers
+                                  .where((p) => p.name.trim().isNotEmpty)
+                                  .map((printer) => DropdownMenuItem(
+                                        value: printer.name,
+                                        child: Text(printer.name, overflow: TextOverflow.ellipsis),
+                                      )),
                             ],
                             onChanged: (val) {
                               setState(() {
@@ -2874,12 +2890,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ),
                                     items: [
                                       const DropdownMenuItem(value: '', child: Text('Default Printer')),
-                                      ..._printers.map(
-                                        (printer) => DropdownMenuItem(
-                                          value: printer.name,
-                                          child: Text(printer.name, overflow: TextOverflow.ellipsis),
-                                        ),
-                                      ),
+                                      ..._printers
+                                          .where((p) => p.name.trim().isNotEmpty)
+                                          .map(
+                                            (printer) => DropdownMenuItem(
+                                              value: printer.name,
+                                              child: Text(printer.name, overflow: TextOverflow.ellipsis),
+                                            ),
+                                          ),
                                     ],
                                     onChanged: (val) {
                                       setDialogState(() {

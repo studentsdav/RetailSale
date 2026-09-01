@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../controllers/settings/property_info_controller.dart';
@@ -731,14 +732,14 @@ class _OutletDetailModificationScreenState extends State<OutletDetailModificatio
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFEFF6FF),
                                           borderRadius: BorderRadius.circular(8),
-                                          image: (_logoPath != null && File(_logoPath!).existsSync())
+                                          image: (!kIsWeb && _logoPath != null && File(_logoPath!).existsSync())
                                               ? DecorationImage(
                                                   image: FileImage(File(_logoPath!)),
                                                   fit: BoxFit.cover,
                                                 )
                                               : null,
                                         ),
-                                        child: _logoPath == null || !File(_logoPath!).existsSync()
+                                        child: kIsWeb || _logoPath == null || !File(_logoPath!).existsSync()
                                             ? const Icon(Icons.image, color: Color(0xFF2563EB))
                                             : null,
                                       ),

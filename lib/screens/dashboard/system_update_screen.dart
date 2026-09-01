@@ -43,6 +43,14 @@ class _SystemUpdateScreenState extends State<SystemUpdateScreen> {
     });
 
     try {
+      if (kIsWeb) {
+        setState(() {
+          _isChecking = false;
+          _updateAvailable = false;
+        });
+        return;
+      }
+
       // 1. Get current system version
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
       _currentVersion = packageInfo.version;

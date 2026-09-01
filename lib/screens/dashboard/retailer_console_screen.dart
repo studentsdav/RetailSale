@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -2285,7 +2286,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
 
   Future<void> _editOrderInPOS(dynamic order) async {
     // Editing invoices is only supported on the Windows Desktop Application
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Row(
@@ -7128,11 +7129,11 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             },
           ),
           Visibility(
-            visible: !Platform.isAndroid && !Platform.isIOS,
+            visible: !kIsWeb && !Platform.isAndroid && !Platform.isIOS,
             child: const Divider(),
           ),
           Visibility(
-            visible: !Platform.isAndroid && !Platform.isIOS,
+            visible: !kIsWeb && !Platform.isAndroid && !Platform.isIOS,
             child: ListTile(
               leading: const Icon(Icons.dashboard_outlined),
               title: const Text('Exit to Dashboard'),

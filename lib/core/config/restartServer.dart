@@ -1,9 +1,12 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:retailpos/core/config/app_config.dart'; // Make sure to import where your URL is stored
 
 class ServerBootstrapper {
   static Future<bool> ensureServerIsRunning() async {
+    if (kIsWeb) return true;
+
     // Get the dynamic base URL instead of hardcoding it
     // Example: 'http://127.0.0.1:3000' OR 'http://192.168.1.50:3000'
     final String serverUrl = AppConfig.baseUrl;
@@ -27,7 +30,7 @@ class ServerBootstrapper {
     }
 
     // 3. If we are the Host machine, wake up the local server!
-    if (Platform.isWindows) {
+    if (!kIsWeb && Platform.isWindows) {
       try {
         final String appDir = Directory.current.path;
         final String vbsPath = '$appDir\\run_hidden.vbs';
