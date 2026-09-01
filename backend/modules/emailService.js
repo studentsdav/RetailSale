@@ -128,16 +128,6 @@ async function sendViaResendApi(apiKey, to, subject, htmlContent) {
  * Core function to send any generic email
  */
 async function sendEmail(to, subject, htmlContent) {
-    // 1. Try Resend HTTP API first if key is provided (bypasses cloud SMTP firewall blocks!)
-    if (process.env.RESEND_API_KEY) {
-        try {
-            return await sendViaResendApi(process.env.RESEND_API_KEY, to, subject, htmlContent);
-        } catch (resendErr) {
-            console.error(`[EMAIL RESEND ERROR] ${resendErr.message}`);
-        }
-    }
-
-    // 2. Fallback to standard Nodemailer SMTP
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL_ID || (sysConfig ? sysConfig.emailId : null);
     const emailPass = process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || (sysConfig ? sysConfig.emailPass : null);
     const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
@@ -149,46 +139,59 @@ async function sendEmail(to, subject, htmlContent) {
 
     console.log(`🔍 [EMAIL DEBUG] Target: ${to} | User: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Pass: ${emailPass ? 'YES (len=' + emailPass.length + ')' : 'NO'} | Host: ${emailHost}:${emailPort} | Security: ${secProtocolStr} | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'}`);
 
-    let transporter = getTransporter();
+    // 1. Primary: Standard Nodemailer SMTP using configured EMAIL_USER, EMAIL_PASS, EMAIL_HOST, EMAIL_SECURITY, EMAIL_SECURE
+    if (emailUser && emailPass) {
+        const transporter = getTransporter();
+        if (transporter) {
+            try {
+                const info = await transporter.sendMail({
+                    from: `"System Admin" <${emailUser}>`,
+                    to: to,
+                    subject: subject,
+                    html: htmlContent
+                });
+                console.log(`[EMAIL SMTP SUCCESS] Sent to ${to}: ${info.messageId}`);
+                return true;
+            } catch (smtpErr) {
+                console.error(`[EMAIL SMTP ERROR] ${smtpErr.message}`);
+                // Retry fallback: If port 587 timed out on cloud host, try SSL Port 465
+                if ((smtpErr.code === 'ETIMEDOUT' || smtpErr.code === 'ESOCKET' || smtpErr.message.includes('ETIMEDOUT')) && emailPort !== 465) {
+                    console.warn(`[EMAIL TIMEOUT FALLBACK] Retrying email to ${to} via SSL Port 465...`);
+                    try {
+                        const fallbackTransporter = getTransporter(465);
+                        if (fallbackTransporter) {
+                            const info = await fallbackTransporter.sendMail({
+                                from: `"System Admin" <${emailUser}>`,
+                                to: to,
+                                subject: subject,
+                                html: htmlContent
+                            });
+                            console.log(`[EMAIL SUCCESS via Port 465] Sent to ${to}: ${info.messageId}`);
+                            return true;
+                        }
+                    } catch (fallbackErr) {
+                        console.error(`[EMAIL FALLBACK ERROR] ${fallbackErr.message}`);
+                    }
+                }
+            }
+        }
+    }
 
-    if (!transporter) {
+    // 2. Secondary Option: Resend HTTP API if key is present
+    if (process.env.RESEND_API_KEY) {
+        try {
+            return await sendViaResendApi(process.env.RESEND_API_KEY, to, subject, htmlContent);
+        } catch (resendErr) {
+            console.error(`[EMAIL RESEND ERROR] ${resendErr.message}`);
+        }
+    }
+
+    if (!emailUser || !emailPass) {
         console.warn(`⚠️ [EMAIL NOTICE] SMTP credentials not configured (EMAIL_USER / EMAIL_PASS missing). Email to ${to} bypassed.`);
         return false;
     }
 
-    try {
-        const info = await transporter.sendMail({
-            from: `"System Admin" <${emailUser}>`,
-            to: to,
-            subject: subject,
-            html: htmlContent
-        });
-        console.log(`[EMAIL] Sent to ${to}: ${info.messageId}`);
-        return true;
-    } catch (error) {
-        // Fallback: If port 587 timed out on Zoho or cloud host, retry via SSL Port 465
-        if ((error.code === 'ETIMEDOUT' || error.code === 'ESOCKET' || error.message.includes('ETIMEDOUT')) && emailPort !== 465) {
-            console.warn(`[EMAIL TIMEOUT FALLBACK] Retrying email to ${to} via SSL Port 465...`);
-            try {
-                const fallbackTransporter = getTransporter(465);
-                if (fallbackTransporter) {
-                    const info = await fallbackTransporter.sendMail({
-                        from: `"System Admin" <${emailUser}>`,
-                        to: to,
-                        subject: subject,
-                        html: htmlContent
-                    });
-                    console.log(`[EMAIL SUCCESS via Port 465] Sent to ${to}: ${info.messageId}`);
-                    return true;
-                }
-            } catch (fallbackErr) {
-                console.error(`[EMAIL FALLBACK ERROR] ${fallbackErr.message}`);
-            }
-        }
-
-        console.error(`[EMAIL ERROR DETAILED] Failed to send to ${to}: ${error.code || ''} ${error.message}`);
-        throw new Error(`Failed to send email. ${error.code || error.message}`);
-    }
+    throw new Error(`Failed to send email to ${to}`);
 }
 
 /**

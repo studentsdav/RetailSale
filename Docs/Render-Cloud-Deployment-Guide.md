@@ -1,6 +1,6 @@
 # ☁️ Render Cloud Deployment & Environment Guide
 
-This guide provides a comprehensive, step-by-step walkthrough for deploying the **Retail POS Backend** to [Render.com](https://render.com) with PostgreSQL database integration and full Cloud SaaS capability.
+This guide provides a comprehensive, step-by-step walkthrough for deploying the **Retail POS Backend** to [Render.com](https://render.com) with PostgreSQL database integration, cloud backup sync, and full multi-tenant SaaS capability.
 
 ---
 
@@ -44,35 +44,49 @@ This guide provides a comprehensive, step-by-step walkthrough for deploying the 
 
 ---
 
-## 🔑 Step 3: Complete Environment Variables Reference
+## 🔑 Step 3: Comprehensive Environment Variables Reference
 
-In your Web Service, go to **Environment** tab and add the following keys:
+In your Web Service, go to the **Environment** tab and add the following key-value pairs:
 
-### 1. Database & Server Core (Required)
+### 1. Database & Core Server (Required)
 
 | Variable | Example Value | Description |
 | :--- | :--- | :--- |
-| `NODE_ENV` | `production` | Enables production mode |
-| `PORT` | `10000` | Port for Express app (Render sets automatically) |
-| `DATABASE_URL` | `postgresql://user:pass@ep-xyz.render.com/retailpos?ssl=true` | PostgreSQL Connection URI (Triggers Cloud SaaS Mode) |
-| `DB_SSL` | `true` | Required for SSL connection to Cloud PostgreSQL |
-| `JWT_SECRET` | `super-secret-jwt-key-2026-prod` | Secret key used to sign JWT authentication tokens |
+| `NODE_ENV` | `production` | Enables production mode and triggers cloud safety protocols |
+| `PORT` | `10000` | Port for Express API server (Render sets automatically) |
+| `DATABASE_URL` | `postgresql://user:pass@dpg-xyz.render.com/retailpos?ssl=true` | PostgreSQL Connection URI (Enables Cloud SaaS multi-tenant mode) |
+| `DB_SSL` | `true` | Enables SSL encryption required by Cloud PostgreSQL instances |
+| `JWT_SECRET` | `super-secret-jwt-key-2026-prod` | Secret key used to sign and verify user JWT authentication tokens |
+| `IS_CLOUD` | `true` | Explicitly declares cloud deployment environment |
 
-### 2. Email Service & OTP Delivery (Optional)
+---
+
+### 2. SMTP Email Service & OTP Delivery (Primary & Add-On)
 
 > [!IMPORTANT]
 > Render Web Services block outbound TCP port 587 (`ETIMEDOUT`). For Zoho Mail or custom SMTP on Render, set **`EMAIL_PORT=465`** and **`EMAIL_SECURITY=SSL`** (or use **`RESEND_API_KEY`** over HTTPS port 443).
 
 | Variable | Example Value | Description |
 | :--- | :--- | :--- |
-| `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails (Recommended for Render) |
 | `EMAIL_HOST` | `smtp.zoho.com` | SMTP Server Host (`smtp.zoho.com` / `smtp.gmail.com`) |
 | `EMAIL_PORT` | `465` | SMTP Port (`465` for SSL, `587` for STARTTLS, `25` for None) |
-| `EMAIL_SECURITY` | `SSL` | Security Protocol: `SSL` (465), `STARTTLS` (587), or `NONE` (25) |
-| `EMAIL_SECURE` | `true` | Set `true` for Port 465 SSL, `false` for Port 587 STARTTLS |
-| `EMAIL_USER` | `famalth.retail@famalth.com` | SMTP Sender Email Address |
-| `EMAIL_PASS` | `abcd1234efgh` | SMTP App Password generated in Zoho / Gmail |
-| `EMAIL_TIMEOUT` | `20000` | Connection timeout in milliseconds (Default: 20000) |
+| `EMAIL_SECURITY` | `SSL` | Security Protocol: **`SSL`** (465), **`STARTTLS`** (587), or **`NONE`** (25) |
+| `EMAIL_SECURE` | `true` | Set `true` for Port 465 Direct SSL, `false` for Port 587 STARTTLS |
+| `EMAIL_USER` | `famalth.retail@famalth.com` | Primary SMTP Sender Email Address |
+| `EMAIL_PASS` | `abcd1234efgh` | SMTP App Password generated in Zoho Mail or Gmail Security |
+| `EMAIL_FROM` | `"Retail POS" <famalth.retail@famalth.com>` | Custom Sender Header Name & Address |
+| `EMAIL_TIMEOUT` | `20000` | SMTP Connection timeout in milliseconds (Default: 20000) |
+| `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails over Port 443 |
+
+---
+
+### 3. Google Drive Cloud Backups & Sheet Sync (Add-On)
+
+| Variable | Example Value | Description |
+| :--- | :--- | :--- |
+| `ROOT_FOLDER_ID` | `1A2B3C4D5E6F7G8H9I` | Google Drive Root Folder ID for storing automated `.enc` database backups |
+| `SCRIPT_URL` | `https://script.google.com/macros/s/exec` | Google Apps Script Sync Endpoint URL for cloud synchronization |
+| `SHEET_ID` | `1XYZ2ABC3DEF4GHI5JKL` | Google Sheets Database Spreadsheet ID for real-time audit logging |
 
 ---
 
@@ -80,10 +94,11 @@ In your Web Service, go to **Environment** tab and add the following keys:
 
 When `DATABASE_URL` or `DB_HOST` is set, the backend automatically adapts:
 
-1. **Bypasses Disk `.enc` Files:** Local `config.enc` disk existence checks are automatically bypassed in cloud mode while preserving local offline mode for Windows desktop terminals.
-2. **Resilient Migrations:** Automatically runs database schema migrations and seed scripts on boot with automatic PostgreSQL transaction `ROLLBACK` error recovery.
-3. **IPv4 DNS Lookup:** Uses forced `resolve4` lookup (`family: 4`) for Nodemailer to prevent container IPv6 `ENETUNREACH` socket errors.
-4. **Live OTP Console Logging:** Outputs generated OTP codes directly to Render Live Logs (`🔑 [OTP GENERATED] Target: email | Code: 123456`).
+1. **Automatic Cloud Sync (`Cloud Sync: ON`):** Database backups default to **`ON`** for cloud deployments to protect data against ephemeral container restarts.
+2. **Bypasses Disk `.enc` Files:** Local `config.enc` disk existence checks are automatically bypassed in cloud mode while preserving local offline mode for Windows desktop terminals.
+3. **Resilient Migrations:** Automatically runs database schema migrations and seed scripts on boot with automatic PostgreSQL transaction `ROLLBACK` error recovery.
+4. **IPv4 DNS Lookup:** Uses forced `resolve4` lookup (`family: 4`) for Nodemailer to prevent container IPv6 `ENETUNREACH` socket errors.
+5. **Live OTP Console Logging:** Outputs generated OTP codes directly to Render Live Logs (`🔑 [OTP GENERATED] Target: email | Code: 123456`).
 
 ---
 
@@ -92,5 +107,5 @@ When `DATABASE_URL` or `DB_HOST` is set, the backend automatically adapts:
 1. Launch your Flutter client app.
 2. On the **Terminal Setup Screen**:
    - **Server URL:** `https://retail-sale-backend.onrender.com`
-   - **Outlet Code (Optional):** Enter your private outlet code (e.g. `MUMBAI_STORE`), or leave blank to register a new store.
+   - **Outlet Code (Optional):** Enter your private outlet code (e.g. `OUTLET202608301109`), or leave blank to register a new store.
 3. Click **Verify & Connect Outlet** (or **Save & Register New Store**).
