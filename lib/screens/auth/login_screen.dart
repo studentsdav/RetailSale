@@ -402,6 +402,32 @@ class _LoginScreenState extends State<LoginScreen>
             textAlign: TextAlign.center,
             style: TextStyle(color: Color(0xFF64748B), height: 1.35),
           ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('New to FAMALTH LYNX? ',
+                  style: TextStyle(color: Color(0xFF475569), fontSize: 13)),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const OutletSetupScreen()),
+                  );
+                },
+                child: Text(
+                  'Register Now',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           // Desktop Mode Warning / Recommendation Banner for Mobile
           Container(
@@ -465,45 +491,20 @@ class _LoginScreenState extends State<LoginScreen>
         children: [
           Visibility(
             visible: kIsWeb || (!Platform.isAndroid && !Platform.isIOS),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedOutlet,
-                    decoration: const InputDecoration(
-                      labelText: 'Outlet Code',
-                      prefixIcon: Icon(Icons.storefront),
-                    ),
-                    items: AppConfig.outlets
-                        .map((o) => DropdownMenuItem(value: o, child: Text(o)))
-                        .toList(),
-                    onChanged: (v) {
-                      setState(() => _selectedOutlet = v);
-                      _loadOutletLogo();
-                    },
-                    validator: (v) => v == null ? 'Required' : null,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const OutletSetupScreen()),
-                    ).then((_) {
-                      setState(() {
-                        if (AppConfig.outlets.isNotEmpty) {
-                          _selectedOutlet = AppConfig.outlets.first;
-                        }
-                      });
-                      _loadOutletLogo();
-                    });
-                  },
-                  icon: const Icon(Icons.add_circle_outline),
-                  tooltip: 'Add new Outlet',
-                )
-              ],
+            child: DropdownButtonFormField<String>(
+              initialValue: _selectedOutlet,
+              decoration: const InputDecoration(
+                labelText: 'Outlet Code',
+                prefixIcon: Icon(Icons.storefront),
+              ),
+              items: AppConfig.outlets
+                  .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                  .toList(),
+              onChanged: (v) {
+                setState(() => _selectedOutlet = v);
+                _loadOutletLogo();
+              },
+              validator: (v) => v == null ? 'Required' : null,
             ),
           ),
           const SizedBox(height: 14),
@@ -626,10 +627,10 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
           const SizedBox(height: 12),
-          // Register Button (LinkedIn-style Outlined Pill Button)
+          // Register Button (High-Visibility High-Contrast Tonal Pill Button)
           SizedBox(
             width: double.infinity,
-            height: 46,
+            height: 48,
             child: OutlinedButton.icon(
               onPressed: () {
                 Navigator.push(
@@ -647,12 +648,19 @@ class _LoginScreenState extends State<LoginScreen>
               },
               style: OutlinedButton.styleFrom(
                 shape: const StadiumBorder(),
-                side: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.6)),
+                backgroundColor: const Color(0xFFEFF6FF), // High-visibility soft blue background
+                side: const BorderSide(color: Color(0xFF2563EB), width: 1.5), // Vibrant solid 1.5px border
+                foregroundColor: const Color(0xFF1D4ED8),
+                elevation: 0,
               ),
-              icon: const Icon(Icons.add_business_outlined, size: 18),
+              icon: const Icon(Icons.add_business_rounded, size: 20, color: Color(0xFF1D4ED8)),
               label: const Text(
                 'Register New Business / Outlet',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Color(0xFF1D4ED8),
+                ),
               ),
             ),
           ),
