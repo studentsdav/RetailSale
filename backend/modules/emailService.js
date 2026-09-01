@@ -111,6 +111,98 @@ function getTransporter(overridePort = null) {
     });
 }
 
+async function getGmailAccessToken(clientId, clientSecret, refreshToken) {
+    const postData = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token'
+    }).toString();
+
+    return new Promise((resolve, reject) => {
+        const req = https.request({
+            hostname: 'oauth2.googleapis.com',
+            path: '/token',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (res.statusCode >= 200 && res.statusCode < 300 && parsed.access_token) {
+                        resolve(parsed.access_token);
+                    } else {
+                        reject(new Error(`OAuth2 Token error (${res.statusCode}): ${parsed.error_description || parsed.error || data}`));
+                    }
+                } catch (e) {
+                    reject(new Error(`Failed to parse OAuth2 token response: ${e.message}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(postData);
+        req.end();
+    });
+}
+
+async function sendViaGmailOAuthApi(clientId, clientSecret, refreshToken, user, to, subject, htmlContent) {
+    console.log(`[GMAIL API] Fetching OAuth2 access token for ${user}...`);
+    const accessToken = await getGmailAccessToken(clientId, clientSecret, refreshToken);
+
+    const fromName = process.env.EMAIL_FROM || `System Admin <${user}>`;
+    const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
+    const messageParts = [
+        `From: ${fromName}`,
+        `To: ${to}`,
+        `Subject: ${utf8Subject}`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=utf-8',
+        '',
+        htmlContent
+    ];
+    const message = messageParts.join('\r\n');
+
+    const encodedMessage = Buffer.from(message)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+    const postData = JSON.stringify({ raw: encodedMessage });
+
+    return new Promise((resolve, reject) => {
+        const req = https.request({
+            hostname: 'gmail.googleapis.com',
+            path: '/gmail/v1/users/me/messages/send',
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    console.log(`[GMAIL API SUCCESS] Sent to ${to}: ${data}`);
+                    resolve(true);
+                } else {
+                    reject(new Error(`Gmail REST API error (${res.statusCode}): ${data}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(postData);
+        req.end();
+    });
+}
+
 async function sendViaResendApi(apiKey, to, subject, htmlContent) {
     const fromAddress = process.env.EMAIL_FROM || "Retail POS <onboarding@resend.dev>";
     const postData = JSON.stringify({
@@ -162,32 +254,25 @@ async function sendEmail(to, subject, htmlContent) {
     const secProtocolStr = isSecureBool ? 'SSL (465)' : (secEnv === 'NONE' ? 'NONE (25)' : 'STARTTLS (587)');
 
     const providerMode = (process.env.EMAIL_PROVIDER || process.env.EMAIL_DRIVER || '').toString().trim().toUpperCase();
-    const isGmailOAuthMode = providerMode === 'GMAIL' || providerMode === 'GMAIL_OAUTH' || providerMode === 'OAUTH';
-    const isResendMode = providerMode === 'RESEND' || process.env.USE_RESEND === 'true';
-    const isSmtpMode = providerMode === 'SMTP' || process.env.USE_SMTP === 'true';
 
     const gmailClientId = process.env.GMAIL_CLIENT_ID || process.env.GMAIL_OAUTH_CLIENT_ID;
     const gmailClientSecret = process.env.GMAIL_CLIENT_SECRET || process.env.GMAIL_OAUTH_CLIENT_SECRET;
     const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN || process.env.GMAIL_OAUTH_REFRESH_TOKEN;
 
+    const hasGmailOAuthKeys = Boolean(gmailClientId && gmailRefreshToken);
+    const isGmailOAuthMode = providerMode === 'GMAIL' || providerMode === 'GMAIL_OAUTH' || providerMode === 'OAUTH' || (hasGmailOAuthKeys && providerMode !== 'RESEND' && providerMode !== 'SMTP');
+    const isResendMode = (providerMode === 'RESEND' || process.env.USE_RESEND === 'true') && !hasGmailOAuthKeys;
+    const isSmtpMode = (providerMode === 'SMTP' || process.env.USE_SMTP === 'true') && !hasGmailOAuthKeys;
+
     console.log(`🔍 [EMAIL DEBUG] Target: ${to} | Provider Mode: ${providerMode || 'AUTO'} | User: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Host: ${emailHost}:${emailPort} (${secProtocolStr}) | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'} | Gmail OAuth: ${gmailRefreshToken ? 'YES' : 'NO'}`);
 
-    // MODE 1: GMAIL OAUTH2 ONLY (Does NOT request Resend or Password SMTP)
+    // MODE 1: GMAIL OAUTH2 ONLY (Uses HTTPS Port 443 REST API - Never blocks/hangs)
     if (isGmailOAuthMode) {
         if (!emailUser || !gmailClientId || !gmailRefreshToken) {
             throw new Error(`EMAIL_PROVIDER is set to ${providerMode}, but required variables (EMAIL_USER, GMAIL_CLIENT_ID, or GMAIL_REFRESH_TOKEN) are missing in environment variables.`);
         }
-        console.log(`[EMAIL MODE] Sending strictly via Gmail OAuth2 to ${to}...`);
-        const transporter = getTransporter();
-        if (!transporter) throw new Error("Could not initialize Gmail OAuth2 transporter.");
-        const info = await transporter.sendMail({
-            from: `"System Admin" <${emailUser}>`,
-            to: to,
-            subject: subject,
-            html: htmlContent
-        });
-        console.log(`[EMAIL OAUTH2 SUCCESS] Sent to ${to}: ${info.messageId}`);
-        return true;
+        console.log(`[EMAIL MODE] Sending strictly via Gmail OAuth2 REST API (Port 443) to ${to}...`);
+        return await sendViaGmailOAuthApi(gmailClientId, gmailClientSecret, gmailRefreshToken, emailUser, to, subject, htmlContent);
     }
 
     // MODE 2: RESEND ONLY (Does NOT request SMTP or Gmail OAuth2)
