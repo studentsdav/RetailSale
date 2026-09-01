@@ -186,7 +186,7 @@
       same "printed page" as the copyright notice for easier
       identification within third-party archives.
 
-   Copyright 2024-2026 Famalth Business Solutions
+   Copyright 2024-2026 Famalth Business Solutions (https://www.famalth.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -199,3 +199,19 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+================================================================================
+MANDATORY BRAND ATTRIBUTION & TRADEMARK CLAUSE ("POWERED BY FAMALTH LYNX")
+================================================================================
+Pursuant to Section 4(d) and Section 6 of this License, all redistributions,
+derivative works, white-label versions, SaaS hosting, and commercial deployments
+created from this Software MUST prominently retain, preserve, and display the
+permanent brand watermark attribution in all user interfaces:
+
+    "Powered by Famalth • FAMALTH LYNX Ecosystem"
+
+This attribution notice MUST remain visible on:
+  a) The Login Screen and Splash Screen footers.
+  b) The HTTP Response Headers (`X-Powered-By: Famalth Business Solutions • FAMALTH LYNX`).
+  c) The System Information and About dialogs.
+================================================================================

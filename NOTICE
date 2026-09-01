@@ -1,0 +1,21 @@
+FAMALTH LYNX Enterprise Retail & Restaurant ERP POS System
+Copyright 2024-2026 Famalth Business Solutions (https://www.famalth.com)
+
+This product includes software developed by Famalth Business Solutions.
+
+================================================================================
+MANDATORY BRAND ATTRIBUTION NOTICE ("POWERED BY FAMALTH LYNX")
+================================================================================
+Pursuant to Section 4(d) and Section 6 of the Apache License, Version 2.0,
+all redistributions, derivative works, white-label versions, SaaS hosting,
+and commercial deployments created from this Software MUST prominently retain,
+preserve, and display the permanent brand watermark attribution in all user
+interfaces:
+
+    "Powered by Famalth • FAMALTH LYNX Ecosystem"
+
+This attribution notice MUST remain visible on:
+  a) The Login Screen and Splash Screen footers.
+  b) The HTTP Response Headers (`X-Powered-By: Famalth Business Solutions • FAMALTH LYNX`).
+  c) The System Information and About dialogs.
+================================================================================
