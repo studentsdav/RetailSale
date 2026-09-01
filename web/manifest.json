@@ -1,11 +1,11 @@
 {
-    "name": "inventory",
-    "short_name": "inventory",
+    "name": "FAMALTH LYNX",
+    "short_name": "FAMALTH LYNX",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0D9488",
+    "theme_color": "#0D9488",
+    "description": "FAMALTH LYNX - Retailpos, billing, accounting, and reporting in one secure flow.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
