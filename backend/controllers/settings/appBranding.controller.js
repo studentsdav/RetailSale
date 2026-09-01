@@ -3,7 +3,7 @@ const audit = require('../../services/audit.service');
 const defaultBranding = {
     company_name: 'Famalth Technologies',
     product_name: 'Famalth Inventory',
-    support_email: 'support@famalth.com',
+    support_email: 'help@famalth.com',
     support_website: 'www.famalth.com',
     support_phone: '+91-00000-00000',
     open_source_notice:

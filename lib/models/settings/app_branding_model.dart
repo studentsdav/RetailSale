@@ -29,7 +29,7 @@ class AppBrandingModel {
     return const AppBrandingModel(
       companyName: 'Famalth Business Solutions',
       productName: 'FAMALTH LYNX',
-      supportEmail: 'support@famalth.com',
+      supportEmail: 'help@famalth.com',
       supportWebsite: 'www.famalth.com',
       supportPhone: '+91-00000-00000',
       openSourceNotice:

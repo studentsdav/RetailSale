@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
         support_email: {
             type: DataTypes.STRING(255),
             allowNull: false,
-            defaultValue: 'support@famalth.com'
+            defaultValue: 'help@famalth.com'
         },
         support_website: {
             type: DataTypes.STRING(255),

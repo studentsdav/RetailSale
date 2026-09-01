@@ -46104,7 +46104,7 @@ ddS(a){var s,r,q,p,o,n,m,l="Famalth Business Solutions",k=a.h(0,"company_name"),
 k=j.length===0
 s=k?l:j
 r=A.x6(a.h(0,"product_name"),"FAMALTH LYNX")
-q=A.x6(a.h(0,"support_email"),"support@famalth.com")
+q=A.x6(a.h(0,"support_email"),"help@famalth.com")
 p=A.x6(a.h(0,"support_website"),"www.famalth.com")
 o=A.x6(a.h(0,"support_phone"),"+91-00000-00000")
 n=A.x6(a.h(0,"open_source_notice"),u.n)

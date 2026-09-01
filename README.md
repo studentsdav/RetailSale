@@ -5,7 +5,7 @@ A comprehensive, production-ready ERP and Multi-Module POS solution built with a
 ---
 
 > [!NOTE]
-> This repository is actively maintained and sponsored by **Famalth Technologies**.
+> This repository is actively maintained and sponsored by **Famalth Technologies** ([www.famalth.com](https://www.famalth.com)).
 
 ---
 
