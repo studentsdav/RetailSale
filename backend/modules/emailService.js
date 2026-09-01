@@ -137,9 +137,40 @@ async function sendEmail(to, subject, htmlContent) {
     const isSecureBool = process.env.EMAIL_SECURE === 'true' || process.env.EMAIL_SECURE === '1' || emailPort === 465 || secEnv === 'SSL';
     const secProtocolStr = isSecureBool ? 'SSL (465)' : (secEnv === 'NONE' ? 'NONE (25)' : 'STARTTLS (587)');
 
-    console.log(`🔍 [EMAIL DEBUG] Target: ${to} | User: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Pass: ${emailPass ? 'YES (len=' + emailPass.length + ')' : 'NO'} | Host: ${emailHost}:${emailPort} | Security: ${secProtocolStr} | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'}`);
+    const providerMode = (process.env.EMAIL_PROVIDER || process.env.EMAIL_DRIVER || '').toString().trim().toUpperCase();
+    const useResendOnly = providerMode === 'RESEND' || process.env.USE_RESEND === 'true';
+    const useSmtpOnly = providerMode === 'SMTP' || process.env.USE_SMTP === 'true';
 
-    // 1. Primary: Standard Nodemailer SMTP using configured EMAIL_USER, EMAIL_PASS, EMAIL_HOST, EMAIL_SECURITY, EMAIL_SECURE
+    console.log(`🔍 [EMAIL DEBUG] Target: ${to} | Provider Mode: ${providerMode || 'AUTO'} | User: ${emailUser ? 'YES (' + emailUser + ')' : 'NO'} | Host: ${emailHost}:${emailPort} (${secProtocolStr}) | Resend Key: ${process.env.RESEND_API_KEY ? 'YES' : 'NO'}`);
+
+    // MODE 1: RESEND ONLY (Does NOT request SMTP)
+    if (useResendOnly) {
+        if (!process.env.RESEND_API_KEY) {
+            throw new Error("EMAIL_PROVIDER is set to RESEND, but RESEND_API_KEY is missing in environment variables.");
+        }
+        console.log(`[EMAIL MODE] Sending strictly via Resend API to ${to}...`);
+        return await sendViaResendApi(process.env.RESEND_API_KEY, to, subject, htmlContent);
+    }
+
+    // MODE 2: SMTP ONLY (Does NOT request Resend API)
+    if (useSmtpOnly) {
+        if (!emailUser || !emailPass) {
+            throw new Error("EMAIL_PROVIDER is set to SMTP, but EMAIL_USER / EMAIL_PASS credentials are missing.");
+        }
+        console.log(`[EMAIL MODE] Sending strictly via SMTP to ${to}...`);
+        const transporter = getTransporter();
+        if (!transporter) throw new Error("Could not initialize SMTP transporter.");
+        const info = await transporter.sendMail({
+            from: `"System Admin" <${emailUser}>`,
+            to: to,
+            subject: subject,
+            html: htmlContent
+        });
+        console.log(`[EMAIL SMTP SUCCESS] Sent to ${to}: ${info.messageId}`);
+        return true;
+    }
+
+    // MODE 3: AUTO / FALLBACK MODE (Tries SMTP first, falls back to Resend API if SMTP fails)
     if (emailUser && emailPass) {
         const transporter = getTransporter();
         if (transporter) {
@@ -177,7 +208,7 @@ async function sendEmail(to, subject, htmlContent) {
         }
     }
 
-    // 2. Secondary Option: Resend HTTP API if key is present
+    // Secondary Fallback if SMTP fails/not configured in AUTO mode
     if (process.env.RESEND_API_KEY) {
         try {
             return await sendViaResendApi(process.env.RESEND_API_KEY, to, subject, htmlContent);
@@ -187,7 +218,7 @@ async function sendEmail(to, subject, htmlContent) {
     }
 
     if (!emailUser || !emailPass) {
-        console.warn(`⚠️ [EMAIL NOTICE] SMTP credentials not configured (EMAIL_USER / EMAIL_PASS missing). Email to ${to} bypassed.`);
+        console.warn(`⚠️ [EMAIL NOTICE] SMTP credentials not configured. Email to ${to} bypassed.`);
         return false;
     }
 

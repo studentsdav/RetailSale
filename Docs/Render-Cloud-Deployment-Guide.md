@@ -68,13 +68,14 @@ In your Web Service, go to the **Environment** tab and add the following key-val
 
 | Variable | Example Value | Description |
 | :--- | :--- | :--- |
+| `EMAIL_PROVIDER` | `RESEND` | Explicit provider mode: **`RESEND`** (Resend API only), **`SMTP`** (SMTP only), or **`AUTO`** (SMTP primary + Resend fallback) |
 | `EMAIL_HOST` | `smtp.zoho.com` | SMTP Server Host (`smtp.zoho.com` / `smtp.gmail.com`) |
-| `EMAIL_PORT` | `465` | SMTP Port (`465` for SSL, `587` for STARTTLS, `25` for None) |
-| `EMAIL_SECURITY` | `SSL` | Security Protocol: **`SSL`** (465), **`STARTTLS`** (587), or **`NONE`** (25) |
-| `EMAIL_SECURE` | `true` | Set `true` for Port 465 Direct SSL, `false` for Port 587 STARTTLS |
+| `EMAIL_PORT` | `587` | SMTP Port (`465` for SSL, `587` for STARTTLS, `25` for None) |
+| `EMAIL_SECURITY` | `STARTTLS` | Security Protocol: **`SSL`** (465), **`STARTTLS`** (587), or **`NONE`** (25) |
+| `EMAIL_SECURE` | `false` | Set `true` for Port 465 SSL, `false` for Port 587 STARTTLS |
 | `EMAIL_USER` | `famalth.retail@famalth.com` | Primary SMTP Sender Email Address |
 | `EMAIL_PASS` | `abcd1234efgh` | SMTP App Password generated in Zoho Mail or Gmail Security |
-| `EMAIL_FROM` | `"Retail POS" <famalth.retail@famalth.com>` | Custom Sender Header Name & Address |
+| `EMAIL_FROM` | `"Retail POS" <noreply@famalth.com>` | Custom Sender Header Name & Address |
 | `EMAIL_TIMEOUT` | `20000` | SMTP Connection timeout in milliseconds (Default: 20000) |
 | `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails over Port 443 |
 

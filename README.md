@@ -30,14 +30,16 @@ Deploy the backend seamlessly on [Render.com](https://render.com) or custom clou
 | **Database** | `DATABASE_URL` | `postgresql://user:pass@dpg-xyz.render.com/dbname` | PostgreSQL connection string (Triggers Cloud SaaS mode) |
 | | `DB_SSL` | `true` | Required for SSL connection to Cloud PostgreSQL |
 | **Authentication**| `JWT_SECRET` | `super-secret-jwt-key-2026-prod` | Secret key used to sign JWT tokens |
-| **SMTP Email** | `EMAIL_HOST` | `smtp.zoho.com` | SMTP Server Host (`smtp.zoho.com` / `smtp.gmail.com`) |
+| **SMTP / Email** | `EMAIL_PROVIDER` | `RESEND` | Explicit provider mode: **`RESEND`** (Resend API only), **`SMTP`** (SMTP only), or **`AUTO`** (SMTP primary + Resend fallback) |
+| | `EMAIL_HOST` | `smtp.zoho.com` | SMTP Server Host (`smtp.zoho.com` / `smtp.gmail.com`) |
 | | `EMAIL_PORT` | `465` | SMTP Port (`465` for SSL, `587` for STARTTLS, `25` for None) |
 | | `EMAIL_SECURITY` | `SSL` | Security Protocol: **`SSL`** (465), **`STARTTLS`** (587), or **`NONE`** (25) |
-| | `EMAIL_SECURE` | `true` | Set `true` for Port 465 SSL, `false` for Port 587 STARTTLS |
+| | `EMAIL_SECURE` | `false` | Set `true` for Port 465 SSL, `false` for Port 587 STARTTLS |
 | | `EMAIL_USER` | `famalth.retail@famalth.com` | SMTP Sender Email Address |
 | | `EMAIL_PASS` | `abcd1234efgh` | Zoho / Gmail 16-character App Password |
 | | `EMAIL_TIMEOUT` | `20000` | Connection timeout in milliseconds (Default: 20000) |
 | **Resend API** | `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails over Port 443 |
+| | `EMAIL_FROM` | `"Retail POS" <noreply@famalth.com>` | Custom verified sender header name & email address |
 | **Google Sync** | `ROOT_FOLDER_ID` | `1A2B3C4D5E6F7G8H` | Google Drive Root Folder ID for automated backups |
 | | `SCRIPT_URL` | `https://script.google.com/macros/s/exec` | Google Apps Script Sync Endpoint URL |
 | | `SHEET_ID` | `1XYZ2ABC3DEF4GHI` | Google Sheets Sync Database Spreadsheet ID |

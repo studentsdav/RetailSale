@@ -67,7 +67,8 @@ exports.verifySetupOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: "This code has expired. Please request a new one." });
         }
 
-        if (storedRecord.otp !== otp.toString().trim()) {
+        const trimmedOtp = otp.toString().trim();
+        if (storedRecord.otp !== trimmedOtp) {
             return res.status(401).json({ success: false, message: "Invalid verification code." });
         }
 
