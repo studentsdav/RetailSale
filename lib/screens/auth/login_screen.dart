@@ -379,50 +379,10 @@ class _LoginScreenState extends State<LoginScreen>
                   ],
                 ),
                 const Spacer(),
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/images/famalth_lynx_logo.png',
-                          fit: BoxFit.cover,
-                          gaplessPlayback: true,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Text(
-                          'FAMALTH LYNX',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'One Intelligent Platform.',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                const FamalthWatermark(
+                  showVersion: true,
+                  color: Colors.white70,
+                  fontSize: 11,
                 ),
               ],
             ),
@@ -733,14 +693,6 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
           const SizedBox(height: 14),
-          const Spacer(),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: FamalthWatermark(
-              showVersion: true,
-              fontSize: 11,
-            ),
-          ),
         ],
       ),
     );
