@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import 'dart:io';
 import 'package:retailpos/core/api/api_client.dart';
 import 'package:retailpos/core/api/endpoints.dart';
@@ -229,6 +230,69 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  Widget _buildBrandLogoWidget({double size = 76}) {
+    if (_logoPath != null && _logoPath!.trim().isNotEmpty) {
+      final path = _logoPath!.trim();
+
+      // 1. Base64 Data URI or raw Base64 string
+      if (path.startsWith('data:image') || path.length > 200) {
+        try {
+          final base64Str = path.contains(',') ? path.split(',').last : path;
+          final bytes = base64Decode(base64Str.trim());
+          return ClipOval(
+            child: Image.memory(
+              bytes,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
+            ),
+          );
+        } catch (_) {}
+      }
+
+      // 2. HTTP / HTTPS URL
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        return ClipOval(
+          child: Image.network(
+            path,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
+          ),
+        );
+      }
+
+      // 3. Local File Path (non-web)
+      if (!kIsWeb && File(path).existsSync()) {
+        return ClipOval(
+          child: Image.file(
+            File(path),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
+          ),
+        );
+      }
+    }
+
+    // 4. Default Platform Mascot Logo (FAMALTH LYNX)
+    return _famalthMascotFallback(size);
+  }
+
+  Widget _famalthMascotFallback(double size) {
+    return ClipOval(
+      child: Image.asset(
+        'assets/images/famalth_lynx_logo.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -302,20 +366,7 @@ class _LoginScreenState extends State<LoginScreen>
                   child: CircleAvatar(
                     radius: 46,
                     backgroundColor: Colors.white,
-                    backgroundImage:
-                        _logoPath != null && File(_logoPath!).existsSync()
-                            ? FileImage(File(_logoPath!))
-                            : null,
-                    child: _logoPath == null || !File(_logoPath!).existsSync()
-                        ? ClipOval(
-                            child: Image.asset(
-                              'assets/images/famalth_lynx_logo.png',
-                              width: 76,
-                              height: 76,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : null,
+                    child: _buildBrandLogoWidget(size: 76),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -346,23 +397,6 @@ class _LoginScreenState extends State<LoginScreen>
                   ],
                 ),
                 const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Powered by @Famalth',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.92),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Since 2024',
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -387,20 +421,7 @@ class _LoginScreenState extends State<LoginScreen>
             child: CircleAvatar(
               radius: 40,
               backgroundColor: Colors.white,
-              backgroundImage:
-                  _logoPath != null && File(_logoPath!).existsSync()
-                      ? FileImage(File(_logoPath!))
-                      : null,
-              child: _logoPath == null || !File(_logoPath!).existsSync()
-                  ? ClipOval(
-                      child: Image.asset(
-                        'assets/images/famalth_lynx_logo.png',
-                        width: 68,
-                        height: 68,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  : null,
+              child: _buildBrandLogoWidget(size: 68),
             ),
           ),
           const SizedBox(height: 16),

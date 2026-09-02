@@ -1307,10 +1307,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               onPressed: () async {
                 await TokenStorage.clear();
                 _notificationTimer?.cancel();
-                Navigator.push(
+                if (!mounted) return;
+                Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(
-                        builder: (context) => const LoginScreen()));
+                        builder: (context) => const LoginScreen()),
+                    (route) => false);
               },
               icon: const Icon(Icons.logout)),
         ],
@@ -2895,7 +2897,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'onTap': () async {
           await TokenStorage.clear();
           _notificationTimer?.cancel();
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+          if (!mounted) return;
+          Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+              (route) => false);
         },
       },
       if (PermissionService.can('SYSTEM_UPDATE'))
@@ -4031,10 +4037,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                             );
                             await TokenStorage.clear();
                             _notificationTimer?.cancel();
-                            Navigator.push(
+                            if (!context.mounted) return;
+                            Navigator.pushAndRemoveUntil(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (context) => const LoginScreen()));
+                                    builder: (context) => const LoginScreen()),
+                                (route) => false);
                           } catch (e) {
                             setDialogState(() => loading = false);
 
