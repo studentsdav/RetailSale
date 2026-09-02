@@ -382,8 +382,8 @@ class _LoginScreenState extends State<LoginScreen>
                 Row(
                   children: [
                     Container(
-                      width: 38,
-                      height: 38,
+                      width: 36,
+                      height: 36,
                       padding: const EdgeInsets.all(2),
                       decoration: const BoxDecoration(
                         color: Colors.white,
@@ -393,6 +393,7 @@ class _LoginScreenState extends State<LoginScreen>
                         child: Image.asset(
                           'assets/images/famalth_lynx_logo.png',
                           fit: BoxFit.cover,
+                          gaplessPlayback: true,
                         ),
                       ),
                     ),

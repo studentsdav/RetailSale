@@ -36,7 +36,7 @@
     body {
       margin: 0;
       padding: 0;
-      background: radial-gradient(circle at center, #1E293B 0%, #0F172A 100%);
+      background-color: #F8FAFC;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       display: flex;
       justify-content: center;
@@ -44,78 +44,40 @@
       height: 100vh;
       width: 100vw;
       overflow: hidden;
-      color: #FFFFFF;
     }
     #loading-splash {
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      text-align: center;
       transition: opacity 0.4s ease-out;
     }
     .logo-badge {
-      width: 96px;
-      height: 96px;
+      width: 110px;
+      height: 110px;
       border-radius: 50%;
       background: #FFFFFF;
-      box-shadow: 0 0 40px rgba(13, 148, 136, 0.5), 0 10px 20px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 12px 35px -5px rgba(13, 148, 136, 0.35);
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 24px;
       padding: 4px;
-      animation: floatPulse 2.5s infinite ease-in-out;
+      animation: logoPulseGlow 1.8s infinite ease-in-out;
     }
     .logo-badge img {
-      width: 88px;
-      height: 88px;
+      width: 100px;
+      height: 100px;
       border-radius: 50%;
       object-fit: cover;
     }
-    .brand-name {
-      font-size: 24px;
-      font-weight: 800;
-      color: #FFFFFF;
-      letter-spacing: 2px;
-      margin-bottom: 8px;
-      text-transform: uppercase;
-    }
-    .brand-tag {
-      background: rgba(13, 148, 136, 0.18);
-      border: 1px solid rgba(45, 212, 191, 0.35);
-      color: #2DD4BF;
-      padding: 5px 16px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      margin-bottom: 28px;
-    }
-    .spinner-ring {
-      position: relative;
-      width: 36px;
-      height: 36px;
-      border: 3px solid rgba(255, 255, 255, 0.1);
-      border-top: 3px solid #2DD4BF;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    .footer-note {
-      position: absolute;
-      bottom: 28px;
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.45);
-      letter-spacing: 0.5px;
-      font-weight: 500;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    @keyframes floatPulse {
-      0%, 100% { transform: translateY(0) scale(1); }
-      50% { transform: translateY(-4px) scale(1.03); }
+    @keyframes logoPulseGlow {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 10px 30px -5px rgba(13, 148, 136, 0.3);
+      }
+      50% {
+        transform: scale(1.08);
+        box-shadow: 0 16px 45px 0px rgba(13, 148, 136, 0.5);
+      }
     }
   </style>
 </head>
@@ -124,10 +86,6 @@
     <div class="logo-badge">
       <img src="favicon.png" alt="FAMALTH LYNX">
     </div>
-    <div class="brand-name">FAMALTH LYNX</div>
-    <div class="brand-tag">Enterprise Management System</div>
-    <div class="spinner-ring"></div>
-    <div class="footer-note">Powered by Famalth • FAMALTH LYNX Ecosystem</div>
   </div>
 
   <script src="flutter_bootstrap.js" async></script>

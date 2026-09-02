@@ -21,41 +21,16 @@ class FamalthWatermark extends StatelessWidget {
 
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: fontSize + 6,
-              height: fontSize + 6,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/images/famalth_lynx_logo.png',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Icon(
-                    Icons.verified_user_outlined,
-                    size: fontSize + 2,
-                    color: textColor.withOpacity(0.8),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              AppBrand.permanentWatermark,
-              style: TextStyle(
-                color: textColor,
-                fontSize: fontSize,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
+        Text(
+          AppBrand.permanentWatermark,
+          style: TextStyle(
+            color: textColor,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
         ),
         if (showVersion) ...[
           const SizedBox(height: 3),
