@@ -13,6 +13,7 @@ import 'package:retailpos/screens/dashboard/system_update_screen.dart';
 import 'package:retailpos/screens/reports/return_report_screen.dart';
 import 'package:retailpos/screens/reports/cashier_handover_report_screen.dart';
 import 'package:retailpos/screens/settings/settings_screen.dart';
+import 'package:retailpos/widgets/brand_logo_widget.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
@@ -4254,66 +4255,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   Widget _buildDrawerHeaderLogoWidget(String? logoPath, double size) {
-    if (logoPath != null && logoPath.trim().isNotEmpty) {
-      final path = logoPath.trim();
-
-      // 1. Base64 Data URI or raw Base64 string
-      if (path.startsWith('data:image') || path.length > 200) {
-        try {
-          final base64Str = path.contains(',') ? path.split(',').last : path;
-          final bytes = base64Decode(base64Str.trim());
-          return ClipOval(
-            child: Image.memory(
-              bytes,
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _famalthMascotAvatar(size),
-            ),
-          );
-        } catch (_) {}
-      }
-
-      // 2. HTTP / HTTPS URL
-      if (path.startsWith('http://') || path.startsWith('https://')) {
-        return ClipOval(
-          child: Image.network(
-            path,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _famalthMascotAvatar(size),
-          ),
-        );
-      }
-
-      // 3. Local File Path (non-web)
-      if (!kIsWeb && File(path).existsSync()) {
-        return ClipOval(
-          child: Image.file(
-            File(path),
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _famalthMascotAvatar(size),
-          ),
-        );
-      }
-    }
-
-    // 4. Default Platform Mascot Logo (FAMALTH LYNX)
-    return _famalthMascotAvatar(size);
-  }
-
-  Widget _famalthMascotAvatar(double size) {
-    return ClipOval(
-      child: Image.asset(
-        'assets/images/famalth_lynx_logo.png',
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-      ),
-    );
+    return BrandLogoWidget(logoPath: logoPath, size: size);
   }
 }
 

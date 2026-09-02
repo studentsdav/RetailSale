@@ -14,6 +14,8 @@ import 'package:retailpos/widgets/famalth_watermark.dart';
 import 'package:retailpos/screens/settings/outlet_setup_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retailpos/widgets/brand_logo_widget.dart';
 import '../../controllers/security/password_recovery_controller.dart';
 import '../../utils/branding_storage.dart';
 import '../../core/settings/local_preferences.dart';
@@ -71,19 +73,43 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _loadOutletLogo() async {
     String mod = 'ALL';
+    String? fetchedPath = _logoPath;
+
     if (_selectedOutlet != null) {
-      final path = await BrandingStorage.getLogoPathForOutlet(_selectedOutlet!);
-      if (mounted) setState(() => _logoPath = path);
+      final localPath = await BrandingStorage.getLogoPathForOutlet(_selectedOutlet!);
+      if (localPath != null && localPath.isNotEmpty) {
+        fetchedPath = localPath;
+      }
 
       try {
-        final res = await ApiClient.post(
-          ApiEndpoints.checkOutlet,
-          {'outlet_code': _selectedOutlet!},
+        final res = await ApiClient.get(
+          '${ApiEndpoints.propertyInfo}?outlet_code=$_selectedOutlet',
         );
         if (res != null && res['success'] == true && res['data'] != null) {
-          mod = res['data']['business_module'] ?? 'ALL';
+          final data = res['data'];
+          mod = data['business_module'] ?? data['outlet_module'] ?? 'ALL';
+          final serverLogo = data['logo_path']?.toString();
+          if (serverLogo != null && serverLogo.trim().isNotEmpty) {
+            fetchedPath = serverLogo.trim();
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('brand_logo_$_selectedOutlet', fetchedPath!);
+          }
         }
-      } catch (_) {}
+      } catch (_) {
+        try {
+          final res = await ApiClient.post(
+            ApiEndpoints.checkOutlet,
+            {'outlet_code': _selectedOutlet!},
+          );
+          if (res != null && res['success'] == true && res['data'] != null) {
+            mod = res['data']['business_module'] ?? 'ALL';
+            final serverLogo = res['data']['logo_path']?.toString();
+            if (serverLogo != null && serverLogo.trim().isNotEmpty) {
+              fetchedPath = serverLogo.trim();
+            }
+          }
+        } catch (_) {}
+      }
     }
 
     if (mod == 'ALL') {
@@ -93,10 +119,16 @@ class _LoginScreenState extends State<LoginScreen>
 
     final branding = await LocalPreferences.getAppBranding();
     if (!mounted) return;
-    setState(() {
-      _activeModule = mod;
-      _bgCoverImagePath = branding.homeBgImagePath;
-    });
+
+    if (_logoPath != fetchedPath ||
+        _activeModule != mod ||
+        _bgCoverImagePath != branding.homeBgImagePath) {
+      setState(() {
+        _logoPath = fetchedPath;
+        _activeModule = mod;
+        _bgCoverImagePath = branding.homeBgImagePath;
+      });
+    }
   }
 
   @override
@@ -231,66 +263,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildBrandLogoWidget({double size = 76}) {
-    if (_logoPath != null && _logoPath!.trim().isNotEmpty) {
-      final path = _logoPath!.trim();
-
-      // 1. Base64 Data URI or raw Base64 string
-      if (path.startsWith('data:image') || path.length > 200) {
-        try {
-          final base64Str = path.contains(',') ? path.split(',').last : path;
-          final bytes = base64Decode(base64Str.trim());
-          return ClipOval(
-            child: Image.memory(
-              bytes,
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
-            ),
-          );
-        } catch (_) {}
-      }
-
-      // 2. HTTP / HTTPS URL
-      if (path.startsWith('http://') || path.startsWith('https://')) {
-        return ClipOval(
-          child: Image.network(
-            path,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
-          ),
-        );
-      }
-
-      // 3. Local File Path (non-web)
-      if (!kIsWeb && File(path).existsSync()) {
-        return ClipOval(
-          child: Image.file(
-            File(path),
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
-          ),
-        );
-      }
-    }
-
-    // 4. Default Platform Mascot Logo (FAMALTH LYNX)
-    return _famalthMascotFallback(size);
-  }
-
-  Widget _famalthMascotFallback(double size) {
-    return ClipOval(
-      child: Image.asset(
-        'assets/images/famalth_lynx_logo.png',
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-      ),
-    );
+    return BrandLogoWidget(logoPath: _logoPath, size: size);
   }
 
   @override

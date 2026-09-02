@@ -3,6 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/brand_logo_widget.dart';
+import '../core/api/api_client.dart';
+import '../core/api/endpoints.dart';
 import '../utils/branding_storage.dart';
 import '../core/auth/token_storage.dart';
 import '../core/config/app_brand.dart';
@@ -37,8 +41,30 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _loadClientLogo() async {
     try {
-      final logo = await BrandingStorage.getCurrentLogoPath();
-      if (mounted) {
+      String? logo = await BrandingStorage.getCurrentLogoPath();
+
+      if (logo == null || logo.trim().isEmpty) {
+        if (AppConfig.outlets.isNotEmpty) {
+          final outletCode = AppConfig.outlets.first;
+          logo = await BrandingStorage.getLogoPathForOutlet(outletCode);
+
+          try {
+            final res = await ApiClient.get(
+              '${ApiEndpoints.propertyInfo}?outlet_code=$outletCode',
+            );
+            if (res != null && res['success'] == true && res['data'] != null) {
+              final serverLogo = res['data']['logo_path']?.toString();
+              if (serverLogo != null && serverLogo.trim().isNotEmpty) {
+                logo = serverLogo.trim();
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('brand_logo_$outletCode', logo);
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (mounted && _clientLogoPath != logo) {
         setState(() {
           _clientLogoPath = logo;
         });
@@ -47,55 +73,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Widget _buildSplashLogo(double size) {
-    if (_clientLogoPath != null && _clientLogoPath!.trim().isNotEmpty) {
-      final path = _clientLogoPath!.trim();
-
-      // 1. Base64 Data URI or raw Base64 string
-      if (path.startsWith('data:image') || path.length > 200) {
-        try {
-          final base64Str = path.contains(',') ? path.split(',').last : path;
-          final bytes = base64Decode(base64Str.trim());
-          return ClipOval(
-            child: Image.memory(
-              bytes,
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
-            ),
-          );
-        } catch (_) {}
-      }
-
-      // 2. HTTP / HTTPS URL
-      if (path.startsWith('http://') || path.startsWith('https://')) {
-        return ClipOval(
-          child: Image.network(
-            path,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
-          ),
-        );
-      }
-
-      // 3. Local File Path (non-web)
-      if (!kIsWeb && File(path).existsSync()) {
-        return ClipOval(
-          child: Image.file(
-            File(path),
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
-          ),
-        );
-      }
-    }
-
-    // 4. Fallback Platform Mascot Logo (FAMALTH LYNX)
-    return _famalthMascotFallback(size);
+    return BrandLogoWidget(logoPath: _clientLogoPath, size: size);
   }
 
   Widget _famalthMascotFallback(double size) {
