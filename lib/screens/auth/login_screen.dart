@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import 'dart:io';
 import 'package:retailpos/core/api/api_client.dart';
 import 'package:retailpos/core/api/endpoints.dart';
@@ -274,7 +275,6 @@ class _LoginScreenState extends State<LoginScreen>
             message,
             textAlign: TextAlign.center,
           ),
-          actionsAlignment: MainAxisAlignment.center,
           actions: [
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -284,6 +284,41 @@ class _LoginScreenState extends State<LoginScreen>
         );
       },
     );
+  }
+
+  ImageProvider? _getHeroBgImageProvider(String? rawPath) {
+    if (rawPath == null || rawPath.trim().isEmpty) return null;
+    final path = rawPath.trim();
+
+    // 1. Base64
+    if (path.startsWith('data:image') ||
+        path.contains(';base64,') ||
+        (path.length > 200 && !path.contains(' '))) {
+      try {
+        final base64Str = path.contains(',') ? path.split(',').last : path;
+        final bytes = base64Decode(base64Str.trim());
+        return MemoryImage(bytes);
+      } catch (_) {}
+    }
+
+    // 2. Full Network URL
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return NetworkImage(path);
+    }
+
+    // 3. Relative Server Path
+    if (path.startsWith('/') || path.startsWith('uploads/')) {
+      final baseUrl = AppConfig.baseUrl.replaceAll(RegExp(r'/$'), '');
+      final fullUrl = path.startsWith('/') ? '$baseUrl$path' : '$baseUrl/$path';
+      return NetworkImage(fullUrl);
+    }
+
+    // 4. Native File Path
+    if (!kIsWeb && File(path).existsSync()) {
+      return FileImage(File(path));
+    }
+
+    return null;
   }
 
   Widget _buildBrandLogoWidget({double size = 76}) {
@@ -349,11 +384,9 @@ class _LoginScreenState extends State<LoginScreen>
                 end: Alignment.bottomRight,
                 colors: heroColors,
               ),
-              image: _bgCoverImagePath != null &&
-                      _bgCoverImagePath!.isNotEmpty &&
-                      File(_bgCoverImagePath!).existsSync()
+              image: _getHeroBgImageProvider(_bgCoverImagePath) != null
                   ? DecorationImage(
-                      image: FileImage(File(_bgCoverImagePath!)),
+                      image: _getHeroBgImageProvider(_bgCoverImagePath)!,
                       fit: BoxFit.cover,
                       colorFilter: ColorFilter.mode(
                         Colors.black.withOpacity(0.45),
