@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:intl/intl.dart';
 
 import 'package:flutter/material.dart';
@@ -3247,28 +3248,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                             ),
                             child: CircleAvatar(
                               radius: 24,
-                              backgroundColor: theme.colorScheme.primary,
-                              backgroundImage: (!kIsWeb &&
-                                      property?.logoPath != null &&
-                                      property!.logoPath!.isNotEmpty &&
-                                      File(property!.logoPath!).existsSync())
-                                  ? FileImage(File(property!.logoPath!))
-                                  : null,
-                              child: (!kIsWeb &&
-                                      property?.logoPath != null &&
-                                      property!.logoPath!.isNotEmpty &&
-                                      File(property!.logoPath!).existsSync())
-                                  ? null
-                                  : userName.isNotEmpty
-                                      ? Text(
-                                          userName.substring(0, 1).toUpperCase(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                          ),
-                                        )
-                                      : const Icon(Icons.person, color: Colors.white),
+                              backgroundColor: Colors.white,
+                              child: _buildDrawerHeaderLogoWidget(property?.logoPath, 48),
                             ),
                           ),
                           Positioned(
@@ -4268,6 +4249,69 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           const SizedBox(height: 12),
           Expanded(child: child),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDrawerHeaderLogoWidget(String? logoPath, double size) {
+    if (logoPath != null && logoPath.trim().isNotEmpty) {
+      final path = logoPath.trim();
+
+      // 1. Base64 Data URI or raw Base64 string
+      if (path.startsWith('data:image') || path.length > 200) {
+        try {
+          final base64Str = path.contains(',') ? path.split(',').last : path;
+          final bytes = base64Decode(base64Str.trim());
+          return ClipOval(
+            child: Image.memory(
+              bytes,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _famalthMascotAvatar(size),
+            ),
+          );
+        } catch (_) {}
+      }
+
+      // 2. HTTP / HTTPS URL
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        return ClipOval(
+          child: Image.network(
+            path,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _famalthMascotAvatar(size),
+          ),
+        );
+      }
+
+      // 3. Local File Path (non-web)
+      if (!kIsWeb && File(path).existsSync()) {
+        return ClipOval(
+          child: Image.file(
+            File(path),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _famalthMascotAvatar(size),
+          ),
+        );
+      }
+    }
+
+    // 4. Default Platform Mascot Logo (FAMALTH LYNX)
+    return _famalthMascotAvatar(size);
+  }
+
+  Widget _famalthMascotAvatar(double size) {
+    return ClipOval(
+      child: Image.asset(
+        'assets/images/famalth_lynx_logo.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
       ),
     );
   }

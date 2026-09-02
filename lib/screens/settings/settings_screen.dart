@@ -9,6 +9,7 @@ import '../../controllers/settings/theme_controller.dart';
 import '../../controllers/settings/ui_preferences_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/app_brand.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/settings/local_preferences.dart';
@@ -1602,14 +1603,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       _settingRow(
-                        title: 'Powered By Tagline',
-                        description: 'Footer attribution copyright label printed on reports',
+                        title: 'Powered By Tagline (Locked)',
+                        description: 'Mandatory brand attribution tag (Non-editable as per License terms)',
                         control: SizedBox(
                           width: 280,
                           child: TextFormField(
-                            key: ValueKey('branding-powered-${_branding.poweredByLabel}'),
-                            initialValue: _branding.poweredByLabel,
-                            onChanged: (value) => _branding = _branding.copyWith(poweredByLabel: value),
+                            readOnly: true,
+                            enabled: false,
+                            initialValue: AppBrand.permanentWatermark,
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: const Color(0xFFF1F5F9),
+                              suffixIcon: const Icon(Icons.lock_outline, size: 18, color: Colors.blue),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: Colors.blue.withOpacity(0.3)),
+                              ),
+                            ),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Color(0xFF1E293B),
+                            ),
                           ),
                         ),
                       ),

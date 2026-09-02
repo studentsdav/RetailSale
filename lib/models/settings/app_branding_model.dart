@@ -66,10 +66,7 @@ class AppBrandingModel {
         json['open_source_notice'],
         defaults.openSourceNotice,
       ),
-      poweredByLabel: _valueOrDefault(
-        json['powered_by_label'],
-        'Powered by ${companyName.isEmpty ? defaults.companyName : companyName}',
-      ),
+      poweredByLabel: 'Powered by Famalth • FAMALTH LYNX Ecosystem',
       themeKey: _valueOrDefault(json['theme_key'], defaults.themeKey),
       homeBgImagePath: _valueOrDefault(json['home_bg_image_path'], defaults.homeBgImagePath),
       homeBgImageSize: _valueOrDefault(json['home_bg_image_size'], defaults.homeBgImageSize),
