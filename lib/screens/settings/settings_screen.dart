@@ -1062,7 +1062,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         control: SizedBox(
                           width: 280,
                           child: DropdownButtonFormField<String>(
-                            value: themeCtrl.themeKey,
+                            value: AppTheme.availableThemes.containsKey(themeCtrl.themeKey)
+                                ? themeCtrl.themeKey
+                                : AppTheme.famalthClassic,
                             items: AppTheme.availableThemes.entries
                                 .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
                                 .toList(),

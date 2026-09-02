@@ -48,6 +48,7 @@ class AppTheme {
   AppTheme._();
 
   static const famalthClassic = 'famalth_classic';
+  static const famalthBlack = 'famalth_black';
   static const famalthOcean = 'famalth_ocean';
   static const famalthForest = 'famalth_forest';
   static const microsoftFluent = 'microsoft_fluent';
@@ -59,10 +60,49 @@ class AppTheme {
     microsoftFluent: 'Microsoft Fluent (Enterprise)',
   };
 
+  static List<Color> getHeroGradientColors(String key) {
+    switch (key) {
+      case famalthOcean:
+        return const [
+          Color(0xFF0F4C81),
+          Color(0xFF1B4965),
+          Color(0xFF2A9D8F),
+        ];
+      case famalthForest:
+        return const [
+          Color(0xFF1F6E43),
+          Color(0xFF145233),
+          Color(0xFF2D6A4F),
+        ];
+      case microsoftFluent:
+        return const [
+          Color(0xFF0078D4),
+          Color(0xFF106EBE),
+          Color(0xFF005A9E),
+        ];
+      case famalthClassic:
+      case 'famalth_lynx':
+      default:
+        return const [
+          Color(0xFF0B5CAD), // Corporate Blue
+          Color(0xFF0F4C81), // Deep Royal Blue
+          Color(0xFF1D4ED8), // Vibrant Accent Blue
+        ];
+    }
+  }
+
   static ThemeData getTheme(String key, {bool isDark = false}) {
-    final Brightness brightness = isDark ? Brightness.dark : Brightness.light;
+    final Brightness brightness = (key == famalthBlack || isDark)
+        ? Brightness.dark
+        : Brightness.light;
 
     switch (key) {
+      case famalthBlack:
+        return _buildTheme(
+          seed: const Color(0xFF38BDF8), // Midnight Sky Primary
+          secondary: const Color(0xFF818CF8),
+          brightness: Brightness.dark,
+        );
       case microsoftFluent:
         return _buildTheme(
           seed: const Color(0xFF0078D4), // Microsoft Communication Blue
@@ -83,6 +123,7 @@ class AppTheme {
           brightness: brightness,
         );
       case famalthClassic:
+      case 'famalth_lynx':
       default:
         return _buildTheme(
           seed: const Color(0xFF0B5CAD),

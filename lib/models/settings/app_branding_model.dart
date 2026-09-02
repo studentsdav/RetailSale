@@ -35,7 +35,7 @@ class AppBrandingModel {
       openSourceNotice:
           'Famalth Business Solutions branding is applied across the product. Third-party packages remain available under their respective open-source licenses.',
       poweredByLabel: 'Powered by FAMALTH LYNX Ecosystem',
-      themeKey: 'famalth_lynx',
+      themeKey: 'famalth_classic',
       homeBgImagePath: '',
       homeBgImageSize: 'Cover',
       homeThemeStyle: 'Default',

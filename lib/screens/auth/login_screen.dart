@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:convert';
 import 'dart:io';
 import 'package:retailpos/core/api/api_client.dart';
 import 'package:retailpos/core/api/endpoints.dart';
@@ -13,12 +12,17 @@ import 'package:retailpos/core/navigation/home_route_helper.dart';
 import 'package:retailpos/widgets/famalth_watermark.dart';
 import 'package:retailpos/screens/settings/outlet_setup_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:http/http.dart' as http;
 
+import 'package:provider/provider.dart';
+import '../../controllers/settings/theme_controller.dart';
+import '../../core/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retailpos/widgets/brand_logo_widget.dart';
 import '../../controllers/security/password_recovery_controller.dart';
 import '../../utils/branding_storage.dart';
 import '../../core/settings/local_preferences.dart';
+import '../../core/config/server_check.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -42,17 +46,20 @@ class _LoginScreenState extends State<LoginScreen>
   String? _bgCoverImagePath;
 
   late final AnimationController _logoCtrl;
-  late final Animation<double> _logoAnim;
 
   bool _isloading = false;
   String currentVersion = "";
 
   String _activeModule = 'ALL';
 
+  HealthResponse? _serverHealth;
+  bool _isCheckingServer = false;
+
   @override
   void initState() {
     super.initState();
     getVersion();
+    _checkServerHealth();
 
     if (AppConfig.outlets.isNotEmpty) {
       _selectedOutlet = AppConfig.outlets.first;
@@ -61,8 +68,25 @@ class _LoginScreenState extends State<LoginScreen>
 
     _logoCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 800));
-    _logoAnim = CurvedAnimation(parent: _logoCtrl, curve: Curves.elasticOut);
     _logoCtrl.forward();
+  }
+
+  Future<void> _checkServerHealth() async {
+    if (!mounted) return;
+    setState(() => _isCheckingServer = true);
+    try {
+      final res = await checkServer();
+      if (mounted) {
+        setState(() {
+          _serverHealth = res;
+          _isCheckingServer = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isCheckingServer = false);
+      }
+    }
   }
 
   void getVersion() async {
@@ -92,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen>
           if (serverLogo != null && serverLogo.trim().isNotEmpty) {
             fetchedPath = serverLogo.trim();
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('brand_logo_$_selectedOutlet', fetchedPath!);
+            await prefs.setString('brand_logo_$_selectedOutlet', fetchedPath);
           }
         }
       } catch (_) {
@@ -301,20 +325,29 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  bool get _shouldShowServerBadge {
+    if (kIsWeb) return false;
+    return Platform.isWindows;
+  }
+
   Widget _desktopLayout() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themeKey = context.watch<ThemeController>().themeKey;
+    final heroColors = AppTheme.getHeroGradientColors(themeKey);
+
     return SizedBox(
-      height: 580,
+      height: 610,
       child: Row(
         children: [
+          // ==================== LEFT HERO PANEL ====================
           Container(
             width: 420,
             padding: const EdgeInsets.all(36),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primary,
-                  Theme.of(context).colorScheme.secondary,
-                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: heroColors,
               ),
               image: _bgCoverImagePath != null &&
                       _bgCoverImagePath!.isNotEmpty &&
@@ -323,7 +356,7 @@ class _LoginScreenState extends State<LoginScreen>
                       image: FileImage(File(_bgCoverImagePath!)),
                       fit: BoxFit.cover,
                       colorFilter: ColorFilter.mode(
-                        Colors.black.withOpacity(0.35),
+                        Colors.black.withOpacity(0.45),
                         BlendMode.darken,
                       ),
                     )
@@ -334,14 +367,20 @@ class _LoginScreenState extends State<LoginScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Logo Halo Container
                 Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.12),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                      BoxShadow(
+                        color: const Color(0xFF38BDF8).withOpacity(0.18),
+                        blurRadius: 24,
+                        spreadRadius: 2,
                       ),
                     ],
                   ),
@@ -351,46 +390,88 @@ class _LoginScreenState extends State<LoginScreen>
                     child: _buildBrandLogoWidget(size: 76),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 22),
                 Text(
                   AppBrand.productName,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold),
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'POS, billing, accounting, and reporting in one secure flow.',
+                  'POS, billing, accounting, and multi-outlet reporting in one secure flow.',
                   style: TextStyle(
-                    color: Colors.white70,
-                    height: 1.4,
-                    fontSize: 14,
+                    color: Color(0xFF94A3B8),
+                    height: 1.45,
+                    fontSize: 13.5,
                   ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
                 Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: const [
-                    _HeroPill(label: 'Enterprise Ready'),
-                    _HeroPill(label: 'Fast Billing'),
-                    _HeroPill(label: 'Live Stock'),
+                    _HeroPill(icon: Icons.bolt_rounded, label: 'Fast POS Billing'),
+                    _HeroPill(icon: Icons.cloud_sync_rounded, label: 'Cloud & Offline Sync'),
+                    _HeroPill(icon: Icons.security_rounded, label: 'Enterprise Security'),
                   ],
                 ),
                 const Spacer(),
                 const FamalthWatermark(
                   showVersion: true,
-                  color: Colors.white70,
+                  color: Color(0xFF94A3B8),
                   fontSize: 11,
                 ),
               ],
             ),
           ),
+
+          // ==================== RIGHT FORM PANEL ====================
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: _loginForm(),
+              padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 28),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with Server Connectivity Badge
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Sign In',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Access your store terminal & workstation',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_shouldShowServerBadge) _buildServerStatusBadge(),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    _loginForm(),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -399,43 +480,54 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _mobileLayout() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       child: Column(
         children: [
+          if (_shouldShowServerBadge)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _buildServerStatusBadge(isCompact: true),
+              ],
+            ),
+          const SizedBox(height: 8),
           Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
             child: CircleAvatar(
-              radius: 40,
+              radius: 38,
               backgroundColor: Colors.white,
-              child: _buildBrandLogoWidget(size: 68),
+              child: _buildBrandLogoWidget(size: 64),
             ),
           ),
-          const SizedBox(height: 16),
-          Text(AppBrand.productName,
-              style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          const Text(
-            'FAMALTH LYNX - POS, billing, accounting, and reporting in one secure flow.',
+          const SizedBox(height: 14),
+          Text(
+            AppBrand.productName,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'FAMALTH LYNX - Cloud & Offline POS Ecosystem',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF64748B), height: 1.35),
+            style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), height: 1.35, fontSize: 13),
           ),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('New to FAMALTH LYNX? ',
-                  style: TextStyle(color: Color(0xFF475569), fontSize: 13)),
+              Text('New to FAMALTH LYNX? ',
+                  style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569), fontSize: 13)),
               GestureDetector(
                 onTap: () {
                   Navigator.push(
@@ -457,45 +549,38 @@ class _LoginScreenState extends State<LoginScreen>
             ],
           ),
           const SizedBox(height: 16),
-          // Desktop Mode Warning / Recommendation Banner for Mobile
+          // Mobile recommendation banner
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFFBEB),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.6)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.amber.withOpacity(0.08),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: isDark ? const Color(0xFFF59E0B) : const Color(0xFFF59E0B).withOpacity(0.5)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.desktop_windows_outlined, color: Color(0xFFD97706), size: 24),
-                const SizedBox(width: 10),
+                const Icon(Icons.desktop_windows_outlined, color: Color(0xFFD97706), size: 20),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text(
-                        'Desktop Mode Required for Best POS Experience',
+                        'Desktop Mode Recommended for POS Terminals',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF92400E),
+                          color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF92400E),
                         ),
                       ),
-                      SizedBox(height: 3),
+                      const SizedBox(height: 2),
                       Text(
-                        'This application is optimized for Desktop PC & POS terminals. On mobile browsers, please turn on "Desktop Site" in your browser menu.',
+                        'For best billing experience on mobile browsers, switch to "Desktop Site".',
                         style: TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFFB45309),
-                          height: 1.35,
+                          fontSize: 10.5,
+                          color: isDark ? const Color(0xFFFCD34D) : const Color(0xFFB45309),
+                          height: 1.3,
                         ),
                       ),
                     ],
@@ -504,14 +589,311 @@ class _LoginScreenState extends State<LoginScreen>
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           _loginForm(),
         ],
       ),
     );
   }
 
+  Widget _buildServerStatusBadge({bool isCompact = false}) {
+    if (!_shouldShowServerBadge) return const SizedBox.shrink();
+
+    final isChecking = _isCheckingServer;
+    final isOnline = _serverHealth?.isRunning == true;
+    final isLocal = AppConfig.isLocalServer;
+    final isLan = !isLocal && !kIsWeb && (AppConfig.baseUrl.contains('192.168.') || AppConfig.baseUrl.contains('10.'));
+
+    Color badgeBg;
+    Color badgeBorder;
+    Color dotColor;
+    Color textColor;
+    String label;
+    IconData icon;
+
+    if (isChecking) {
+      badgeBg = const Color(0xFFF1F5F9);
+      badgeBorder = const Color(0xFFCBD5E1);
+      dotColor = const Color(0xFF94A3B8);
+      textColor = const Color(0xFF475569);
+      label = 'Checking...';
+      icon = Icons.sync;
+    } else if (isOnline) {
+      badgeBg = const Color(0xFFECFDF5);
+      badgeBorder = const Color(0xFFA7F3D0);
+      dotColor = const Color(0xFF10B981);
+      textColor = const Color(0xFF065F46);
+      if (isLocal) {
+        label = isCompact ? 'Local POS' : 'Local Engine • Online';
+        icon = Icons.computer;
+      } else if (isLan) {
+        label = isCompact ? 'LAN Server' : 'LAN Server • Online';
+        icon = Icons.lan_outlined;
+      } else {
+        label = isCompact ? 'Cloud Sync' : 'Cloud Server • Connected';
+        icon = Icons.cloud_done_outlined;
+      }
+    } else {
+      badgeBg = const Color(0xFFFEF2F2);
+      badgeBorder = const Color(0xFFFECACA);
+      dotColor = const Color(0xFFEF4444);
+      textColor = const Color(0xFF991B1B);
+      label = isCompact ? 'Offline' : 'Server Offline • Click to Fix';
+      icon = Icons.cloud_off_outlined;
+    }
+
+    return Tooltip(
+      message: 'Active API: ${AppConfig.baseUrl}\nClick to test or change server',
+      child: InkWell(
+        onTap: () => _showServerConfigDialog(context),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: isCompact ? 10 : 12, vertical: isCompact ? 5 : 6),
+          decoration: BoxDecoration(
+            color: badgeBg,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: badgeBorder, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isChecking)
+                const SizedBox(
+                  width: 10,
+                  height: 10,
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF64748B)),
+                )
+              else
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: dotColor.withOpacity(0.4),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(width: 7),
+              Icon(icon, size: 14, color: textColor),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: isCompact ? 11 : 12,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.tune_rounded, size: 12, color: textColor.withOpacity(0.7)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showServerConfigDialog(BuildContext context) async {
+    final urlCtrl = TextEditingController(text: AppConfig.baseUrl);
+    bool isTesting = false;
+    String? testMsg;
+    bool? testSuccess;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> runTest(String testUrl) async {
+              setDialogState(() {
+                isTesting = true;
+                testMsg = null;
+                testSuccess = null;
+              });
+              try {
+                final uri = Uri.parse('$testUrl/health');
+                final res = await http.get(uri).timeout(const Duration(seconds: 4));
+                if (res.statusCode == 200) {
+                  setDialogState(() {
+                    testSuccess = true;
+                    testMsg = 'Connected successfully! Server is healthy.';
+                  });
+                } else {
+                  setDialogState(() {
+                    testSuccess = false;
+                    testMsg = 'Server responded with status ${res.statusCode}.';
+                  });
+                }
+              } catch (e) {
+                setDialogState(() {
+                  testSuccess = false;
+                  testMsg = 'Failed to connect: Server unreachable or offline.';
+                });
+              } finally {
+                setDialogState(() => isTesting = false);
+              }
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.dns_rounded, color: Color(0xFF2563EB), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Server & Connectivity', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Configure the active server endpoint URL for this workstation.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Target Server URL / IP', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF475569))),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: urlCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. http://127.0.0.1:3000 or https://api.store.com',
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        prefixIcon: const Icon(Icons.link, size: 20),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.play_circle_fill_rounded, color: Color(0xFF2563EB)),
+                          tooltip: 'Test Connection',
+                          onPressed: isTesting ? null : () => runTest(urlCtrl.text.trim()),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                    ),
+                    if (isTesting) ...[
+                      const SizedBox(height: 12),
+                      const Row(
+                        children: [
+                          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(width: 8),
+                          Text('Pinging server...', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                        ],
+                      ),
+                    ] else if (testMsg != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: testSuccess == true ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: testSuccess == true ? const Color(0xFFA7F3D0) : const Color(0xFFFECACA)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(testSuccess == true ? Icons.check_circle : Icons.error_outline, size: 16, color: testSuccess == true ? const Color(0xFF059669) : const Color(0xFFDC2626)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                testMsg!,
+                                style: TextStyle(fontSize: 12, color: testSuccess == true ? const Color(0xFF065F46) : const Color(0xFF991B1B)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final newUrl = urlCtrl.text.trim();
+                    if (newUrl.isNotEmpty) {
+                      await AppConfig.saveConfig(newUrl, AppConfig.outlets);
+                      if (context.mounted) {
+                        Navigator.pop(dialogCtx);
+                        _checkServerHealth();
+                        _loadOutletLogo();
+                      }
+                    }
+                  },
+                  child: const Text('Save & Reconnect'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  InputDecoration _enterpriseInputDecoration({
+    required String labelText,
+    required IconData prefixIcon,
+    Widget? suffixIcon,
+    String? hintText,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InputDecoration(
+      labelText: labelText,
+      hintText: hintText,
+      labelStyle: TextStyle(fontSize: 13, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+      floatingLabelStyle: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF1E293B),
+      ),
+      prefixIcon: Icon(prefixIcon, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), size: 20),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), width: 1.2),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.8),
+      ),
+    );
+  }
+
   Widget _loginForm() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Form(
       key: _formKey,
       child: Column(
@@ -521,12 +903,12 @@ class _LoginScreenState extends State<LoginScreen>
             visible: kIsWeb || (!Platform.isAndroid && !Platform.isIOS),
             child: DropdownButtonFormField<String>(
               initialValue: _selectedOutlet,
-              decoration: const InputDecoration(
+              decoration: _enterpriseInputDecoration(
                 labelText: 'Outlet Code',
-                prefixIcon: Icon(Icons.storefront),
+                prefixIcon: Icons.storefront_rounded,
               ),
               items: AppConfig.outlets
-                  .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                  .map((o) => DropdownMenuItem(value: o, child: Text(o, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: isDark ? Colors.white : Colors.black))))
                   .toList(),
               onChanged: (v) {
                 setState(() => _selectedOutlet = v);
@@ -542,9 +924,11 @@ class _LoginScreenState extends State<LoginScreen>
             textInputAction: TextInputAction.next,
             onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
             onTapOutside: (_) => FocusScope.of(context).unfocus(),
-            decoration: const InputDecoration(
+            style: TextStyle(color: isDark ? Colors.white : Colors.black),
+            decoration: _enterpriseInputDecoration(
               labelText: 'Username',
-              prefixIcon: Icon(Icons.person),
+              prefixIcon: Icons.person_outline_rounded,
+              hintText: 'Enter your operator or cashier ID',
             ),
             validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
           ),
@@ -556,11 +940,13 @@ class _LoginScreenState extends State<LoginScreen>
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => _login(),
             onTapOutside: (_) => FocusScope.of(context).unfocus(),
-            decoration: InputDecoration(
+            style: TextStyle(color: isDark ? Colors.white : Colors.black),
+            decoration: _enterpriseInputDecoration(
               labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock),
+              prefixIcon: Icons.lock_outline_rounded,
+              hintText: 'Enter your password',
               suffixIcon: IconButton(
-                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), size: 20),
                 onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
@@ -568,29 +954,27 @@ class _LoginScreenState extends State<LoginScreen>
                 v == null || v.length < 4 ? 'Invalid password' : null,
           ),
 
-          // ==========================================
-
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
             initialValue: () {
               final roles = AppConstants.getRolesForModule(_activeModule);
               return roles.contains(_role) ? _role : roles.first;
             }(),
-            decoration: const InputDecoration(
-              labelText: 'Role',
-              prefixIcon: Icon(Icons.badge),
+            decoration: _enterpriseInputDecoration(
+              labelText: 'Workstation Role',
+              prefixIcon: Icons.badge_outlined,
             ),
             items: (() {
               final roles = AppConstants.getRolesForModule(_activeModule);
               final list = roles.contains(_role) ? roles : [...roles, _role];
               return list
-                  .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                  .map((r) => DropdownMenuItem(value: r, child: Text(r, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: isDark ? Colors.white : Colors.black))))
                   .toList();
             })(),
             onChanged: (v) => setState(() => _role = v ?? _role),
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -604,15 +988,15 @@ class _LoginScreenState extends State<LoginScreen>
                     );
                     return;
                   }
-                  _showForgotUsernameDialog(context); // NEW DIALOG
+                  _showForgotUsernameDialog(context);
                 },
                 style: TextButton.styleFrom(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                child: const Text('Forgot Username?',
-                    style: TextStyle(fontSize: 12)),
+                child: Text('Forgot Username?',
+                    style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
               ),
-              const Text('|', style: TextStyle(color: Colors.grey)),
+              Text('|', style: TextStyle(color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))),
               TextButton(
                 onPressed: () {
                   if (_selectedOutlet == null) {
@@ -622,40 +1006,49 @@ class _LoginScreenState extends State<LoginScreen>
                     );
                     return;
                   }
-                  _showForgotPasswordDialog(context); // EXISTING DIALOG
+                  _showForgotPasswordDialog(context);
                 },
                 style: TextButton.styleFrom(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                child: const Text('Forgot Password?',
-                    style: TextStyle(fontSize: 12)),
+                child: Text('Forgot Password?',
+                    style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          // LOGIN Button (LinkedIn-style Stadium Pill Button)
+          const SizedBox(height: 14),
+          // Enterprise Primary Sign In Button
           SizedBox(
             width: double.infinity,
             height: 48,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                shape: const StadiumBorder(),
-                elevation: 0,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFF2563EB) : primaryColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 2,
+                shadowColor: primaryColor.withOpacity(0.35),
               ),
               onPressed: _login,
-              child: const Text(
-                'LOGIN',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'SIGN IN TO WORKSTATION',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(Icons.arrow_forward_rounded, size: 18),
+                ],
               ),
             ),
           ),
           const SizedBox(height: 12),
-          // Register Button (High-Visibility High-Contrast Tonal Pill Button)
+          // Register Outlet Button (High-Visibility High-Contrast Tonal Button)
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -675,24 +1068,24 @@ class _LoginScreenState extends State<LoginScreen>
                 });
               },
               style: OutlinedButton.styleFrom(
-                shape: const StadiumBorder(),
-                backgroundColor: const Color(0xFFEFF6FF), // High-visibility soft blue background
-                side: const BorderSide(color: Color(0xFF2563EB), width: 1.5), // Vibrant solid 1.5px border
-                foregroundColor: const Color(0xFF1D4ED8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                backgroundColor: isDark ? const Color(0xFF0F172A) : primaryColor.withOpacity(0.08),
+                side: BorderSide(color: isDark ? const Color(0xFF3B82F6) : primaryColor, width: 1.4),
+                foregroundColor: isDark ? const Color(0xFF60A5FA) : primaryColor,
                 elevation: 0,
               ),
-              icon: const Icon(Icons.add_business_rounded, size: 20, color: Color(0xFF1D4ED8)),
-              label: const Text(
+              icon: Icon(Icons.add_business_rounded, size: 19, color: isDark ? const Color(0xFF60A5FA) : primaryColor),
+              label: Text(
                 'Register New Business / Outlet',
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Color(0xFF1D4ED8),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
+                  color: isDark ? const Color(0xFF60A5FA) : primaryColor,
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
         ],
       ),
     );
@@ -1112,25 +1505,36 @@ class _LoginScreenState extends State<LoginScreen>
 
 class _HeroPill extends StatelessWidget {
   final String label;
+  final IconData? icon;
 
-  const _HeroPill({required this.label});
+  const _HeroPill({required this.label, this.icon});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.14),
+        color: Colors.white.withOpacity(0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: Colors.white.withOpacity(0.18)),
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: const Color(0xFF38BDF8)),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,1 @@
-{
-    "baseUrl": "http://127.0.0.1:3000",
-    "outlets": [
-        "OUTLET202604212159"
-    ]
-}
+{"baseUrl":"https://retail-sale-backend.onrender.com","outlets":["OUTLET202604212159","OUTLET202608311030"]}
