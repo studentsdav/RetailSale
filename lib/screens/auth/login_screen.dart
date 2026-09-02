@@ -361,7 +361,7 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'FAMALTH LYNX - POS, billing, accounting, and reporting in one secure flow.',
+                  'POS, billing, accounting, and reporting in one secure flow.',
                   style: TextStyle(
                     color: Colors.white70,
                     height: 1.4,

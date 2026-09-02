@@ -1,11 +1,11 @@
 [Setup]
-AppName=Retailpos
+AppName=Famalth Lynx
 AppId={{8C07A1B8-7BE7-4F73-9A89-42D8F7B9D322}
 AppVersion=1.1.31
 AppPublisher=Students dev
 DefaultDirName={sd}\Retailpos
 UsePreviousAppDir=yes
-DefaultGroupName=Retailpos
+DefaultGroupName=Famalth Lynx
 OutputBaseFilename=Retailpos_Installer
 Compression=lzma
 SolidCompression=yes
@@ -40,8 +40,8 @@ Type: files; Name: "{app}\sync_status.json"
 Type: files; Name: "{app}\client.json"
 
 [Icons]
-Name: "{group}\Retailpos"; Filename: "{app}\Retailpos.exe"; IconFilename: "{app}\resources\app_icon.ico"
-Name: "{commondesktop}\Retailpos"; Filename: "{app}\Retailpos.exe"; IconFilename: "{app}\resources\app_icon.ico"; Tasks: desktopicon
+Name: "{group}\Famalth Lynx"; Filename: "{app}\Retailpos.exe"; IconFilename: "{app}\resources\app_icon.ico"
+Name: "{commondesktop}\Famalth Lynx"; Filename: "{app}\Retailpos.exe"; IconFilename: "{app}\resources\app_icon.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"
