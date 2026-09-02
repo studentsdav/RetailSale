@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'dart:io';
 
+import '../utils/branding_storage.dart';
 import '../core/auth/token_storage.dart';
 import '../core/config/app_brand.dart';
 import '../core/config/app_config.dart';
@@ -22,10 +26,96 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  String? _clientLogoPath;
+
   @override
   void initState() {
     super.initState();
+    _loadClientLogo();
     _runBootSequence();
+  }
+
+  Future<void> _loadClientLogo() async {
+    try {
+      final logo = await BrandingStorage.getCurrentLogoPath();
+      if (mounted) {
+        setState(() {
+          _clientLogoPath = logo;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Widget _buildSplashLogo(double size) {
+    if (_clientLogoPath != null && _clientLogoPath!.trim().isNotEmpty) {
+      final path = _clientLogoPath!.trim();
+
+      // 1. Base64 Data URI or raw Base64 string
+      if (path.startsWith('data:image') || path.length > 200) {
+        try {
+          final base64Str = path.contains(',') ? path.split(',').last : path;
+          final bytes = base64Decode(base64Str.trim());
+          return ClipOval(
+            child: Image.memory(
+              bytes,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
+            ),
+          );
+        } catch (_) {}
+      }
+
+      // 2. HTTP / HTTPS URL
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        return ClipOval(
+          child: Image.network(
+            path,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
+          ),
+        );
+      }
+
+      // 3. Local File Path (non-web)
+      if (!kIsWeb && File(path).existsSync()) {
+        return ClipOval(
+          child: Image.file(
+            File(path),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _famalthMascotFallback(size),
+          ),
+        );
+      }
+    }
+
+    // 4. Fallback Platform Mascot Logo (FAMALTH LYNX)
+    return _famalthMascotFallback(size);
+  }
+
+  Widget _famalthMascotFallback(double size) {
+    return ClipOval(
+      child: Image.asset(
+        'assets/images/famalth_lynx_logo.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          width: size,
+          height: size,
+          decoration: const BoxDecoration(
+            color: Color(0xFF0F172A),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 40),
+        ),
+      ),
+    );
   }
 
   Future<void> _runBootSequence() async {
@@ -120,12 +210,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         ),
                       ],
                     ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/famalth_lynx_logo.png',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
+                    child: _buildSplashLogo(102),
                   ),
                   const SizedBox(height: 24),
                   Text(
