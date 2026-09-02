@@ -334,8 +334,17 @@ class _LoginScreenState extends State<LoginScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ScaleTransition(
-                  scale: _logoAnim,
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.12),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
                   child: CircleAvatar(
                     radius: 46,
                     backgroundColor: Colors.white,
@@ -433,8 +442,17 @@ class _LoginScreenState extends State<LoginScreen>
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          ScaleTransition(
-            scale: _logoAnim,
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
             child: CircleAvatar(
               radius: 40,
               backgroundColor: Colors.white,

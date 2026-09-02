@@ -10,6 +10,8 @@ class BrandLogoWidget extends StatelessWidget {
   final double size;
   final Widget? customFallback;
 
+  static final Map<String, Uint8List> _bytesCache = {};
+
   const BrandLogoWidget({
     super.key,
     required this.logoPath,
@@ -28,13 +30,22 @@ class BrandLogoWidget extends StatelessWidget {
           (path.length > 100 && !path.contains(' '))) {
         try {
           final base64Str = path.contains(',') ? path.split(',').last : path;
-          final bytes = base64Decode(base64Str.trim());
+          final cleanStr = base64Str.trim();
+
+          Uint8List? bytes = _bytesCache[cleanStr];
+          if (bytes == null) {
+            bytes = base64Decode(cleanStr);
+            _bytesCache[cleanStr] = bytes;
+          }
+
           return ClipOval(
+            key: ValueKey('logo-mem-${cleanStr.hashCode}-$size'),
             child: Image.memory(
               bytes,
               width: size,
               height: size,
               fit: BoxFit.cover,
+              gaplessPlayback: true,
               errorBuilder: (_, __, ___) => _fallback(),
             ),
           );
@@ -44,11 +55,13 @@ class BrandLogoWidget extends StatelessWidget {
       // 2. Full HTTP / HTTPS URL
       if (path.startsWith('http://') || path.startsWith('https://')) {
         return ClipOval(
+          key: ValueKey('logo-net-$path-$size'),
           child: Image.network(
             path,
             width: size,
             height: size,
             fit: BoxFit.cover,
+            gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
         );
@@ -60,11 +73,13 @@ class BrandLogoWidget extends StatelessWidget {
         final fullUrl =
             path.startsWith('/') ? '$baseUrl$path' : '$baseUrl/$path';
         return ClipOval(
+          key: ValueKey('logo-rel-$fullUrl-$size'),
           child: Image.network(
             fullUrl,
             width: size,
             height: size,
             fit: BoxFit.cover,
+            gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
         );
@@ -73,11 +88,13 @@ class BrandLogoWidget extends StatelessWidget {
       // 4. Local File Path (non-web)
       if (!kIsWeb && File(path).existsSync()) {
         return ClipOval(
+          key: ValueKey('logo-file-$path-$size'),
           child: Image.file(
             File(path),
             width: size,
             height: size,
             fit: BoxFit.cover,
+            gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
         );
@@ -92,11 +109,13 @@ class BrandLogoWidget extends StatelessWidget {
     if (customFallback != null) return customFallback!;
 
     return ClipOval(
+      key: ValueKey('logo-fallback-mascot-$size'),
       child: Image.asset(
         'assets/images/famalth_lynx_logo.png',
         width: size,
         height: size,
         fit: BoxFit.cover,
+        gaplessPlayback: true,
         errorBuilder: (_, __, ___) => Container(
           width: size,
           height: size,
