@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'package:retailpos/screens/recovery/backup_service.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
@@ -282,13 +285,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+        withData: true,
       );
 
-      final path = result?.files.single.path;
-      if (path != null && path.isNotEmpty) {
-        setState(() {
-          _branding = _branding.copyWith(homeBgImagePath: path);
-        });
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        String? base64Image;
+
+        if (file.bytes != null && file.bytes!.isNotEmpty) {
+          final ext = (file.extension ?? 'png').toLowerCase();
+          final mime = ext == 'jpg' ? 'jpeg' : ext;
+          base64Image = 'data:image/$mime;base64,${base64Encode(file.bytes!)}';
+        } else if (file.path != null && file.path!.isNotEmpty && !kIsWeb) {
+          final ioFile = File(file.path!);
+          if (ioFile.existsSync()) {
+            final bytes = ioFile.readAsBytesSync();
+            final ext = (file.extension ?? 'png').toLowerCase();
+            final mime = ext == 'jpg' ? 'jpeg' : ext;
+            base64Image = 'data:image/$mime;base64,${base64Encode(bytes)}';
+          }
+        }
+
+        if (base64Image != null && base64Image.isNotEmpty) {
+          setState(() {
+            _branding = _branding.copyWith(homeBgImagePath: base64Image);
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1657,77 +1679,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _settingRow(
                         title: 'Support Website URL',
                         description: 'Reference business website domain linked in footer',
+                        isLast: true,
                         control: SizedBox(
                           width: 280,
                           child: TextFormField(
                             key: ValueKey('branding-web-${_branding.supportWebsite}'),
                             initialValue: _branding.supportWebsite,
                             onChanged: (value) => _branding = _branding.copyWith(supportWebsite: value),
-                          ),
-                        ),
-                      ),
-                      _settingRow(
-                        title: 'Home Screen Background Image',
-                        description: 'Select an image file or enter path for home page backdrop theme',
-                        control: SizedBox(
-                          width: 360,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  key: ValueKey('branding-bgpath-${_branding.homeBgImagePath}'),
-                                  initialValue: _branding.homeBgImagePath,
-                                  onChanged: (value) => _branding = _branding.copyWith(homeBgImagePath: value),
-                                  decoration: const InputDecoration(
-                                    hintText: 'Select image file...',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                                onPressed: _pickBackgroundImage,
-                                icon: const Icon(Icons.photo_library_outlined, size: 18),
-                                label: const Text('Browse...'),
-                              ),
-                              if (_branding.homeBgImagePath != null &&
-                                  _branding.homeBgImagePath!.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                IconButton.filledTonal(
-                                  style: IconButton.styleFrom(
-                                    foregroundColor: Colors.red,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _branding = _branding.copyWith(homeBgImagePath: '');
-                                    });
-                                  },
-                                  icon: const Icon(Icons.delete_outline, size: 18),
-                                  tooltip: 'Remove Cover Image',
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                      _settingRow(
-                        title: 'Background Image Scale Mode',
-                        description: 'Size sizing mode used for the backdrop theme image',
-                        isLast: true,
-                        control: SizedBox(
-                          width: 280,
-                          child: DropdownButtonFormField<String>(
-                            value: _branding.homeBgImageSize,
-                            items: const [
-                              DropdownMenuItem(value: 'Cover', child: Text('Cover (Fill screen)')),
-                              DropdownMenuItem(value: 'Contain', child: Text('Contain (Fit constraints)')),
-                              DropdownMenuItem(value: 'Original', child: Text('Original (No scaling)')),
-                            ],
-                            onChanged: (value) => setState(() {
-                              _branding = _branding.copyWith(homeBgImageSize: value);
-                            }),
                           ),
                         ),
                       ),

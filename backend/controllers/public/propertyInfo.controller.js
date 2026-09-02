@@ -39,6 +39,16 @@ exports.getPropertyInfo = async (req, res) => {
             }
         }
 
+        if (actualOutletId && req.propertyDb.models.app_branding) {
+            const branding = await req.propertyDb.models.app_branding.findOne({
+                where: { outlet_id: actualOutletId }
+            });
+            if (branding) {
+                infoObj.home_bg_image_path = branding.home_bg_image_path;
+                infoObj.home_bg_image_size = branding.home_bg_image_size;
+            }
+        }
+
         res.json({ success: true, data: infoObj });
     } catch (err) {
         console.error("GET PROPERTY INFO ERROR STACK:", err);

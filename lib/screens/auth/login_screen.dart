@@ -99,12 +99,15 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> _loadOutletLogo() async {
     String mod = 'ALL';
     String? fetchedPath = _logoPath;
+    String? fetchedBg = _bgCoverImagePath;
 
     if (_selectedOutlet != null) {
       final localPath = await BrandingStorage.getLogoPathForOutlet(_selectedOutlet!);
       if (localPath != null && localPath.isNotEmpty) {
         fetchedPath = localPath;
       }
+      final prefs = await SharedPreferences.getInstance();
+      fetchedBg = prefs.getString('brand_home_bg_$_selectedOutlet');
 
       try {
         final res = await ApiClient.get(
@@ -116,8 +119,12 @@ class _LoginScreenState extends State<LoginScreen>
           final serverLogo = data['logo_path']?.toString();
           if (serverLogo != null && serverLogo.trim().isNotEmpty) {
             fetchedPath = serverLogo.trim();
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('brand_logo_$_selectedOutlet', fetchedPath);
+            await prefs.setString('brand_logo_$_selectedOutlet', fetchedPath!);
+          }
+          final serverBg = data['home_bg_image_path']?.toString();
+          if (serverBg != null && serverBg.trim().isNotEmpty) {
+            fetchedBg = serverBg.trim();
+            await prefs.setString('brand_home_bg_$_selectedOutlet', fetchedBg!);
           }
         }
       } catch (_) {
@@ -143,15 +150,19 @@ class _LoginScreenState extends State<LoginScreen>
     }
 
     final branding = await LocalPreferences.getAppBranding();
+    if (fetchedBg == null || fetchedBg.trim().isEmpty) {
+      fetchedBg = branding.homeBgImagePath;
+    }
+
     if (!mounted) return;
 
     if (_logoPath != fetchedPath ||
         _activeModule != mod ||
-        _bgCoverImagePath != branding.homeBgImagePath) {
+        _bgCoverImagePath != fetchedBg) {
       setState(() {
         _logoPath = fetchedPath;
         _activeModule = mod;
-        _bgCoverImagePath = branding.homeBgImagePath;
+        _bgCoverImagePath = fetchedBg;
       });
     }
   }
@@ -384,16 +395,6 @@ class _LoginScreenState extends State<LoginScreen>
                 end: Alignment.bottomRight,
                 colors: heroColors,
               ),
-              image: _getHeroBgImageProvider(_bgCoverImagePath) != null
-                  ? DecorationImage(
-                      image: _getHeroBgImageProvider(_bgCoverImagePath)!,
-                      fit: BoxFit.cover,
-                      colorFilter: ColorFilter.mode(
-                        Colors.black.withOpacity(0.45),
-                        BlendMode.darken,
-                      ),
-                    )
-                  : null,
               borderRadius:
                   const BorderRadius.horizontal(left: Radius.circular(18)),
             ),
