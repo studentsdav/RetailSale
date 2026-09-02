@@ -106,16 +106,26 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    width: 110,
+                    height: 110,
+                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.1),
+                      color: Colors.white,
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(Icons.inventory_2_rounded,
-                        size: 80, color: Theme.of(context).colorScheme.primary),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/famalth_lynx_logo.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Text(

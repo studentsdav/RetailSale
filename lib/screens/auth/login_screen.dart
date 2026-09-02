@@ -301,14 +301,20 @@ class _LoginScreenState extends State<LoginScreen>
                   scale: _logoAnim,
                   child: CircleAvatar(
                     radius: 46,
-                    backgroundColor: Colors.white24,
+                    backgroundColor: Colors.white,
                     backgroundImage:
                         _logoPath != null && File(_logoPath!).existsSync()
                             ? FileImage(File(_logoPath!))
                             : null,
                     child: _logoPath == null || !File(_logoPath!).existsSync()
-                        ? const Icon(Icons.inventory_2,
-                            size: 42, color: Colors.white)
+                        ? ClipOval(
+                            child: Image.asset(
+                              'assets/images/famalth_lynx_logo.png',
+                              width: 76,
+                              height: 76,
+                              fit: BoxFit.cover,
+                            ),
+                          )
                         : null,
                   ),
                 ),
@@ -380,15 +386,20 @@ class _LoginScreenState extends State<LoginScreen>
             scale: _logoAnim,
             child: CircleAvatar(
               radius: 40,
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              backgroundColor: Colors.white,
               backgroundImage:
                   _logoPath != null && File(_logoPath!).existsSync()
                       ? FileImage(File(_logoPath!))
                       : null,
               child: _logoPath == null || !File(_logoPath!).existsSync()
-                  ? Icon(Icons.inventory_2,
-                      size: 36,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer)
+                  ? ClipOval(
+                      child: Image.asset(
+                        'assets/images/famalth_lynx_logo.png',
+                        width: 68,
+                        height: 68,
+                        fit: BoxFit.cover,
+                      ),
+                    )
                   : null,
             ),
           ),
