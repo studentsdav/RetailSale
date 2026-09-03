@@ -27,6 +27,8 @@ import '../../core/settings/local_preferences.dart';
 import '../../core/billing/pos_billing_engine.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 import '../../core/printing/device_printer_routing.dart';
 import '../../core/printing/pdf_preview_dialog.dart';
@@ -284,7 +286,12 @@ class _SaleScreenState extends State<SaleScreen> {
         _saleNo.text = await ctrl.getNextSaleNo();
       } catch (_) {}
 
-      _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
+      _saleDate = DateTime.now();
+      _saleDateCtrl.text = TimeZoneUtils.formatInTimeZone(
+        _saleDate,
+        DateTimeService.instance.currentTimeZone,
+        pattern: 'dd-MMM-yyyy HH:mm',
+      );
       _applyBillingDefaults();
 
       if (widget.editSaleId != null) {

@@ -10,6 +10,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/stock_transfer_report_controller.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 import '../../utils/pdf_report_builder.dart';
 
 class StockTransferReportScreen extends StatefulWidget {
@@ -80,8 +82,9 @@ class _StockTransferReportScreenState extends State<StockTransferReportScreen> {
   }
 
   String _dateText(dynamic value) {
-    final raw = DateTime.tryParse('${value ?? ''}')?.toLocal();
-    return raw == null ? '--' : DateFormat('dd-MMM-yyyy').format(raw);
+    if (value == null) return '--';
+    final raw = DateTime.tryParse('$value');
+    return raw == null ? '--' : TimeZoneUtils.formatInTimeZone(raw, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy');
   }
 
   Future<void> _exportToExcel() async {

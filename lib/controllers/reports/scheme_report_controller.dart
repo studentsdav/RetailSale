@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/inventory/sale_scheme_model.dart';
 
 class SchemeReportRow {
@@ -28,7 +29,7 @@ class SchemeReportRow {
 
 class SchemeReportController extends ChangeNotifier {
   bool loading = false;
-  DateTime asOfDate = DateTime.now();
+  DateTime asOfDate = DateTimeService.instance.nowInTimeZone;
   SaleScheme? selectedScheme;
   String reportFilter = 'RUNNING';
   List<SaleScheme> schemes = [];

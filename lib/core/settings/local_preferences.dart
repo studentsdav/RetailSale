@@ -19,6 +19,17 @@ class LocalPreferences {
   static const _buttonBorderStyleKey = 'ui_button_border_style';
   static const _fontSizeAdjustmentKey = 'ui_font_size_adjustment';
   static const _virtualKeyboardDisabledKey = 'virtual_keyboard_disabled';
+  static const _timeZoneKey = 'app_time_zone';
+
+  static Future<String> getTimeZone() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_timeZoneKey) ?? 'Asia/Kolkata';
+  }
+
+  static Future<void> setTimeZone(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_timeZoneKey, value);
+  }
 
   static Future<bool> getShowNotifications() async {
     final prefs = await SharedPreferences.getInstance();

@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/supplier_controller.dart';
 import '../../controllers/modify/receiving_modify_controller.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart';
@@ -37,7 +38,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
 
   PropertyInfo? propertyInfo;
 
-  DateTime selectedDate = DateTime.now();
+  DateTime selectedDate = DateTimeService.instance.nowInTimeZone;
 
   int? grnId;
   int? supplierId;
@@ -99,14 +100,31 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
     });
   }
 
-  double get total {
+  double _parseDouble(dynamic val) {
+    if (val == null) return 0.0;
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
+  double get subTotal {
     double t = 0;
     for (var i in items) {
-      t += double.parse(i['qty'].toString()) *
-          double.parse(i['rate'].toString());
+      t += _parseDouble(i['qty']) * _parseDouble(i['rate']);
     }
     return t;
   }
+
+  double get totalGST {
+    double g = 0;
+    for (var i in items) {
+      final qty = _parseDouble(i['qty']);
+      final rate = _parseDouble(i['rate']);
+      final tax = _parseDouble(i['tax']);
+      g += (qty * rate) * tax / 100;
+    }
+    return g;
+  }
+
+  double get netAmount => subTotal + totalGST;
 
   Future<void> _save() async {
     if (grnId == null) {
@@ -600,14 +618,16 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                           DataColumn(label: Text("Unit")),
                           DataColumn(label: Text("Qty")),
                           DataColumn(label: Text("Rate")),
+                          DataColumn(label: Text("GST (%)")),
                           DataColumn(label: Text("Remarks")),
                           DataColumn(label: Text("Amount")),
                         ],
                         rows: List.generate(items.length, (i) {
                           final item = items[i];
 
-                          final amount = double.parse(item['qty'].toString()) *
-                              double.parse(item['rate'].toString());
+                          final qty = _parseDouble(item['qty']);
+                          final rate = _parseDouble(item['rate']);
+                          final amount = qty * rate;
 
                           return DataRow(
                             color: WidgetStateProperty.resolveWith((states) {
@@ -661,6 +681,25 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                               ),
                               DataCell(
                                 SizedBox(
+                                  width: 80,
+                                  child: TextFormField(
+                                    key: ValueKey(
+                                      'receiving-$grnId-${item['id'] ?? item['item_code'] ?? item['item_name']}-tax',
+                                    ),
+                                    initialValue: (item['tax'] ?? 0).toString(),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    ),
+                                    onChanged: (v) {
+                                      item['tax'] = double.tryParse(v) ?? 0;
+                                      setState(() {});
+                                    },
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                SizedBox(
                                   width: 150,
                                   child: TextFormField(
                                     key: ValueKey(
@@ -691,33 +730,25 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
 
             const SizedBox(height: 16),
 
-            /// TOTAL
+            /// TOTAL SUMMARY
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 300,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: scheme.outlineVariant),
                   ),
-                  child: Row(
+                  child: Wrap(
+                    spacing: 24,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
                     children: [
-                      const Text(
-                        "Total Amount",
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      const Spacer(),
-                      Text(
-                        "₹ ${total.toStringAsFixed(2)}",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: scheme.primary,
-                        ),
-                      )
+                      _totalSummaryChip(scheme, 'Sub Total', subTotal),
+                      _totalSummaryChip(scheme, 'Total GST', totalGST),
+                      _totalSummaryChip(scheme, 'Net Amount', netAmount, highlight: true),
                     ],
                   ),
                 ),
@@ -776,6 +807,30 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _totalSummaryChip(ColorScheme scheme, String label, double value, {bool highlight = false}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          "$label: ",
+          style: TextStyle(
+            fontWeight: highlight ? FontWeight.bold : FontWeight.w600,
+            fontSize: highlight ? 14 : 13,
+            color: highlight ? scheme.primary : Colors.grey.shade700,
+          ),
+        ),
+        Text(
+          "₹ ${value.toStringAsFixed(2)}",
+          style: TextStyle(
+            fontSize: highlight ? 17 : 14,
+            fontWeight: FontWeight.bold,
+            color: highlight ? scheme.primary : Colors.black87,
+          ),
+        ),
+      ],
     );
   }
 }

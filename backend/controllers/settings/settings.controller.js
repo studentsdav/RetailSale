@@ -155,6 +155,7 @@ exports.getSettings = async (req, res) => {
                     default_printer_name: '',
                     default_printer_url: '',
                     billing_country: 'India',
+                    time_zone: 'Asia/Kolkata',
                     billing_tax_mode: 'CGST_SGST',
                     bill_format: 'A4',
                     default_charges: [],
@@ -236,6 +237,7 @@ exports.saveSettings = async (req, res) => {
             default_printer_name: req.body.default_printer_name || '',
             default_printer_url: req.body.default_printer_url || '',
             billing_country: req.body.billing_country || 'India',
+            time_zone: req.body.time_zone || 'Asia/Kolkata',
             billing_tax_mode: req.body.billing_tax_mode || 'CGST_SGST',
             bill_format: req.body.bill_format || 'A4',
             default_charges: Array.isArray(req.body.default_charges)

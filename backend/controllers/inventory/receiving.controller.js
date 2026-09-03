@@ -437,15 +437,17 @@ exports.modifyReceiving = async (req, res) => {
             const oldQty = item.qty;
             const diffQty = i.qty - oldQty;
 
+            const taxRate = Number(i.tax ?? item.tax ?? 0);
+
             /// UPDATE ITEM
             await item.update({
                 qty: i.qty,
                 rate: i.rate,
-                tax: i.tax,
+                tax: taxRate,
                 amount: i.qty * i.rate,
-                gst_amount: (i.qty * i.rate) * i.tax / 100,
-                tax_amount: (i.qty * i.rate) * i.tax / 100,
-                total_after_tax: (i.qty * i.rate) + ((i.qty * i.rate) * i.tax / 100),
+                gst_amount: (i.qty * i.rate) * taxRate / 100,
+                tax_amount: (i.qty * i.rate) * taxRate / 100,
+                total_after_tax: (i.qty * i.rate) + ((i.qty * i.rate) * taxRate / 100),
                 remarks: i.remarks || null
             }, { transaction: t });
 
@@ -453,7 +455,6 @@ exports.modifyReceiving = async (req, res) => {
                 req,
                 itemCode: item.item_code,
                 purchaseRate: i.rate,
-                saleRate: Number(i.sale_rate ?? i.rate) || 0,
                 transaction: t
             });
 
@@ -492,7 +493,7 @@ exports.modifyReceiving = async (req, res) => {
             }
 
             total += i.qty * i.rate;
-            gst += (i.qty * i.rate) * i.tax / 100;
+            gst += (i.qty * i.rate) * taxRate / 100;
 
         }
 

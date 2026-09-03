@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/reports/damage_item_model.dart';
 import '../../models/reports/damage_report_model.dart';
 
@@ -10,8 +11,8 @@ class DamageReportController extends ChangeNotifier {
   bool loading = false;
   List<DamageItem> items = [];
 
-  DateTime from = DateTime.now().subtract(const Duration(days: 6));
-  DateTime to = DateTime.now();
+  DateTime from = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 6));
+  DateTime to = DateTimeService.instance.nowInTimeZone;
 
   Future<void> load() async {
     loading = true;
@@ -84,8 +85,8 @@ class DamageReportsumController extends ChangeNotifier {
 
   List<DamageReportModel> data = [];
 
-  DateTime fromDate = DateTime.now();
-  DateTime toDate = DateTime.now();
+  DateTime fromDate = DateTimeService.instance.nowInTimeZone;
+  DateTime toDate = DateTimeService.instance.nowInTimeZone;
 
   Future<void> load() async {
     loading = true;

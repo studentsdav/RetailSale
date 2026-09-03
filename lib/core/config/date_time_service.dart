@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
+import '../utils/timezone_utils.dart';
+import '../settings/local_preferences.dart';
 
 /// ---------------------------------------------------------------------------
 /// DateTimeService
@@ -59,8 +61,17 @@ class DateTimeService extends ChangeNotifier {
   bool _initialized = false;
   ClockStatus _status = ClockStatus.unknown;
   String? _warningMessage;
+  String _currentTimeZone = TimeZoneUtils.defaultTimeZone;
 
   bool get isInitialized => _initialized;
+  String get currentTimeZone => _currentTimeZone;
+
+  void updateTimeZone(String tzId) {
+    if (tzId.trim().isNotEmpty && tzId != _currentTimeZone) {
+      _currentTimeZone = tzId;
+      notifyListeners();
+    }
+  }
 
   /// Current reliable date/time, immune to system clock drift.
   DateTime get now {
@@ -68,10 +79,38 @@ class DateTimeService extends ChangeNotifier {
     return _anchor!.add(_sw.elapsed);
   }
 
+  /// Current time converted to configured software time zone.
+  DateTime get nowInTimeZone {
+    return TimeZoneUtils.convertToTimeZone(now, _currentTimeZone);
+  }
+
   /// Today's date (midnight local) using trusted time.
   DateTime get today {
     final n = now;
     return DateTime(n.year, n.month, n.day);
+  }
+
+  /// Today's date (midnight in configured time zone).
+  DateTime get todayInTimeZone {
+    final n = nowInTimeZone;
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  /// Start of today (00:00:00) in configured time zone.
+  DateTime get startOfDayInTimeZone {
+    final n = nowInTimeZone;
+    return DateTime(n.year, n.month, n.day, 0, 0, 0);
+  }
+
+  /// End of today (23:59:59) in configured time zone.
+  DateTime get endOfDayInTimeZone {
+    final n = nowInTimeZone;
+    return DateTime(n.year, n.month, n.day, 23, 59, 59, 999);
+  }
+
+  /// Format current date & time in configured time zone.
+  String formatNow([String pattern = 'dd-MMM-yyyy hh:mm a']) {
+    return TimeZoneUtils.formatInTimeZone(now, _currentTimeZone, pattern: pattern);
   }
 
   ClockStatus get status => _status;
@@ -84,6 +123,7 @@ class DateTimeService extends ChangeNotifier {
   /// [baseUrl] is optional override; defaults to AppConfig.baseUrl.
   Future<void> init({String? baseUrl}) async {
     try {
+      _currentTimeZone = await LocalPreferences.getTimeZone();
       final trusted = await _fetchServerTime(baseUrl: baseUrl);
       if (trusted != null && trusted.isAfter(_earliestPlausible)) {
         _anchor = trusted;

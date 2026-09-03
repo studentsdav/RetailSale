@@ -6,6 +6,8 @@ import '../../core/api/endpoints.dart';
 import '../../models/inventory/supplier_bill_model.dart';
 import '../../models/inventory/supplier_model.dart';
 
+import '../../core/config/date_time_service.dart';
+
 class SupplierBillController extends ChangeNotifier {
   bool loading = false;
   List<Supplier> suppliers = [];
@@ -16,8 +18,8 @@ class SupplierBillController extends ChangeNotifier {
   double totalUnpaid = 0;
   double availableCredit = 0;
 
-  DateTime fromDate = DateTime.now().subtract(const Duration(days: 30));
-  DateTime toDate = DateTime.now();
+  DateTime fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 30));
+  DateTime toDate = DateTimeService.instance.nowInTimeZone;
 
   String? supplierId;
   String? status;

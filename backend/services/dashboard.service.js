@@ -1,4 +1,5 @@
 const { QueryTypes, Op } = require('sequelize');
+const { getOutletTimeZone, getNowInTimeZone } = require('../utils/timezoneHelper');
 
 const SALES_ZONES = [
   { key: 'MORNING', label: 'Morning', startHour: 5, endHour: 11 },
@@ -93,13 +94,19 @@ function periodBetween(currentStart, previousStart, currentEnd, previousEnd) {
   };
 }
 
+function getNowInLocalTime(timeZone = 'Asia/Kolkata') {
+  return getNowInTimeZone(timeZone);
+}
+
 function growthPercent(current, previous) {
   if (!previous) return current > 0 ? 100 : 0;
   return roundAmount(((current - previous) / previous) * 100);
 }
 
 exports.getInventoryDashboard = async (outletId, db) => {
-  const todayStr = formatDateLocalYmd(new Date());
+  const timeZone = await getOutletTimeZone(outletId, db);
+  const now = getNowInLocalTime(timeZone);
+  const todayStr = formatDateLocalYmd(now);
 
   const [
     kpis,
@@ -377,7 +384,7 @@ FROM item_stock;
     year: { current: { sales: 0, profit: 0, loss: 0 }, previous: { sales: 0, profit: 0, loss: 0 } }
   };
 
-  const now = new Date();
+  // now already declared at start of getInventoryDashboard
   const currentDayStart = startOfDay(now);
   const previousDayStart = new Date(currentDayStart);
   previousDayStart.setDate(previousDayStart.getDate() - 1);

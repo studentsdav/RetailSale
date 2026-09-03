@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const nightAuditService = require('../services/nightAudit.service');
+const { getOutletTimeZone, toOutletDateYmd } = require('../utils/timezoneHelper');
 
 async function checkStartupCatchup(propertyDb) {
     try {
@@ -9,10 +10,10 @@ async function checkStartupCatchup(propertyDb) {
             bypassOutletFilter: true
         }).catch(() => []);
 
-        const todayStr = new Date().toISOString().split('T')[0];
-
         for (const outlet of outlets) {
             try {
+                const outletTz = await getOutletTimeZone(outlet.id, propertyDb);
+                const todayStr = toOutletDateYmd(new Date(), outletTz);
                 const currentDay = await nightAuditService.getCurrentBusinessDay(propertyDb, outlet.id, 1);
                 if (currentDay && currentDay.business_date < todayStr) {
                     const settings = await propertyDb.models.system_settings.findOne({

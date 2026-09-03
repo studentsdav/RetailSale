@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../models/inventory/settings/system_settings_model.dart';
 
@@ -92,6 +93,11 @@ class SystemSettingsController extends ChangeNotifier {
       settings!.kotPrintMode = localKotPrintMode;
     }
 
+    if (settings != null) {
+      await LocalPreferences.setTimeZone(settings!.timeZone);
+      DateTimeService.instance.updateTimeZone(settings!.timeZone);
+    }
+
     loading = false;
     notifyListeners();
   }
@@ -108,6 +114,8 @@ class SystemSettingsController extends ChangeNotifier {
     await LocalPreferences.setDevicePrinterMappings(payload.devicePrinterMappings);
     await LocalPreferences.setEnableKotPrint(payload.enableKotPrint);
     await LocalPreferences.setKotPrintMode(payload.kotPrintMode);
+    await LocalPreferences.setTimeZone(payload.timeZone);
+    DateTimeService.instance.updateTimeZone(payload.timeZone);
 
     try {
       final res = await ApiClient.post(

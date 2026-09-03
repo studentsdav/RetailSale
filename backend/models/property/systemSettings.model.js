@@ -65,6 +65,11 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: 'India'
         },
 
+        time_zone: {
+            type: DataTypes.STRING(100),
+            defaultValue: 'Asia/Kolkata'
+        },
+
         billing_tax_mode: {
             type: DataTypes.STRING(30),
             defaultValue: 'CGST_SGST'

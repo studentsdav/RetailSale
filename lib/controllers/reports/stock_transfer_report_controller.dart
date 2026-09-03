@@ -3,13 +3,14 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 
 class StockTransferReportController extends ChangeNotifier {
   bool loading = false;
   List<Map<String, dynamic>> transfers = [];
 
-  DateTime fromDate = DateTime.now();
-  DateTime toDate = DateTime.now();
+  DateTime fromDate = DateTimeService.instance.nowInTimeZone;
+  DateTime toDate = DateTimeService.instance.nowInTimeZone;
   String search = '';
 
   Future<void> load() async {

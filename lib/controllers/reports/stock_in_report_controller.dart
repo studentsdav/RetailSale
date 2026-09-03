@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/reports/stock_in_model.dart';
 
 class StockInReportController extends ChangeNotifier {
@@ -14,8 +15,8 @@ class StockInReportController extends ChangeNotifier {
   /// Filtered data (after supplier/item/search filter)
   List<StockInModel> filteredData = [];
 
-  DateTime fromDate = DateTime.now();
-  DateTime toDate = DateTime.now();
+  DateTime fromDate = DateTimeService.instance.nowInTimeZone;
+  DateTime toDate = DateTimeService.instance.nowInTimeZone;
   String search = '';
 
   // ================= LOAD FROM API =================

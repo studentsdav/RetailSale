@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/inventory/item_model.dart';
 
 class ItemAdvanceReportController extends ChangeNotifier {
   bool loading = false;
   List<Item> items = [];
   Item? selectedItem;
-  DateTime fromDate = DateTime.now().subtract(const Duration(days: 30));
-  DateTime toDate = DateTime.now();
+  DateTime fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 30));
+  DateTime toDate = DateTimeService.instance.nowInTimeZone;
   Map<String, dynamic> report = const {};
 
   Future<void> init() async {

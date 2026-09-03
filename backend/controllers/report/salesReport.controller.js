@@ -25,8 +25,15 @@ function normalizeDate(value) {
     return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
-function resolveSaleZone(dateValue) {
-    const hour = normalizeDate(dateValue).getHours();
+function resolveSaleZone(dateValue, timeZone = 'Asia/Kolkata') {
+    let hour = 0;
+    try {
+        const dt = dateValue instanceof Date ? dateValue : new Date(dateValue);
+        const hourStr = dt.toLocaleTimeString('en-US', { timeZone, hour12: false, hour: '2-digit' });
+        hour = parseInt(hourStr, 10);
+    } catch (_) {
+        hour = normalizeDate(dateValue).getHours();
+    }
 
     if (hour >= 5 && hour <= 11) return SALES_ZONES[0];
     if (hour >= 12 && hour <= 16) return SALES_ZONES[1];
@@ -148,12 +155,12 @@ exports.getSalesReport = async (req, res) => {
             is_latest: true
         };
 
+        const outletTz = req.outletTimeZone || 'Asia/Kolkata';
         if (from_date && to_date) {
+            const startDate = new Date(`${from_date}T00:00:00`);
+            const endDate = new Date(`${to_date}T23:59:59.999`);
             where.sale_date = {
-                [Op.between]: [
-                    new Date(`${from_date}T00:00:00`),
-                    new Date(`${to_date}T23:59:59`)
-                ]
+                [Op.between]: [startDate, endDate]
             };
         }
 

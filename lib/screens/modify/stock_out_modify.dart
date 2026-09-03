@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/issue_controller.dart';
 import '../../controllers/modify/issue_modify_controller.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart' show PropertyInfo;
@@ -27,7 +28,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
   bool get _canModify => PermissionService.can('MODIFY_ISSUE');
   final issueCtrl = IssueController();
   final propertyCtrl = PropertyInfoController();
-  DateTime selectedDate = DateTime.now();
+  DateTime selectedDate = DateTimeService.instance.nowInTimeZone;
   PropertyInfo? propertyInfo;
 
   int? issueId;

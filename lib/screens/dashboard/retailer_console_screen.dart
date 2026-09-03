@@ -21,6 +21,8 @@ import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart';
 import '../../controllers/settings/notification_services.dart';
 import '../../utils/order_status_display.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 
 
 class RetailerConsoleScreen extends StatefulWidget {
@@ -89,8 +91,8 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
 
   // Filters State (Supplier Console Requirements)
   final TextEditingController _searchCtrl = TextEditingController();
-  DateTime _fromDate = DateTime.now();
-  DateTime _toDate = DateTime.now();
+  DateTime _fromDate = DateTimeService.instance.nowInTimeZone;
+  DateTime _toDate = DateTimeService.instance.nowInTimeZone;
   bool _todayOnly = true;
 
   Timer? _refreshTimer;
@@ -600,8 +602,8 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     final refundedAt = details['refunded_at'] ?? '';
     final paidAt = details['paid_at'] ?? txn['createdAt'] ?? txn['created_at'] ?? '';
     final refundDateStr = refundedAt.isNotEmpty 
-        ? DateFormat('yyyy-MM-dd').format(DateTime.parse(refundedAt).toLocal()) 
-        : (paidAt.isNotEmpty ? DateFormat('yyyy-MM-dd').format(DateTime.parse(paidAt.toString()).toLocal()) : DateFormat('yyyy-MM-dd').format(DateTime.now()));
+        ? TimeZoneUtils.formatInTimeZone(DateTime.parse(refundedAt), DateTimeService.instance.currentTimeZone, pattern: 'yyyy-MM-dd')
+        : (paidAt.isNotEmpty ? TimeZoneUtils.formatInTimeZone(DateTime.parse(paidAt.toString()), DateTimeService.instance.currentTimeZone, pattern: 'yyyy-MM-dd') : DateTimeService.instance.formatNow('yyyy-MM-dd'));
 
     final refundsList = details['refunds'] as List<dynamic>? ?? [];
     final String cnNo = refundsList.isNotEmpty

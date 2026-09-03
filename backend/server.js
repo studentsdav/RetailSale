@@ -152,6 +152,8 @@ app.get('/health', async (req, res) => {
 });
 
 app.use(dbMiddleware);
+const timezoneMiddleware = require('./middlewares/timezone.middleware');
+app.use(timezoneMiddleware);
 app.use('/api', apiLimiter);
 
 
@@ -197,6 +199,7 @@ if (!fs.existsSync(licensePath)) {
         try {
             await propertyDb.query(`
                 ALTER TABLE system_settings 
+                ADD COLUMN IF NOT EXISTS time_zone VARCHAR(100) DEFAULT 'Asia/Kolkata',
                 ADD COLUMN IF NOT EXISTS merchant_upi_id VARCHAR(255) DEFAULT '',
                 ADD COLUMN IF NOT EXISTS sub_delivery_charge_enabled BOOLEAN DEFAULT FALSE,
                 ADD COLUMN IF NOT EXISTS sub_delivery_charge_name VARCHAR(255) DEFAULT 'Subscription Delivery',

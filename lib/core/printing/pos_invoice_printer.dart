@@ -15,6 +15,8 @@ import '../../models/inventory/tax_breakdown_model.dart';
 import '../../models/inventory/settings/system_settings_model.dart';
 import 'device_printer_routing.dart';
 import '../config/app_brand.dart';
+import '../config/date_time_service.dart';
+import '../utils/timezone_utils.dart';
 import '../../utils/branding_storage.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
@@ -33,6 +35,13 @@ class PosInvoicePrinter {
 
   static final NumberFormat _currency =
       NumberFormat.currency(locale: 'en_IN', symbol: '', decimalDigits: 2);
+  static String formatTzDate(DateTime dt) =>
+      TimeZoneUtils.formatInTimeZone(dt, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy');
+  static String formatTzTime(DateTime dt) =>
+      TimeZoneUtils.formatInTimeZone(dt, DateTimeService.instance.currentTimeZone, pattern: 'hh:mm a');
+  static String formatTzDateTime(DateTime dt) =>
+      TimeZoneUtils.formatInTimeZone(dt, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy hh:mm a');
+
   static final DateFormat _date = DateFormat('dd-MMM-yyyy');
   static final DateFormat _time = DateFormat('hh:mm a');
   static final DateFormat _dateTime = DateFormat('dd-MMM-yyyy hh:mm a');
@@ -286,7 +295,7 @@ class PosInvoicePrinter {
             _receiptNumberLabel(order),
             order.saleNo,
             'Date',
-            _date.format(order.saleDate),
+            formatTzDate(order.saleDate),
           ),
           if (_isActualOrder(order) && order.orderId != null && order.hasBillNo)
             _thermalMetaRow(
@@ -308,7 +317,7 @@ class PosInvoicePrinter {
                 ? 'System'
                 : data.cashierName.trim(),
             'Time',
-            _time.format(order.saleDate),
+            formatTzTime(order.saleDate),
           ),
           if ((order.customerName ?? '').trim().isNotEmpty ||
               (order.customerPhone ?? '').trim().isNotEmpty)
@@ -881,7 +890,7 @@ class PosInvoicePrinter {
                         _a4MetaRow('Against Bill No', _exchangeAgainstBillNo(order)),
                       _a4MetaRow(
                         'Invoice Dt/Tm',
-                        '${_date.format(order.saleDate)} ${_time.format(order.saleDate)}',
+                        formatTzDateTime(order.saleDate),
                       ),
                       _a4MetaRow(
                         'Cashier/Terminal',
@@ -3413,9 +3422,9 @@ class PosInvoicePrinter {
           
           // CN and Sale Details
           _thermalRow('CN No:', cnNo, bold: true),
-          _thermalRow('CN Date:', _date.format(cnDate)),
+          _thermalRow('CN Date:', formatTzDate(cnDate)),
           _thermalRow('Orig Bill No:', originalSaleNo),
-          _thermalRow('Orig Bill Date:', _date.format(originalSaleDate)),
+          _thermalRow('Orig Bill Date:', formatTzDate(originalSaleDate)),
           pw.Divider(color: _thermalDivider, thickness: 0.8),
 
           // Customer Details
@@ -3595,7 +3604,7 @@ class PosInvoicePrinter {
   }) async {
     final document = pw.Document();
     final pageFormat = _thermalSheetFor('THERMAL_80');
-    final formattedDate = refundedAt.isNotEmpty ? refundedAt : DateTime.now().toString().split(' ')[0];
+    final formattedDate = refundedAt.isNotEmpty ? refundedAt : DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');
 
     document.addPage(
       pw.MultiPage(
@@ -4051,7 +4060,7 @@ class PosInvoicePrinter {
 
                   // 3. META DETAILS (BILL NO, STATION, TIME)
                   _thermalMetaRow('Bill No', order.saleNo, 'Station', stationLocation),
-                  _thermalMetaRow('Date', _date.format(order.saleDate), 'Time', _time.format(order.saleDate)),
+                  _thermalMetaRow('Date', formatTzDate(order.saleDate), 'Time', formatTzTime(order.saleDate)),
                   if ((order.customerName ?? '').trim().isNotEmpty)
                     _thermalMetaRow('Customer', order.customerName!.trim(), '', ''),
                   _dashedDivider(),

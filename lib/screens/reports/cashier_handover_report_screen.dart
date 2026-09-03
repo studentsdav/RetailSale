@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 import '../../utils/branding_storage.dart';
 
 class CashierHandoverReportScreen extends StatefulWidget {
@@ -283,7 +284,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
     final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
-    final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+    final nowStr = DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');
 
     double totalExp = 0;
     double totalPhy = 0;

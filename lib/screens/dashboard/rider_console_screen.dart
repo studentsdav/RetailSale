@@ -16,6 +16,8 @@ import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/notification_services.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 
 class RiderConsoleScreen extends StatefulWidget {
   const RiderConsoleScreen({super.key});
@@ -1107,7 +1109,7 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
     final commAmt = double.tryParse(order['commission_amount']?.toString() ?? '20') ?? 20.0;
     final commStatus = order['commission_status'] ?? 'UNPAID';
     final dateStr = order['delivered_at'] != null 
-        ? DateFormat('dd-MMM-yyyy, hh:mm a').format(DateTime.parse(order['delivered_at'].toString()))
+        ? TimeZoneUtils.formatInTimeZone(DateTime.parse(order['delivered_at'].toString()), DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy, hh:mm a')
         : '--';
 
     return Card(

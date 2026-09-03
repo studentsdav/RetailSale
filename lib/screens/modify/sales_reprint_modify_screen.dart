@@ -6,6 +6,9 @@ import 'package:intl/intl.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
+import '../../core/config/app_config.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 import '../../core/api/api_client.dart';
 import 'package:printing/printing.dart';
 import '../../core/settings/local_preferences.dart';
@@ -30,8 +33,8 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   final settingsCtrl = SystemSettingsController();
   final _searchCtrl = TextEditingController();
 
-  DateTime _fromDate = DateTime.now();
-  DateTime _toDate = DateTime.now();
+  DateTime _fromDate = DateTimeService.instance.nowInTimeZone;
+  DateTime _toDate = DateTimeService.instance.nowInTimeZone;
   bool _loading = false;
   String _selectedSourceFilter = 'ALL';
   List<String> _availablePaymentMethods = [
@@ -968,7 +971,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                         ],
                                       ),
                                       subtitle: Text(
-                                        '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateFormat('dd-MMM-yyyy hh:mm a').format(saleDate)} • Rs. ${_fmtAmount(sale['net_amount'])}${sale['status'] == 'RETURNED' ? ' • [RETURNED]' : ''}',
+                                        '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : TimeZoneUtils.formatInTimeZone(saleDate, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy hh:mm a')} • Rs. ${_fmtAmount(sale['net_amount'])}${sale['status'] == 'RETURNED' ? ' • [RETURNED]' : ''}',
                                       ),
                                       trailing: const Icon(Icons.chevron_right),
                                       onTap: () => _selectSale(sale),
@@ -1019,9 +1022,11 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                               ],
                                             ),
                                             Text(
-                                              DateFormat('dd-MMM-yyyy hh:mm a')
-                                                  .format(
-                                                      _selectedOrder!.saleDate),
+                                              TimeZoneUtils.formatInTimeZone(
+                                                _selectedOrder!.saleDate,
+                                                DateTimeService.instance.currentTimeZone,
+                                                pattern: 'dd-MMM-yyyy hh:mm a',
+                                              ),
                                             ),
                                             Text(
                                               _selectedOrder!.customerName

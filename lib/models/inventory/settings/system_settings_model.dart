@@ -12,6 +12,7 @@ class SystemSettings {
   String defaultPrinterName;
   String defaultPrinterUrl;
   String billingCountry;
+  String timeZone;
   String billingTaxMode;
   String billFormat;
   List<BillingCharge> defaultCharges;
@@ -51,6 +52,7 @@ class SystemSettings {
     required this.defaultPrinterName,
     required this.defaultPrinterUrl,
     required this.billingCountry,
+    this.timeZone = 'Asia/Kolkata',
     required this.billingTaxMode,
     required this.billFormat,
     required this.defaultCharges,
@@ -101,6 +103,7 @@ class SystemSettings {
       defaultPrinterName: (json['default_printer_name'] ?? json['defaultPrinterName'] ?? '').toString(),
       defaultPrinterUrl: (json['default_printer_url'] ?? json['defaultPrinterUrl'] ?? '').toString(),
       billingCountry: (json['billing_country'] ?? json['billingCountry'] ?? 'India').toString(),
+      timeZone: (json['time_zone'] ?? json['timeZone'] ?? 'Asia/Kolkata').toString(),
       billingTaxMode: (json['billing_tax_mode'] ?? json['billingTaxMode'] ?? 'CGST_SGST').toString(),
       billFormat: (json['bill_format'] ?? json['billFormat'] ?? 'A4').toString(),
       billCopiesCount: int.tryParse(json['bill_copies_count']?.toString() ?? json['billCopiesCount']?.toString() ?? '1') ?? 1,
@@ -190,6 +193,7 @@ class SystemSettings {
       'default_printer_name': defaultPrinterName,
       'default_printer_url': defaultPrinterUrl,
       'billing_country': billingCountry,
+      'time_zone': timeZone,
       'billing_tax_mode': billingTaxMode,
       'bill_format': billFormat,
       'default_charges':

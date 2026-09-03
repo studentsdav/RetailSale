@@ -8,12 +8,13 @@ pg.types.setTypeParser(pg.types.builtins.TIMESTAMP, (stringValue) => {
 
 const loadConfig = require("../utils/decryptConfig");
 
-// Calculate local timezone offset dynamically (e.g., +05:30 or -05:00)
+// Calculate local timezone offset dynamically or respect TZ environment variable
+const envTz = process.env.TZ;
 const offsetMinutes = new Date().getTimezoneOffset();
 const offsetHours = Math.abs(Math.floor(offsetMinutes / 60));
 const offsetMins = Math.abs(offsetMinutes % 60);
 const sign = offsetMinutes <= 0 ? '+' : '-';
-const localTimezone = `${sign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+const localTimezone = envTz || `${sign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
 
 let propertyDb;
 

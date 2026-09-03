@@ -1290,86 +1290,103 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
-          // Header Row
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  if (logo != null) ...[
-                    pw.Container(
-                      height: 40,
-                      child: pw.Image(logo, fit: pw.BoxFit.contain),
-                    ),
-                    pw.SizedBox(height: 6),
-                  ],
-                  pw.Text(
-                    property?.propertyName ?? 'Famalth Retail Outlet',
-                    style: pw.TextStyle(
-                        fontSize: 16,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.blueGrey900),
-                  ),
-                  if ((property?.address ?? '').trim().isNotEmpty)
-                    pw.Text(property!.address.trim(),
-                        style: const pw.TextStyle(
-                            fontSize: 8, color: PdfColors.grey700)),
-                  if ((property?.gstNo ?? '').trim().isNotEmpty)
-                    pw.Text("GSTIN: ${property!.gstNo.trim()}",
-                        style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.blueGrey800)),
-                ],
+          /// ================= HEADER =================
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            logo: logo,
+            rightWidget: pw.Text(
+              "PURCHASE ORDER",
+              style: pw.TextStyle(
+                fontSize: 18,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.deepOrange700,
               ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text("PURCHASE ORDER",
-                      style: pw.TextStyle(
-                          fontSize: 18,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.deepOrange700)),
-                  pw.SizedBox(height: 4),
-                  _metaRow("PO No", _poNo.text),
-                  _metaRow("Date", DateFormat('dd-MMM-yyyy').format(_date)),
-                ],
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 14),
-
-          // Vendor Box
-          pw.Container(
-            padding: const pw.EdgeInsets.all(8),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.grey100,
-              borderRadius: pw.BorderRadius.circular(4),
             ),
-            child: pw.Column(
+          ),
+          pw.SizedBox(height: 12),
+
+          /// ================= VENDOR & PO DETAILS CARD =================
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              color: PdfColors.grey50,
+            ),
+            child: pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text("Vendor Information:",
-                    style: pw.TextStyle(
-                        fontSize: 8,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.grey700)),
-                pw.SizedBox(height: 2),
-                pw.Text(supplier?.supplierName ?? 'Vendor', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
-                if (supplier != null && (supplier.address ?? '').trim().isNotEmpty)
-                  pw.Text(supplier.address!.trim(), style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
-                if (supplier != null && (supplier.gstin ?? '').trim().isNotEmpty)
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.only(top: 2),
-                    child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                pw.Expanded(
+                  flex: 3,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        "VENDOR / BILL FROM",
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 8,
+                          color: PdfColors.blueGrey800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        supplier?.supplierName ?? 'Vendor',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 8.5,
+                          color: PdfColors.blueGrey900,
+                        ),
+                      ),
+                      if (supplier != null && (supplier.address ?? '').trim().isNotEmpty)
+                        pw.Text(
+                          supplier.address!.trim(),
+                          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800),
+                        ),
+                      if (supplier != null && (supplier.gstin ?? '').trim().isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 2),
+                          child: pw.Text(
+                            "GSTIN: ${supplier.gstin!.trim()}",
+                            style: pw.TextStyle(
+                              fontSize: 8,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.blueGrey800,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+                ),
+                pw.Container(
+                  width: 0.5,
+                  height: 45,
+                  color: PdfColors.grey300,
+                  margin: const pw.EdgeInsets.symmetric(horizontal: 16),
+                ),
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        "ORDER DETAILS",
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 8,
+                          color: PdfColors.blueGrey800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      _metaRow("PO No", _poNo.text),
+                      _metaRow("Date", PosInvoicePrinter.formatTzDate(_date)),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 16),
 
           /// ================= ITEM TABLE =================
           pw.Table(
@@ -1512,15 +1529,15 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         mainAxisSize: pw.MainAxisSize.min,
         children: [
           pw.SizedBox(
-            width: 45,
+            width: 65,
             child: pw.Text(
-              "$label:",
-              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+              label.endsWith(':') ? label : "$label:",
+              style: pw.TextStyle(fontSize: 7.8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
             ),
           ),
           pw.Text(
             value,
-            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+            style: pw.TextStyle(fontSize: 7.8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
           ),
         ],
       ),

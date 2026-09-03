@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 
 class StockOutReportController extends ChangeNotifier {
   bool loading = false;
@@ -12,8 +13,8 @@ class StockOutReportController extends ChangeNotifier {
 
   double totalNet = 0;
 
-  DateTime fromDate = DateTime.now();
-  DateTime toDate = DateTime.now();
+  DateTime fromDate = DateTimeService.instance.nowInTimeZone;
+  DateTime toDate = DateTimeService.instance.nowInTimeZone;
 
   String reportType = 'detail';
 

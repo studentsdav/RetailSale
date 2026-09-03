@@ -12,6 +12,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/sales/sales_controller.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 import '../../utils/pdf_report_builder.dart';
 
 class RefundPendingReportScreen extends StatefulWidget {
@@ -151,7 +153,7 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
       final rawDate = DateTime.tryParse('${row['refund_date'] ?? ''}')?.toLocal();
       final displayDate = rawDate == null
           ? ''
-          : DateFormat('dd-MMM-yyyy').format(displayDateUtcOrLocal(row['refund_date']));
+          : TimeZoneUtils.formatInTimeZone(rawDate, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy');
 
       final pending = double.tryParse('${row['amount_pending'] ?? 0}') ?? 0.0;
       final paid = double.tryParse('${row['amount_paid'] ?? 0}') ?? 0.0;

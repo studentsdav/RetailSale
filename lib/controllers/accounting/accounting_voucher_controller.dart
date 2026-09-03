@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/accounting/accounting_voucher_model.dart';
 
 class AccountingVoucherController extends ChangeNotifier {
@@ -8,7 +9,7 @@ class AccountingVoucherController extends ChangeNotifier {
   List<AccountingVoucherModel> vouchers = [];
 
   String activeType = 'CONTRA'; // CONTRA, PAYMENT, RECEIPT, JOURNAL
-  DateTime voucherDate = DateTime.now();
+  DateTime voucherDate = DateTimeService.instance.nowInTimeZone;
   String paymentMode = 'CASH'; // CASH, BANK, CHEQUE, ONLINE
   int? selectedBankId;
   final refNoCtrl = TextEditingController();

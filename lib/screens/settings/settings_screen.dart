@@ -14,6 +14,8 @@ import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/config/app_brand.dart';
 import '../../core/config/app_config.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../models/auth/permission_service.dart';
@@ -619,6 +621,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           icon: const Icon(Icons.edit_note_rounded, size: 18),
                           label: const Text('Update Registration Info', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
+                    'Regional & Timezone Settings',
+                    'Configure software time zone for local date and time handling (Default: India Standard Time).',
+                    [
+                      _settingRow(
+                        title: 'Software Time Zone',
+                        description: 'All dates, bill timestamps, and transactions in the software will convert according to the selected time zone.',
+                        control: SizedBox(
+                          width: 340,
+                          child: DropdownButtonFormField<String>(
+                            value: TimeZoneUtils.supportedTimeZones.any((tz) => tz.id == s.timeZone)
+                                ? s.timeZone
+                                : TimeZoneUtils.defaultTimeZone,
+                            decoration: const InputDecoration(
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            isExpanded: true,
+                            items: TimeZoneUtils.supportedTimeZones
+                                .map((tz) => DropdownMenuItem<String>(
+                                      value: tz.id,
+                                      child: Text(
+                                        tz.fullDisplayName,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    ))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  s.timeZone = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Live Time Zone Preview',
+                        description: 'Current software date and time in selected time zone',
+                        isLast: true,
+                        control: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).primaryColor.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(context).primaryColor.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.access_time_filled,
+                                size: 18,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                TimeZoneUtils.formatNowInTimeZone(
+                                  s.timeZone,
+                                  pattern: 'dd-MMM-yyyy  hh:mm:ss a',
+                                ),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).primaryColor,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],

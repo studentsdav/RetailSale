@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
+import '../core/config/date_time_service.dart';
+import '../core/utils/timezone_utils.dart';
 import '../controllers/notes/user_notes_controller.dart';
 import '../models/notes/user_note_model.dart';
 
@@ -440,7 +442,7 @@ class _StickyNotesModalState extends State<StickyNotesModal> {
     if (hasReminder) {
       String startPrefix = '';
       if (note.reminderDate != null) {
-        startPrefix = '${DateFormat('dd MMM').format(note.reminderDate!)}, ';
+        startPrefix = '${TimeZoneUtils.formatInTimeZone(note.reminderDate!, DateTimeService.instance.currentTimeZone, pattern: 'dd MMM')}, ';
       }
       if (note.reminderType == 'DAILY') {
         reminderText = '$startPrefix${note.reminderTime ?? "09:00 AM"} 🔁 Daily';
@@ -451,7 +453,7 @@ class _StickyNotesModalState extends State<StickyNotesModal> {
       } else if (note.reminderType == 'YEARLY') {
         reminderText = '$startPrefix${note.reminderTime ?? "09:00 AM"} 🔁 Yearly';
       } else if (note.reminderDate != null) {
-        reminderText = DateFormat('dd MMM, HH:mm').format(note.reminderDate!);
+        reminderText = TimeZoneUtils.formatInTimeZone(note.reminderDate!, DateTimeService.instance.currentTimeZone, pattern: 'dd MMM, HH:mm');
       } else if (note.reminderTime != null) {
         reminderText = note.reminderTime!;
       }
@@ -879,7 +881,7 @@ class _GoogleKeepNoteEditorState extends State<_GoogleKeepNoteEditor> {
     if (hasReminder) {
       String startPrefix = '';
       if (_reminderDate != null) {
-        startPrefix = '${DateFormat('dd MMM').format(_reminderDate!)}, ';
+        startPrefix = '${TimeZoneUtils.formatInTimeZone(_reminderDate!, DateTimeService.instance.currentTimeZone, pattern: 'dd MMM')}, ';
       }
       if (_reminderType == 'DAILY') {
         reminderText = '$startPrefix${_reminderTime ?? "09:00 AM"} 🔁 Daily';
@@ -890,7 +892,7 @@ class _GoogleKeepNoteEditorState extends State<_GoogleKeepNoteEditor> {
       } else if (_reminderType == 'YEARLY') {
         reminderText = '$startPrefix${_reminderTime ?? "09:00 AM"} 🔁 Yearly';
       } else if (_reminderDate != null) {
-        reminderText = DateFormat('dd MMM, HH:mm').format(_reminderDate!);
+        reminderText = TimeZoneUtils.formatInTimeZone(_reminderDate!, DateTimeService.instance.currentTimeZone, pattern: 'dd MMM, HH:mm');
       } else if (_reminderTime != null) {
         reminderText = _reminderTime!;
       }

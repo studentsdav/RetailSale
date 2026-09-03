@@ -23,6 +23,8 @@ import '../../controllers/reports/inventory_dashboard_controller.dart';
 import '../../controllers/security/user_controller.dart';
 import '../../controllers/settings/notification_services.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import '../../core/config/date_time_service.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
@@ -330,14 +332,23 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     return 'FAMALTH LYNX Dashboard';
   }
 
+  void _onTimeZoneChanged() {
+    if (mounted) {
+      setState(() {
+        _currentTime = DateTimeService.instance.nowInTimeZone;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    _currentTime = DateTime.now();
+    DateTimeService.instance.addListener(_onTimeZoneChanged);
+    _currentTime = DateTimeService.instance.nowInTimeZone;
     _appBarTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
-          _currentTime = DateTime.now();
+          _currentTime = DateTimeService.instance.nowInTimeZone;
         });
       }
     });
@@ -363,8 +374,18 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<NightAuditController>().fetchStatus();
+        context.read<SystemSettingsController>().load();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    DateTimeService.instance.removeListener(_onTimeZoneChanged);
+    _appBarTimer?.cancel();
+    _dataProtectionTimer?.cancel();
+    _notificationTimer?.cancel();
+    super.dispose();
   }
 
   Future<bool?> _showConfirmSyncDialog() async {
@@ -1182,14 +1203,6 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _appBarTimer?.cancel();
-    _dataProtectionTimer?.cancel();
-    _notificationTimer?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadSessionTime() async {

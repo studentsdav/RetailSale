@@ -64,7 +64,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => SystemSettingsController()),
+        ChangeNotifierProvider(create: (_) => SystemSettingsController()..load()),
         ChangeNotifierProvider(create: (_) => ThemeController()..load()),
         ChangeNotifierProvider(create: (_) => UiPreferencesController()..load()),
         ChangeNotifierProvider(create: (_) => AppBrandingController()..loadLocal()),

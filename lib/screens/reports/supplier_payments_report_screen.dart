@@ -12,6 +12,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/supplier_payments_report_controller.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 import '../../utils/pdf_report_builder.dart';
 
 class SupplierPaymentsReportScreen extends StatefulWidget {
@@ -178,7 +180,7 @@ class _SupplierPaymentsReportScreenState extends State<SupplierPaymentsReportScr
         final creditAdjusted = double.tryParse('${row['credit_adjusted'] ?? 0}') ?? 0;
         final applied = cashPaid + creditAdjusted;
         return [
-          rawDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(rawDate),
+          rawDate == null ? '--' : TimeZoneUtils.formatInTimeZone(rawDate, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy'),
           '${row['supplier']?['supplier_name'] ?? ''}',
           '${row['bill']?['bill_no'] ?? ''}',
           '${row['payment_mode'] ?? ''}',
@@ -320,8 +322,11 @@ class _SupplierPaymentsReportScreenState extends State<SupplierPaymentsReportScr
                                       DataCell(Text(
                                         rawDate == null
                                             ? '--'
-                                            : DateFormat('dd-MMM-yyyy')
-                                                .format(rawDate),
+                                            : TimeZoneUtils.formatInTimeZone(
+                                                rawDate,
+                                                DateTimeService.instance.currentTimeZone,
+                                                pattern: 'dd-MMM-yyyy',
+                                              ),
                                       )),
                                       DataCell(Text(
                                         '${row['supplier']?['supplier_name'] ?? ''}',

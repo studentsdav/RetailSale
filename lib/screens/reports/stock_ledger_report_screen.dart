@@ -10,6 +10,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/stock_ledger_report_controller.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 import '../../utils/pdf_report_builder.dart';
 
 class StockLedgerReportScreen extends StatefulWidget {
@@ -171,7 +173,7 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
       data: rows.map((row) {
         final rawDate = DateTime.tryParse('${row['txnDate'] ?? ''}')?.toLocal();
         return [
-          rawDate == null ? '--' : DateFormat('dd-MMM-yyyy').format(rawDate),
+          rawDate == null ? '--' : TimeZoneUtils.formatInTimeZone(rawDate, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy'),
           '${row['txnType'] ?? ''}',
           '${row['itemName'] ?? row['itemCode'] ?? ''}',
           '${row['brand'] ?? ''}',
@@ -310,8 +312,11 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
                                       DataCell(Text(
                                         rawDate == null
                                             ? '--'
-                                            : DateFormat('dd-MMM-yyyy')
-                                                .format(rawDate),
+                                            : TimeZoneUtils.formatInTimeZone(
+                                                rawDate,
+                                                DateTimeService.instance.currentTimeZone,
+                                                pattern: 'dd-MMM-yyyy',
+                                              ),
                                       )),
                                       DataCell(Text('${row['txnType'] ?? ''}')),
                                       DataCell(Text(

@@ -3,13 +3,14 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class RestaurantAnalyticsReportsController extends ChangeNotifier {
   bool loading = false;
 
-  DateTime fromDate = DateTime.now().subtract(const Duration(days: 30));
-  DateTime toDate = DateTime.now();
+  DateTime fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 30));
+  DateTime toDate = DateTimeService.instance.nowInTimeZone;
   String? search;
 
   List<SalesReport> salesList = [];
@@ -49,8 +50,8 @@ class RestaurantAnalyticsReportsController extends ChangeNotifier {
   }
 
   void reset() {
-    fromDate = DateTime.now().subtract(const Duration(days: 30));
-    toDate = DateTime.now();
+    fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 30));
+    toDate = DateTimeService.instance.nowInTimeZone;
     search = null;
     notifyListeners();
   }

@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/supplier_controller.dart';
 import '../../controllers/purchase/purchase_order_modify_controller.dart';
+import '../../core/config/date_time_service.dart';
 import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart'
     show PropertyInfoController;
@@ -33,7 +34,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
   final supplierCtrl = SupplierController();
   final propertyCtrl = PropertyInfoController();
   PropertyInfo? propertyInfo;
-  DateTime selectedDate = DateTime.now();
+  DateTime selectedDate = DateTimeService.instance.nowInTimeZone;
   int? selectedPoId;
   int? supplierId;
 
@@ -203,17 +204,12 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
-            rightWidget: pw.Container(
-              padding: const pw.EdgeInsets.all(8),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(),
-              ),
-              child: pw.Text(
-                "PURCHASE ORDER",
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+            rightWidget: pw.Text(
+              "PURCHASE ORDER",
+              style: pw.TextStyle(
+                fontSize: 18,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.deepOrange700,
               ),
             ),
           ),
@@ -223,13 +219,12 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
               "REPRINT",
               style: pw.TextStyle(
                 color: PdfColors.red,
-                fontSize: 10,
+                fontSize: 9,
                 fontWeight: pw.FontWeight.bold,
               ),
             ),
           ),
-          pw.SizedBox(height: 10),
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 12),
 
           /// ================= SUPPLIER & PO INFO =================
           pw.Container(
@@ -243,10 +238,11 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Expanded(
+                  flex: 3,
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text("VENDOR / BILL TO", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                      pw.Text("VENDOR / BILL FROM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
                       pw.SizedBox(height: 4),
                       pw.Text(supplier.supplierName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
                       if ((supplier.address ?? '').trim().isNotEmpty)
@@ -260,15 +256,18 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                   ),
                 ),
                 pw.Container(width: 0.5, height: 45, color: PdfColors.grey300, margin: const pw.EdgeInsets.symmetric(horizontal: 16)),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("PURCHASE ORDER DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
-                    pw.SizedBox(height: 4),
-                    _metaRow("PO No", po.poNo),
-                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(po.createdAt ?? po.poDate)),
-                    _metaRow("Time", DateFormat('hh:mm a').format(po.createdAt ?? DateTime.now())),
-                  ],
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("ORDER DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                      pw.SizedBox(height: 4),
+                      _metaRow("PO No", po.poNo),
+                      _metaRow("Date", PosInvoicePrinter.formatTzDate(po.createdAt ?? po.poDate)),
+                      _metaRow("Time", PosInvoicePrinter.formatTzTime(po.createdAt ?? DateTime.now())),
+                    ],
+                  ),
                 ),
               ],
             ),

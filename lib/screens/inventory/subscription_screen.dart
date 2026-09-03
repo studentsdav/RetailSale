@@ -9,6 +9,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 import '../../utils/branding_storage.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 
@@ -56,12 +58,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   final _search = TextEditingController();
   final List<_SubscriptionItemLine> _additionalItems = [];
 
-  DateTime _startDate =
-      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  DateTime _startDate = DateTime(
+      DateTimeService.instance.nowInTimeZone.year,
+      DateTimeService.instance.nowInTimeZone.month,
+      DateTimeService.instance.nowInTimeZone.day);
   DateTime _endDate = DateTime(
-    DateTime.now().year,
-    DateTime.now().month,
-    DateTime.now().day,
+    DateTimeService.instance.nowInTimeZone.year,
+    DateTimeService.instance.nowInTimeZone.month,
+    DateTimeService.instance.nowInTimeZone.day,
   ).add(const Duration(days: 29));
   Item? _selectedItem;
   SaleCustomer? _selectedCustomer;
@@ -123,7 +127,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     _customerAddress.text = customer.customerAddress;
     _customerGstin.text = customer.customerGstin;
     if (widget.renewMode) {
-      final now = DateTime.now();
+      final now = DateTimeService.instance.nowInTimeZone;
       _startDate = DateTime(now.year, now.month, now.day);
       _endDate = DateTime(now.year, now.month, now.day)
           .add(const Duration(days: 29));
@@ -1358,7 +1362,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ),
           pw.Center(
             child: pw.Text(
-              DateFormat('dd-MMM-yyyy hh:mm a').format(receiptDate),
+              TimeZoneUtils.formatInTimeZone(receiptDate, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy hh:mm a'),
               style: pw.TextStyle(font: mono, fontSize: 8),
             ),
           ),

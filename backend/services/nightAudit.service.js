@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { getOutletTimeZone, toOutletDateYmd } = require('../utils/timezoneHelper');
 
 /**
  * Get or initialize current business day for an outlet
@@ -18,12 +19,13 @@ async function getCurrentBusinessDay(propertyDb, outletId, userId = null) {
             bypassOutletFilter: true
         });
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const timeZone = await getOutletTimeZone(outletId, propertyDb);
+        const todayStr = toOutletDateYmd(new Date(), timeZone);
         let nextDateStr = todayStr;
         if (lastDay) {
             const lastDate = new Date(lastDay.business_date);
             lastDate.setDate(lastDate.getDate() + 1);
-            const calcDate = lastDate.toISOString().split('T')[0];
+            const calcDate = toOutletDateYmd(lastDate, timeZone);
             nextDateStr = calcDate > todayStr ? todayStr : calcDate;
         }
 

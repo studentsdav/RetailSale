@@ -3976,6 +3976,15 @@ COMMIT;
         ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS outlet_max_discount_percent NUMERIC(5,2) DEFAULT 100.00;
       `);
     }
+  },
+  {
+    version: 105,
+    description: "Add time_zone column to system_settings table",
+    up: async (db) => {
+      await db.query(`
+        ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS time_zone VARCHAR(100) DEFAULT 'Asia/Kolkata';
+      `);
+    }
   }
 ];
 

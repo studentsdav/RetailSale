@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../core/config/date_time_service.dart';
+import '../core/utils/timezone_utils.dart';
 import '../core/printing/pos_invoice_printer.dart';
 import '../models/inventory/sale_order_model.dart';
 
@@ -25,7 +27,7 @@ Future<void> showSaleBillPreviewDialog(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Customer: ${(order.customerName ?? '').trim().isEmpty ? 'Walk-in' : order.customerName!.trim()}'),
-              Text('Date: ${DateFormat('dd-MMM-yyyy').format(order.saleDate)}'),
+              Text('Date: ${TimeZoneUtils.formatInTimeZone(order.saleDate, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy hh:mm a')}'),
               Text('Status: ${order.status}'),
               Text('Payment: ${order.paymentMode}'),
               Text('Net Amount: ${currency.format(order.netAmount)}'),

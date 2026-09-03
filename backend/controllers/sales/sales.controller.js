@@ -74,15 +74,11 @@ function dateOnly(value) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function formatDateLocalYmd(value) {
-    const d = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(d.getTime())) return null;
-    const offsetMs = 5.5 * 60 * 60 * 1000;
-    const ist = new Date(d.getTime() + offsetMs);
-    const y = ist.getUTCFullYear();
-    const m = String(ist.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(ist.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+const { toOutletDateYmd } = require('../../utils/timezoneHelper');
+
+function formatDateLocalYmd(value, timeZone = 'Asia/Kolkata') {
+    if (!value) return null;
+    return toOutletDateYmd(value, timeZone);
 }
 
 function dateOnlyString(value) {

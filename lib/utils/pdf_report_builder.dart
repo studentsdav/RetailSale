@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import 'branding_storage.dart';
+import '../core/config/date_time_service.dart';
 
 class PdfKpiItem {
   final String label;
@@ -33,7 +34,7 @@ class PdfReportBuilder {
   }) async {
     final format = pageFormat ?? PdfPageFormat.a4.landscape;
     final pdf = pw.Document();
-    final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+    final nowStr = DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');
 
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);

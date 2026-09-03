@@ -1,6 +1,7 @@
 const https = require('https');
 const { DATABASE_SCHEMA_REGISTRY, getActionMappingList, matchActionFromQuery } = require('./ai_registry.service');
 const supplierMasterController = require('../controllers/supplier/supplierMaster.controller');
+const { getOutletTimeZone, getTimeZoneContext } = require('../utils/timezoneHelper');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -500,31 +501,20 @@ function getMockAnalysis(question, datasetJson) {
 * Top performance metrics are listed in the paginated table grid below. You can download the complete list containing all rows as a CSV file or compile this summary as an enterprise PDF report.`;
 }
 
-function getIstContext() {
-    const now = new Date();
-    const istDateString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
-    const istDisplayString = now.toLocaleDateString('en-US', { 
-        timeZone: 'Asia/Kolkata', 
-        month: 'long', 
-        day: 'numeric',
-        year: 'numeric'
-    });
-    const istTimeString = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: true });
-
-    const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const yesterdayIstDateString = y.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const yesterdayDisplayString = y.toLocaleDateString('en-US', {
-        timeZone: 'Asia/Kolkata',
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-    });
-
-    return { istDateString, istDisplayString, istTimeString, yesterdayIstDateString, yesterdayDisplayString };
+function getIstContext(timeZone = 'Asia/Kolkata') {
+    const tzCtx = getTimeZoneContext(timeZone);
+    return {
+        istDateString: tzCtx.currentDateString,
+        istDisplayString: tzCtx.currentDisplayString,
+        istTimeString: tzCtx.currentTimeString,
+        yesterdayIstDateString: tzCtx.yesterdayDateString,
+        yesterdayDisplayString: tzCtx.yesterdayDisplayString
+    };
 }
 
 async function fetchLiveStoreContext(propertyDb, outletId = 0) {
-    const istCtx = getIstContext();
+    const timeZone = await getOutletTimeZone(outletId, propertyDb);
+    const istCtx = getIstContext(timeZone);
     const context = {
         currentIstDate: istCtx.istDisplayString,
         currentIstDateCode: istCtx.istDateString,
@@ -2165,7 +2155,9 @@ async function processLynxAssist(prompt, history = [], config = {}, propertyDb =
                     const t = await propertyDb.transaction();
                     try {
                         await propertyDb.query("SET TRANSACTION READ ONLY", { transaction: t });
-                        await propertyDb.query("SET TIME ZONE 'Asia/Kolkata'", { transaction: t });
+                        const outletTz = await getOutletTimeZone(outletId, propertyDb);
+                        const sanitizedTz = String(outletTz).replace(/['";\\]/g, '');
+                        await propertyDb.query(`SET TIME ZONE '${sanitizedTz}'`, { transaction: t });
                         const rows = await propertyDb.query(sqlQueryString, {
                             replacements: { outletId },
                             type: propertyDb.QueryTypes.SELECT,

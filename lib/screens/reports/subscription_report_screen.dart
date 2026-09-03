@@ -11,6 +11,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/sales/sales_controller.dart';
+import '../../core/config/date_time_service.dart';
 import '../../utils/branding_storage.dart';
 import '../../widgets/sale_bill_preview_dialog.dart';
 
@@ -528,7 +529,7 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
   Future<void> _exportToPdf() async {
     final pdf = pw.Document();
     final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
-    final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
+    final nowStr = DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');
 
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);

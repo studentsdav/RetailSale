@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../core/api/api_client.dart';
+import '../../core/config/date_time_service.dart';
+import '../../core/utils/timezone_utils.dart';
 
 class LuckyDrawCampaignScreen extends StatefulWidget {
   const LuckyDrawCampaignScreen({super.key});
@@ -12,6 +14,18 @@ class LuckyDrawCampaignScreen extends StatefulWidget {
 }
 
 class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with SingleTickerProviderStateMixin {
+  String _formatTz(dynamic dateVal, {String pattern = 'dd-MMM-yyyy hh:mm a'}) {
+    if (dateVal == null) return '--';
+    final dt = dateVal is DateTime
+        ? dateVal
+        : DateTime.tryParse(dateVal.toString());
+    if (dt == null) return '--';
+    return TimeZoneUtils.formatInTimeZone(
+      dt,
+      DateTimeService.instance.currentTimeZone,
+      pattern: pattern,
+    );
+  }
   late TabController _tabController;
   bool _isLoading = true;
   dynamic _activeCampaign;
@@ -305,7 +319,6 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
 
   void _showEarlyDrawConfirmationDialog() {
     if (_activeCampaign == null) return;
-    final drawDate = DateTime.parse(_activeCampaign['draw_date']).toLocal();
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -319,7 +332,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
             ],
           ),
           content: Text(
-            'Scheduled Draw Date: ${DateFormat('dd-MMM-yyyy hh:mm a').format(drawDate)}\n\nDeclaring the result early will draw a random winner from all current ticket holders immediately.',
+            'Scheduled Draw Date: ${_formatTz(_activeCampaign['draw_date'])}\n\nDeclaring the result early will draw a random winner from all current ticket holders immediately.',
             style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.black87),
           ),
           actions: [
@@ -1072,7 +1085,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                       selected: isSelected,
                       selectedTileColor: Colors.blue.shade50,
                       title: Text(c['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      subtitle: Text(DateFormat('dd-MMM-yy').format(DateTime.parse(c['draw_date']).toLocal()), style: const TextStyle(fontSize: 11)),
+                      subtitle: Text(_formatTz(c['draw_date'], pattern: 'dd-MMM-yy'), style: const TextStyle(fontSize: 11)),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 12),
                       onTap: () => _selectCompletedCampaign(c),
                     );
@@ -1158,8 +1171,8 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
           const Divider(),
           const SizedBox(height: 8),
           _detailRow('Raffle Threshold', 'Spend ${_inr.format(double.parse(campaign['threshold_amount'].toString()))} per ticket'),
-          _detailRow('Start Date', DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(campaign['start_date']).toLocal())),
-          _detailRow('Draw Date', DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(campaign['draw_date']).toLocal())),
+          _detailRow('Start Date', _formatTz(campaign['start_date'])),
+          _detailRow('Draw Date', _formatTz(campaign['draw_date'])),
           if (_completedStats != null && campaign['id'] == _selectedCompletedCampaign?['id']) ...[
             _detailRow('Total Campaign Sales', '₹${_inr.format(double.tryParse((_completedStats!['total_campaign_sales'] ?? _completedStats!['total_revenue'] ?? 0).toString()) ?? 0.0)}'),
           ],
@@ -1217,7 +1230,6 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
   Widget _buildRaffleDrawerConsole(dynamic campaign, bool isResultDayOrAfter) {
     final status = campaign['status'];
     final hasWinner = campaign['winner'] != null;
-    final drawDate = DateTime.parse(campaign['draw_date']).toLocal();
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -1343,7 +1355,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Scheduled draw date is ${DateFormat('dd-MMM-yyyy').format(drawDate)}. Click "Declare Result Early" above to draw a winner anytime.',
+                    'Scheduled draw date is ${_formatTz(campaign['draw_date'], pattern: 'dd-MMM-yyyy')}. Click "Declare Result Early" above to draw a winner anytime.',
                     style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
                   ),
                 ),
