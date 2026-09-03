@@ -28,17 +28,13 @@ function normalizeDateKey(value) {
             const isYearFirst = first >= 1000;
 
             if (isYearLast) {
-                if (first > 12 && second >= 1 && second <= 12) {
+                // DD-MM-YYYY format (e.g. 04-09-2026: first=4 (day), second=9 (month), third=2026 (year))
+                if (first >= 1 && first <= 31 && second >= 1 && second <= 12) {
                     return `${third}-${String(second).padStart(2, '0')}-${String(first).padStart(2, '0')}`;
                 }
+                // MM-DD-YYYY format fallback if second > 12
                 if (second > 12 && first >= 1 && first <= 12) {
                     return `${third}-${String(first).padStart(2, '0')}-${String(second).padStart(2, '0')}`;
-                }
-                if (first >= 1 && first <= 12) {
-                    return `${third}-${String(first).padStart(2, '0')}-${String(second).padStart(2, '0')}`;
-                }
-                if (second >= 1 && second <= 12) {
-                    return `${third}-${String(second).padStart(2, '0')}-${String(first).padStart(2, '0')}`;
                 }
             }
 

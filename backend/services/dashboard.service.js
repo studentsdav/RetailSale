@@ -17,6 +17,13 @@ function roundAmount(value) {
 }
 
 function formatDateLocalYmd(value) {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const clean = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(clean)) {
+      return clean.substring(0, 10);
+    }
+  }
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   const y = d.getFullYear();
