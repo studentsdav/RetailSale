@@ -51,7 +51,7 @@ class OutletOnboardingController extends ChangeNotifier {
         subtitle: 'Configure store name, address, phone number, GSTIN, and receipt logo',
         icon: Icons.storefront_rounded,
         isConfigured: propertyConfigured,
-        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'ALL'],
+        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
         actionText: 'Configure Property',
       ),
       OnboardingStepStatus(
@@ -60,7 +60,7 @@ class OutletOnboardingController extends ChangeNotifier {
         subtitle: 'Set auto-numbering prefixes for sales bills, KOTs, GRNs, and POs',
         icon: Icons.pin_outlined,
         isConfigured: sequenceConfigured,
-        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'ALL'],
+        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
         actionText: 'Set Sequences',
       ),
       OnboardingStepStatus(
@@ -69,7 +69,7 @@ class OutletOnboardingController extends ChangeNotifier {
         subtitle: 'Add store locations, stock rooms, or warehouses for inventory control',
         icon: Icons.location_on_outlined,
         isConfigured: locationConfigured,
-        allowedModules: const ['RETAIL', 'HOTEL', 'ALL'],
+        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
         actionText: 'Setup Locations',
       ),
       OnboardingStepStatus(
@@ -78,7 +78,7 @@ class OutletOnboardingController extends ChangeNotifier {
         subtitle: 'Add products, categories, rates, and opening stock items',
         icon: Icons.inventory_2_outlined,
         isConfigured: itemMasterConfigured,
-        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'ALL'],
+        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
         actionText: 'Add Items',
       ),
       OnboardingStepStatus(
@@ -87,7 +87,7 @@ class OutletOnboardingController extends ChangeNotifier {
         subtitle: 'Register vendors and suppliers for purchase orders and receiving',
         icon: Icons.local_shipping_outlined,
         isConfigured: supplierConfigured,
-        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'ALL'],
+        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
         actionText: 'Manage Vendors',
       ),
       OnboardingStepStatus(
@@ -96,7 +96,7 @@ class OutletOnboardingController extends ChangeNotifier {
         subtitle: 'Create dining areas, section floors, and seating table layouts',
         icon: Icons.table_restaurant_outlined,
         isConfigured: restaurantConfigured,
-        allowedModules: const ['RESTAURANT', 'HOTEL', 'ALL'],
+        allowedModules: const ['RESTAURANT', 'HOTEL'],
         actionText: 'Setup Tables',
       ),
       OnboardingStepStatus(
@@ -105,15 +105,17 @@ class OutletOnboardingController extends ChangeNotifier {
         subtitle: 'Create cashier and manager accounts with custom security permissions',
         icon: Icons.people_alt_outlined,
         isConfigured: usersConfigured,
-        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'ALL'],
+        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
         actionText: 'Manage Staff',
       ),
     ];
 
     final currentMod = businessModule.trim().toUpperCase();
     return allSteps.where((s) {
-      if (currentMod == 'ALL') return true;
-      return s.allowedModules.contains(currentMod) || s.allowedModules.contains('ALL');
+      if ((currentMod == 'RETAIL' || currentMod == 'INVENTORY') && s.key == 'RESTAURANT') {
+        return false;
+      }
+      return true;
     }).toList();
   }
 
@@ -123,9 +125,8 @@ class OutletOnboardingController extends ChangeNotifier {
 
     try {
       final userMap = await TokenStorage.getUser();
-      businessModule = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
 
-      // Parallelize all 7 onboarding API checks concurrently using Future.wait
+      // Parallelize onboarding API checks concurrently
       final results = await Future.wait([
         ApiClient.get(ApiEndpoints.propertyInfo).catchError((_) => null),
         ApiClient.get(ApiEndpoints.documentSequence).catchError((_) => null),
@@ -136,8 +137,31 @@ class OutletOnboardingController extends ChangeNotifier {
         ApiClient.get(ApiEndpoints.users).catchError((_) => null),
       ]);
 
-      // 1. Property Setup Status
+      // 1. Determine Business Module (Inventory Only / Retail / Restaurant / Hotel)
       final propRes = results[0];
+      String rawModule = '';
+      if (propRes != null && propRes['success'] == true && propRes['data'] != null) {
+        final pData = propRes['data'];
+        rawModule = (pData['business_type'] ?? pData['business_module'] ?? pData['property_type'] ?? pData['businessType'] ?? '').toString();
+      }
+      if (rawModule.isEmpty || rawModule == 'null') {
+        rawModule = (userMap?['business_type'] ?? userMap?['business_module'] ?? userMap?['outlet_module'] ?? userMap?['outlet_type'] ?? 'ALL').toString();
+      }
+
+      final upper = rawModule.trim().toUpperCase();
+      if (upper.contains('INVENTORY') || upper.contains('WAREHOUSE') || upper.contains('STOCK')) {
+        businessModule = 'INVENTORY';
+      } else if (upper.contains('RETAIL') || upper.contains('STORE') || upper.contains('MART') || upper.contains('GROCERY') || upper.contains('SUPERMARKET') || upper.contains('SHOP')) {
+        businessModule = 'RETAIL';
+      } else if (upper.contains('RESTAURANT') || upper.contains('CAFE') || upper.contains('DINER') || upper.contains('FOOD')) {
+        businessModule = 'RESTAURANT';
+      } else if (upper.contains('HOTEL') || upper.contains('LODGE') || upper.contains('RESORT')) {
+        businessModule = 'HOTEL';
+      } else {
+        businessModule = upper.isNotEmpty ? upper : 'ALL';
+      }
+
+      // 2. Property Setup Status
       if (propRes != null && propRes['success'] == true && propRes['data'] != null) {
         final data = propRes['data'];
         final String name = (data['property_name'] ?? data['propertyName'] ?? data['name'] ?? '').toString().trim();
@@ -146,7 +170,7 @@ class OutletOnboardingController extends ChangeNotifier {
         propertyConfigured = false;
       }
 
-      // 2. Document Sequence Status
+      // 3. Document Sequence Status
       final seqRes = results[1];
       if (seqRes != null && seqRes['success'] == true && seqRes['data'] is List) {
         final list = seqRes['data'] as List;
@@ -155,7 +179,7 @@ class OutletOnboardingController extends ChangeNotifier {
         sequenceConfigured = false;
       }
 
-      // 3. Location Setup Status
+      // 4. Location Setup Status
       final locRes = results[2];
       if (locRes != null && locRes['success'] == true && locRes['data'] is List) {
         final list = locRes['data'] as List;
@@ -164,7 +188,7 @@ class OutletOnboardingController extends ChangeNotifier {
         locationConfigured = false;
       }
 
-      // 4. Item Master Status
+      // 5. Item Master Status
       final itemRes = results[3];
       if (itemRes != null && itemRes['success'] == true && itemRes['data'] is List) {
         final list = itemRes['data'] as List;
@@ -173,7 +197,7 @@ class OutletOnboardingController extends ChangeNotifier {
         itemMasterConfigured = false;
       }
 
-      // 5. Supplier Status
+      // 6. Supplier Status
       final supRes = results[4];
       if (supRes != null && supRes['success'] == true && supRes['data'] is List) {
         final list = supRes['data'] as List;
@@ -182,7 +206,7 @@ class OutletOnboardingController extends ChangeNotifier {
         supplierConfigured = false;
       }
 
-      // 6. Restaurant Setup Status
+      // 7. Restaurant Setup Status
       final restRes = results[5];
       if (restRes != null && restRes['success'] == true && restRes['data'] is List) {
         final list = restRes['data'] as List;
@@ -191,11 +215,11 @@ class OutletOnboardingController extends ChangeNotifier {
         restaurantConfigured = false;
       }
 
-      // 7. Users Status
+      // 8. Users Status
       final usersRes = results[6];
       if (usersRes != null && usersRes['success'] == true && usersRes['data'] is List) {
         final list = usersRes['data'] as List;
-        usersConfigured = list.length > 1; // More than 1 user means staff configured
+        usersConfigured = list.length > 1;
       } else {
         usersConfigured = false;
       }
