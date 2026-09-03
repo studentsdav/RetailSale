@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const audit = require('../../services/audit.service');
 const { createLedgerEntry, dateKey } = require('../../services/cashLedger.service');
+const { isBankPayment, debitBankBalance } = require('../../services/bankAccount.service');
 exports.getSupplierBills = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
@@ -334,6 +335,9 @@ exports.paySupplierBill = async (req, res) => {
         // Auto-create accounting voucher safely after transaction commit
         if (amount > 0) {
             try {
+                if (isBankPayment(paymentMode)) {
+                    await debitBankBalance({ db: req.propertyDb, outlet_id, amount });
+                }
                 const { getNextNumber } = require('../../services/numbering.service');
                 let vNo;
                 try {

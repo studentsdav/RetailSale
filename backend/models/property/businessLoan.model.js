@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-    const BankAccount = sequelize.define('bank_accounts', {
+    const BusinessLoan = sequelize.define('business_loans', {
         id: {
             type: DataTypes.INTEGER,
             primaryKey: true,
@@ -9,56 +9,52 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             allowNull: false
         },
-        bank_name: {
+        loan_name: {
             type: DataTypes.STRING(150),
             allowNull: false
         },
-        account_name: {
+        lender_name: {
             type: DataTypes.STRING(150),
-            allowNull: false
-        },
-        account_number: {
-            type: DataTypes.STRING(50),
-            allowNull: false
-        },
-        ifsc_code: {
-            type: DataTypes.STRING(20),
             allowNull: true
         },
-        branch_name: {
-            type: DataTypes.STRING(100),
-            allowNull: true
+        principal_amount: {
+            type: DataTypes.DECIMAL(12, 2),
+            defaultValue: 0.00
         },
-        account_type: {
+        interest_rate: {
+            type: DataTypes.DECIMAL(5, 2),
+            defaultValue: 0.00
+        },
+        tenure_months: {
+            type: DataTypes.INTEGER,
+            defaultValue: 12
+        },
+        monthly_emi: {
+            type: DataTypes.DECIMAL(12, 2),
+            defaultValue: 0.00
+        },
+        remaining_principal: {
+            type: DataTypes.DECIMAL(12, 2),
+            defaultValue: 0.00
+        },
+        status: {
             type: DataTypes.STRING(30),
-            defaultValue: 'CURRENT'
+            defaultValue: 'ACTIVE'
         },
-        opening_balance: {
-            type: DataTypes.DECIMAL(12, 2),
-            defaultValue: 0.00
-        },
-        current_balance: {
-            type: DataTypes.DECIMAL(12, 2),
-            defaultValue: 0.00
-        },
-        is_active: {
-            type: DataTypes.BOOLEAN,
-            defaultValue: true
-        },
-        is_primary: {
-            type: DataTypes.BOOLEAN,
-            defaultValue: false
+        notes: {
+            type: DataTypes.TEXT,
+            allowNull: true
         },
         created_by: {
             type: DataTypes.INTEGER,
             allowNull: true
         }
     }, {
-        tableName: 'bank_accounts',
+        tableName: 'business_loans',
         timestamps: true,
         createdAt: 'created_at',
         updatedAt: 'updated_at'
     });
 
-    return BankAccount;
+    return BusinessLoan;
 };

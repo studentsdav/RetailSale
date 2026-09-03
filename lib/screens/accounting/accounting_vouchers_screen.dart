@@ -21,6 +21,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
   final BankAccountController bankCtrl = BankAccountController();
 
   final FocusNode _focusNode = FocusNode();
+  bool _isCreatingVoucher = false;
 
   @override
   void initState() {
@@ -40,25 +41,27 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
   void _handleKeyEvent(RawKeyEvent event) {
     if (event is RawKeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.f4) {
-        setState(() => ctrl.setActiveType('CONTRA'));
-        ctrl.fetchVouchers(type: 'CONTRA');
+        _selectType('CONTRA');
       } else if (event.logicalKey == LogicalKeyboardKey.f5) {
-        setState(() => ctrl.setActiveType('PAYMENT'));
-        ctrl.fetchVouchers(type: 'PAYMENT');
+        _selectType('PAYMENT');
       } else if (event.logicalKey == LogicalKeyboardKey.f6) {
-        setState(() => ctrl.setActiveType('RECEIPT'));
-        ctrl.fetchVouchers(type: 'RECEIPT');
+        _selectType('RECEIPT');
       } else if (event.logicalKey == LogicalKeyboardKey.f7) {
-        setState(() => ctrl.setActiveType('JOURNAL'));
-        ctrl.fetchVouchers(type: 'JOURNAL');
+        _selectType('JOURNAL');
       } else if (event.logicalKey == LogicalKeyboardKey.f8) {
-        setState(() => ctrl.setActiveType('SALES'));
-        ctrl.fetchVouchers(type: 'SALES');
+        _selectType('SALES');
       } else if (event.logicalKey == LogicalKeyboardKey.f9) {
-        setState(() => ctrl.setActiveType('PURCHASE'));
-        ctrl.fetchVouchers(type: 'PURCHASE');
+        _selectType('PURCHASE');
       }
     }
+  }
+
+  void _selectType(String type) {
+    setState(() {
+      _isCreatingVoucher = false;
+      ctrl.setActiveType(type);
+    });
+    ctrl.fetchVouchers(type: type);
   }
 
   @override
@@ -165,35 +168,55 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                   _buildShortcutToolbar(primaryColor, tealColor),
                   const SizedBox(height: 16),
 
-                  // Main Form Grid
+                  // Main View Panel (Register List View for ALL Vouchers by Default)
                   Expanded(
-                    child: (ctrl.activeType == 'SALES' || ctrl.activeType == 'PURCHASE')
-                        ? _buildVoucherRegisterPanel(primaryColor, tealColor)
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    child: _isCreatingVoucher
+                        ? Column(
                             children: [
-                              // Left Section: Form & Entry Table
-                              Expanded(
-                                flex: 2,
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    children: [
-                                      _buildVoucherMetaCard(primaryColor, tealColor),
-                                      const SizedBox(height: 16),
-                                      _buildLedgerBreakdownTable(primaryColor),
-                                    ],
+                              Row(
+                                children: [
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: primaryColor,
+                                      side: const BorderSide(color: primaryColor),
+                                    ),
+                                    onPressed: () => setState(() => _isCreatingVoucher = false),
+                                    icon: const Icon(Icons.arrow_back, size: 16),
+                                    label: Text(
+                                      '← Back to ${ctrl.activeType} Register & History',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
                                   ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Expanded(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: SingleChildScrollView(
+                                        child: Column(
+                                          children: [
+                                            _buildVoucherMetaCard(primaryColor, tealColor),
+                                            const SizedBox(height: 16),
+                                            _buildLedgerBreakdownTable(primaryColor),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    SizedBox(
+                                      width: 340,
+                                      child: _buildSummaryAndActionCard(primaryColor, tealColor),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 16),
-
-                              // Right Section: Summary & Action Card
-                              SizedBox(
-                                width: 340,
-                                child: _buildSummaryAndActionCard(primaryColor, tealColor),
-                              ),
                             ],
-                          ),
+                          )
+                        : _buildVoucherRegisterPanel(primaryColor, tealColor),
                   ),
                 ],
               ),
@@ -205,11 +228,58 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
   }
 
   Widget _buildVoucherRegisterPanel(Color primaryColor, Color tealColor) {
-    final isSales = ctrl.activeType == 'SALES';
-    final title = isSales ? 'Sales POS Register & Vouchers (F8)' : 'Purchase GRN Register & Vouchers (F9)';
-    final desc = isSales
-        ? 'View, search, and reprint saved Sales POS invoice vouchers.'
-        : 'View, search, and reprint saved Purchase GRN vendor receive vouchers.';
+    final type = ctrl.activeType;
+
+    final titles = {
+      'CONTRA': 'Contra Register & Vouchers (F4)',
+      'PAYMENT': 'Payment Register & Vouchers (F5)',
+      'RECEIPT': 'Receipt Register & Vouchers (F6)',
+      'JOURNAL': 'Journal Register & Vouchers (F7)',
+      'SALES': 'Sales POS Register & Vouchers (F8)',
+      'PURCHASE': 'Purchase GRN Register & Vouchers (F9)'
+    };
+
+    final descs = {
+      'CONTRA': 'View, search, and reprint saved cash deposit, withdrawal, and bank transfer vouchers.',
+      'PAYMENT': 'View, search, and reprint saved cash & bank expense payment vouchers.',
+      'RECEIPT': 'View, search, and reprint saved incoming cash & bank receipt vouchers.',
+      'JOURNAL': 'View, search, and reprint saved non-cash adjustment and journal vouchers.',
+      'SALES': 'View, search, and reprint saved Sales POS invoice vouchers.',
+      'PURCHASE': 'View, search, and reprint saved Purchase GRN vendor receive vouchers.'
+    };
+
+    final buttonLabels = {
+      'CONTRA': '+ Create Contra Entry',
+      'PAYMENT': '+ Create Payment Entry',
+      'RECEIPT': '+ Create Receipt Entry',
+      'JOURNAL': '+ Create Journal Entry',
+      'SALES': '+ Open Sales Screen',
+      'PURCHASE': '+ Open GRN Receiving'
+    };
+
+    final buttonColors = {
+      'CONTRA': primaryColor,
+      'PAYMENT': primaryColor,
+      'RECEIPT': primaryColor,
+      'JOURNAL': primaryColor,
+      'SALES': Colors.green.shade800,
+      'PURCHASE': Colors.amber.shade900
+    };
+
+    final badgeColors = {
+      'CONTRA': Colors.blue.shade800,
+      'PAYMENT': Colors.indigo.shade800,
+      'RECEIPT': Colors.teal.shade800,
+      'JOURNAL': Colors.purple.shade800,
+      'SALES': Colors.green.shade800,
+      'PURCHASE': Colors.amber.shade900
+    };
+
+    final title = titles[type] ?? 'Accounting Vouchers Register';
+    final desc = descs[type] ?? 'View, search, and reprint saved vouchers.';
+    final btnLabel = buttonLabels[type] ?? '+ Create Voucher';
+    final btnColor = buttonColors[type] ?? primaryColor;
+    final defaultBadge = badgeColors[type] ?? primaryColor;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -232,7 +302,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: isSales ? Colors.green.shade800 : Colors.amber.shade900,
+                      color: btnColor,
                     ),
                   ),
                   Text(
@@ -243,19 +313,21 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
               ),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isSales ? Colors.green.shade800 : Colors.amber.shade900,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  backgroundColor: btnColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 ),
                 onPressed: () {
-                  if (isSales) {
+                  if (type == 'SALES') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const SaleScreen()));
-                  } else {
+                  } else if (type == 'PURCHASE') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const GoodsReceivingScreen()));
+                  } else {
+                    setState(() => _isCreatingVoucher = true);
                   }
                 },
                 icon: const Icon(Icons.add, size: 16, color: Colors.white),
                 label: Text(
-                  isSales ? '+ Open Sales Screen' : '+ Open GRN Receiving',
+                  btnLabel,
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
               ),
@@ -267,9 +339,23 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : ctrl.vouchers.isEmpty
                     ? Center(
-                        child: Text(
-                          isSales ? 'No Sales POS vouchers found.' : 'No Purchase GRN vouchers found.',
-                          style: const TextStyle(color: Colors.grey),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No $type vouchers recorded yet.',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 8),
+                            if (type != 'SALES' && type != 'PURCHASE')
+                              ElevatedButton(
+                                onPressed: () => setState(() => _isCreatingVoucher = true),
+                                style: ElevatedButton.styleFrom(backgroundColor: btnColor),
+                                child: Text(btnLabel, style: const TextStyle(color: Colors.white)),
+                              ),
+                          ],
                         ),
                       )
                     : ListView.separated(
@@ -277,7 +363,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                         separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final v = ctrl.vouchers[index];
-                          final badgeColor = isSales ? Colors.green.shade700 : Colors.amber.shade800;
+                          final badgeColor = badgeColors[v.voucherType] ?? defaultBadge;
                           return ListTile(
                             leading: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -311,6 +397,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
                                     color: Color(0xFF0B5CAD),
+                                    fontFamily: 'monospace',
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -352,22 +439,22 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _fKeyBtn('F4', 'Contra Voucher', ctrl.activeType == 'CONTRA',
+            _fKeyBtn('F4', 'Contra (Deposit/Withdrawal)', ctrl.activeType == 'CONTRA',
                 () => _selectType('CONTRA'), primaryColor),
             const SizedBox(width: 8),
-            _fKeyBtn('F5', 'Payment Voucher', ctrl.activeType == 'PAYMENT',
+            _fKeyBtn('F5', 'Payment (Expenses)', ctrl.activeType == 'PAYMENT',
                 () => _selectType('PAYMENT'), primaryColor),
             const SizedBox(width: 8),
-            _fKeyBtn('F6', 'Receipt Voucher', ctrl.activeType == 'RECEIPT',
+            _fKeyBtn('F6', 'Receipt (Income)', ctrl.activeType == 'RECEIPT',
                 () => _selectType('RECEIPT'), primaryColor),
             const SizedBox(width: 8),
-            _fKeyBtn('F7', 'Journal Voucher', ctrl.activeType == 'JOURNAL',
+            _fKeyBtn('F7', 'Journal (Adjustments)', ctrl.activeType == 'JOURNAL',
                 () => _selectType('JOURNAL'), primaryColor),
             Container(height: 24, width: 1, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 10)),
-            _fKeyBtn('F8', 'Sales POS', ctrl.activeType == 'SALES',
+            _fKeyBtn('F8', 'Sales POS (Billing)', ctrl.activeType == 'SALES',
                 () => _selectType('SALES'), Colors.green.shade800),
             const SizedBox(width: 8),
-            _fKeyBtn('F9', 'Purchase GRN', ctrl.activeType == 'PURCHASE',
+            _fKeyBtn('F9', 'Purchase (GRN)', ctrl.activeType == 'PURCHASE',
                 () => _selectType('PURCHASE'), Colors.amber.shade900),
           ],
         ),
@@ -418,52 +505,12 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
     );
   }
 
-  Widget _fKeyNavBtn(String key, String label, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                key,
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _selectType(String type) {
-    setState(() => ctrl.setActiveType(type));
-    ctrl.fetchVouchers(type: type);
-  }
-
   Widget _buildVoucherMetaCard(Color primaryColor, Color tealColor) {
     final titles = {
-      'CONTRA': 'Contra Voucher (F4)',
-      'PAYMENT': 'Payment Voucher (F5)',
-      'RECEIPT': 'Receipt Voucher (F6)',
-      'JOURNAL': 'Journal Voucher (F7)'
+      'CONTRA': 'Contra Voucher Entry (F4)',
+      'PAYMENT': 'Payment Voucher Entry (F5)',
+      'RECEIPT': 'Receipt Voucher Entry (F6)',
+      'JOURNAL': 'Journal Voucher Entry (F7)'
     };
     final descs = {
       'CONTRA': 'Record cash deposit to bank, withdrawal, or bank-to-bank transfer',
@@ -680,7 +727,9 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                               : Colors.teal.shade100,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: line.lineType == 'DEBIT' ? Colors.blue : Colors.teal,
+                            color: line.lineType == 'DEBIT'
+                                ? Colors.blue.shade300
+                                : Colors.teal.shade300,
                           ),
                         ),
                         child: Row(
@@ -688,14 +737,14 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                             Text(
                               line.lineType == 'DEBIT' ? 'Dr' : 'Cr',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: line.lineType == 'DEBIT'
                                     ? Colors.blue.shade900
                                     : Colors.teal.shade900,
                               ),
                             ),
-                            const SizedBox(width: 2),
+                            const SizedBox(width: 4),
                             Icon(
                               Icons.swap_vert,
                               size: 12,
@@ -893,14 +942,18 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                             backgroundColor: res['success'] == true ? Colors.green : Colors.red,
                           ),
                         );
+                        if (res['success'] == true) {
+                          setState(() => _isCreatingVoucher = false);
+                          ctrl.fetchVouchers(type: ctrl.activeType);
+                        }
                       }
                     },
               icon: ctrl.loading
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : const Icon(Icons.save, color: Colors.white, size: 18),
-              label: Text(
-                ctrl.loading ? 'Saving...' : 'Save Voucher (Ctrl+S)',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              label: const Text(
+                'Save Voucher (Ctrl+S)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ),
           ),
@@ -913,111 +966,66 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.8,
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Voucher History Register & Reprint',
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0B5CAD)),
-                      ),
-                      Text('List of all saved double-entry vouchers passed in the system.',
-                          style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const Divider(height: 20),
-              Expanded(
-                child: ctrl.vouchers.isEmpty
-                    ? const Center(
-                        child: Text('No saved vouchers found in this category.',
-                            style: TextStyle(color: Colors.grey)))
-                    : ListView.separated(
-                        itemCount: ctrl.vouchers.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final v = ctrl.vouchers[index];
-                          return ListTile(
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Voucher History & Reprint Slip',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0B5CAD)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: ctrl.vouchers.isEmpty
+                  ? const Center(child: Text('No accounting vouchers recorded yet.'))
+                  : ListView.builder(
+                      itemCount: ctrl.vouchers.length,
+                      itemBuilder: (context, index) {
+                        final v = ctrl.vouchers[index];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
                             leading: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF0B5CAD).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(6),
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 v.voucherType,
-                                style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0B5CAD)),
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0B5CAD)),
                               ),
                             ),
-                            title: Text(
-                              'Voucher No: ${v.voucherNo}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 13),
+                            title: Text('Voucher #${v.voucherNo} • ${v.paymentMode}'),
+                            subtitle: Text('Date: ${v.voucherDate}\n${v.narration ?? ''}'),
+                            trailing: ElevatedButton.icon(
+                              onPressed: () => _showPrintVoucherSlipDialog(v),
+                              icon: const Icon(Icons.print, size: 14),
+                              label: const Text('Reprint Slip'),
                             ),
-                            subtitle: Text(
-                              'Date: ${v.voucherDate} • Mode: ${v.paymentMode} • Ref: ${v.referenceNo ?? 'N/A'}\nNotes: ${v.narration ?? 'None'}',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '₹${v.totalDebit.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0B5CAD),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                  ),
-                                  onPressed: () =>
-                                      _showPrintVoucherSlipDialog(v),
-                                  icon: const Icon(Icons.print,
-                                      size: 14, color: Colors.white),
-                                  label: const Text('Reprint',
-                                      style: TextStyle(
-                                          fontSize: 11, color: Colors.white)),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        );
-      },
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1025,160 +1033,48 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        title: Text('Print Slip - Voucher #${voucher.voucherNo}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Voucher Slip Preview: ${voucher.voucherNo}',
-              style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0B5CAD)),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, size: 18),
-              onPressed: () => Navigator.pop(ctx),
-            ),
+            Text('Type: ${voucher.voucherType}'),
+            Text('Date: ${voucher.voucherDate}'),
+            Text('Payment Mode: ${voucher.paymentMode}'),
+            Text('Total Amount: ₹${voucher.totalDebit.toStringAsFixed(2)}'),
+            if (voucher.narration != null) Text('Remarks: ${voucher.narration}'),
           ],
         ),
-        content: Container(
-          width: 450,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Column(
-                    children: [
-                      const Text(
-                        'RETAILSALE ENTERPRISE ACCOUNTING',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                      Text(
-                        '${voucher.voucherType} VOUCHER SLIP',
-                        style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF0F766E)),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Voucher No: ${voucher.voucherNo}',
-                        style: const TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.bold)),
-                    Text('Date: ${voucher.voucherDate}',
-                        style: const TextStyle(fontSize: 11)),
-                  ],
-                ),
-                Text('Payment Mode: ${voucher.paymentMode}',
-                    style: const TextStyle(fontSize: 11)),
-                if (voucher.referenceNo != null)
-                  Text('Reference / Slip: ${voucher.referenceNo}',
-                      style: const TextStyle(fontSize: 11)),
-                const Divider(height: 16),
-                const Text('LEDGER BREAKDOWN:',
-                    style:
-                        TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                ...voucher.lines.map((l) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: l.lineType == 'DEBIT'
-                                  ? Colors.blue.shade100
-                                  : Colors.teal.shade100,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Text(l.lineType == 'DEBIT' ? 'Dr' : 'Cr',
-                                style: const TextStyle(
-                                    fontSize: 9, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                              child: Text(l.accountName,
-                                  style: const TextStyle(fontSize: 11))),
-                          Text(
-                            l.lineType == 'DEBIT'
-                                ? '₹${l.debitAmount.toStringAsFixed(2)}'
-                                : '₹${l.creditAmount.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                fontSize: 11, fontFamily: 'monospace'),
-                          ),
-                        ],
-                      ),
-                    )),
-                const Divider(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Total Amount:',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 12)),
-                    Text('₹${voucher.totalDebit.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            fontFamily: 'monospace',
-                            color: Color(0xFF0B5CAD))),
-                  ],
-                ),
-                if (voucher.narration != null && voucher.narration!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text('Narration: ${voucher.narration}',
-                        style: const TextStyle(
-                            fontSize: 11, fontStyle: FontStyle.italic)),
-                  ),
-              ],
-            ),
-          ),
-        ),
         actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0B5CAD)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B5CAD)),
             onPressed: () async {
               Navigator.pop(ctx);
-              await PosInvoicePrinter.printAccountingVoucherReceipt(
-                voucherNo: voucher.voucherNo,
-                voucherType: voucher.voucherType,
-                dateStr: voucher.voucherDate,
-                partyName: voucher.lines.isNotEmpty ? voucher.lines.first.accountName : 'General Account',
-                paymentMode: voucher.paymentMode,
-                amount: voucher.totalDebit > 0 ? voucher.totalDebit : voucher.totalCredit,
-                note: voucher.narration ?? '',
-                referenceNo: voucher.referenceNo,
-                lines: voucher.lines.map((l) => {
-                  'line_type': l.lineType,
-                  'account_name': l.accountName,
-                  'debit_amount': l.debitAmount,
-                  'credit_amount': l.creditAmount,
-                }).toList(),
-              );
+              await _printVoucherSlip(voucher);
             },
             icon: const Icon(Icons.print, color: Colors.white, size: 16),
-            label: const Text('Print Voucher Slip',
-                style: TextStyle(color: Colors.white)),
+            label: const Text('Print POS Slip', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _printVoucherSlip(AccountingVoucherModel voucher) async {
+    try {
+      await PosInvoicePrinter.printAccountingVoucherReceipt(
+        voucherNo: voucher.voucherNo,
+        voucherType: voucher.voucherType,
+        dateStr: voucher.voucherDate,
+        partyName: voucher.narration ?? 'Accounting Voucher',
+        paymentMode: voucher.paymentMode,
+        amount: voucher.totalDebit,
+        note: voucher.narration ?? '',
+        referenceNo: voucher.referenceNo,
+      );
+    } catch (e) {
+      debugPrint('Print Voucher Error: $e');
+    }
   }
 }

@@ -13,6 +13,8 @@ router.use(auth, license('REPORTS'));
 router.get('/banks', bankCtrl.getBankAccounts);
 router.post('/banks', bankCtrl.createBankAccount);
 router.put('/banks/:id', bankCtrl.updateBankAccount);
+router.post('/banks/:id/set-primary', bankCtrl.setPrimaryBankAccount);
+router.post('/banks/:id/toggle-active', bankCtrl.toggleBankAccountActive);
 
 // Accounting Vouchers Endpoints
 router.get('/vouchers', voucherCtrl.getVouchers);
@@ -21,6 +23,10 @@ router.post('/vouchers', voucherCtrl.createVoucher);
 
 // Loan, Asset & EMI Endpoints
 router.get('/loans-assets', loanCtrl.getLoansAndAssets);
+router.post('/loans', loanCtrl.createLoan);
+router.delete('/loans/:id', loanCtrl.deleteLoan);
+router.post('/assets', loanCtrl.createCapitalAsset);
+router.delete('/assets/:id', loanCtrl.deleteCapitalAsset);
 router.post('/loans/pay-emi', loanCtrl.payLoanEmi);
 
 // Financial Statements Endpoints

@@ -10,6 +10,7 @@ class BankAccountModel {
   final double openingBalance;
   final double currentBalance;
   final bool isActive;
+  final bool isPrimary;
 
   BankAccountModel({
     required this.id,
@@ -23,6 +24,7 @@ class BankAccountModel {
     required this.openingBalance,
     required this.currentBalance,
     required this.isActive,
+    this.isPrimary = false,
   });
 
   factory BankAccountModel.fromJson(Map<String, dynamic> json) {
@@ -42,6 +44,7 @@ class BankAccountModel {
       currentBalance:
           double.tryParse(json['current_balance']?.toString() ?? '0') ?? 0.0,
       isActive: json['is_active'] ?? true,
+      isPrimary: json['is_primary'] ?? false,
     );
   }
 
@@ -58,6 +61,7 @@ class BankAccountModel {
       'opening_balance': openingBalance,
       'current_balance': currentBalance,
       'is_active': isActive,
+      'is_primary': isPrimary,
     };
   }
 }

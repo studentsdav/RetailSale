@@ -1,5 +1,6 @@
 const { Op, Sequelize } = require('sequelize');
 const { createLedgerEntry } = require('../../services/cashLedger.service');
+const { isBankPayment, debitBankBalance } = require('../../services/bankAccount.service');
 
 exports.createExpense = async (req, res) => {
     const t = await req.propertyDb.transaction();
@@ -18,6 +19,7 @@ exports.createExpense = async (req, res) => {
         const category = String(req.body.category || '').trim();
         const amount = Number(req.body.amount) || 0;
         const note = String(req.body.note || '').trim() || null;
+        const payment_mode = String(req.body.payment_mode || req.body.payment_method || 'CASH').trim().toUpperCase();
 
         if (!category) {
             await t.rollback();
@@ -47,12 +49,21 @@ exports.createExpense = async (req, res) => {
             reference_id: expense.id,
             reference_no: `EXP-${expense.id}`,
             party_name: category,
-            payment_method: 'CASH',
+            payment_method: payment_mode,
             amount_out: amount,
             notes: note,
             created_by,
             transaction: t
         });
+
+        let bank = null;
+        if (isBankPayment(payment_mode)) {
+            try {
+                bank = await debitBankBalance({ db: req.propertyDb, outlet_id, amount, transaction: t });
+            } catch (bErr) {
+                console.error('Error debiting bank for expense:', bErr);
+            }
+        }
 
         // Auto-Post Double-Entry Payment Voucher (PV)
         try {
@@ -67,7 +78,8 @@ exports.createExpense = async (req, res) => {
                 voucher_no: autoNo,
                 voucher_type: 'PAYMENT',
                 voucher_date: expense_date,
-                payment_mode: 'CASH',
+                payment_mode,
+                bank_account_id: bank?.id || null,
                 reference_no: `EXP-${expense.id}`,
                 narration: `Auto Payment Voucher for ${category}: ${note || 'Expense Entry'}`,
                 total_debit: amount,
@@ -89,11 +101,11 @@ exports.createExpense = async (req, res) => {
                 {
                     voucher_id: header.id,
                     line_type: 'CREDIT',
-                    account_name: 'Main Cash Drawer',
-                    account_type: 'CASH',
+                    account_name: isBankPayment(payment_mode) ? (bank?.account_name || 'Bank Accounts Total') : 'Main Cash Drawer',
+                    account_type: isBankPayment(payment_mode) ? 'BANK' : 'CASH',
                     debit_amount: 0,
                     credit_amount: amount,
-                    particulars: 'Cash Outflow for Expense'
+                    particulars: `${isBankPayment(payment_mode) ? 'Bank' : 'Cash'} Outflow for Expense`
                 }
             ], { transaction: t });
         } catch (vErr) {

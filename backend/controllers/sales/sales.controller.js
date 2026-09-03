@@ -1,6 +1,7 @@
 const audit = require('../../services/audit.service');
 const { insertLedger, batchInsertLedger } = require('../../services/stockLedger.service');
 const { createLedgerEntry, batchCreateLedgerEntries, recalculateLedgerBalances } = require('../../services/cashLedger.service');
+const { isBankPayment, isBankPaymentMethod, getDefaultBankAccount, creditBankBalance, debitBankBalance } = require('../../services/bankAccount.service');
 const { applyLoyaltyOnCompletedSale } = require('../../services/loyalty.service');
 const { Op, fn, col, where: sqlWhere } = require('sequelize');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
@@ -2534,7 +2535,11 @@ function buildSalePaymentLedgerEntries({
         });
     }
 
-    if (!hasUsableSplit && balanceDue > 0) {
+    const creditSplit = splitLines.filter((row) => row.method === 'CREDIT' || row.method === 'DUE');
+    const splitCreditAmount = creditSplit.reduce((sum, r) => sum + toAmount(r.amount), 0);
+    const finalCreditAmount = Math.max(toAmount(balanceDue), splitCreditAmount);
+
+    if (finalCreditAmount > 0) {
         entries.push({
             outlet_id: req.user.outlet_id,
             txn_date: header.sale_date,
@@ -2545,7 +2550,8 @@ function buildSalePaymentLedgerEntries({
             party_name: header.customer_name || header.customer_phone || 'Walk-in Customer',
             payment_method: 'CREDIT',
             amount_in: 0,
-            notes: `Sale ${sale.sale_no} created with outstanding ${balanceDue.toFixed(2)}`,
+            adjustment_amount: finalCreditAmount,
+            notes: `Sale ${sale.sale_no} created with outstanding ${finalCreditAmount.toFixed(2)}`,
             created_by
         });
     }
@@ -3148,7 +3154,112 @@ async function createSaleVersion({
             ...buildSalePaymentLedgerEntries({ req, sale, header, paymentMode, amountPaid, netAmount: derivedNetAmount, balanceDue: effectiveBalanceDue, created_by }),
             ...buildSaleBenefitLedgerEntries({ req, sale, header, paymentMode, created_by, discountAmount: ledgerDiscountAmount, schemeFreeQtyAmount, subscriptionAdjustmentAmount })
         ];
-        if (allLedgerEntries.length > 0) await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id, entries: allLedgerEntries, transaction });
+        if (allLedgerEntries.length > 0) {
+            await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id, entries: allLedgerEntries, transaction });
+
+            // Auto credit default bank account for bank/card/upi/subscription payment lines
+            try {
+                const defaultBank = await getDefaultBankAccount({ db: req.propertyDb, outlet_id, transaction });
+                let bankPaymentTotal = 0;
+                for (const e of allLedgerEntries) {
+                    const isBank = await isBankPaymentMethod({ db: req.propertyDb, method: e.payment_method });
+                    if (isBank || e.transaction_type === 'SALE_CARD' || e.transaction_type === 'SALE_UPI') {
+                        bankPaymentTotal += Number(e.amount_in) || 0;
+                    }
+                }
+
+                if (bankPaymentTotal > 0) {
+                    await creditBankBalance({ db: req.propertyDb, outlet_id, amount: bankPaymentTotal, bankAccountId: defaultBank?.id, transaction });
+                }
+
+                // Auto post double-entry Sales Accounting Voucher
+                const count = await req.propertyDb.models.accounting_vouchers.count({ where: { outlet_id, voucher_type: 'SALES' }, transaction });
+                const vNo = `SV-${String(count + 1).padStart(4, '0')}`;
+                const vHeader = await req.propertyDb.models.accounting_vouchers.create({
+                    outlet_id,
+                    voucher_no: vNo,
+                    voucher_type: 'SALES',
+                    voucher_date: header.sale_date || new Date().toISOString().split('T')[0],
+                    payment_mode: paymentMode,
+                    bank_account_id: bankPaymentTotal > 0 ? (defaultBank?.id || null) : null,
+                    reference_no: sale.sale_no,
+                    narration: `Sales Voucher for Sale #${sale.sale_no} (${header.customer_name || 'Walk-in Customer'})`,
+                    total_debit: derivedNetAmount,
+                    total_credit: derivedNetAmount,
+                    status: 'POSTED',
+                    created_by
+                }, { transaction });
+
+                const cashPaidTotal = allLedgerEntries
+                    .filter(e => e.transaction_type === 'SALE_CASH' || e.payment_method === 'CASH')
+                    .reduce((sum, e) => sum + (Number(e.amount_in) || 0), 0);
+                const taxAmount = toAmount(header.total_tax || 0);
+                const grossSales = Math.max(0, derivedNetAmount - taxAmount);
+
+                const vLines = [];
+                if (cashPaidTotal > 0) {
+                    vLines.push({
+                        voucher_id: vHeader.id,
+                        line_type: 'DEBIT',
+                        account_name: 'Main Cash Drawer',
+                        account_type: 'CASH',
+                        debit_amount: cashPaidTotal,
+                        credit_amount: 0,
+                        particulars: `Cash Received for Sale #${sale.sale_no}`
+                    });
+                }
+                if (bankPaymentTotal > 0) {
+                    vLines.push({
+                        voucher_id: vHeader.id,
+                        line_type: 'DEBIT',
+                        account_name: defaultBank?.account_name || 'Bank Accounts Total',
+                        account_type: 'BANK',
+                        debit_amount: bankPaymentTotal,
+                        credit_amount: 0,
+                        particulars: `Bank/Card/UPI Received for Sale #${sale.sale_no}`
+                    });
+                }
+                if (effectiveBalanceDue > 0) {
+                    vLines.push({
+                        voucher_id: vHeader.id,
+                        line_type: 'DEBIT',
+                        account_name: 'Sundry Debtors (Customer Dues)',
+                        account_type: 'ASSET',
+                        debit_amount: effectiveBalanceDue,
+                        credit_amount: 0,
+                        particulars: `Credit Sale Balance Due for #${sale.sale_no}`
+                    });
+                }
+                if (grossSales > 0) {
+                    vLines.push({
+                        voucher_id: vHeader.id,
+                        line_type: 'CREDIT',
+                        account_name: 'Sales Revenue Account',
+                        account_type: 'REVENUE',
+                        debit_amount: 0,
+                        credit_amount: grossSales,
+                        particulars: `Net Sales Revenue for #${sale.sale_no}`
+                    });
+                }
+                if (taxAmount > 0) {
+                    vLines.push({
+                        voucher_id: vHeader.id,
+                        line_type: 'CREDIT',
+                        account_name: 'Output GST Payable Account',
+                        account_type: 'LIABILITY',
+                        debit_amount: 0,
+                        credit_amount: taxAmount,
+                        particulars: `Output Tax Payable for #${sale.sale_no}`
+                    });
+                }
+
+                if (vLines.length > 0) {
+                    await req.propertyDb.models.voucher_lines.bulkCreate(vLines, { transaction });
+                }
+            } catch (vErr) {
+                console.error('Error auto-creating Sales accounting voucher:', vErr);
+            }
+        }
     }
     console.log(`[PERF-CSV] batchCreateLedgerEntries: ${Date.now() - _t2}ms`);
 

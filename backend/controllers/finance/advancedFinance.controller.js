@@ -1,5 +1,6 @@
 const { Op, Sequelize } = require('sequelize');
 const { getNextNumber } = require('../../services/numbering.service');
+const { isBankPayment, isBankPaymentMethod, getDefaultBankAccount, creditBankBalance, debitBankBalance } = require('../../services/bankAccount.service');
 const {
     createLedgerEntry,
     updateLedgerEntry,
@@ -1357,6 +1358,53 @@ exports.createRepayment = async (req, res) => {
             balance = await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
             await updateSaleLedgerOutstanding({ db: req.propertyDb, outlet_id: req.user.outlet_id, sale, balance, transaction: t });
 
+            // Auto credit default bank account if paid by bank/card/upi/electronic payment method
+            const isBankRepay = await isBankPaymentMethod({ db: req.propertyDb, method: payment_mode });
+            if (!waiveOff && isBankRepay) {
+                try {
+                    const bank = await creditBankBalance({ db: req.propertyDb, outlet_id: req.user.outlet_id, amount, transaction: t });
+                    const count = await req.propertyDb.models.accounting_vouchers.count({ where: { outlet_id: req.user.outlet_id, voucher_type: 'RECEIPT' }, transaction: t });
+                    const vNo = `RV-${String(count + 1).padStart(4, '0')}`;
+                    const vHeader = await req.propertyDb.models.accounting_vouchers.create({
+                        outlet_id: req.user.outlet_id,
+                        voucher_no: vNo,
+                        voucher_type: 'RECEIPT',
+                        voucher_date: payment_date,
+                        payment_mode,
+                        bank_account_id: bank?.id || null,
+                        reference_no: repaymentVoucherNo,
+                        narration: `Customer Repayment received for Sale #${sale.sale_no}`,
+                        total_debit: amount,
+                        total_credit: amount,
+                        status: 'POSTED',
+                        created_by: req.user.id
+                    }, { transaction: t });
+
+                    await req.propertyDb.models.voucher_lines.bulkCreate([
+                        {
+                            voucher_id: vHeader.id,
+                            line_type: 'DEBIT',
+                            account_name: bank?.account_name || 'Bank Accounts Total',
+                            account_type: 'BANK',
+                            debit_amount: amount,
+                            credit_amount: 0,
+                            particulars: `Bank Repayment received for #${sale.sale_no}`
+                        },
+                        {
+                            voucher_id: vHeader.id,
+                            line_type: 'CREDIT',
+                            account_name: 'Sundry Debtors (Customer Dues)',
+                            account_type: 'ASSET',
+                            debit_amount: 0,
+                            credit_amount: amount,
+                            particulars: `Credit Settlement for #${sale.sale_no}`
+                        }
+                    ], { transaction: t });
+                } catch (vErr) {
+                    console.error('Error auto posting repayment voucher:', vErr);
+                }
+            }
+
             await t.commit();
             res.json({ success: true, data: { repayment, balance, voucher_no: repaymentVoucherNo } });
         }
@@ -1477,6 +1525,15 @@ exports.createAdvance = async (req, res) => {
             created_by: req.user.id,
             transaction: t
         });
+
+        const isBankAdv = await isBankPaymentMethod({ db: req.propertyDb, method: payment_mode });
+        if (isBankAdv) {
+            try {
+                await creditBankBalance({ db: req.propertyDb, outlet_id: req.user.outlet_id, amount, transaction: t });
+            } catch (bErr) {
+                console.error('Error crediting bank for customer advance:', bErr);
+            }
+        }
 
         await t.commit();
         res.json({ success: true, data: advance });

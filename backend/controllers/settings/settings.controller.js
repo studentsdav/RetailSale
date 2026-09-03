@@ -446,6 +446,7 @@ exports.clearTransactionData = async (req, res) => {
             `DELETE FROM "daily_opening_balances" WHERE outlet_id = :outletId`,
             `DELETE FROM "accounting_vouchers" WHERE outlet_id = :outletId`,
             `DELETE FROM "business_day_status" WHERE outlet_id = :outletId`,
+            `UPDATE "bank_accounts" SET opening_balance = 0.00, current_balance = 0.00 WHERE outlet_id = :outletId`,
 
             // 10. Stock Ledger, Notifications, Audits, Night Audit
             `DELETE FROM "stock_ledger" WHERE outlet_id = :outletId`,

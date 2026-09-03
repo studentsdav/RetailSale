@@ -313,10 +313,12 @@ if (!fs.existsSync(licensePath)) {
                     opening_balance NUMERIC(12,2) DEFAULT 0.00,
                     current_balance NUMERIC(12,2) DEFAULT 0.00,
                     is_active BOOLEAN DEFAULT TRUE,
+                    is_primary BOOLEAN DEFAULT FALSE,
                     created_by INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
+                ALTER TABLE bank_accounts ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT FALSE;
                 CREATE TABLE IF NOT EXISTS chart_of_accounts (
                     id SERIAL PRIMARY KEY,
                     outlet_id INTEGER NOT NULL,
@@ -359,6 +361,35 @@ if (!fs.existsSync(licensePath)) {
                     debit_amount NUMERIC(12,2) DEFAULT 0.00,
                     credit_amount NUMERIC(12,2) DEFAULT 0.00,
                     particulars VARCHAR(255)
+                );
+                CREATE TABLE IF NOT EXISTS business_loans (
+                    id SERIAL PRIMARY KEY,
+                    outlet_id INTEGER NOT NULL,
+                    loan_name VARCHAR(150) NOT NULL,
+                    lender_name VARCHAR(150),
+                    principal_amount NUMERIC(12,2) DEFAULT 0.00,
+                    interest_rate NUMERIC(5,2) DEFAULT 0.00,
+                    tenure_months INTEGER DEFAULT 12,
+                    monthly_emi NUMERIC(12,2) DEFAULT 0.00,
+                    remaining_principal NUMERIC(12,2) DEFAULT 0.00,
+                    status VARCHAR(30) DEFAULT 'ACTIVE',
+                    notes TEXT,
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS capital_assets (
+                    id SERIAL PRIMARY KEY,
+                    outlet_id INTEGER NOT NULL,
+                    asset_name VARCHAR(150) NOT NULL,
+                    asset_category VARCHAR(50) DEFAULT 'FIXED_ASSET',
+                    purchase_date DATE DEFAULT CURRENT_DATE,
+                    purchase_cost NUMERIC(12,2) DEFAULT 0.00,
+                    current_value NUMERIC(12,2) DEFAULT 0.00,
+                    notes TEXT,
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             `);
             console.log('✅ Verified/created accounting database tables (bank_accounts, chart_of_accounts, accounting_vouchers, voucher_lines)');

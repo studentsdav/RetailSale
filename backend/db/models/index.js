@@ -313,6 +313,10 @@ propertyDb.models.accounting_vouchers =
     require('../../models/property/accountingVoucher.model')(propertyDb, DataTypes);
 propertyDb.models.voucher_lines =
     require('../../models/property/voucherLine.model')(propertyDb, DataTypes);
+propertyDb.models.business_loans =
+    require('../../models/property/businessLoan.model')(propertyDb, DataTypes);
+propertyDb.models.capital_assets =
+    require('../../models/property/capitalAsset.model')(propertyDb, DataTypes);
 
 Object.values(propertyDb.models).forEach(model => {
     if (typeof model.associate === 'function') {
