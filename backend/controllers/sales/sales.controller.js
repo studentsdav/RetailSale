@@ -2564,13 +2564,20 @@ function buildSaleBenefitLedgerEntries({
     paymentMode,
     created_by,
     discountAmount,
-    schemeFreeQtyAmount
+    schemeFreeQtyAmount,
+    subscriptionAdjustmentAmount = 0
 }) {
     if (sale.status !== 'COMPLETED') return [];
 
+    const isSubscription = String(paymentMode || '').toUpperCase().includes('SUBSCRIPTION');
+    // Avoid double-posting: subscription sales are paid via prepaid customer advance,
+    // which is booked via ADVANCE_APPLY in the subscription allocation flow.
+    if (isSubscription) return [];
+
     const partyName = header.customer_name || header.customer_phone || 'Walk-in Customer';
     const normalizedSchemeFree = toAmount(schemeFreeQtyAmount);
-    const normalizedDiscount = Math.max(0, toAmount(toAmount(discountAmount) - normalizedSchemeFree));
+    const subAdj = toAmount(subscriptionAdjustmentAmount);
+    const normalizedDiscount = Math.max(0, toAmount(toAmount(discountAmount) - normalizedSchemeFree - subAdj));
     const entries = [];
 
     if (normalizedDiscount > 0) {
@@ -2590,24 +2597,19 @@ function buildSaleBenefitLedgerEntries({
     }
 
     if (normalizedSchemeFree > 0) {
-        const isSubscription = String(paymentMode || '').toUpperCase() === 'SUBSCRIPTION';
-        // Avoid double-posting: subscription adjustments are booked via ADVANCE_APPLY
-        // in the subscription allocation flow.
-        if (!isSubscription) {
-            entries.push({
-                outlet_id: req.user.outlet_id,
-                txn_date: header.sale_date,
-                transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
-                reference_type: 'SALE',
-                reference_id: sale.id,
-                reference_no: sale.sale_no,
-                party_name: partyName,
-                payment_method: paymentMode,
-                amount_out: normalizedSchemeFree,
-                notes: `Scheme free quantity expense booked for sale ${sale.sale_no}`,
-                created_by
-            });
-        }
+        entries.push({
+            outlet_id: req.user.outlet_id,
+            txn_date: header.sale_date,
+            transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
+            reference_type: 'SALE',
+            reference_id: sale.id,
+            reference_no: sale.sale_no,
+            party_name: partyName,
+            payment_method: paymentMode,
+            amount_out: normalizedSchemeFree,
+            notes: `Scheme free quantity expense booked for sale ${sale.sale_no}`,
+            created_by
+        });
     }
 
     return entries;
@@ -3144,7 +3146,7 @@ async function createSaleVersion({
         const ledgerDiscountAmount = toAmount(header.ledger_discount_amount ?? header.total_discount ?? 0);
         const allLedgerEntries = [
             ...buildSalePaymentLedgerEntries({ req, sale, header, paymentMode, amountPaid, netAmount: derivedNetAmount, balanceDue: effectiveBalanceDue, created_by }),
-            ...buildSaleBenefitLedgerEntries({ req, sale, header, paymentMode, created_by, discountAmount: ledgerDiscountAmount, schemeFreeQtyAmount })
+            ...buildSaleBenefitLedgerEntries({ req, sale, header, paymentMode, created_by, discountAmount: ledgerDiscountAmount, schemeFreeQtyAmount, subscriptionAdjustmentAmount })
         ];
         if (allLedgerEntries.length > 0) await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id, entries: allLedgerEntries, transaction });
     }

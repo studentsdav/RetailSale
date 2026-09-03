@@ -1074,9 +1074,6 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                             ? _selectedOrder!.totalDiscount
                                             : _selectedOrder!.items.fold<double>(
                                                 0, (sum, item) => sum + item.lineDiscount);
-                                        final double displayDiscount = allInclusive
-                                            ? (rawDiscount > displaySubTotal ? displaySubTotal : rawDiscount)
-                                            : rawDiscount;
                                         final double displayTaxableAmount = _selectedOrder!.taxableAmount > 0
                                             ? _selectedOrder!.taxableAmount
                                             : _selectedOrder!.items.fold<double>(
@@ -1106,11 +1103,15 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           }
                                         }
                                         if (subscriptionAdjustment <= 0) {
-                                          final diff = (displaySubTotal - displayDiscount) - _selectedOrder!.netAmount;
+                                          final diff = (displaySubTotal - rawDiscount) - _selectedOrder!.netAmount;
                                           if (diff > 0.01 && (_selectedOrder!.paymentMode.toUpperCase() == 'SUBSCRIPTION' || _selectedOrder!.items.any((item) => item.isAdvanceFree || item.rate == 0 || item.lineTotal == 0))) {
                                             subscriptionAdjustment = diff;
                                           }
                                         }
+                                        final double effectiveDiscount = (rawDiscount - subscriptionAdjustment).clamp(0.0, double.infinity);
+                                        final double displayDiscount = allInclusive
+                                            ? (effectiveDiscount > displaySubTotal ? displaySubTotal : effectiveDiscount)
+                                            : effectiveDiscount;
 
                                         return [
                                           _metricCard('Sub Total',

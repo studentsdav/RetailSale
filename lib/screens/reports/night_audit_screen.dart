@@ -274,6 +274,9 @@ class _NightAuditScreenState extends State<NightAuditScreen>
     final bool hasWarnings = warnings.isNotEmpty;
 
     final bool isOverdue = validation?['isOverdue'] == true;
+    final bool isRestricted = validation?['isRestricted'] == true;
+    final String todayDate = validation?['todayDate'] ?? DateTime.now().toString().split(' ')[0];
+    final String targetNextDate = validation?['targetNextDate'] ?? todayDate;
     final String businessDate = day?['business_date'] ?? 'N/A';
     final String dayStatus = day?['status'] ?? 'OPEN';
 
@@ -290,15 +293,15 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 28),
-                  SizedBox(width: 14),
+                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 28),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           '⚠️ NIGHT AUDIT OVERDUE',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -306,12 +309,52 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                             color: Color(0xFF92400E),
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          'Yesterday\'s business day was not closed because the system was offline at 2:00 AM. Please verify cash and execute audit now to open today.',
-                          style: TextStyle(
+                          'Yesterday\'s business day was not closed because the system was offline at 2:00 AM. Please verify cash and execute audit now to advance to $targetNextDate.',
+                          style: const TextStyle(
                             fontSize: 13,
                             color: Color(0xFF78350F),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (isRestricted) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_clock_outlined, color: Color(0xFF1D4ED8), size: 28),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '🔒 NIGHT AUDIT RESTRICTED',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: Color(0xFF1E40AF),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Current business date ($businessDate) is up to date with today\'s calendar date ($todayDate). Night Audit cannot advance into future dates.',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF1E3A8A),
                           ),
                         ),
                       ],
@@ -598,12 +641,14 @@ class _NightAuditScreenState extends State<NightAuditScreen>
             height: 52,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: hasWarnings ? const Color(0xFFD97706) : posOrange,
+                backgroundColor: isRestricted
+                    ? Colors.grey.shade400
+                    : (hasWarnings ? const Color(0xFFD97706) : posOrange),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              onPressed: controller.isExecuting
+              onPressed: (controller.isExecuting || isRestricted)
                   ? null
                   : () => _confirmAndExecuteAudit(context, controller, hasWarnings),
               icon: controller.isExecuting
@@ -612,11 +657,15 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                       height: 20,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     )
-                  : Icon(hasWarnings ? Icons.warning_amber_rounded : Icons.check_circle_outline),
+                  : Icon(isRestricted
+                      ? Icons.lock_outline
+                      : (hasWarnings ? Icons.warning_amber_rounded : Icons.check_circle_outline)),
               label: Text(
                 controller.isExecuting
                     ? 'Executing Night Audit...'
-                    : (hasWarnings ? 'Force Run Night Audit' : 'Execute Night Audit & Close Day'),
+                    : (isRestricted
+                        ? 'Night Audit Restricted (Up to Date)'
+                        : (hasWarnings ? 'Force Run Night Audit' : 'Execute Night Audit & Close Day')),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),

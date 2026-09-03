@@ -18,11 +18,13 @@ async function getCurrentBusinessDay(propertyDb, outletId, userId = null) {
             bypassOutletFilter: true
         });
 
-        let nextDateStr = new Date().toISOString().split('T')[0];
+        const todayStr = new Date().toISOString().split('T')[0];
+        let nextDateStr = todayStr;
         if (lastDay) {
             const lastDate = new Date(lastDay.business_date);
             lastDate.setDate(lastDate.getDate() + 1);
-            nextDateStr = lastDate.toISOString().split('T')[0];
+            const calcDate = lastDate.toISOString().split('T')[0];
+            nextDateStr = calcDate > todayStr ? todayStr : calcDate;
         }
 
         day = await propertyDb.models.business_day_status.create({
@@ -189,19 +191,34 @@ async function validatePreAuditConditions(propertyDb, outletId, businessDate) {
         });
     }
 
-    // 4. Check if business date is overdue (system was closed at 2 AM)
+    // 4. Check if business date is overdue or restricted from future advancement
     const todayStr = new Date().toISOString().split('T')[0];
     const isOverdue = businessDate < todayStr;
+    const currentDateObj = new Date(businessDate);
+    currentDateObj.setDate(currentDateObj.getDate() + 1);
+    const calculatedNextDate = currentDateObj.toISOString().split('T')[0];
+    const isRestricted = calculatedNextDate > todayStr;
+    const targetNextDate = isRestricted ? todayStr : calculatedNextDate;
+
     if (isOverdue) {
         warnings.push({
             type: 'MISSED_NIGHT_AUDIT',
-            message: `Business date ${businessDate} is past due. The system was closed/offline during the scheduled 2:00 AM audit. Execute audit now to advance to ${todayStr}.`
+            message: `Business date ${businessDate} is past due. The system was closed/offline during the scheduled 2:00 AM audit. Execute audit now to advance to ${targetNextDate}.`
+        });
+    }
+
+    if (isRestricted) {
+        warnings.push({
+            type: 'FUTURE_DATE_RESTRICTED',
+            message: `Business date restriction: Business date (${businessDate}) is already up to date with today's calendar date (${todayStr}). Night Audit cannot advance to a future date (${calculatedNextDate}).`
         });
     }
 
     return {
         valid: warnings.length === 0,
         isOverdue,
+        isRestricted,
+        targetNextDate,
         todayDate: todayStr,
         businessDate,
         openKotCount,
@@ -220,6 +237,18 @@ async function executeNightAudit(propertyDb, outletId, userId, options = {}) {
 
     const currentDay = await getCurrentBusinessDay(propertyDb, outletId, userId);
     const businessDate = currentDay.business_date;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const currentDateObj = new Date(businessDate);
+    currentDateObj.setDate(currentDateObj.getDate() + 1);
+    const calculatedNextDate = currentDateObj.toISOString().split('T')[0];
+
+    if (calculatedNextDate > todayStr) {
+        return {
+            success: false,
+            message: `Night Audit Restricted: Business date (${businessDate}) is already up to date with today's calendar date (${todayStr}). Cannot advance to a future date (${calculatedNextDate}).`
+        };
+    }
 
     // Run Pre-Audit Validation
     const validation = await validatePreAuditConditions(propertyDb, outletId, businessDate);
@@ -379,10 +408,11 @@ async function executeNightAudit(propertyDb, outletId, userId, options = {}) {
             notes: notes || 'Night audit completed'
         }, { transaction: t, bypassOutletFilter: true });
 
-        // 5. Advance Business Date to Next Day (YYYY-MM-DD + 1)
+        // 5. Advance Business Date to Next Day (capped at todayStr)
         const currentDateObj = new Date(businessDate);
         currentDateObj.setDate(currentDateObj.getDate() + 1);
-        const nextBusinessDate = currentDateObj.toISOString().split('T')[0];
+        const calcNextDate = currentDateObj.toISOString().split('T')[0];
+        const nextBusinessDate = calcNextDate > todayStr ? todayStr : calcNextDate;
 
         const nextDay = await propertyDb.models.business_day_status.create({
             outlet_id: outletId,

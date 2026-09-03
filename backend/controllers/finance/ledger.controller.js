@@ -157,6 +157,22 @@ exports.getLedgerReport = async (req, res) => {
             where.transaction_type = type;
         }
 
+        // Auto-cleanup any legacy duplicate SALE_DISCOUNT_EXPENSE entries created for SUBSCRIPTION bills
+        const duplicateSubDiscountEntries = await req.propertyDb.models.cash_ledger.findAll({
+            where: {
+                outlet_id,
+                transaction_type: 'SALE_DISCOUNT_EXPENSE',
+                payment_method: 'SUBSCRIPTION'
+            }
+        });
+        if (duplicateSubDiscountEntries.length > 0) {
+            const { recalculateLedgerBalances } = require('../../services/cashLedger.service');
+            for (const dup of duplicateSubDiscountEntries) {
+                await dup.destroy();
+            }
+            await recalculateLedgerBalances({ db: req.propertyDb, outlet_id, fromDate: new Date(0) });
+        }
+
         const entries = await req.propertyDb.models.cash_ledger.findAll({
             where,
             order: [['txn_date', 'ASC'], ['id', 'ASC']]

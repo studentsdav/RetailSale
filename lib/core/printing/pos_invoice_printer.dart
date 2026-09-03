@@ -1595,7 +1595,7 @@ class PosInvoicePrinter {
       return true;
     }
     return _sourceTaxBreakup(order).any((tax) => tax.taxAmount.abs() > 0.0009) ||
-        order.items.any((item) => item.taxPercent > 0);
+        (order.items.any((item) => item.taxPercent > 0) && _adjustedItemTaxableTotal(order) > 0.0009);
   }
 
   static double _billRoundOff(SaleOrder order) {
@@ -2228,6 +2228,13 @@ class PosInvoicePrinter {
     double? summaryTaxTotal,
     double? subscriptionAdjustment,
   }) {
+    if (order.netAmount.abs() <= 0.0009 &&
+        (order.items.isNotEmpty ||
+            order.manualDiscountAmount > 0 ||
+            order.totalDiscount > 0 ||
+            order.schemeDiscount > 0)) {
+      return 0.0;
+    }
     if (order.netAmount > 0.0009) {
       return order.netAmount;
     }
@@ -2413,18 +2420,22 @@ class PosInvoicePrinter {
   }
 
   static double _taxableAmountForItem(SaleItem item) {
-    if (item.taxableAmount.abs() > 0.0009) return item.taxableAmount;
-    final rate = (item.rate > 0)
+    final itemRate = (item.rate > 0)
         ? item.rate
         : ((item.referenceRate > 0)
             ? item.referenceRate
             : (item.originalRate != null && item.originalRate! > 0 ? item.originalRate! : 0.0));
-    final gross = math.max(0.0, (rate * item.qty) - item.lineDiscount);
+    final itemGrossAmount = itemRate * item.qty;
+    if (item.lineDiscount >= itemGrossAmount && itemGrossAmount > 0) {
+      return 0.0;
+    }
+    if (item.taxableAmount.abs() > 0.0009) return item.taxableAmount;
+    final gross = math.max(0.0, itemGrossAmount - item.lineDiscount);
     if (item.isTaxInclusive && item.taxPercent > 0 && gross > 0) {
       return gross / (1 + item.taxPercent / 100);
     }
     if (gross > 0) return gross;
-    return item.amount;
+    return 0.0;
   }
 
   static double _displayRate(SaleItem item) {

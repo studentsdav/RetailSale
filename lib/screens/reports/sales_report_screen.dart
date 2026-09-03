@@ -13,6 +13,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/reports/sales_report_controller.dart';
 import '../../controllers/reports/stock_in_report_controller.dart';
+import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../models/reports/sales_report_model.dart';
 
@@ -39,6 +40,20 @@ class PaymentBreakdownRow {
     required this.taxedSales,
     required this.nonTaxSales,
     required this.tax,
+    required this.netAmount,
+  });
+}
+
+class PivotedBillPaymentRow {
+  final DateTime saleDate;
+  final String saleNo;
+  final Map<String, double> modeAmounts;
+  final double netAmount;
+
+  PivotedBillPaymentRow({
+    required this.saleDate,
+    required this.saleNo,
+    required this.modeAmounts,
     required this.netAmount,
   });
 }
@@ -139,12 +154,31 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     _toCtrl.text = DateFormat('dd-MM-yyyy').format(ctrl.toDate);
   }
 
+  List<String> _masterPaymentMethods = [];
+
+  Future<void> _loadMasterPaymentMethods() async {
+    try {
+      final methods = await SalesController().listPaymentMethods();
+      final activeList = methods
+          .where((m) => m['is_active'] != false)
+          .map((m) => (m['name'] ?? m['method_name'] ?? '').toString().trim().toUpperCase())
+          .where((name) => name.isNotEmpty)
+          .toList();
+      if (mounted) {
+        setState(() {
+          _masterPaymentMethods = activeList;
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadReports() async {
     purchaseCtrl.fromDate = ctrl.fromDate;
     purchaseCtrl.toDate = ctrl.toDate;
     await Future.wait([
       ctrl.load().catchError((_) {}),
       purchaseCtrl.load().catchError((_) {}),
+      _loadMasterPaymentMethods().catchError((_) {}),
     ]);
     if (mounted) setState(() {});
   }
@@ -155,7 +189,10 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   bool _isTaxedItem(SalesReportItem item) {
-    return item.taxAmount > 0.009;
+    if (item.taxAmount > 0.009 || item.taxableAmount > 0.009) return true;
+    if (item.taxPercent > 0.009) return true;
+    if (item.taxBreakup.any((t) => t.rate > 0 || t.taxAmount.abs() > 0.009)) return true;
+    return false;
   }
 
   bool _isTaxedSale(SalesReport sale) {
@@ -242,11 +279,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             igst = 0;
           }
         }
-        final itemNetVal = item.netAmount > 0.009
-            ? item.netAmount
-            : (itemTaxable + cgst + sgst + igst > 0
-                ? (itemTaxable + cgst + sgst + igst)
-                : item.amount);
+        final double effectiveDiscount = item.lineDiscount;
+        final double grossMinusDiscount = (item.amount - effectiveDiscount).clamp(0.0, double.infinity);
+        final double itemNetVal;
+        if (item.netAmount > 0.009) {
+          itemNetVal = item.netAmount;
+        } else if (effectiveDiscount > 0.009 || grossMinusDiscount <= 0.009) {
+          itemNetVal = grossMinusDiscount;
+        } else if (itemTaxable + cgst + sgst + igst > 0.009) {
+          itemNetVal = itemTaxable + cgst + sgst + igst;
+        } else {
+          itemNetVal = item.amount;
+        }
         final lineVal = _isTaxedItem(item)
             ? (itemTaxable + cgst + sgst + igst)
             : itemNetVal;
@@ -659,7 +703,15 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       0,
       (sum, sale) => sum + sale.items.fold<double>(
             0,
-            (itemSum, item) => itemSum + (_isTaxedItem(item) ? 0 : (item.netAmount > 0.009 ? item.netAmount : (item.taxableAmount > 0.009 ? item.taxableAmount : item.amount))),
+            (itemSum, item) {
+              if (_isTaxedItem(item)) return itemSum;
+              final disc = item.lineDiscount;
+              final grossMinusDisc = (item.amount - disc).clamp(0.0, double.infinity);
+              final net = item.netAmount > 0.009
+                  ? item.netAmount
+                  : ((disc > 0.009 || grossMinusDisc <= 0.009) ? grossMinusDisc : item.amount);
+              return itemSum + net;
+            },
           ));
 
   // Taxed Sales After GST = Net Sales (Standard) − Non-Tax Sales
@@ -868,6 +920,96 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         .toList();
   }
 
+  String _formatPaymentModeHeader(String modeKey) {
+    final upper = modeKey.toUpperCase();
+    switch (upper) {
+      case 'CASH':
+        return 'Cash';
+      case 'CARD':
+        return 'Card';
+      case 'UPI':
+        return 'UPI';
+      case 'CREDIT':
+        return 'Credit';
+      case 'ADVANCE_DEPOSIT':
+        return 'Advance Deposit';
+      case 'ADVANCE_ADJUSTMENT':
+        return 'Advance Adjustment';
+      case 'SUBSCRIPTION':
+        return 'Subscription';
+      case 'PAYTM':
+        return 'Paytm';
+      case 'PHONEPE':
+        return 'PhonePe';
+      case 'GPAY':
+      case 'GOOGLE_PAY':
+        return 'Google Pay';
+      case 'BANK_TRANSFER':
+      case 'BANK':
+        return 'Bank Transfer';
+      default:
+        final words = upper.split(RegExp(r'[\s_]+'));
+        return words.map((w) => w.isEmpty ? '' : '${w[0]}${w.substring(1).toLowerCase()}').join(' ');
+    }
+  }
+
+  List<String> get _pivotedPaymentModes {
+    final Set<String> modes = {};
+    for (final m in _masterPaymentMethods) {
+      if (m.isNotEmpty) modes.add(m.toUpperCase());
+    }
+    for (final sale in _billWiseSales) {
+      final splits = _extractPaymentSplits(sale);
+      for (final split in splits) {
+        final mode = (split['mode'] as String).toUpperCase();
+        if ((split['amount'] as double).abs() > 0.009) {
+          modes.add(mode);
+        }
+      }
+    }
+    final preferredOrder = [
+      'CASH',
+      'CARD',
+      'UPI',
+      'CREDIT',
+      'ADVANCE_DEPOSIT',
+      'ADVANCE_ADJUSTMENT',
+      'SUBSCRIPTION'
+    ];
+    final List<String> sorted = modes.toList();
+    sorted.sort((a, b) {
+      int idxA = preferredOrder.indexOf(a);
+      int idxB = preferredOrder.indexOf(b);
+      if (idxA == -1) idxA = 999;
+      if (idxB == -1) idxB = 999;
+      if (idxA != idxB) return idxA.compareTo(idxB);
+      return a.compareTo(b);
+    });
+    return sorted;
+  }
+
+  List<PivotedBillPaymentRow> get _pivotedBillPaymentRows {
+    final List<PivotedBillPaymentRow> rows = [];
+    for (final sale in _billWiseSales) {
+      final splits = _extractPaymentSplits(sale);
+      final Map<String, double> modeAmounts = {};
+      double totalNet = 0;
+      for (final split in splits) {
+        final String mode = (split['mode'] as String).toUpperCase();
+        final double amt = split['amount'] as double;
+        modeAmounts[mode] = (modeAmounts[mode] ?? 0.0) + amt;
+        totalNet += amt;
+      }
+      rows.add(PivotedBillPaymentRow(
+        saleDate: sale.saleDate,
+        saleNo: sale.saleNo,
+        modeAmounts: modeAmounts,
+        netAmount: totalNet > 0 ? totalNet : sale.netAmount,
+      ));
+    }
+    return rows;
+  }
+
   List<PaymentBreakdownRow> get _paymentBreakdownRows {
     final List<PaymentBreakdownRow> rows = [];
     for (final sale in _billWiseSales) {
@@ -894,9 +1036,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   List<Map<String, dynamic>> get _uniquePaymentModeSummaries {
     final Map<String, double> totals = {};
-    for (final row in _paymentBreakdownRows) {
-      final mode = row.paymentMode.toUpperCase();
-      totals[mode] = (totals[mode] ?? 0) + row.netAmount;
+    for (final sale in _billWiseSales) {
+      final splits = _extractPaymentSplits(sale);
+      for (final split in splits) {
+        final mode = (split['mode'] as String).toUpperCase();
+        final amt = split['amount'] as double;
+        totals[mode] = (totals[mode] ?? 0) + amt;
+      }
     }
     if (totals.isEmpty) {
       for (final entry in ctrl.paymentModes) {
@@ -908,19 +1054,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     final List<Map<String, dynamic>> list = [];
     totals.forEach((modeKey, amount) {
       if (amount.abs() > 0.009) {
-        String label = modeKey;
-        if (modeKey == 'CASH') label = 'CASH';
-        else if (modeKey == 'UPI') label = 'UPI';
-        else if (modeKey == 'CARD') label = 'CARD';
-        else if (modeKey == 'CREDIT') label = 'CREDIT';
-        else if (modeKey == 'ADVANCE_DEPOSIT') label = 'ADVANCE DEPOSIT';
-        else if (modeKey == 'ADVANCE_ADJUSTMENT') label = 'ADVANCE ADJUSTED';
-        else if (modeKey == 'SUBSCRIPTION') label = 'SUBSCRIPTION';
-        else label = modeKey;
-
         list.add({
           'key': modeKey,
-          'label': label,
+          'label': _formatPaymentModeHeader(modeKey),
           'amount': amount,
         });
       }
@@ -1336,32 +1472,32 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     final sheet = workbook[sheetName];
 
     if (_reportTabIndex == 0) {
+      final modes = _pivotedPaymentModes;
       sheet.appendRow(
         [
           'Date',
           'Bill No',
-          'Payment',
-          'Taxed Sales',
-          'Non-Tax Sales',
+          ...modes.map(_formatPaymentModeHeader),
           'Net Amount',
         ].map(exc.TextCellValue.new).toList(),
       );
-      for (final row in _paymentBreakdownRows) {
+      for (final row in _pivotedBillPaymentRows) {
         sheet.appendRow([
           exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.saleDate)),
           exc.TextCellValue(_maskedBillNo(row.saleNo)),
-          exc.TextCellValue(row.paymentMode),
-          exc.DoubleCellValue(row.taxedSales),
-          exc.DoubleCellValue(row.nonTaxSales),
+          ...modes.map((m) => exc.DoubleCellValue(row.modeAmounts[m] ?? 0.0)),
           exc.DoubleCellValue(row.netAmount),
         ]);
       }
       sheet.appendRow([
         exc.TextCellValue('TOTAL'),
         exc.TextCellValue(''),
-        exc.TextCellValue(''),
-        exc.DoubleCellValue(_paymentReportTaxSaleTotal),
-        exc.DoubleCellValue(_paymentReportNonTaxSaleTotal),
+        ...modes.map((m) {
+          final modeTotal = _pivotedBillPaymentRows.fold<double>(
+            0, (sum, r) => sum + (r.modeAmounts[m] ?? 0.0),
+          );
+          return exc.DoubleCellValue(modeTotal);
+        }),
         exc.DoubleCellValue(_paymentReportNetTotal),
       ]);
     } else if (_reportTabIndex == 1) {
@@ -1867,13 +2003,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       4 => 'GSTR-1 Sales Report',
       _ => 'GSTR-2 Purchase Report',
     };
+    final modes = _pivotedPaymentModes;
     final headers = switch (_reportTabIndex) {
       0 => [
           'Date',
           'Bill No',
-          'Payment',
-          'Taxed Sales',
-          'Non-Tax Sales',
+          ...modes.map(_formatPaymentModeHeader),
           'Net Amount'
         ],
       1 => [
@@ -1962,26 +2097,27 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         ],
     };
     final data = switch (_reportTabIndex) {
-      0 => _paymentBreakdownRows
-          .map(
+      0 => [
+          ..._pivotedBillPaymentRows.map(
             (row) => [
               DateFormat('dd-MM-yyyy').format(row.saleDate),
               _maskedBillNo(row.saleNo),
-              row.paymentMode,
-              _money(row.taxedSales),
-              _money(row.nonTaxSales),
+              ...modes.map((m) => _money(row.modeAmounts[m] ?? 0.0)),
               _money(row.netAmount),
             ],
-          )
-          .toList()
-        ..add([
-          'TOTAL',
-          '',
-          '',
-          _money(_paymentReportTaxSaleTotal),
-          _money(_paymentReportNonTaxSaleTotal),
-          _money(_paymentReportNetTotal),
-        ]),
+          ),
+          [
+            'TOTAL',
+            '',
+            ...modes.map((m) {
+              final modeTotal = _pivotedBillPaymentRows.fold<double>(
+                0, (sum, r) => sum + (r.modeAmounts[m] ?? 0.0),
+              );
+              return _money(modeTotal);
+            }),
+            _money(_paymentReportNetTotal),
+          ],
+        ],
       1 => _billWiseSales.map(
           (sale) {
             final bands = _saleTaxBands(sale);
@@ -2920,94 +3056,82 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               headingRowColor: WidgetStateProperty.all(
                 const Color(0xFFF1F5F9),
               ),
-              columns: const [
-                DataColumn(label: Text('Date')),
-                DataColumn(label: Text('Bill No')),
-                DataColumn(label: Text('Payment')),
-                DataColumn(label: Text('Taxed Sales')),
-                DataColumn(label: Text('Non-Tax Sales')),
-                DataColumn(label: Text('Net Amount')),
+              columns: [
+                const DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                const DataColumn(label: Text('Bill No', style: TextStyle(fontWeight: FontWeight.bold))),
+                ..._pivotedPaymentModes.map(
+                  (mode) => DataColumn(
+                    label: Text(
+                      _formatPaymentModeHeader(mode),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const DataColumn(label: Text('Net Amount', style: TextStyle(fontWeight: FontWeight.bold))),
               ],
-              rows: _paymentBreakdownRows
-                  .map(
-                    (row) => DataRow(
-                      color: WidgetStateProperty.all(
-                        _paymentColor(row.paymentMode).withOpacity(0.10),
+              rows: [
+                ..._pivotedBillPaymentRows.map(
+                  (row) => DataRow(
+                    cells: [
+                      DataCell(
+                        Text(DateFormat('dd-MM-yyyy').format(row.saleDate)),
                       ),
-                      cells: [
-                        DataCell(
-                          Text(DateFormat('dd-MM-yyyy').format(row.saleDate)),
-                        ),
-                        DataCell(Text(_maskedBillNo(row.saleNo))),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _paymentColor(row.paymentMode)
-                                  .withOpacity(0.14),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              row.paymentMode,
+                      DataCell(Text(_maskedBillNo(row.saleNo))),
+                      ..._pivotedPaymentModes.map(
+                        (mode) {
+                          final amt = row.modeAmounts[mode] ?? 0.0;
+                          return DataCell(
+                            Text(
+                              _money(amt),
                               style: TextStyle(
-                                color: _paymentColor(row.paymentMode),
-                                fontWeight: FontWeight.w700,
+                                color: amt > 0 ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                                fontWeight: amt > 0 ? FontWeight.w600 : FontWeight.normal,
                               ),
                             ),
-                          ),
-                        ),
-                        DataCell(
-                          Text(_money(row.taxedSales)),
-                        ),
-                        DataCell(
-                          Text(_money(row.nonTaxSales)),
-                        ),
-                        DataCell(
-                          Text(
-                            _money(row.netAmount),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                  .toList()
-                ..add(
-                  DataRow(
-                    color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                    cells: [
-                      const DataCell(
-                        Text(
-                          'TOTAL',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      const DataCell(Text('')),
-                      const DataCell(Text('')),
-                      DataCell(
-                        Text(
-                          _money(_paymentReportTaxSaleTotal),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
+                          );
+                        },
                       ),
                       DataCell(
                         Text(
-                          _money(_paymentReportNonTaxSaleTotal),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          _money(_paymentReportNetTotal),
+                          _money(row.netAmount),
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
                     ],
                   ),
                 ),
+                DataRow(
+                  color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                  cells: [
+                    const DataCell(
+                      Text(
+                        'TOTAL',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const DataCell(Text('')),
+                    ..._pivotedPaymentModes.map(
+                      (mode) {
+                        final modeTotal = _pivotedBillPaymentRows.fold<double>(
+                          0, (sum, row) => sum + (row.modeAmounts[mode] ?? 0.0),
+                        );
+                        return DataCell(
+                          Text(
+                            _money(modeTotal),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        );
+                      },
+                    ),
+                    DataCell(
+                      Text(
+                        _money(_paymentReportNetTotal),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],

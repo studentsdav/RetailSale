@@ -352,6 +352,11 @@ FROM item_stock;
         model: db.models.milk_subscription_consumptions,
         as: 'consumptions',
         required: false
+      },
+      {
+        model: db.models.customer_repayments,
+        as: 'repayments',
+        required: false
       }
     ],
     order: [['sale_date', 'DESC'], ['id', 'DESC']]
@@ -461,9 +466,13 @@ FROM item_stock;
 
     const isFullSubscriptionSale = sale.payment_mode === 'SUBSCRIPTION';
     sale.total_discount = isFullSubscriptionSale ? 0 : Math.max(toNumber(sale.total_discount) - subscriptionSubtotal, 0);
-    sale.taxable_amount = toNumber(sale.taxable_amount) + subscriptionTaxable;
     sale.total_tax = toNumber(sale.total_tax);
     sale.net_amount = toNumber(sale.net_amount) + subscriptionNet;
+    let headerTaxable = toNumber(sale.taxable_amount);
+    if (headerTaxable <= 0) {
+      headerTaxable = Math.max(0, sale.net_amount - sale.total_tax);
+    }
+    sale.taxable_amount = headerTaxable;
 
     const saleDate = normalizeDate(sale.sale_date);
     let saleProfit = 0;
@@ -473,12 +482,16 @@ FROM item_stock;
     for (const item of sale.items || []) {
       const qty = toNumber(item.qty);
       const dbLineNet = toNumber(item.net_amount);
-      const lineTaxable = toNumber(item.taxable_amount);
+      const lineTaxableRaw = toNumber(item.taxable_amount);
       const lineTax = toNumber(item.tax_amount);
       let lineNet = dbLineNet;
       if (item.is_advance_free) {
-        const calculatedItemNet = lineTaxable + lineTax;
+        const calculatedItemNet = lineTaxableRaw + lineTax;
         lineNet = dbLineNet > 0 ? dbLineNet : (calculatedItemNet > 0 ? calculatedItemNet : toNumber(item.amount));
+      }
+      let lineTaxable = lineTaxableRaw;
+      if (lineTaxable <= 0) {
+        lineTaxable = lineNet > 0 ? Math.max(0, lineNet - lineTax) : toNumber(item.amount);
       }
       const itemCost = toNumber(item.item?.rate) * qty;
       cogsTotal = roundAmount(cogsTotal + itemCost);
@@ -517,38 +530,42 @@ FROM item_stock;
     grandProfit = roundAmount(grandProfit + saleProfit);
     grandLoss = roundAmount(grandLoss + saleLoss);
     if (isSameDay(saleDate, now)) {
-      todayDiscount = roundAmount(todayDiscount + toNumber(sale.total_discount));
-      todayRevenue = roundAmount(todayRevenue + saleRevenue);
-      todayTaxableRevenue = roundAmount(todayTaxableRevenue + toNumber(sale.taxable_amount));
-      todayGst = roundAmount(todayGst + toNumber(sale.total_tax));
-
       let subBillAmt = (sale.consumptions || [])
         .filter(c => !(c.status === 'PENDING' && toNumber(c.excess_qty) > 0 && sale.payment_mode !== 'SUBSCRIPTION'))
         .reduce((sum, c) => sum + toNumber(c.covered_amount), 0);
 
-      if (subBillAmt === 0) {
-        const ref = String(sale.payment_reference || '').trim();
-        if (ref.startsWith('POSPAY:')) {
-          try {
-            const lines = JSON.parse(ref.substring(7));
-            if (Array.isArray(lines)) {
-              for (const line of lines) {
-                const method = String(line.method || '').toUpperCase();
-                if (method === 'ADVANCE' || method === 'ADVANCE_ADJUSTMENT' || method === 'ADVANCE_APPLY' || method === 'SUBSCRIPTION') {
-                  subBillAmt += toNumber(line.amount);
-                }
+      let pospayAdvAdj = 0;
+      const ref = String(sale.payment_reference || '').trim();
+      if (ref.startsWith('POSPAY:')) {
+        try {
+          const lines = JSON.parse(ref.substring(7));
+          if (Array.isArray(lines)) {
+            for (const line of lines) {
+              const method = String(line.method || '').toUpperCase();
+              if (method === 'ADVANCE' || method === 'ADVANCE_ADJUSTMENT' || method === 'ADVANCE_APPLY' || method === 'SUBSCRIPTION') {
+                pospayAdvAdj += toNumber(line.amount);
               }
             }
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
 
       const pMode = String(sale.payment_mode || '').toUpperCase();
-      if (subBillAmt === 0 && (pMode === 'SUBSCRIPTION' || pMode === 'ADVANCE' || pMode === 'ADVANCE_ADJUSTMENT' || subscriptionNet > 0)) {
-        subBillAmt = subscriptionNet > 0 ? subscriptionNet : saleRevenue;
+      if (subBillAmt === 0) {
+        if (pospayAdvAdj > 0) {
+          subBillAmt = pospayAdvAdj;
+        } else if (subscriptionNet > 0) {
+          subBillAmt = subscriptionNet;
+        } else if (pMode === 'SUBSCRIPTION' || pMode === 'ADVANCE' || pMode === 'ADVANCE_ADJUSTMENT') {
+          subBillAmt = saleRevenue;
+        }
       }
-      subBillAmt = Math.min(subBillAmt, saleRevenue);
+
+      todayDiscount = roundAmount(todayDiscount + toNumber(sale.total_discount));
       todaySubscriptionAmount = roundAmount(todaySubscriptionAmount + subBillAmt);
+      todayRevenue = roundAmount(todayRevenue + saleRevenue);
+      todayTaxableRevenue = roundAmount(todayTaxableRevenue + toNumber(sale.taxable_amount));
+      todayGst = roundAmount(todayGst + toNumber(sale.total_tax));
     }
 
     addPeriod('day', saleDate, toNumber(sale.taxable_amount), saleProfit, saleLoss);
@@ -727,6 +744,7 @@ FROM item_stock;
       todaySubscriptionAmount: todaySubscriptionAmount,
       todayDiscount: todayDiscount,
       todayRevenue: todayRevenue,
+      todayTaxableRevenue: todayTaxableRevenue,
       todayCollection: todayCollection,
       todayCogs: todayCogs,
       todayGrossProfit: todayGrossProfit,

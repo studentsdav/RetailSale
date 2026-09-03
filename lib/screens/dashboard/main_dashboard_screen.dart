@@ -168,6 +168,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   double todayGrossProfit = 0;
   double todayGrossLoss = 0;
   double todayGst = 0;
+  double todayTaxableRevenue = 0;
   Timer? _appBarTimer;
   Timer? _dataProtectionTimer;
   DateTime _currentTime = DateTime.now();
@@ -958,6 +959,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         todayGrossProfit = safeDouble(data['kpis']['todayGrossProfit']);
         todayGrossLoss = safeDouble(data['kpis']['todayGrossLoss']);
         todayGst = safeDouble(data['kpis']['todayGst']);
+        todayTaxableRevenue = safeDouble(data['kpis']['todayTaxableRevenue']);
+        if (todayTaxableRevenue <= 0 && todayRevenue > 0) {
+          todayTaxableRevenue = todayRevenue - todayGst;
+        }
 
         // Low stock list
         lowStockItems = List<String>.from(data['lowStockItems']);
@@ -1497,6 +1502,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               'Rs. ${todayCogs.toStringAsFixed(0)}',
               Icons.shopping_bag_outlined,
               const Color(0xFFF97316),
+              showInfoIcon: true,
+              onTap: () => _showProfitFormulaDialog(context),
             ),
             todayGrossProfit >= todayGrossLoss
                 ? _statCard(
@@ -1504,12 +1511,16 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     'Rs. ${todayGrossProfit.toStringAsFixed(0)}',
                     Icons.trending_up,
                     const Color(0xFF16A34A),
+                    showInfoIcon: true,
+                    onTap: () => _showProfitFormulaDialog(context),
                   )
                 : _statCard(
                     'Gross Loss',
                     'Rs. ${todayGrossLoss.toStringAsFixed(0)}',
                     Icons.trending_down,
                     const Color(0xFFDC2626),
+                    showInfoIcon: true,
+                    onTap: () => _showProfitFormulaDialog(context),
                   ),
             _statCard(
               'Month Growth',
@@ -1770,8 +1781,171 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     );
   }
 
+  void _showProfitFormulaDialog(BuildContext context) {
+    final double taxableRev = (todayTaxableRevenue > 0) ? todayTaxableRevenue : (todayRevenue - todayGst);
+    final double netGrossProfit = (todayGrossProfit > 0)
+        ? todayGrossProfit
+        : ((todayGrossLoss > 0) ? -todayGrossLoss : (taxableRev - todayCogs));
+    final bool isProfit = netGrossProfit >= 0;
+    final double displayAmount = netGrossProfit.abs();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isProfit ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isProfit ? Icons.trending_up : Icons.trending_down,
+                color: isProfit ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Profit & Loss Formula',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'How Profit & Loss is calculated in Famalth Lynx:',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '📐 GROSS PROFIT FORMULA',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Gross Profit = Today Revenue (Excl. Tax) - Today COGS',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                    ),
+                    const Divider(height: 16),
+                    const Text(
+                      '🔻 GROSS LOSS FORMULA (When Cost > Revenue)',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Gross Loss = Today COGS - Today Revenue (Excl. Tax)',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                    ),
+                    const Divider(height: 16),
+                    const Text(
+                      '📈 NET PROFIT FORMULA',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Net Profit = Gross Profit - Operating Expenses',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '💡 TAX & GST HANDLING NOTE:',
+                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1E40AF)),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      '• Same universal formula applies for Taxable, Non-Taxable, Inclusive, & Exclusive GST sales.\n'
+                      '• GST collected is a government liability, NOT revenue. For Inclusive GST, tax is deducted before calculating Gross Profit.\n'
+                      '• COGS = Sold Quantity × Item Purchase Cost Rate.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF1E3A8A), height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Live Today Component Values:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('• Today Revenue (Excl. Tax):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
+                  Text('Rs. ${taxableRev.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('• Today COGS (Cost of Goods):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
+                  Text('Rs. ${todayCogs.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFC2410C))),
+                ],
+              ),
+              const Divider(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isProfit ? '• Calculated Gross Profit:' : '• Calculated Gross Loss:',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Rs. ${displayAmount.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: isProfit ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _statCard(String label, String value, IconData icon, Color color,
-      {VoidCallback? onTap}) {
+      {VoidCallback? onTap, bool showInfoIcon = false}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1801,15 +1975,24 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (showInfoIcon)
+                            Icon(Icons.info_outline, size: 13, color: color.withOpacity(0.8)),
+                        ],
                       ),
                       const SizedBox(height: 2),
                       FittedBox(
