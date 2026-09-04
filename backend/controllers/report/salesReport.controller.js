@@ -1,5 +1,4 @@
 const { Op } = require('sequelize');
-const { toOutletDateYmd, getOutletDateBounds } = require('../../utils/timezoneHelper');
 
 const SALES_ZONES = [
     { key: 'MORNING', label: 'Morning', startHour: 5, endHour: 11 },
@@ -158,12 +157,11 @@ exports.getSalesReport = async (req, res) => {
 
         const outletTz = req.outletTimeZone || 'Asia/Kolkata';
         if (from_date && to_date) {
-            const { startDate, endDate } = getOutletDateBounds(from_date, to_date, outletTz);
-            if (startDate && endDate) {
-                where.sale_date = {
-                    [Op.between]: [startDate, endDate]
-                };
-            }
+            const startDate = new Date(`${from_date}T00:00:00`);
+            const endDate = new Date(`${to_date}T23:59:59.999`);
+            where.sale_date = {
+                [Op.between]: [startDate, endDate]
+            };
         }
 
         if (payment_mode) {
@@ -219,12 +217,9 @@ exports.getSalesReport = async (req, res) => {
             outlet_id,
         };
         if (from_date && to_date) {
-            const { startDate, endDate } = getOutletDateBounds(from_date, to_date, outletTz);
-            if (startDate && endDate) {
-                cnWhere.credit_note_date = {
-                    [Op.between]: [startDate, endDate]
-                };
-            }
+            cnWhere.credit_note_date = {
+                [Op.between]: [from_date, to_date]
+            };
         }
         if (search) {
             const cleanPhone = String(search).replace(/\D/g, '').trim();

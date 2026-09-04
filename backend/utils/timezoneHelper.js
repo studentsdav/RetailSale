@@ -173,6 +173,21 @@ function getOutletDateBounds(fromDateStr, toDateStr, timeZone = DEFAULT_TIMEZONE
     return { startDate, endDate };
 }
 
+/**
+ * Resolves timezone ID from express request or fallback.
+ */
+function getReqTimeZone(req, defaultTz = DEFAULT_TIMEZONE) {
+    return req?.outletTimeZone || defaultTz;
+}
+
+/**
+ * Returns current date/time adjusted to outlet time zone.
+ */
+async function getNowInOutletTimeZone(outletId, db) {
+    const tz = await getOutletTimeZone(outletId, db);
+    return getNowInTimeZone(tz);
+}
+
 module.exports = {
     getOutletTimeZone,
     getNowInTimeZone,
