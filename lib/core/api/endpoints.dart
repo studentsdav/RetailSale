@@ -8,6 +8,7 @@ class ApiEndpoints {
   static const stockTransfer = '/api/inventory/stock-transfer';
 
   static const propertyInfo = '/api/inventory/property-info';
+  static const publicPropertyInfo = '/api/public/property-info';
   static const userNotes = '/api/notes';
 
   static const checkOutlet = '/api/public/outlet/check';

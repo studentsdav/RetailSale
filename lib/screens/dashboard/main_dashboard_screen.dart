@@ -4420,7 +4420,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   Widget _buildDrawerHeaderLogoWidget(String? logoPath, double size) {
-    return BrandLogoWidget(logoPath: logoPath, size: size);
+    return BrandLogoWidget(
+      logoPath: logoPath,
+      size: size,
+      useCircleBadge: true,
+      showShadow: true,
+      borderColor: Colors.white,
+      borderWidth: 2.0,
+    );
   }
 }
 

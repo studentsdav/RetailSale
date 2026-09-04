@@ -84,7 +84,16 @@ class ApiClient {
     if (response.statusCode >= 400 || data['success'] == false) {
       String errorMessage = data['error'] ?? data['message'] ?? "API Error";
 
-      showErrorSnackbar(errorMessage);
+      final lowerMsg = errorMessage.toLowerCase();
+      final isAuthError = response.statusCode == 401 ||
+          lowerMsg.contains('no token provided') ||
+          lowerMsg.contains('token expired') ||
+          lowerMsg.contains('jwt expired') ||
+          lowerMsg.contains('unauthorized');
+
+      if (!isAuthError) {
+        showErrorSnackbar(errorMessage);
+      }
 
       throw Exception(errorMessage);
     }

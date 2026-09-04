@@ -45,6 +45,7 @@ class _LoginScreenState extends State<LoginScreen>
   bool _obscure = true;
   String? _logoPath;
   String? _bgCoverImagePath;
+  String? _outletName;
 
   late final AnimationController _logoCtrl;
 
@@ -100,22 +101,31 @@ class _LoginScreenState extends State<LoginScreen>
     String mod = 'ALL';
     String? fetchedPath = _logoPath;
     String? fetchedBg = _bgCoverImagePath;
+    String? fetchedName = _outletName;
 
     if (_selectedOutlet != null) {
+      final prefs = await SharedPreferences.getInstance();
       final localPath = await BrandingStorage.getLogoPathForOutlet(_selectedOutlet!);
       if (localPath != null && localPath.isNotEmpty) {
         fetchedPath = localPath;
       }
-      final prefs = await SharedPreferences.getInstance();
       fetchedBg = prefs.getString('brand_home_bg_$_selectedOutlet');
+      fetchedName = prefs.getString('brand_name_$_selectedOutlet');
 
       try {
         final res = await ApiClient.get(
-          '${ApiEndpoints.propertyInfo}?outlet_code=$_selectedOutlet',
+          '${ApiEndpoints.publicPropertyInfo}?outlet_code=$_selectedOutlet',
         );
         if (res != null && res['success'] == true && res['data'] != null) {
           final data = res['data'];
           mod = data['business_module'] ?? data['outlet_module'] ?? 'ALL';
+
+          final serverName = (data['property_name'] ?? data['outlet_name'] ?? data['name'] ?? data['hotel_name'])?.toString().trim();
+          if (serverName != null && serverName.isNotEmpty) {
+            fetchedName = serverName;
+            await prefs.setString('brand_name_$_selectedOutlet', fetchedName!);
+          }
+
           final serverLogo = data['logo_path']?.toString();
           if (serverLogo != null && serverLogo.trim().isNotEmpty) {
             fetchedPath = serverLogo.trim();
@@ -134,8 +144,13 @@ class _LoginScreenState extends State<LoginScreen>
             {'outlet_code': _selectedOutlet!},
           );
           if (res != null && res['success'] == true && res['data'] != null) {
-            mod = res['data']['business_module'] ?? 'ALL';
-            final serverLogo = res['data']['logo_path']?.toString();
+            final data = res['data'];
+            mod = data['business_module'] ?? 'ALL';
+            final serverName = (data['property_name'] ?? data['outlet_name'] ?? data['name'] ?? data['hotel_name'])?.toString().trim();
+            if (serverName != null && serverName.isNotEmpty) {
+              fetchedName = serverName;
+            }
+            final serverLogo = data['logo_path']?.toString();
             if (serverLogo != null && serverLogo.trim().isNotEmpty) {
               fetchedPath = serverLogo.trim();
             }
@@ -158,11 +173,13 @@ class _LoginScreenState extends State<LoginScreen>
 
     if (_logoPath != fetchedPath ||
         _activeModule != mod ||
-        _bgCoverImagePath != fetchedBg) {
+        _bgCoverImagePath != fetchedBg ||
+        _outletName != fetchedName) {
       setState(() {
         _logoPath = fetchedPath;
         _activeModule = mod;
         _bgCoverImagePath = fetchedBg;
+        _outletName = fetchedName;
       });
     }
   }
@@ -387,13 +404,19 @@ class _LoginScreenState extends State<LoginScreen>
         children: [
           // ==================== LEFT HERO PANEL ====================
           Container(
-            width: 420,
-            padding: const EdgeInsets.all(36),
+            width: 440,
+            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 38),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: heroColors,
+                colors: heroColors.isNotEmpty
+                    ? heroColors
+                    : const [
+                        Color(0xFF0F172A),
+                        Color(0xFF1E293B),
+                        Color(0xFF0F4C81),
+                      ],
               ),
               borderRadius:
                   const BorderRadius.horizontal(left: Radius.circular(18)),
@@ -401,16 +424,18 @@ class _LoginScreenState extends State<LoginScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Logo Halo Container
-                _buildBrandLogoWidget(size: 92),
-                const SizedBox(height: 22),
+                // Clean Brand Logo Emblem
+                _buildBrandLogoWidget(size: 84),
+                const SizedBox(height: 24),
                 Text(
-                  AppBrand.productName,
+                  (_outletName != null && _outletName!.isNotEmpty)
+                      ? _outletName!
+                      : AppBrand.productName,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 26,
+                    fontSize: 28,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
+                    letterSpacing: -0.6,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -418,11 +443,11 @@ class _LoginScreenState extends State<LoginScreen>
                   'POS, billing, accounting, and multi-outlet reporting in one secure flow.',
                   style: TextStyle(
                     color: Color(0xFF94A3B8),
-                    height: 1.45,
+                    height: 1.5,
                     fontSize: 13.5,
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -510,7 +535,9 @@ class _LoginScreenState extends State<LoginScreen>
           _buildBrandLogoWidget(size: 76),
           const SizedBox(height: 14),
           Text(
-            AppBrand.productName,
+            (_outletName != null && _outletName!.isNotEmpty)
+                ? _outletName!
+                : AppBrand.productName,
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF0F172A)),
           ),
           const SizedBox(height: 4),
@@ -1509,24 +1536,24 @@ class _HeroPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.18)),
+        color: Colors.white.withOpacity(0.09),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.16)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
             Icon(icon, size: 14, color: const Color(0xFF38BDF8)),
-            const SizedBox(width: 5),
+            const SizedBox(width: 6),
           ],
           Text(
             label,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 11.5,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
             ),
