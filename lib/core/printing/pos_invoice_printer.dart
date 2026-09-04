@@ -1612,7 +1612,10 @@ class PosInvoicePrinter {
 
   static double _billRoundOff(SaleOrder order) {
     final appSubDiscount = _appSubscriptionDiscountAmount(order);
-    if (appSubDiscount > 0.0009 && order.paymentMode.trim().toUpperCase() != 'SUBSCRIPTION') {
+    final hasSubscriptionItems = appSubDiscount > 0.0009 ||
+        order.paymentMode.trim().toUpperCase() == 'SUBSCRIPTION' ||
+        order.items.any((item) => item.isAdvanceFree);
+    if (hasSubscriptionItems) {
       final itemBase = _adjustedItemTaxableTotal(order);
       final chargeBase = order.chargeTotal;
       final itemGroupedTaxes = _adjustedItemGroupedTaxes(order, _groupedTaxBreakup(order));
@@ -1625,7 +1628,11 @@ class PosInvoicePrinter {
           _taxAmountFromBreakup(chargeGroupedTaxes, 'IGST');
       final displayNetPayable = _displayNetPayable(order);
       final subscriptionTax = _appSubscriptionTaxAdjustmentAmount(order);
-      return double.parse((displayNetPayable - (itemBase + chargeBase + summaryTax - appSubDiscount - subscriptionTax)).toStringAsFixed(2));
+      final diff = displayNetPayable - (itemBase + chargeBase + summaryTax - appSubDiscount - subscriptionTax);
+      if (diff.abs() < 0.015) {
+        return 0.0;
+      }
+      return double.parse(diff.toStringAsFixed(2));
     }
     if (order.roundOffAmount.abs() > 0.0009) {
       return order.roundOffAmount;
@@ -2012,9 +2019,17 @@ class PosInvoicePrinter {
   static double _appSubscriptionTaxAdjustmentAmount(SaleOrder order) {
     return order.items.fold<double>(
       0,
-      (sum, item) => item.isAdvanceFree
-          ? sum + ((_displayRate(item) * item.qty) * item.taxPercent / 100)
-          : sum,
+      (sum, item) {
+        if (!item.isAdvanceFree) return sum;
+        final isInclusive = item.isTaxInclusive ||
+            item.taxType.trim().toUpperCase().contains('INCLUSIVE') ||
+            order.billingTaxMode.trim().toUpperCase().contains('INCLUSIVE') ||
+            (order.items.isNotEmpty && order.items.every((i) => i.isTaxInclusive));
+        if (isInclusive) {
+          return sum;
+        }
+        return sum + ((_displayRate(item) * item.qty) * item.taxPercent / 100);
+      },
     );
   }
 
