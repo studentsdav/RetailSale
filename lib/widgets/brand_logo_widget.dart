@@ -25,7 +25,7 @@ class BrandLogoWidget extends StatelessWidget {
   });
 
   Widget _wrap(Widget child, Key key) {
-    final effectivePadding = padding ?? EdgeInsets.all(size * 0.10);
+    final effectivePadding = padding ?? EdgeInsets.all(size * 0.22);
     return ClipOval(
       key: key,
       child: Container(
