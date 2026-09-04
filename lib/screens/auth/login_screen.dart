@@ -402,28 +402,7 @@ class _LoginScreenState extends State<LoginScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Logo Halo Container
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.25),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                      BoxShadow(
-                        color: const Color(0xFF38BDF8).withOpacity(0.18),
-                        blurRadius: 24,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: CircleAvatar(
-                    radius: 46,
-                    backgroundColor: Colors.white,
-                    child: _buildBrandLogoWidget(size: 76),
-                  ),
-                ),
+                _buildBrandLogoWidget(size: 92),
                 const SizedBox(height: 22),
                 Text(
                   AppBrand.productName,
@@ -528,23 +507,7 @@ class _LoginScreenState extends State<LoginScreen>
               ],
             ),
           const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: CircleAvatar(
-              radius: 38,
-              backgroundColor: Colors.white,
-              child: _buildBrandLogoWidget(size: 64),
-            ),
-          ),
+          _buildBrandLogoWidget(size: 76),
           const SizedBox(height: 14),
           Text(
             AppBrand.productName,

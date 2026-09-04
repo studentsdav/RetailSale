@@ -178,23 +178,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Center(
               child: Column(
                 children: [
-                  Container(
-                    width: 110,
-                    height: 110,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: _buildSplashLogo(102),
-                  ),
+                  _buildSplashLogo(110),
                   const SizedBox(height: 24),
                   Text(
                     AppBrand.productName,

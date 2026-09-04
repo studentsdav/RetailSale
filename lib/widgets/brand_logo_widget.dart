@@ -9,11 +9,15 @@ class BrandLogoWidget extends StatelessWidget {
   final String? logoPath;
   final double size;
   final Widget? customFallback;
-
-  static final Map<String, Uint8List> _bytesCache = {};
-
   final BoxFit fit;
   final EdgeInsetsGeometry? padding;
+  final Color? borderColor;
+  final double borderWidth;
+  final bool showShadow;
+  final Color? backgroundColor;
+  final bool useCircleBadge;
+
+  static final Map<String, Uint8List> _bytesCache = {};
 
   const BrandLogoWidget({
     super.key,
@@ -22,18 +26,65 @@ class BrandLogoWidget extends StatelessWidget {
     this.customFallback,
     this.fit = BoxFit.contain,
     this.padding,
+    this.borderColor,
+    this.borderWidth = 0.0,
+    this.showShadow = false,
+    this.backgroundColor,
+    this.useCircleBadge = false,
   });
 
   Widget _wrap(Widget child, Key key) {
-    final effectivePadding = padding ?? EdgeInsets.all(size * 0.22);
-    return ClipOval(
-      key: key,
-      child: Container(
+    if (!useCircleBadge) {
+      final effectivePadding = padding ?? EdgeInsets.zero;
+      return SizedBox(
+        key: key,
         width: size,
         height: size,
-        color: Colors.transparent,
-        padding: effectivePadding,
-        child: child,
+        child: Center(
+          child: Padding(
+            padding: effectivePadding,
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    final effectivePadding = padding ?? EdgeInsets.all(size * 0.12);
+    return Container(
+      key: key,
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: backgroundColor ?? Colors.white,
+        border: borderWidth > 0
+            ? Border.all(
+                color: borderColor ?? Colors.white,
+                width: borderWidth,
+              )
+            : null,
+        boxShadow: showShadow
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: size * 0.12,
+                  spreadRadius: 1,
+                  offset: Offset(0, size * 0.04),
+                ),
+              ]
+            : null,
+      ),
+      child: ClipOval(
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          color: backgroundColor ?? Colors.white,
+          padding: effectivePadding,
+          child: Center(
+            child: child,
+          ),
+        ),
       ),
     );
   }
@@ -61,6 +112,7 @@ class BrandLogoWidget extends StatelessWidget {
             Image.memory(
               bytes,
               fit: fit,
+              alignment: Alignment.center,
               gaplessPlayback: true,
               errorBuilder: (_, __, ___) => _fallback(),
             ),
@@ -75,6 +127,7 @@ class BrandLogoWidget extends StatelessWidget {
           Image.network(
             path,
             fit: fit,
+            alignment: Alignment.center,
             gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
@@ -91,6 +144,7 @@ class BrandLogoWidget extends StatelessWidget {
           Image.network(
             fullUrl,
             fit: fit,
+            alignment: Alignment.center,
             gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
@@ -104,6 +158,7 @@ class BrandLogoWidget extends StatelessWidget {
           Image.file(
             File(path),
             fit: fit,
+            alignment: Alignment.center,
             gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
@@ -123,10 +178,12 @@ class BrandLogoWidget extends StatelessWidget {
       Image.asset(
         'assets/images/famalth_lynx_logo.png',
         fit: fit,
+        alignment: Alignment.center,
         gaplessPlayback: true,
         errorBuilder: (_, __, ___) => Container(
           width: size,
           height: size,
+          alignment: Alignment.center,
           decoration: const BoxDecoration(
             color: Color(0xFF0F172A),
             shape: BoxShape.circle,

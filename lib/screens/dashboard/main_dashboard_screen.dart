@@ -3435,41 +3435,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
                   child: Row(
                     children: [
-                      Stack(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: theme.colorScheme.primary.withOpacity(0.5),
-                                width: 2,
-                              ),
-                            ),
-                            child: CircleAvatar(
-                              radius: 24,
-                              backgroundColor: Colors.white,
-                              child: _buildDrawerHeaderLogoWidget(property?.logoPath, 48),
-                            ),
-                          ),
-                          Positioned(
-                            right: 1,
-                            bottom: 1,
-                            child: Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
-                                  width: 1.5,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      _buildDrawerHeaderLogoWidget(property?.logoPath, 56),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
