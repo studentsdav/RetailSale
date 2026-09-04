@@ -15,7 +15,7 @@ class BrandLogoWidget extends StatelessWidget {
   final double borderWidth;
   final bool showShadow;
   final Color? backgroundColor;
-  final bool useCircleBadge;
+  final bool? forceCircleBadge;
 
   static final Map<String, Uint8List> _bytesCache = {};
 
@@ -27,14 +27,21 @@ class BrandLogoWidget extends StatelessWidget {
     this.fit = BoxFit.contain,
     this.padding,
     this.borderColor,
-    this.borderWidth = 0.0,
-    this.showShadow = false,
+    this.borderWidth = 2.0,
+    this.showShadow = true,
     this.backgroundColor,
-    this.useCircleBadge = false,
+    this.forceCircleBadge,
   });
 
-  Widget _wrap(Widget child, Key key) {
-    if (!useCircleBadge) {
+  bool _shouldUseCircleBadge(bool isCustomLogo) {
+    if (forceCircleBadge != null) return forceCircleBadge!;
+    return isCustomLogo;
+  }
+
+  Widget _wrap(Widget child, Key key, {required bool isCustomLogo}) {
+    final useBadge = _shouldUseCircleBadge(isCustomLogo);
+
+    if (!useBadge) {
       final effectivePadding = padding ?? EdgeInsets.zero;
       return SizedBox(
         key: key,
@@ -57,12 +64,10 @@ class BrandLogoWidget extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: backgroundColor ?? Colors.white,
-        border: borderWidth > 0
-            ? Border.all(
-                color: borderColor ?? Colors.white,
-                width: borderWidth,
-              )
-            : null,
+        border: Border.all(
+          color: borderColor ?? Colors.white,
+          width: borderWidth > 0 ? borderWidth : 2.0,
+        ),
         boxShadow: showShadow
             ? [
                 BoxShadow(
@@ -117,6 +122,7 @@ class BrandLogoWidget extends StatelessWidget {
               errorBuilder: (_, __, ___) => _fallback(),
             ),
             ValueKey('logo-mem-${cleanStr.hashCode}-$size'),
+            isCustomLogo: true,
           );
         } catch (_) {}
       }
@@ -132,6 +138,7 @@ class BrandLogoWidget extends StatelessWidget {
             errorBuilder: (_, __, ___) => _fallback(),
           ),
           ValueKey('logo-net-$path-$size'),
+          isCustomLogo: true,
         );
       }
 
@@ -149,6 +156,7 @@ class BrandLogoWidget extends StatelessWidget {
             errorBuilder: (_, __, ___) => _fallback(),
           ),
           ValueKey('logo-rel-$fullUrl-$size'),
+          isCustomLogo: true,
         );
       }
 
@@ -163,6 +171,7 @@ class BrandLogoWidget extends StatelessWidget {
             errorBuilder: (_, __, ___) => _fallback(),
           ),
           ValueKey('logo-file-$path-$size'),
+          isCustomLogo: true,
         );
       }
     }
@@ -193,6 +202,7 @@ class BrandLogoWidget extends StatelessWidget {
         ),
       ),
       ValueKey('logo-fallback-mascot-$size'),
+      isCustomLogo: false,
     );
   }
 }
