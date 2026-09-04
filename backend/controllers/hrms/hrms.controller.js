@@ -1792,20 +1792,23 @@ exports.createHandover = async (req, res) => {
     const { Op } = req.propertyDb.Sequelize;
     const { cashier_id, handover_date, physical_cash, denominations } = req.body;
     
+    const targetOutletId = req.outlet?.id || req.user?.outlet_id || req.body?.outlet_id || req.headers['x-outlet-id'];
     const targetCashierId = cashier_id ? parseInt(cashier_id, 10) : req.user.id;
     const dateStr = handover_date || new Date().toISOString().split('T')[0];
-    const startDate = new Date(`${dateStr}T00:00:00.000Z`);
-    const endDate = new Date(`${dateStr}T23:59:59.999Z`);
+    const startDate = new Date(`${dateStr}T00:00:00`);
+    const endDate = new Date(`${dateStr}T23:59:59.999`);
 
     let expected_cash = 0;
     if (sales_headers) {
+      const salesWhere = {
+        sale_date: { [Op.gte]: startDate, [Op.lte]: endDate },
+        status: { [Op.ne]: 'Cancelled' }
+      };
+      if (targetOutletId) salesWhere.outlet_id = targetOutletId;
+      if (targetCashierId) salesWhere.created_by = targetCashierId;
+
       const sales = await sales_headers.findAll({
-        where: { 
-          created_by: targetCashierId, 
-          sale_date: { [Op.gte]: startDate, [Op.lte]: endDate }, 
-          outlet_id: req.user.outlet_id,
-          status: { [Op.ne]: 'Cancelled' }
-        }
+        where: salesWhere
       });
 
       expected_cash = sales.reduce((sum, s) => sum + extractCashFromSaleHeader(s), 0);
@@ -1825,7 +1828,7 @@ exports.createHandover = async (req, res) => {
       variance,
       denominations,
       shortage_status,
-      outlet_id: req.user.outlet_id,
+      outlet_id: targetOutletId,
       created_by: req.user.id
     });
     

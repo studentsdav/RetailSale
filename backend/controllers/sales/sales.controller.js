@@ -2461,10 +2461,12 @@ function buildSalePaymentLedgerEntries({
     amountPaid,
     netAmount,
     balanceDue,
-    created_by
+    created_by,
+    outlet_id
 }) {
     if (sale.status !== 'COMPLETED') return [];
     if (netAmount <= 0 && amountPaid <= 0 && balanceDue <= 0) return [];
+    const targetOutletId = outlet_id || sale?.outlet_id || header?.outlet_id || req?.user?.outlet_id;
     const splitLines = decodePaymentReferenceLines(header.payment_reference);
     const nonCreditSplit = splitLines.filter((row) => row.method !== 'CREDIT');
     const hasUsableSplit = nonCreditSplit.length > 0;
@@ -2517,7 +2519,7 @@ function buildSalePaymentLedgerEntries({
         else lineTxnType = 'SALE_CASH';
 
         entries.push({
-            outlet_id: req.user.outlet_id,
+            outlet_id: targetOutletId,
             txn_date: header.sale_date,
             transaction_type: lineTxnType,
             reference_type: 'SALE',
@@ -2537,7 +2539,7 @@ function buildSalePaymentLedgerEntries({
 
     if (finalCreditAmount > 0) {
         entries.push({
-            outlet_id: req.user.outlet_id,
+            outlet_id: targetOutletId,
             txn_date: header.sale_date,
             transaction_type: 'SALE_CREDIT',
             reference_type: 'SALE',
@@ -2567,10 +2569,12 @@ function buildSaleBenefitLedgerEntries({
     created_by,
     discountAmount,
     schemeFreeQtyAmount,
-    subscriptionAdjustmentAmount = 0
+    subscriptionAdjustmentAmount = 0,
+    outlet_id
 }) {
     if (sale.status !== 'COMPLETED') return [];
 
+    const targetOutletId = outlet_id || sale?.outlet_id || header?.outlet_id || req?.user?.outlet_id;
     const isSubscription = String(paymentMode || '').toUpperCase().includes('SUBSCRIPTION');
     // Avoid double-posting: subscription sales are paid via prepaid customer advance,
     // which is booked via ADVANCE_APPLY in the subscription allocation flow.
@@ -2584,7 +2588,7 @@ function buildSaleBenefitLedgerEntries({
 
     if (normalizedDiscount > 0) {
         entries.push({
-            outlet_id: req.user.outlet_id,
+            outlet_id: targetOutletId,
             txn_date: header.sale_date,
             transaction_type: 'SALE_DISCOUNT_EXPENSE',
             reference_type: 'SALE',
@@ -2600,7 +2604,7 @@ function buildSaleBenefitLedgerEntries({
 
     if (normalizedSchemeFree > 0) {
         entries.push({
-            outlet_id: req.user.outlet_id,
+            outlet_id: targetOutletId,
             txn_date: header.sale_date,
             transaction_type: 'SALE_SCHEME_FREE_EXPENSE',
             reference_type: 'SALE',
@@ -2620,15 +2624,17 @@ function buildSaleBenefitLedgerEntries({
 // Keep the old async wrappers for backward compatibility with any callers
 // outside createSaleVersion (e.g. returns/refunds)
 async function recordSalePayment({ req, transaction, sale, header, paymentMode, amountPaid, netAmount, balanceDue, created_by }) {
-    const entries = buildSalePaymentLedgerEntries({ req, sale, header, paymentMode, amountPaid, netAmount, balanceDue, created_by });
+    const targetOutletId = sale?.outlet_id || header?.outlet_id || req?.user?.outlet_id;
+    const entries = buildSalePaymentLedgerEntries({ req, sale, header, paymentMode, amountPaid, netAmount, balanceDue, created_by, outlet_id: targetOutletId });
     if (entries.length === 0) return;
-    await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id: req.user.outlet_id, entries, transaction });
+    await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id: targetOutletId, entries, transaction });
 }
 
 async function recordSaleBenefitExpenseEntries({ req, transaction, sale, header, paymentMode, created_by, discountAmount, schemeFreeQtyAmount, subscriptionAdjustmentAmount }) {
-    const entries = buildSaleBenefitLedgerEntries({ req, sale, header, paymentMode, created_by, discountAmount, schemeFreeQtyAmount });
+    const targetOutletId = sale?.outlet_id || header?.outlet_id || req?.user?.outlet_id;
+    const entries = buildSaleBenefitLedgerEntries({ req, sale, header, paymentMode, created_by, discountAmount, schemeFreeQtyAmount, outlet_id: targetOutletId });
     if (entries.length === 0) return;
-    await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id: req.user.outlet_id, entries, transaction });
+    await batchCreateLedgerEntries({ db: req.propertyDb, outlet_id: targetOutletId, entries, transaction });
 }
 
 
@@ -5942,7 +5948,7 @@ exports.createSubscription = async (req, res) => {
         const item = await req.propertyDb.models.item_master.findOne({
             where: {
                 id: itemId,
-                outlet_id: req.user.outlet_id
+                outlet_id
             },
             transaction: t
         });
@@ -5960,7 +5966,7 @@ exports.createSubscription = async (req, res) => {
 
         const existingSubscriptions = await req.propertyDb.models.milk_subscriptions.findAll({
             where: {
-                outlet_id: req.user.outlet_id,
+                outlet_id,
                 status: { [Op.ne]: 'CANCELLED' }
             },
             include: [
@@ -6079,7 +6085,7 @@ exports.createSubscription = async (req, res) => {
             const subItemMaster = (subItemId === itemId && item)
                 ? item
                 : (await req.propertyDb.models.item_master.findOne({
-                    where: { id: subItemId, outlet_id: req.user.outlet_id },
+                    where: { id: subItemId, outlet_id },
                     transaction: t
                 }) || item);
 
@@ -6092,7 +6098,7 @@ exports.createSubscription = async (req, res) => {
                 : toRoundedAmount(subBaseAmount + subTaxAmount);
 
             const subRecord = await req.propertyDb.models.milk_subscriptions.create({
-                outlet_id: req.user.outlet_id,
+                outlet_id,
                 customer_name: identity.customer_name || null,
                 customer_phone: identity.customer_phone || null,
                 customer_gstin: identity.customer_gstin || null,
@@ -6112,8 +6118,8 @@ exports.createSubscription = async (req, res) => {
                 delivery_charge_tax_amount: idx === 0 ? toRoundedAmount(req.body.delivery_charge_tax_amount ?? req.body.deliveryChargeTaxAmount ?? 0.0) : 0.0,
                 status: 'ACTIVE',
                 active_subscription: true,
-                created_by: req.user.id,
-                updated_by: req.user.id
+                created_by: req.user?.id || null,
+                updated_by: req.user?.id || null
             }, { transaction: t });
 
             if (idx === 0) primarySubscription = subRecord;
@@ -6121,7 +6127,7 @@ exports.createSubscription = async (req, res) => {
             const prepaidQty = subItemRate > 0 ? toRoundedAmount(subBaseAmount / subItemRate) : 0;
             if (subTotalPayment > 0 && (prepaidQty > 0 || subBaseAmount > 0)) {
                 await req.propertyDb.models.customer_advances.create({
-                    outlet_id: req.user.outlet_id,
+                    outlet_id,
                     source_sale_id: null,
                     customer_name: identity.customer_name || null,
                     customer_phone: identity.customer_phone || null,
@@ -6132,12 +6138,12 @@ exports.createSubscription = async (req, res) => {
                     payment_mode: paymentMode,
                     reference_no: getSubscriptionReferenceNo(subRecord.id),
                     note: `Subscription prepaid amount for ${subItemMaster.item_name}`,
-                    created_by: req.user.id,
-                    updated_by: req.user.id
+                    created_by: req.user?.id || null,
+                    updated_by: req.user?.id || null
                 }, { transaction: t });
 
                 await req.propertyDb.models.customer_item_advances.create({
-                    outlet_id: req.user.outlet_id,
+                    outlet_id,
                     source_sale_id: null,
                     customer_name: identity.customer_name || null,
                     customer_phone: identity.customer_phone || null,
@@ -6148,13 +6154,13 @@ exports.createSubscription = async (req, res) => {
                     available_qty: prepaidQty > 0 ? prepaidQty : (subDailyQty * payableDays),
                     rate: subItemRate,
                     note: `Subscription #${subRecord.id} prepaid qty for ${subItemMaster.item_name}`,
-                    created_by: req.user.id,
-                    updated_by: req.user.id
+                    created_by: req.user?.id || null,
+                    updated_by: req.user?.id || null
                 }, { transaction: t });
 
                 await createLedgerEntry({
                     db: req.propertyDb,
-                    outlet_id: req.user.outlet_id,
+                    outlet_id,
                     txn_date: todayTxnDate,
                     transaction_type: 'CUSTOMER_ADVANCE',
                     reference_type: 'SUBSCRIPTION',
@@ -6164,7 +6170,7 @@ exports.createSubscription = async (req, res) => {
                     payment_method: paymentMode,
                     amount_in: subTotalPayment,
                     notes: `Prepaid subscription amount for ${subItemMaster.item_name}`,
-                    created_by: req.user.id,
+                    created_by: req.user?.id || null,
                     transaction: t
                 });
             }

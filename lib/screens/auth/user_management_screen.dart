@@ -76,7 +76,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       Permission1('PENDING_REFUNDS', 'Pending Refunds View'),
       Permission1('CASH_LEDGER', 'Finance & Reports (Cash Ledger)'),
       Permission1('FINANCE_HUB', 'Finance & Accounting Hub (COA / P&L / Banks)'),
-      Permission1('ACCOUNTING_VOUCHERS', 'Accounting Vouchers (F4-F9)'),
+      Permission1('ACCOUNTING_VOUCHERS', 'Accounting Vouchers'),
       Permission1('BANK_ACCOUNTS', 'Company Bank Accounts Master'),
       Permission1('LOAN_EMI', 'Loan & EMI Management'),
       Permission1('CREDIT_ANALYSIS', 'Credit Ledger & Customer Accounts'),

@@ -441,9 +441,10 @@ class PosInvoicePrinter {
 
             final bool allInclusive = order.items.isNotEmpty && order.items.every((item) => item.isTaxInclusive);
             final String subtotalLabel = allInclusive ? 'Subtotal (Incl. GST)' : 'Subtotal';
-            final double rawSubtotal = order.subTotal > 0.0009
-                ? order.subTotal
-                : (preTaxSum + postTaxGrossSum + nonTaxableSum);
+            final double grossSub = _grossItemsSubtotal(order);
+            final double rawSubtotal = grossSub > 0.0009
+                ? grossSub
+                : (order.subTotal > 0.0009 ? order.subTotal : (preTaxSum + postTaxGrossSum + nonTaxableSum));
 
             String? subTotalNote;
             final List<String> noteParts = [];
@@ -1206,7 +1207,7 @@ class PosInvoicePrinter {
           _money(_taxableAmountForItem(item)),
           item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'CGST')} / ${_money(_taxAmount(order, item, 'CGST'))}${item.isTaxInclusive ? ' (Incl.)' : ''}',
           item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'SGST')} / ${_money(_taxAmount(order, item, 'SGST'))}${item.isTaxInclusive ? ' (Incl.)' : ''}',
-          _money(item.lineTotal),
+          _money(_displayItemLineTotal(item)),
         ];
       }
       return [
@@ -1217,7 +1218,7 @@ class PosInvoicePrinter {
         item.unit,
         item.isTaxInclusive ? '${_money(_displayRate(item))} (Incl.)' : _money(_displayRate(item)),
         _money(item.lineDiscount),
-        _money(item.lineTotal),
+        _money(_displayItemLineTotal(item)),
       ];
     }).toList();
 
@@ -1307,7 +1308,9 @@ class PosInvoicePrinter {
           ] else ...[
             _a4AmountRow(
               'Subtotal',
-              order.subTotal > 0.0009 ? order.subTotal : _adjustedItemTaxableTotal(order),
+              _grossItemsSubtotal(order) > 0.0009
+                  ? _grossItemsSubtotal(order)
+                  : (order.subTotal > 0.0009 ? order.subTotal : _adjustedItemTaxableTotal(order)),
             ),
             if (savingsAmount > 0.0009)
               _a4AmountRow(savingsLabel, savingsAmount),
@@ -1741,7 +1744,7 @@ class PosInvoicePrinter {
               ),
               pw.SizedBox(width: 8),
               pw.Text(
-                _money(item.lineTotal),
+                _money(_displayItemLineTotal(item)),
                 style: pw.TextStyle(
                   font: bold,
                   fontSize: 8.7,
@@ -2452,6 +2455,22 @@ class PosInvoicePrinter {
     if (item.originalRate != null && item.originalRate! > 0) return item.originalRate!;
     if (item.referenceRate > 0) return item.referenceRate;
     return item.rate;
+  }
+
+  static double _displayItemLineTotal(SaleItem item) {
+    if (item.isSchemeFree || item.isAdvanceFree) {
+      final rate = _displayRate(item);
+      final calculated = rate * item.qty;
+      if (calculated > 0) return calculated;
+    }
+    return item.lineTotal;
+  }
+
+  static double _grossItemsSubtotal(SaleOrder order) {
+    return order.items.fold<double>(
+      0,
+      (acc, item) => acc + (_displayRate(item) * item.qty),
+    );
   }
 
   static double _taxAmountFromBreakup(List<TaxBreakdown> taxes, String code) {

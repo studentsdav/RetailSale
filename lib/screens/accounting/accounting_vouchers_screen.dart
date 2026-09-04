@@ -104,7 +104,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                     ),
                   ),
                   Text(
-                    'Standalone Double-Entry Financial Vouchers (F4 - F9)',
+                    'Standalone Double-Entry Financial Vouchers',
                     style: TextStyle(
                       color: Colors.grey.shade600,
                       fontSize: 11,
@@ -145,7 +145,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
-                    'F4-F9 Shortcuts Enabled',
+                    'Shortcuts Enabled',
                     style: TextStyle(
                       color: tealColor,
                       fontSize: 11,
@@ -231,12 +231,12 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
     final type = ctrl.activeType;
 
     final titles = {
-      'CONTRA': 'Contra Register & Vouchers (F4)',
-      'PAYMENT': 'Payment Register & Vouchers (F5)',
-      'RECEIPT': 'Receipt Register & Vouchers (F6)',
-      'JOURNAL': 'Journal Register & Vouchers (F7)',
-      'SALES': 'Sales POS Register & Vouchers (F8)',
-      'PURCHASE': 'Purchase GRN Register & Vouchers (F9)'
+      'CONTRA': 'Contra Register & Vouchers',
+      'PAYMENT': 'Payment Register & Vouchers',
+      'RECEIPT': 'Receipt Register & Vouchers',
+      'JOURNAL': 'Journal Register & Vouchers',
+      'SALES': 'Sales POS Register & Vouchers',
+      'PURCHASE': 'Purchase GRN Register & Vouchers'
     };
 
     final descs = {
@@ -439,22 +439,22 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _fKeyBtn('F4', 'Contra (Deposit/Withdrawal)', ctrl.activeType == 'CONTRA',
+            _voucherTypeBtn('Contra (Deposit/Withdrawal)', ctrl.activeType == 'CONTRA',
                 () => _selectType('CONTRA'), primaryColor),
             const SizedBox(width: 8),
-            _fKeyBtn('F5', 'Payment (Expenses)', ctrl.activeType == 'PAYMENT',
+            _voucherTypeBtn('Payment (Expenses)', ctrl.activeType == 'PAYMENT',
                 () => _selectType('PAYMENT'), primaryColor),
             const SizedBox(width: 8),
-            _fKeyBtn('F6', 'Receipt (Income)', ctrl.activeType == 'RECEIPT',
+            _voucherTypeBtn('Receipt (Income)', ctrl.activeType == 'RECEIPT',
                 () => _selectType('RECEIPT'), primaryColor),
             const SizedBox(width: 8),
-            _fKeyBtn('F7', 'Journal (Adjustments)', ctrl.activeType == 'JOURNAL',
+            _voucherTypeBtn('Journal (Adjustments)', ctrl.activeType == 'JOURNAL',
                 () => _selectType('JOURNAL'), primaryColor),
             Container(height: 24, width: 1, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 10)),
-            _fKeyBtn('F8', 'Sales POS (Billing)', ctrl.activeType == 'SALES',
+            _voucherTypeBtn('Sales POS (Billing)', ctrl.activeType == 'SALES',
                 () => _selectType('SALES'), Colors.green.shade800),
             const SizedBox(width: 8),
-            _fKeyBtn('F9', 'Purchase (GRN)', ctrl.activeType == 'PURCHASE',
+            _voucherTypeBtn('Purchase (GRN)', ctrl.activeType == 'PURCHASE',
                 () => _selectType('PURCHASE'), Colors.amber.shade900),
           ],
         ),
@@ -462,7 +462,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
     );
   }
 
-  Widget _fKeyBtn(String key, String label, bool isActive, VoidCallback onTap, Color primaryColor) {
+  Widget _voucherTypeBtn(String label, bool isActive, VoidCallback onTap, Color primaryColor) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -473,33 +473,13 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: isActive ? primaryColor : Colors.grey.shade300),
         ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: isActive ? Colors.white.withOpacity(0.2) : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                key,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: isActive ? Colors.white : Colors.black87,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isActive ? Colors.white : Colors.black87,
-              ),
-            ),
-          ],
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: isActive ? Colors.white : Colors.black87,
+          ),
         ),
       ),
     );
@@ -507,10 +487,10 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
 
   Widget _buildVoucherMetaCard(Color primaryColor, Color tealColor) {
     final titles = {
-      'CONTRA': 'Contra Voucher Entry (F4)',
-      'PAYMENT': 'Payment Voucher Entry (F5)',
-      'RECEIPT': 'Receipt Voucher Entry (F6)',
-      'JOURNAL': 'Journal Voucher Entry (F7)'
+      'CONTRA': 'Contra Voucher Entry',
+      'PAYMENT': 'Payment Voucher Entry',
+      'RECEIPT': 'Receipt Voucher Entry',
+      'JOURNAL': 'Journal Voucher Entry'
     };
     final descs = {
       'CONTRA': 'Record cash deposit to bank, withdrawal, or bank-to-bank transfer',

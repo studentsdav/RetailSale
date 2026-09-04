@@ -70,7 +70,14 @@ class SaleItem {
             ((taxableAmount ?? ((qty * rate) - lineDiscount)) + taxAmount);
 
   double get amount => qty * rate;
-  double get netAmount => lineTotal;
+  double get netAmount {
+    if (isSchemeFree || isAdvanceFree) {
+      final baseRate = referenceRate > 0 ? referenceRate : (rate > 0 ? rate : (originalRate ?? 0.0));
+      final val = baseRate * qty;
+      if (val > 0) return val;
+    }
+    return lineTotal;
+  }
 
   SaleItem copyWith({
     double? qty,

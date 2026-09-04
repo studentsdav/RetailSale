@@ -1002,6 +1002,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       return;
     }
 
+    final subGstPercent = context.read<SystemSettingsController>().settings?.subDeliveryChargeGstPercent ?? 0.0;
     _paymentDraft ??= await _showPaymentDialog();
     if (_paymentDraft == null) return;
 
@@ -1051,8 +1052,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       'customer_gstin': _selectedCustomer!.customerGstin.trim(),
       'item_id': item.id,
       'subscription_items': subscriptionItems,
-      'start_date': _startDate.toIso8601String(),
-      'end_date': _endDate.toIso8601String(),
+      'start_date': DateFormat('yyyy-MM-dd').format(_startDate),
+      'end_date': DateFormat('yyyy-MM-dd').format(_endDate),
       'daily_allowed_qty': double.tryParse(_dailyQty.text.trim()) ?? 0,
       'total_payment_amount': totalAmount,
       'taxable_amount': _taxableSubscriptionAmount,
@@ -1064,8 +1065,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       'payment_mode': firstMode,
       'delivery_type': _deliveryType,
       'delivery_charge_amount': _dailyDeliveryChargeAmount,
-      'delivery_charge_gst_percent': context.read<SystemSettingsController>().settings?.subDeliveryChargeGstPercent ?? 0.0,
-      'delivery_charge_tax_amount': _dailyDeliveryChargeAmount * ((context.read<SystemSettingsController>().settings?.subDeliveryChargeGstPercent ?? 0.0) / 100),
+      'delivery_charge_gst_percent': subGstPercent,
+      'delivery_charge_tax_amount': _dailyDeliveryChargeAmount * (subGstPercent / 100),
     };
 
     final saved = await _ctrl.createSubscription(payload);
@@ -1078,7 +1079,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       'payment_notes': paymentNotes,
       'paid_amount': totalPaid,
       'remaining_amount': (totalAmount - totalPaid).clamp(0, double.infinity),
-      'receipt_date': DateTime.now().toIso8601String(),
+      'receipt_date': DateTimeService.instance.nowInTimeZone.toIso8601String(),
     };
     _lastSavedSubscription = receiptData;
 
@@ -1105,7 +1106,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     setState(() {
       _selectedItem = null;
       _schemeDraft = const _SchemeDraft();
-      final now = DateTime.now();
+      final now = DateTimeService.instance.nowInTimeZone;
       _startDate = DateTime(now.year, now.month, now.day);
       _endDate = DateTime(now.year, now.month, now.day)
           .add(const Duration(days: 29));

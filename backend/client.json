@@ -42,5 +42,21 @@
     "contact_phone": "8287035744",
     "tax_id": "",
     "pin": "$2b$10$1cyzKcWF0bJiCI36qfUcyupL0RhQNzMSJ.udLOrwJsjKBtJPd.Jju"
+  },
+  {
+    "client_id": "a4a06a27-fe16-4d5b-86be-c2261eaf3a6b",
+    "folderId": "1QHrw_L07eJPr4aHR6E-nhhQi9t5rjI3l",
+    "outlet_code": "OUTLET202609031129",
+    "outlet_id": 1,
+    "property_name": "BISTORA MART",
+    "machine_id": "RKBHIST",
+    "db_name": "POSINVRETAIL",
+    "created_at": "2026-09-04T06:51:52.702Z",
+    "status": "ACTIVE",
+    "expiry_date": "",
+    "contact_email": "bistoramart@531gmail.com",
+    "contact_phone": "9557670627",
+    "tax_id": "",
+    "pin": "$2b$10$Zq6.UqjjvuhnOX6rzJ5C/eNMn9xB4rW4MjEcGgQaqc1tGKqqtzRSm"
   }
 ]

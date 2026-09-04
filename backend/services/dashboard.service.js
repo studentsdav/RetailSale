@@ -482,15 +482,11 @@ FROM item_stock;
     sale.total_discount = isFullSubscriptionSale ? 0 : Math.max(toNumber(sale.total_discount) - subscriptionSubtotal, 0);
     sale.total_tax = toNumber(sale.total_tax);
     sale.net_amount = toNumber(sale.net_amount) + subscriptionNet;
-    let headerTaxable = toNumber(sale.taxable_amount);
-    if (headerTaxable <= 0) {
-      headerTaxable = Math.max(0, sale.net_amount - sale.total_tax);
-    }
-    sale.taxable_amount = headerTaxable;
 
     const saleDate = normalizeDate(sale.sale_date);
     let saleProfit = 0;
     let saleLoss = 0;
+    let itemTaxableSum = 0;
     const saleRevenue = toNumber(sale.net_amount);
 
     for (const item of sale.items || []) {
@@ -507,6 +503,8 @@ FROM item_stock;
       if (lineTaxable <= 0) {
         lineTaxable = lineNet > 0 ? Math.max(0, lineNet - lineTax) : toNumber(item.amount);
       }
+      itemTaxableSum += lineTaxable;
+
       const itemCost = toNumber(item.item?.rate) * qty;
       cogsTotal = roundAmount(cogsTotal + itemCost);
       if (fitsRange(saleDate, currentDayStart, currentDayEnd)) {
@@ -538,6 +536,14 @@ FROM item_stock;
         itemEntry.zones[zone].sales = roundAmount(itemEntry.zones[zone].sales + lineNet);
       }
     }
+
+    let headerTaxable = (Array.isArray(sale.items) && sale.items.length > 0 && itemTaxableSum > 0)
+      ? roundAmount(itemTaxableSum)
+      : toNumber(sale.taxable_amount);
+    if (headerTaxable <= 0) {
+      headerTaxable = Math.max(0, sale.net_amount - sale.total_tax);
+    }
+    sale.taxable_amount = headerTaxable;
 
     grandRevenue = roundAmount(grandRevenue + saleRevenue);
     grandTaxableRevenue = roundAmount(grandTaxableRevenue + toNumber(sale.taxable_amount));

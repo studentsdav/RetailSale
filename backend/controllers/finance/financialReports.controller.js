@@ -45,6 +45,87 @@ async function getClosingStockValuation(req, outlet_id) {
 }
 
 /**
+ * Calculates completed sales revenue and itemized COGS for an outlet
+ */
+async function getCompletedSalesMetrics(req, outlet_id) {
+    try {
+        const salesHeaderSummary = await req.propertyDb.models.sales_headers.findOne({
+            where: { outlet_id, status: 'COMPLETED', is_deleted: false },
+            attributes: [
+                [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'total_net'],
+                [Sequelize.fn('SUM', Sequelize.col('total_tax')), 'total_tax'],
+                [Sequelize.fn('SUM', Sequelize.col('taxable_amount')), 'total_taxable'],
+                [Sequelize.fn('SUM', Sequelize.col('total_discount')), 'total_discount']
+            ],
+            raw: true
+        });
+
+        const salesItems = await req.propertyDb.models.sales_items.findAll({
+            include: [
+                {
+                    model: req.propertyDb.models.sales_headers,
+                    as: 'sale',
+                    where: { outlet_id, status: 'COMPLETED', is_deleted: false, is_latest: true },
+                    attributes: []
+                },
+                {
+                    model: req.propertyDb.models.item_master,
+                    as: 'item',
+                    attributes: ['rate', 'retail_sale_price']
+                }
+            ],
+            raw: true,
+            nest: true
+        });
+
+        let itemizedCogs = 0;
+        let itemizedTaxableRevenue = 0;
+        for (const si of salesItems || []) {
+            const qty = Number(si.qty || 0);
+            const costRate = Number(si.item?.rate || 0);
+            itemizedCogs += qty * costRate;
+
+            const lineTaxable = Number(si.taxable_amount || 0);
+            const lineTax = Number(si.tax_amount || 0);
+            const lineNet = Number(si.net_amount || 0);
+            const taxable = lineTaxable > 0 ? lineTaxable : (lineNet > 0 ? Math.max(0, lineNet - lineTax) : Number(si.amount || 0));
+            itemizedTaxableRevenue += taxable;
+        }
+
+        const rawNet = Number(salesHeaderSummary?.total_net || 0);
+        const rawTax = Number(salesHeaderSummary?.total_tax || 0);
+        const rawTaxable = Number(salesHeaderSummary?.total_taxable || 0);
+        const salesDiscounts = Number(salesHeaderSummary?.total_discount || 0);
+
+        const netSalesRevenue = itemizedTaxableRevenue > 0
+            ? Number(itemizedTaxableRevenue.toFixed(2))
+            : (rawTaxable > 0 ? Number(rawTaxable.toFixed(2)) : Number(Math.max(0, rawNet - rawTax - salesDiscounts).toFixed(2)));
+
+        const grossSalesRevenue = Number((netSalesRevenue + salesDiscounts).toFixed(2));
+        const totalOutputTax = Number(rawTax.toFixed(2));
+
+        return {
+            netSalesRevenue,
+            grossSalesRevenue,
+            salesDiscounts,
+            totalOutputTax,
+            itemizedCogs,
+            rawSalesNet: rawNet
+        };
+    } catch (err) {
+        console.error('Error in getCompletedSalesMetrics:', err);
+        return {
+            netSalesRevenue: 0,
+            grossSalesRevenue: 0,
+            salesDiscounts: 0,
+            totalOutputTax: 0,
+            itemizedCogs: 0,
+            rawSalesNet: 0
+        };
+    }
+}
+
+/**
  * Aggregates all operating expenses from expenses table, expense_entries table, and cash_ledger
  */
 async function getExpensesSummaryAndCategories(req, outlet_id) {
@@ -318,31 +399,22 @@ exports.getTrialBalance = async (req, res) => {
         const totalBankBalance = banks.reduce((sum, b) => sum + Number(b.current_balance || 0), 0);
 
         // 4. Sales Revenue & Output Tax
-        const salesSummary = await req.propertyDb.models.sales_headers.findOne({
-            where: { outlet_id, status: 'COMPLETED' },
-            attributes: [
-                [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'total_net'],
-                [Sequelize.fn('SUM', Sequelize.col('total_tax')), 'total_tax'],
-                [Sequelize.fn('SUM', Sequelize.col('total_discount')), 'total_discount']
-            ],
-            raw: true
-        });
-        const totalSalesNet = Number(salesSummary?.total_net || 0);
-        const totalOutputTax = Number(salesSummary?.total_tax || 0);
-        const netSalesRevenue = Math.max(0, totalSalesNet - totalOutputTax);
+        const { netSalesRevenue, totalOutputTax } = await getCompletedSalesMetrics(req, outlet_id);
 
         // 5. Purchases (GRN) & Input GST Taxes
         const grnSummary = await req.propertyDb.models.goods_receipts.findOne({
             where: { outlet_id },
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('total_amount')), 'total_amount'],
-                [Sequelize.fn('SUM', Sequelize.col('total_gst')), 'total_tax']
+                [Sequelize.fn('SUM', Sequelize.col('total_gst')), 'total_tax'],
+                [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'net_amount']
             ],
             raw: true
         });
-        const totalGrnAmount = Number(grnSummary?.total_amount || 0);
+        const totalGrnSubtotal = Number(grnSummary?.total_amount || 0);
         const totalInputTax = Number(grnSummary?.total_tax || 0);
-        const netPurchases = Math.max(0, totalGrnAmount - totalInputTax);
+        const totalGrnNet = Number(grnSummary?.net_amount || 0);
+        const netPurchases = totalGrnSubtotal > 0 ? totalGrnSubtotal : Math.max(0, totalGrnNet - totalInputTax);
 
         // 6. Operating Expenses
         const { totalExpenses } = await getExpensesSummaryAndCategories(req, outlet_id);
@@ -526,39 +598,31 @@ exports.getProfitAndLoss = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
 
-        // Sales Revenue
-        const sales = await req.propertyDb.models.sales_headers.findOne({
-            where: { outlet_id, status: 'COMPLETED' },
-            attributes: [
-                [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'total_sales'],
-                [Sequelize.fn('SUM', Sequelize.col('total_tax')), 'total_tax'],
-                [Sequelize.fn('SUM', Sequelize.col('total_discount')), 'total_discounts']
-            ],
-            raw: true
-        });
-        const rawSales = Number(sales?.total_sales || 0);
-        const rawTax = Number(sales?.total_tax || 0);
-        const salesDiscounts = Number(sales?.total_discounts || 0);
-        const salesRevenue = Math.max(0, rawSales - rawTax);
-        const netSalesRevenue = Number((salesRevenue - salesDiscounts).toFixed(2));
+        // Sales Revenue & COGS Metrics
+        const { netSalesRevenue, grossSalesRevenue, salesDiscounts, itemizedCogs } = await getCompletedSalesMetrics(req, outlet_id);
+        const salesRevenue = grossSalesRevenue;
 
         // Purchases (COGS)
         const grn = await req.propertyDb.models.goods_receipts.findOne({
             where: { outlet_id },
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('total_amount')), 'total_grn'],
-                [Sequelize.fn('SUM', Sequelize.col('total_gst')), 'total_tax']
+                [Sequelize.fn('SUM', Sequelize.col('total_gst')), 'total_tax'],
+                [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'net_amount']
             ],
             raw: true
         });
-        const purchasesNet = Math.max(0, Number(grn?.total_grn || 0) - Number(grn?.total_tax || 0));
+        const grnSubTotal = Number(grn?.total_grn || 0);
+        const grnTax = Number(grn?.total_tax || 0);
+        const grnNet = Number(grn?.net_amount || 0);
+        const purchasesNet = grnSubTotal > 0 ? grnSubTotal : Math.max(0, grnNet - grnTax);
         const openingStock = 0.00;
         const directFreight = 0.00;
 
-        // Closing Stock
-        const closingStock = await getClosingStockValuation(req, outlet_id);
-
-        const cogs = Number(Math.max(0, openingStock + purchasesNet + directFreight - closingStock).toFixed(2));
+        // Closing Stock Valuation
+        const closingStockReal = await getClosingStockValuation(req, outlet_id);
+        const cogs = itemizedCogs > 0 ? Number(itemizedCogs.toFixed(2)) : Number(Math.max(0, openingStock + purchasesNet + directFreight - closingStockReal).toFixed(2));
+        const closingStock = itemizedCogs > 0 ? Number(Math.max(0, openingStock + purchasesNet + directFreight - cogs).toFixed(2)) : closingStockReal;
         const grossProfit = Number((netSalesRevenue - cogs).toFixed(2));
 
         // Operating Expenses Breakdown
@@ -650,28 +714,22 @@ exports.getBalanceSheet = async (req, res) => {
         const bankBalance = banks.reduce((sum, b) => sum + Number(b.current_balance || 0), 0);
 
         // Sales & Output Tax
-        const salesSummary = await req.propertyDb.models.sales_headers.findOne({
-            where: { outlet_id, status: 'COMPLETED' },
-            attributes: [
-                [Sequelize.fn('SUM', Sequelize.col('total_tax')), 'total_output_tax'],
-                [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'total_sales']
-            ],
-            raw: true
-        });
-        const outputGstPayable = Number(salesSummary?.total_output_tax || 0);
-        const salesNet = Math.max(0, Number(salesSummary?.total_sales || 0) - outputGstPayable);
+        const { netSalesRevenue: salesNet, totalOutputTax: outputGstPayable, itemizedCogs } = await getCompletedSalesMetrics(req, outlet_id);
 
         // GRN & Input Tax
         const grnSummary = await req.propertyDb.models.goods_receipts.findOne({
             where: { outlet_id },
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('total_gst')), 'total_input_tax'],
-                [Sequelize.fn('SUM', Sequelize.col('total_amount')), 'total_grn']
+                [Sequelize.fn('SUM', Sequelize.col('total_amount')), 'total_grn'],
+                [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'net_amount']
             ],
             raw: true
         });
         const inputGstCredit = Number(grnSummary?.total_input_tax || 0);
-        const purchasesNet = Math.max(0, Number(grnSummary?.total_amount || 0) - inputGstCredit);
+        const grnSubTotal = Number(grnSummary?.total_grn || 0);
+        const grnNet = Number(grnSummary?.net_amount || 0);
+        const purchasesNet = grnSubTotal > 0 ? grnSubTotal : Math.max(0, grnNet - inputGstCredit);
 
         // Customer & Supplier Dues
         const sundryDebtors = await getSundryDebtorsTotal(req, outlet_id);
@@ -692,13 +750,15 @@ exports.getBalanceSheet = async (req, res) => {
         // Closing Stock Valuation
         const closingStock = await getClosingStockValuation(req, outlet_id);
 
-        // Expenses
+        // Expenses & Indirect Income
         const { totalExpenses } = await getExpensesSummaryAndCategories(req, outlet_id);
+        const indirectIncome = await getIndirectIncomeTotal(req, outlet_id);
 
         // Net Profit Calculation
-        const cogs = Math.max(0, purchasesNet - closingStock);
+        const cogs = itemizedCogs > 0 ? itemizedCogs : Math.max(0, purchasesNet - closingStock);
         const grossProfit = salesNet - cogs;
-        const netProfit = Number((grossProfit - totalExpenses).toFixed(2));
+        const totalOperatingIncome = Number((grossProfit + indirectIncome).toFixed(2));
+        const netProfit = Number((totalOperatingIncome - totalExpenses).toFixed(2));
 
         // Capital Assets & Investments
         const { assetGroupMap, totalLoanLiabilities } = await getCapitalAssetsAndLoansSummary(req, outlet_id);

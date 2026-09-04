@@ -1796,9 +1796,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
   void _showProfitFormulaDialog(BuildContext context) {
     final double taxableRev = (todayTaxableRevenue > 0) ? todayTaxableRevenue : (todayRevenue - todayGst);
-    final double netGrossProfit = (todayGrossProfit > 0)
-        ? todayGrossProfit
-        : ((todayGrossLoss > 0) ? -todayGrossLoss : (taxableRev - todayCogs));
+    final double netGrossProfit = (todayGrossProfit > 0 || todayGrossLoss > 0)
+        ? (todayGrossProfit - todayGrossLoss)
+        : (taxableRev - todayCogs);
     final bool isProfit = netGrossProfit >= 0;
     final double displayAmount = netGrossProfit.abs();
 
@@ -2771,7 +2771,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       {
         'category': 'Finance & Accounting (Beta)',
         'icon': Icons.receipt_long,
-        'label': 'Accounting Vouchers (F4 - F9)',
+        'label': 'Accounting Vouchers',
         'isBeta': true,
         'permission': 'CASH_LEDGER',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountingVouchersScreen())),

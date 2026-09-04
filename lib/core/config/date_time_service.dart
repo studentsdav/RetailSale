@@ -167,8 +167,21 @@ class DateTimeService extends ChangeNotifier {
   // ── Private Helpers ──────────────────────────────────────────────────────
 
   void _fallbackToSystem({required String reason}) {
-    // Use system time but warn if it looks suspicious
     final systemNow = DateTime.now();
+    
+    // If we already have a reliable anchor from a previous sync and the current system clock
+    // is implausible (e.g. BIOS reset to 2002), keep advancing from existing anchor.
+    if (_anchor != null && systemNow.isBefore(_earliestPlausible)) {
+      _status = ClockStatus.drifted;
+      _warningMessage =
+          '⚠ System date looks wrong (${_fmt(systemNow)}).\n'
+          'Using last known reliable server date.';
+      _initialized = true;
+      dev.log('[DateTimeService] Preserving existing anchor due to implausible system date.',
+          name: 'DateTimeService');
+      return;
+    }
+
     _anchor = systemNow;
     _sw
       ..reset()

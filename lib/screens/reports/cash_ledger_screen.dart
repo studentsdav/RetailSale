@@ -2120,13 +2120,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           controller: _tabController,
           isScrollable: true,
           tabs: const [
-            Tab(text: 'Credit (F6 Receipt)'),
+            Tab(text: 'Credit (Receipt)'),
             Tab(text: 'Ledger (Cash/Bank)'),
-            Tab(text: 'Expenses (F5 Payment)'),
-            Tab(text: 'Income (F6 Receipt)'),
-            Tab(text: 'Withdrawal (F4 Contra)'),
-            Tab(text: 'Opening (F4 Contra)'),
-            Tab(text: 'Sales (F8 Sales POS)'),
+            Tab(text: 'Expenses (Payment)'),
+            Tab(text: 'Income (Receipt)'),
+            Tab(text: 'Withdrawal (Contra)'),
+            Tab(text: 'Opening (Contra)'),
+            Tab(text: 'Sales (Sales POS)'),
             Tab(text: 'Expiry & Damage'),
           ],
         ),
@@ -2135,17 +2135,17 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           ? FloatingActionButton.extended(
               onPressed: () => _showExpenseDialog(),
               icon: const Icon(Icons.add),
-              label: const Text('Add Expense (F5 Payment)'))
+              label: const Text('Add Expense (Payment)'))
           : _tabController.index == 3
               ? FloatingActionButton.extended(
                   onPressed: () => _showIncomeDialog(),
                   icon: const Icon(Icons.add_chart_outlined),
-                  label: const Text('Add Income (F6 Receipt)'))
+                  label: const Text('Add Income (Receipt)'))
               : _tabController.index == 4
                   ? FloatingActionButton.extended(
                       onPressed: () => _showWithdrawalDialog(),
                       icon: const Icon(Icons.money_off_csred_outlined),
-                      label: const Text('Add Withdrawal (F4 Contra)'))
+                      label: const Text('Add Withdrawal (Contra)'))
               : null,
       body: AnimatedBuilder(
         animation: ctrl,

@@ -123,7 +123,7 @@ class AccountingDashboardScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Manage Bank Masters, F4-F9 Double-Entry Vouchers, Trial Balance, P&L, and Balance Sheet seamlessly.',
+                      'Manage Bank Masters, Double-Entry Vouchers, Trial Balance, P&L, and Balance Sheet seamlessly.',
                       style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12),
                     ),
                   ],
@@ -172,13 +172,13 @@ class AccountingDashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // Section 2: Vouchers System (F4 - F9)
-              const Text('ACCOUNTING VOUCHERS SYSTEM (F4 - F9)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: primaryColor, letterSpacing: 0.5)),
+              // Section 2: Vouchers System
+              const Text('ACCOUNTING VOUCHERS SYSTEM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: primaryColor, letterSpacing: 0.5)),
               const SizedBox(height: 12),
               _buildTile(
                 context,
-                title: 'Accounting Voucher Hub (F4 Contra, F5 Payment, F6 Receipt, F7 Journal)',
-                subtitle: 'Pass double-entry cash/bank vouchers with zero-difference balance validator and instant F4-F9 key shortcuts.',
+                title: 'Accounting Voucher Hub (Contra, Payment, Receipt, Journal)',
+                subtitle: 'Pass double-entry cash/bank vouchers with zero-difference balance validator and instant key shortcuts.',
                 icon: Icons.receipt_long,
                 color: const Color(0xFF0B5CAD),
                 isFullWidth: true,
