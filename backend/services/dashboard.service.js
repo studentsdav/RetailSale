@@ -19,6 +19,13 @@ function roundAmount(value) {
 
 function formatDateLocalYmd(value, timeZone = 'Asia/Kolkata') {
   if (!value) return null;
+  if (typeof value === 'string') {
+    const clean = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+    if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}/.test(clean) && !clean.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(clean)) {
+      return toOutletDateYmd(new Date(clean.replace(' ', 'T') + '+05:30'), timeZone);
+    }
+  }
   return toOutletDateYmd(value, timeZone);
 }
 
