@@ -10,7 +10,7 @@ class PdfKpiItem {
   final String label;
   final String value;
   final PdfColor color;
-
+  
   const PdfKpiItem({
     required this.label,
     required this.value,
