@@ -4,6 +4,7 @@ import 'sale_scheme_model.dart';
 import 'tax_breakdown_model.dart';
 import 'dart:convert';
 import 'dart:math' as math;
+import '../../core/config/date_time_service.dart';
 
 class SaleOrder {
   final String saleNo;
@@ -428,9 +429,9 @@ class SaleOrder {
 
     return SaleOrder(
       saleNo: json['sale_no']?.toString() ?? '',
-      saleDate: (DateTime.tryParse(json['sale_date']?.toString() ?? '') ??
-              DateTime.now())
-          .toLocal(),
+      saleDate: DateTimeService.instance.parseToConfiguredTimeZone(
+        json['sale_date']?.toString(),
+      ),
       status: json['status']?.toString() ?? 'COMPLETED',
       orderType: json['order_type']?.toString() ?? 'B2C',
       billingCountry: json['billing_country']?.toString() ?? 'India',
@@ -510,7 +511,9 @@ class SaleOrder {
       modificationNote: json['modification_note']?.toString(),
       refundStatus: json['refund_status']?.toString(),
       refundAmount: refundAmt,
-      refundPaidAt: DateTime.tryParse(refundPaidAtVal ?? ''),
+      refundPaidAt: refundPaidAtVal != null && refundPaidAtVal.trim().isNotEmpty
+          ? DateTimeService.instance.parseToConfiguredTimeZone(refundPaidAtVal)
+          : null,
       refundPaymentMode: refundPaymentModeVal,
       exchangeAgainstBillNo: json['exchange_against_bill_no']?.toString(),
       hasBillNo: json['has_bill_no'] != null

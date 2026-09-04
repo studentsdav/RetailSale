@@ -113,6 +113,26 @@ class DateTimeService extends ChangeNotifier {
     return TimeZoneUtils.formatInTimeZone(now, _currentTimeZone, pattern: pattern);
   }
 
+  /// Converts any DateTime to the configured software time zone.
+  DateTime toConfiguredTimeZone(DateTime dt) {
+    return TimeZoneUtils.convertToTimeZone(dt, _currentTimeZone);
+  }
+
+  /// Parses an ISO or date string and converts it directly to configured time zone.
+  DateTime parseToConfiguredTimeZone(String? str, [DateTime? fallback]) {
+    if (str == null || str.trim().isEmpty) {
+      return fallback ?? nowInTimeZone;
+    }
+    final parsed = DateTime.tryParse(str.trim());
+    if (parsed == null) return fallback ?? nowInTimeZone;
+    return toConfiguredTimeZone(parsed);
+  }
+
+  /// Formats any DateTime in the configured software time zone.
+  String format(DateTime dt, [String pattern = 'dd-MMM-yyyy hh:mm a']) {
+    return TimeZoneUtils.formatInTimeZone(dt, _currentTimeZone, pattern: pattern);
+  }
+
   ClockStatus get status => _status;
   String? get warningMessage => _warningMessage;
   bool get hasWarning => _status == ClockStatus.drifted || _status == ClockStatus.fallback;

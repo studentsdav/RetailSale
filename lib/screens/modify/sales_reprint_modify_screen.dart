@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
-import '../../core/config/app_config.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/utils/timezone_utils.dart';
 import '../../core/api/api_client.dart';
@@ -825,8 +824,10 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
       'Initial ${_selectedOrder!.paymentMode}: ${_selectedOrder!.amountPaid.toStringAsFixed(2)} on ${DateFormat('dd-MMM-yyyy').format(_selectedOrder!.saleDate)}',
     ];
     for (final repayment in repayments) {
-      final rawDate = DateTime.tryParse('${repayment['payment_date'] ?? ''}');
-      final paymentDate = rawDate?.toLocal();
+      final rawDate = '${repayment['payment_date'] ?? ''}';
+      final paymentDate = rawDate.trim().isNotEmpty
+          ? DateTimeService.instance.parseToConfiguredTimeZone(rawDate)
+          : null;
       final amount = double.tryParse('${repayment['amount'] ?? 0}') ?? 0;
       final mode = '${repayment['payment_mode'] ?? ''}'.trim();
       if (paymentDate != null) {
@@ -951,14 +952,15 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                               : ListView.separated(
                                   itemCount: filteredSales.length,
                                   separatorBuilder: (_, __) =>
-                                      const Divider(height: 1),
+                      const Divider(height: 1),
                                   itemBuilder: (context, index) {
                                     final sale = filteredSales[index];
                                     final selected =
                                         sale['id'] == _selectedSale?['id'];
-                                    final saleDate = DateTime.tryParse(
-                                      sale['sale_date']?.toString() ?? '',
-                                    )?.toLocal();
+                                    final rawSaleDate = sale['sale_date']?.toString();
+                                    final saleDate = (rawSaleDate != null && rawSaleDate.trim().isNotEmpty)
+                                        ? DateTimeService.instance.parseToConfiguredTimeZone(rawSaleDate)
+                                        : null;
                                     return ListTile(
                                       selected: selected,
                                       title: Row(
@@ -1218,11 +1220,9 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                               .map((cn) {
                                             final cnMap =
                                                 Map<String, dynamic>.from(cn);
-                                            final cnDate = (DateTime.tryParse(
-                                                    cnMap['credit_note_date']
-                                                            ?.toString() ??
-                                                        '') ??
-                                                DateTime.now()).toLocal();
+                                            final cnDate = DateTimeService.instance.parseToConfiguredTimeZone(
+                                              cnMap['credit_note_date']?.toString(),
+                                            );
                                             return ListTile(
                                               contentPadding: EdgeInsets.zero,
                                               title: Text(

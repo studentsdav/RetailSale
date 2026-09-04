@@ -1,15 +1,14 @@
+const { toOutletDateYmd } = require('../../utils/timezoneHelper');
+
 exports.getClosingReport = async (req, res) => {
   try {
     const outlet_id = req.user.outlet_id;
     const { from_date, to_date } = req.query;
 
+    const outletTz = req.outletTimeZone || 'Asia/Kolkata';
     let startDate = from_date;
     if (!startDate) {
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        startDate = `${y}-${m}-${day}`;
+        startDate = req.toOutletDateYmd ? req.toOutletDateYmd(new Date()) : toOutletDateYmd(new Date(), outletTz);
     }
     const endDate = to_date || startDate;
 
@@ -26,19 +25,19 @@ exports.getClosingReport = async (req, res) => {
           COALESCE(im.opening_balance,0)
           +
           COALESCE(SUM(
-            CASE WHEN DATE(sl.txn_date) < :startDate
+            CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) < :startDate
                  THEN COALESCE(sl.qty_in,0) - COALESCE(sl.qty_out,0) ELSE 0 END
           ),0)
         ) AS "opening",
 
         /* Movement Inside Range */
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date) BETWEEN :startDate AND :endDate
+          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
                THEN COALESCE(sl.qty_in,0) ELSE 0 END
         ),0) AS "receive",
 
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date) BETWEEN :startDate AND :endDate
+          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
                AND sl.txn_type IN (
                  'RETURN','RETURN_UPDATE','RETURN_REVERSE','RETURN_DELETE','RETURN_CANCEL',
                  'SALE_MODIFY_REVERSE','GRN_UPDATE','GRN_MODIFY_IN','DAMAGE_DELETE','DAMAGE_REVERSE',
@@ -48,18 +47,18 @@ exports.getClosingReport = async (req, res) => {
         ),0) AS "returned",
 
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date) BETWEEN :startDate AND :endDate
+          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
                AND sl.txn_type = 'SUPPLIER_RETURN'
                THEN sl.qty_out ELSE 0 END
         ),0) AS "supplierReturnQty",
 
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date) BETWEEN :startDate AND :endDate
+          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
                THEN COALESCE(sl.qty_out,0) ELSE 0 END
         ),0) AS "issue",
 
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date) BETWEEN :startDate AND :endDate
+          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
                AND sl.txn_type IN ('DAMAGE','DAMAGE_UPDATE')
                THEN sl.qty_out ELSE 0 END
         ),0) AS "damage"
@@ -83,7 +82,8 @@ exports.getClosingReport = async (req, res) => {
       replacements: {
         outlet_id,
         startDate,
-        endDate
+        endDate,
+        outletTz
       }
     });
 
@@ -118,13 +118,14 @@ exports.getClosingReport = async (req, res) => {
         ON im.item_code = sl.item_code
        AND im.outlet_id = sl.outlet_id
       WHERE sl.outlet_id = :outlet_id
-        AND DATE(sl.txn_date) BETWEEN :startDate AND :endDate
+        AND DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
       ORDER BY sl.txn_date ASC, sl.id ASC
     `, {
       replacements: {
         outlet_id,
         startDate,
-        endDate
+        endDate,
+        outletTz
       }
     });
 

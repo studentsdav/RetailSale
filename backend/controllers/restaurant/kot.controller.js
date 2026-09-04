@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { getOutletDateBounds } = require('../../utils/timezoneHelper');
 const audit = require('../../services/audit.service');
 const { insertLedger } = require('../../services/stockLedger.service');
 const numberingHelper = require('../inventory/numberingSettingsV2.controller');
@@ -61,9 +62,13 @@ exports.listKots = async (req, res) => {
             }
         }
         if (from_date && to_date) {
-            whereClause.created_time = {
-                [Op.between]: [new Date(from_date), new Date(to_date)]
-            };
+            const outletTz = req.outletTimeZone || 'Asia/Kolkata';
+            const { startDate, endDate } = req.getDateBounds ? req.getDateBounds(from_date, to_date) : getOutletDateBounds(from_date, to_date, outletTz);
+            if (startDate && endDate) {
+                whereClause.created_time = {
+                    [Op.between]: [startDate, endDate]
+                };
+            }
         }
 
         const kots = await req.propertyDb.models.kot_headers.findAll({

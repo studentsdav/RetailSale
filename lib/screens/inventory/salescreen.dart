@@ -115,7 +115,7 @@ class _SaleScreenState extends State<SaleScreen> {
   final ScrollController _schemeSelectionScrollController = ScrollController();
   final ScrollController _schemeStripScrollController = ScrollController();
 
-  DateTime _saleDate = DateTime.now();
+  DateTime _saleDate = DateTimeService.instance.nowInTimeZone;
   List<String> _availableSaleSources = ['Store', 'App'];
   String _selectedSaleSource = 'Store';
   List<String> _availablePaymentMethods = ['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT'];
@@ -286,7 +286,7 @@ class _SaleScreenState extends State<SaleScreen> {
         _saleNo.text = await ctrl.getNextSaleNo();
       } catch (_) {}
 
-      _saleDate = DateTime.now();
+      _saleDate = DateTimeService.instance.nowInTimeZone;
       _saleDateCtrl.text = TimeZoneUtils.formatInTimeZone(
         _saleDate,
         DateTimeService.instance.currentTimeZone,
@@ -393,7 +393,11 @@ class _SaleScreenState extends State<SaleScreen> {
       // Load subscription delivery draft counts for sidebar badges
       _loadSubscriptionDraftCounts();
     } catch (error) {
-      _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
+      _saleDateCtrl.text = TimeZoneUtils.formatInTimeZone(
+        _saleDate,
+        DateTimeService.instance.currentTimeZone,
+        pattern: 'dd-MMM-yyyy HH:mm',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -511,7 +515,11 @@ class _SaleScreenState extends State<SaleScreen> {
     setState(() {
       _saleNo.text = order.saleNo;
       _saleDate = order.saleDate;
-      _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
+      _saleDateCtrl.text = TimeZoneUtils.formatInTimeZone(
+        _saleDate,
+        DateTimeService.instance.currentTimeZone,
+        pattern: 'dd-MMM-yyyy HH:mm',
+      );
       _orderType = order.orderType;
       _billingCountry = order.billingCountry;
       _taxMode = order.billingTaxMode;
@@ -6909,8 +6917,12 @@ class _SaleScreenState extends State<SaleScreen> {
       _taxMode = 'CGST_SGST';
       _selectedIgstState = null;
       _selectedIgstStateCode = null;
-      _saleDate = DateTime.now();
-      _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
+      _saleDate = DateTimeService.instance.nowInTimeZone;
+      _saleDateCtrl.text = TimeZoneUtils.formatInTimeZone(
+        _saleDate,
+        DateTimeService.instance.currentTimeZone,
+        pattern: 'dd-MMM-yyyy HH:mm',
+      );
       _applyBillingDefaults();
       _availableAdvanceEntries = const [];
       _availableAdvanceAmount = 0;
@@ -7016,9 +7028,14 @@ class _SaleScreenState extends State<SaleScreen> {
     setState(() {
       _activeDraftId = draftId;
       _saleNo.text = displaySaleNo;
-      _saleDate = DateTime.tryParse(details['sale_date']?.toString() ?? '') ??
-          DateTime.now();
-      _saleDateCtrl.text = DateFormat('dd-MMM-yyyy HH:mm').format(_saleDate);
+      _saleDate = DateTimeService.instance.parseToConfiguredTimeZone(
+        details['sale_date']?.toString(),
+      );
+      _saleDateCtrl.text = TimeZoneUtils.formatInTimeZone(
+        _saleDate,
+        DateTimeService.instance.currentTimeZone,
+        pattern: 'dd-MMM-yyyy HH:mm',
+      );
       _orderType = details['order_type']?.toString() ?? 'B2C';
       _billingCountry = details['billing_country']?.toString() ?? 'India';
       _taxMode = details['billing_tax_mode']?.toString() ?? 'CGST_SGST';
@@ -7212,15 +7229,16 @@ class _SaleScreenState extends State<SaleScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (builderCtx, index) {
                     final draft = drafts[index];
-                    final saleDate = DateTime.tryParse(
-                      draft['sale_date']?.toString() ?? '',
-                    )?.toLocal();
+                    final rawSaleDate = draft['sale_date']?.toString();
+                    final saleDate = (rawSaleDate != null && rawSaleDate.trim().isNotEmpty)
+                        ? DateTimeService.instance.parseToConfiguredTimeZone(rawSaleDate)
+                        : null;
                     final draftId =
                         int.tryParse(draft['id']?.toString() ?? '') ?? 0;
                     return ListTile(
                       title: Text(draft['sale_no']?.toString() ?? 'Draft'),
                       subtitle: Text(
-                        '${draft['customer_name']?.toString().trim().isNotEmpty == true ? draft['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateFormat('dd-MMM-yyyy hh:mm a').format(saleDate)} • Rs. ${_jsonDouble(draft['net_amount']).toStringAsFixed(2)}',
+                        '${draft['customer_name']?.toString().trim().isNotEmpty == true ? draft['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateTimeService.instance.format(saleDate, 'dd-MMM-yyyy hh:mm a')} • Rs. ${_jsonDouble(draft['net_amount']).toStringAsFixed(2)}',
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -7371,8 +7389,9 @@ class _SaleScreenState extends State<SaleScreen> {
       saleNo: saleNo,
       hasBillNo: hasBillNo,
       orderId: orderId,
-      saleDate: DateTime.tryParse(details['sale_date']?.toString() ?? '') ??
-          DateTime.now(),
+      saleDate: DateTimeService.instance.parseToConfiguredTimeZone(
+        details['sale_date']?.toString(),
+      ),
       status: details['status']?.toString() ?? 'COMPLETED',
       orderType: details['order_type']?.toString() ?? 'B2C',
       billingCountry: details['billing_country']?.toString() ?? 'India',
@@ -7444,13 +7463,14 @@ class _SaleScreenState extends State<SaleScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final sale = sales[index];
-                    final saleDate = DateTime.tryParse(
-                      sale['sale_date']?.toString() ?? '',
-                    )?.toLocal();
+                    final rawSaleDate = sale['sale_date']?.toString();
+                    final saleDate = (rawSaleDate != null && rawSaleDate.trim().isNotEmpty)
+                        ? DateTimeService.instance.parseToConfiguredTimeZone(rawSaleDate)
+                        : null;
                     return ListTile(
                       title: Text(sale['sale_no']?.toString() ?? 'Bill'),
                       subtitle: Text(
-                        '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateFormat('dd-MMM-yyyy hh:mm a').format(saleDate)} • Rs. ${_jsonDouble(sale['net_amount']).toStringAsFixed(2)}',
+                        '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateTimeService.instance.format(saleDate, 'dd-MMM-yyyy hh:mm a')} • Rs. ${_jsonDouble(sale['net_amount']).toStringAsFixed(2)}',
                       ),
                       trailing: const Icon(Icons.print_outlined),
                       onTap: () async {

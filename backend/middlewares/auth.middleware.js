@@ -74,6 +74,19 @@ module.exports = async (req, res, next) => {
         if (store) {
             store.set('outlet_id', data.outlet_id);
         }
+
+        try {
+            const { getOutletTimeZone, getNowInTimeZone, getTimeZoneContext, toOutletDateYmd, getOutletDateBounds } = require('../utils/timezoneHelper');
+            const tz = await getOutletTimeZone(data.outlet_id, req.propertyDb);
+            if (tz) {
+                req.outletTimeZone = tz;
+                req.nowInTimeZone = getNowInTimeZone(tz);
+                req.timeZoneContext = getTimeZoneContext(tz);
+                req.toOutletDateYmd = (date) => toOutletDateYmd(date, tz);
+                req.getDateBounds = (fromDate, toDate) => getOutletDateBounds(fromDate, toDate, tz);
+            }
+        } catch (_) {}
+
         next();
 
     } catch (error) {

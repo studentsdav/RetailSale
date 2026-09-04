@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { getOutletDateBounds } = require('../../utils/timezoneHelper');
 
 function toNumber(value) {
     const parsed = Number(value);
@@ -26,10 +27,14 @@ exports.getCommissionReport = async (req, res) => {
             ]
         };
 
+        const outletTz = req.outletTimeZone || 'Asia/Kolkata';
         if (from_date && to_date) {
-            where.sale_date = {
-                [Op.between]: [new Date(from_date), new Date(to_date)]
-            };
+            const { startDate, endDate } = req.getDateBounds ? req.getDateBounds(from_date, to_date) : getOutletDateBounds(from_date, to_date, outletTz);
+            if (startDate && endDate) {
+                where.sale_date = {
+                    [Op.between]: [startDate, endDate]
+                };
+            }
         }
 
         if (sale_source && sale_source !== 'ALL') {

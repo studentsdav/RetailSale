@@ -76,6 +76,8 @@ function startNightAuditJob(propertyDb) {
         } catch (err) {
             console.error('❌ Failed to run Night Audit cron worker:', err.message);
         }
+    }, {
+        timezone: process.env.TZ || 'Asia/Kolkata'
     });
 
     // Run startup catch-up check immediately

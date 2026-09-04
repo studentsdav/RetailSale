@@ -1,20 +1,11 @@
 const { Sequelize } = require('sequelize');
 const pg = require('pg');
 
-// Override parsing for TIMESTAMP WITHOUT TIME ZONE (OID 1114) to parse in local timezone
-pg.types.setTypeParser(pg.types.builtins.TIMESTAMP, (stringValue) => {
-    return stringValue ? new Date(stringValue.replace(' ', 'T')) : null;
-});
-
 const loadConfig = require("../utils/decryptConfig");
 
-// Calculate local timezone offset dynamically or respect TZ environment variable
-const envTz = process.env.TZ;
-const offsetMinutes = new Date().getTimezoneOffset();
-const offsetHours = Math.abs(Math.floor(offsetMinutes / 60));
-const offsetMins = Math.abs(offsetMinutes % 60);
-const sign = offsetMinutes <= 0 ? '+' : '-';
-const localTimezone = envTz || `${sign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+// Standardize database session timezone to UTC (+00:00) so all stored timestamps
+// have a single, unified baseline across cloud containers and local workstations.
+const dbTimezone = '+00:00';
 
 let propertyDb;
 
@@ -25,7 +16,7 @@ try {
         propertyDb = new Sequelize(process.env.DATABASE_URL, {
             dialect: "postgres",
             logging: false,
-            timezone: localTimezone,
+            timezone: dbTimezone,
             dialectOptions: useSSL ? {
                 ssl: {
                     require: true,
@@ -60,7 +51,7 @@ try {
                 port: Number(config.db_port || 5432),
                 dialect: "postgres",
                 logging: false,
-                timezone: localTimezone,
+                timezone: dbTimezone,
                 dialectOptions: useSSL ? {
                     ssl: {
                         require: true,
@@ -86,7 +77,7 @@ try {
         host: '127.0.0.1',
         dialect: 'postgres',
         logging: false,
-        timezone: localTimezone
+        timezone: dbTimezone
     });
 }
 

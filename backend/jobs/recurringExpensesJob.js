@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const { Op } = require('sequelize');
+const { toOutletDateYmd } = require('../utils/timezoneHelper');
 
 /**
  * Process all recurring expenses:
@@ -10,7 +11,7 @@ const { Op } = require('sequelize');
 async function processRecurringExpenses(db) {
     try {
         const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        const todayStr = toOutletDateYmd(today, process.env.TZ || 'Asia/Kolkata');
 
         // 1. Process due or past recurring expenses
         const dueExpenses = await db.models.recurring_expenses.findAll({

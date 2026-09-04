@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { toOutletDateYmd, getOutletDateBounds } = require('../../utils/timezoneHelper');
 
 const SALES_ZONES = [
     { key: 'MORNING', label: 'Morning', startHour: 5, endHour: 11 },
@@ -41,40 +42,26 @@ function resolveSaleZone(dateValue, timeZone = 'Asia/Kolkata') {
     return SALES_ZONES[3];
 }
 
-function startOfDay(dateValue) {
-    const date = normalizeDate(dateValue);
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+function formatDayKey(dateValue, timeZone = 'Asia/Kolkata') {
+    return toOutletDateYmd(dateValue, timeZone);
 }
 
-function startOfWeek(dateValue) {
-    const date = startOfDay(dateValue);
-    const day = date.getDay();
+function formatMonthKey(dateValue, timeZone = 'Asia/Kolkata') {
+    const ymd = toOutletDateYmd(dateValue, timeZone);
+    return ymd.slice(0, 7);
+}
+
+function formatWeekKey(dateValue, timeZone = 'Asia/Kolkata') {
+    const ymd = toOutletDateYmd(dateValue, timeZone);
+    const [y, m, d] = ymd.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    const day = dt.getUTCDay();
     const diff = (day + 6) % 7;
-    date.setDate(date.getDate() - diff);
-    return date;
-}
-
-function startOfMonth(dateValue) {
-    const date = normalizeDate(dateValue);
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function formatDayKey(dateValue) {
-    const date = startOfDay(dateValue);
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-}
-
-function formatMonthKey(dateValue) {
-    const date = startOfMonth(dateValue);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function formatWeekKey(dateValue) {
-    const date = startOfWeek(dateValue);
-    return formatDayKey(date);
+    dt.setUTCDate(dt.getUTCDate() - diff);
+    const wy = dt.getUTCFullYear();
+    const wm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const wd = String(dt.getUTCDate()).padStart(2, '0');
+    return `${wy}-${wm}-${wd}`;
 }
 
 function sumChargeTotals(charges) {
@@ -157,11 +144,12 @@ exports.getSalesReport = async (req, res) => {
 
         const outletTz = req.outletTimeZone || 'Asia/Kolkata';
         if (from_date && to_date) {
-            const startDate = new Date(`${from_date}T00:00:00`);
-            const endDate = new Date(`${to_date}T23:59:59.999`);
-            where.sale_date = {
-                [Op.between]: [startDate, endDate]
-            };
+            const { startDate, endDate } = req.getDateBounds ? req.getDateBounds(from_date, to_date) : getOutletDateBounds(from_date, to_date, outletTz);
+            if (startDate && endDate) {
+                where.sale_date = {
+                    [Op.between]: [startDate, endDate]
+                };
+            }
         }
 
         if (payment_mode) {
@@ -421,7 +409,7 @@ exports.getSalesReport = async (req, res) => {
                 });
                 const saleChargeTaxTotal = toNumber(sale.charge_tax_total) || roundAmount(computedChargeTaxTotal);
                 const saleTaxBreakup = safeArray(sale.tax_breakup);
-                const zone = resolveSaleZone(saleDate);
+                const zone = resolveSaleZone(saleDate, outletTz);
                 const chargeSplit = sumChargeTotals(charges);
                 const saleTaxSplit = aggregateTaxes({ sale, taxAccumulator });
 
@@ -580,9 +568,9 @@ exports.getSalesReport = async (req, res) => {
                     timeZoneMap[zone.key].profit + saleProfit
                 );
 
-                const monthKey = formatMonthKey(saleDate);
-                const weekKey = formatWeekKey(saleDate);
-                const dayKey = formatDayKey(saleDate);
+                const monthKey = formatMonthKey(saleDate, outletTz);
+                const weekKey = formatWeekKey(saleDate, outletTz);
+                const dayKey = formatDayKey(saleDate, outletTz);
 
                 for (const [key, store] of [[monthKey, monthMap], [weekKey, weekMap], [dayKey, dayMap]]) {
                     if (!store[key]) {
@@ -744,7 +732,7 @@ exports.getSalesReport = async (req, res) => {
                 // Process Credit Note as a negative sale entry to reduce monthly returns
                 const cn = rec.record;
                 const cnDate = normalizeDate(cn.credit_note_date);
-                const zone = resolveSaleZone(cnDate);
+                const zone = resolveSaleZone(cnDate, outletTz);
 
                 const cnTaxBreakup = [];
                 const cgst = toNumber(cn.cgst_amount);
@@ -867,9 +855,9 @@ exports.getSalesReport = async (req, res) => {
                     timeZoneMap[zone.key].profit + saleProfit
                 );
 
-                const monthKey = formatMonthKey(cnDate);
-                const weekKey = formatWeekKey(cnDate);
-                const dayKey = formatDayKey(cnDate);
+                const monthKey = formatMonthKey(cnDate, outletTz);
+                const weekKey = formatWeekKey(cnDate, outletTz);
+                const dayKey = formatDayKey(cnDate, outletTz);
 
                 for (const [key, store] of [[monthKey, monthMap], [weekKey, weekMap], [dayKey, dayMap]]) {
                     if (!store[key]) {

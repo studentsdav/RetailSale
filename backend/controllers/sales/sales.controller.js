@@ -1866,7 +1866,8 @@ async function computeItemCycleProgress({
         item_id: itemId,
         // Use local date strings; toISOString() shifts day in IST/timezones.
         from_day: formatDateLocalYmd(cycleStart),
-        to_day: formatDateLocalYmd(dateToCheck)
+        to_day: formatDateLocalYmd(dateToCheck),
+        outletTz: req.outletTimeZone || 'Asia/Kolkata'
     };
 
     let customerWhere = "";
@@ -1883,7 +1884,7 @@ async function computeItemCycleProgress({
 
     const [rows] = await req.propertyDb.query(
         `
-SELECT DATE(sh.sale_date) AS sale_day,
+SELECT DATE(sh.sale_date AT TIME ZONE :outletTz) AS sale_day,
        COALESCE(SUM(si.qty), 0) AS qty
 FROM sales_headers sh
 JOIN sales_items si ON si.sale_id = sh.id
@@ -1893,9 +1894,9 @@ WHERE sh.outlet_id = :outlet_id
   AND sh.is_deleted = FALSE
   AND si.item_id = :item_id
   AND COALESCE(si.is_scheme_free, FALSE) = FALSE
-  AND DATE(sh.sale_date) BETWEEN :from_day AND :to_day
+  AND DATE(sh.sale_date AT TIME ZONE :outletTz) BETWEEN :from_day AND :to_day
   ${customerWhere}
-GROUP BY DATE(sh.sale_date)
+GROUP BY DATE(sh.sale_date AT TIME ZONE :outletTz)
 ORDER BY sale_day ASC
         `,
         { replacements: params }
@@ -6911,7 +6912,8 @@ exports.getItemAdvanceLedger = async (req, res) => {
             to_day: toDay,
             customer_phone: identity.customer_phone || '',
             customer_gstin: identity.customer_gstin || '',
-            customer_name: identity.customer_name || ''
+            customer_name: identity.customer_name || '',
+            outletTz: req.outletTimeZone || 'Asia/Kolkata'
         };
 
         const [advances] = await req.propertyDb.query(
@@ -6920,7 +6922,7 @@ SELECT id, advance_date, original_qty, available_qty, rate, note
 FROM customer_item_advances
 WHERE outlet_id = :outlet_id
   AND item_id = :item_id
-  AND DATE(advance_date) BETWEEN :from_day AND :to_day
+  AND DATE(advance_date AT TIME ZONE :outletTz) BETWEEN :from_day AND :to_day
   ${buildManualAdvanceExclusionClause()}
   AND (
     (:customer_phone <> '' AND customer_phone = :customer_phone)
@@ -6934,7 +6936,7 @@ ORDER BY advance_date ASC, id ASC
 
         const [consumptions] = await req.propertyDb.query(
             `
-SELECT DATE(sh.sale_date) AS sale_day,
+SELECT DATE(sh.sale_date AT TIME ZONE :outletTz) AS sale_day,
        sh.sale_no,
        COALESCE(SUM(si.qty), 0) AS qty,
        COALESCE(SUM(si.qty * COALESCE(NULLIF(si.rate, 0), 0)), 0) AS amount
@@ -6945,13 +6947,13 @@ WHERE sh.outlet_id = :outlet_id
   AND sh.is_latest = TRUE
   AND sh.is_deleted = FALSE
   AND si.item_id = :item_id
-  AND DATE(sh.sale_date) BETWEEN :from_day AND :to_day
+  AND DATE(sh.sale_date AT TIME ZONE :outletTz) BETWEEN :from_day AND :to_day
   AND (
     (:customer_phone <> '' AND sh.customer_phone = :customer_phone)
     OR (:customer_gstin <> '' AND sh.customer_gstin = :customer_gstin)
     OR (:customer_name <> '' AND sh.customer_name = :customer_name)
   )
-GROUP BY DATE(sh.sale_date), sh.sale_no
+GROUP BY DATE(sh.sale_date AT TIME ZONE :outletTz), sh.sale_no
 ORDER BY sale_day ASC
             `,
             { replacements }

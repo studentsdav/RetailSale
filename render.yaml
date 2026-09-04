@@ -10,6 +10,10 @@ services:
         value: 3000
       - key: NODE_ENV
         value: production
+      - key: TZ
+        value: Asia/Kolkata
+      - key: DEFAULT_TIMEZONE
+        value: Asia/Kolkata
       - key: DATABASE_URL
         fromDatabase:
           name: retail-sale-db

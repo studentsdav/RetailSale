@@ -133,25 +133,35 @@ function toOutletDateYmd(date = new Date(), timeZone = DEFAULT_TIMEZONE) {
  * for the specified date strings in the target timezone.
  */
 function getOutletDateBounds(fromDateStr, toDateStr, timeZone = DEFAULT_TIMEZONE) {
-    function parseBound(dateStr, isEnd) {
-        if (!dateStr) return null;
+    function parseBound(dateInput, isEnd) {
+        if (!dateInput) return null;
         let yyyy, mm, dd;
-        const clean = String(dateStr).trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
-            [yyyy, mm, dd] = clean.split('-');
-        } else if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) {
-            [dd, mm, yyyy] = clean.split('-');
+        if (dateInput instanceof Date) {
+            const ymd = toOutletDateYmd(dateInput, timeZone);
+            [yyyy, mm, dd] = ymd.split('-');
         } else {
-            const d = new Date(clean);
-            return Number.isNaN(d.getTime()) ? null : d;
+            const clean = String(dateInput).trim();
+            if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+                [yyyy, mm, dd] = clean.split('-');
+            } else if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) {
+                [dd, mm, yyyy] = clean.split('-');
+            } else if (/^\d{4}-\d{2}-\d{2}[ T]/.test(clean)) {
+                const datePart = clean.slice(0, 10);
+                [yyyy, mm, dd] = datePart.split('-');
+            } else {
+                const d = new Date(clean);
+                if (Number.isNaN(d.getTime())) return null;
+                const ymd = toOutletDateYmd(d, timeZone);
+                [yyyy, mm, dd] = ymd.split('-');
+            }
         }
 
         const targetTimeStr = isEnd ? '23:59:59.999' : '00:00:00.000';
-        const isoBase = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T${targetTimeStr}`;
+        const isoBase = `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}T${targetTimeStr}`;
 
         let offsetStr = '+05:30';
         try {
-            const dummyDate = new Date(Number(yyyy), Number(mm) - 1, Number(dd), 12, 0, 0);
+            const dummyDate = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), 12, 0, 0));
             const tzFormatter = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'shortOffset' });
             const parts = tzFormatter.formatToParts(dummyDate);
             const tzPart = parts.find(p => p.type === 'timeZoneName')?.value || '';
