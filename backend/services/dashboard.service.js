@@ -1,5 +1,5 @@
 const { QueryTypes, Op } = require('sequelize');
-const { getOutletTimeZone, getNowInTimeZone } = require('../utils/timezoneHelper');
+const { getOutletTimeZone, getNowInTimeZone, toOutletDateYmd } = require('../utils/timezoneHelper');
 
 const SALES_ZONES = [
   { key: 'MORNING', label: 'Morning', startHour: 5, endHour: 11 },
@@ -17,20 +17,9 @@ function roundAmount(value) {
   return Number(toNumber(value).toFixed(2));
 }
 
-function formatDateLocalYmd(value) {
+function formatDateLocalYmd(value, timeZone = 'Asia/Kolkata') {
   if (!value) return null;
-  if (typeof value === 'string') {
-    const clean = value.trim();
-    if (/^\d{4}-\d{2}-\d{2}/.test(clean)) {
-      return clean.substring(0, 10);
-    }
-  }
-  const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return toOutletDateYmd(value, timeZone);
 }
 
 function normalizeDate(value) {
@@ -52,8 +41,16 @@ function normalizeDate(value) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
-function resolveSaleZone(dateValue) {
-  const hour = normalizeDate(dateValue).getHours();
+function resolveSaleZone(dateValue, timeZone = 'Asia/Kolkata') {
+  let hour = 0;
+  try {
+    const dt = dateValue instanceof Date ? dateValue : new Date(dateValue);
+    const hourStr = dt.toLocaleTimeString('en-US', { timeZone, hour12: false, hour: '2-digit' });
+    hour = parseInt(hourStr, 10);
+  } catch (_) {
+    hour = normalizeDate(dateValue).getHours();
+  }
+
   if (hour >= 5 && hour <= 11) return SALES_ZONES[0];
   if (hour >= 12 && hour <= 16) return SALES_ZONES[1];
   if (hour >= 17 && hour <= 20) return SALES_ZONES[2];
@@ -106,7 +103,7 @@ function growthPercent(current, previous) {
 exports.getInventoryDashboard = async (outletId, db) => {
   const timeZone = await getOutletTimeZone(outletId, db);
   const now = getNowInLocalTime(timeZone);
-  const todayStr = formatDateLocalYmd(now);
+  const todayStr = formatDateLocalYmd(now, timeZone);
 
   const [
     kpis,
@@ -408,16 +405,16 @@ FROM item_stock;
   currentYearEnd.setFullYear(currentYearEnd.getFullYear() + 1);
 
   function fitsRange(date, start, end) {
-    const dStr = formatDateLocalYmd(date);
-    const sStr = formatDateLocalYmd(start);
-    const eStr = formatDateLocalYmd(end);
+    const dStr = formatDateLocalYmd(date, timeZone);
+    const sStr = formatDateLocalYmd(start, timeZone);
+    const eStr = formatDateLocalYmd(end, timeZone);
     if (!dStr || !sStr) return false;
     if (eStr) return dStr >= sStr && dStr < eStr;
     return dStr >= sStr;
   }
 
   function isSameDay(date1, date2) {
-    return formatDateLocalYmd(date1) === formatDateLocalYmd(date2);
+    return formatDateLocalYmd(date1, timeZone) === formatDateLocalYmd(date2, timeZone);
   }
 
   function addPeriod(rangeKey, date, salesValue, profitValue, lossValue) {
@@ -515,7 +512,7 @@ FROM item_stock;
       saleLoss += lineProfit < 0 ? Math.abs(lineProfit) : 0;
 
       if (fitsRange(saleDate, currentDayStart, currentDayEnd)) {
-        const zone = resolveSaleZone(saleDate).key;
+        const zone = resolveSaleZone(saleDate, timeZone).key;
         const itemKey = `${item.item_name}||${item.item_code || ''}`;
         if (!topItemMap.has(itemKey)) {
           topItemMap.set(itemKey, {
