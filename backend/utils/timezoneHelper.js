@@ -49,16 +49,17 @@ function getNowInTimeZone(timeZone = DEFAULT_TIMEZONE) {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false
+            hourCycle: 'h23'
         });
         const parts = formatter.formatToParts(now);
         const map = {};
         for (const p of parts) map[p.type] = p.value;
+        const hourNum = Number(map.hour || 0) % 24;
         return new Date(
             Number(map.year),
             Number(map.month) - 1,
             Number(map.day),
-            Number(map.hour || 0),
+            hourNum,
             Number(map.minute || 0),
             Number(map.second || 0)
         );
