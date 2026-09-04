@@ -129,18 +129,48 @@ function toOutletDateYmd(date = new Date(), timeZone = DEFAULT_TIMEZONE) {
 }
 
 /**
- * Resolves timezone ID from express request or fallback.
+ * Returns UTC Date objects for start of day (00:00:00.000) and end of day (23:59:59.999)
+ * for the specified date strings in the target timezone.
  */
-function getReqTimeZone(req, defaultTz = DEFAULT_TIMEZONE) {
-    return req?.outletTimeZone || defaultTz;
-}
+function getOutletDateBounds(fromDateStr, toDateStr, timeZone = DEFAULT_TIMEZONE) {
+    function parseBound(dateStr, isEnd) {
+        if (!dateStr) return null;
+        let yyyy, mm, dd;
+        const clean = String(dateStr).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+            [yyyy, mm, dd] = clean.split('-');
+        } else if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) {
+            [dd, mm, yyyy] = clean.split('-');
+        } else {
+            const d = new Date(clean);
+            return Number.isNaN(d.getTime()) ? null : d;
+        }
 
-/**
- * Returns current date/time adjusted to outlet time zone.
- */
-async function getNowInOutletTimeZone(outletId, db) {
-    const tz = await getOutletTimeZone(outletId, db);
-    return getNowInTimeZone(tz);
+        const targetTimeStr = isEnd ? '23:59:59.999' : '00:00:00.000';
+        const isoBase = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T${targetTimeStr}`;
+
+        let offsetStr = '+05:30';
+        try {
+            const dummyDate = new Date(Number(yyyy), Number(mm) - 1, Number(dd), 12, 0, 0);
+            const tzFormatter = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'shortOffset' });
+            const parts = tzFormatter.formatToParts(dummyDate);
+            const tzPart = parts.find(p => p.type === 'timeZoneName')?.value || '';
+            const match = tzPart.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/);
+            if (match) {
+                const sign = match[1][0];
+                const hours = Math.abs(parseInt(match[1], 10)).toString().padStart(2, '0');
+                const mins = (match[2] || '00').padStart(2, '0');
+                offsetStr = `${sign}${hours}:${mins}`;
+            }
+        } catch (_) {}
+
+        return new Date(`${isoBase}${offsetStr}`);
+    }
+
+    const startDate = parseBound(fromDateStr, false);
+    const endDate = parseBound(toDateStr || fromDateStr, true);
+
+    return { startDate, endDate };
 }
 
 module.exports = {
@@ -149,6 +179,7 @@ module.exports = {
     getTimeZoneContext,
     toOutletDateYmd,
     getReqTimeZone,
-    getNowInOutletTimeZone
+    getNowInOutletTimeZone,
+    getOutletDateBounds
 };
 
