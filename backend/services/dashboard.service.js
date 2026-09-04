@@ -30,11 +30,8 @@ function normalizeDate(value) {
       const [year, month, day] = clean.split('-').map(Number);
       return new Date(year, month - 1, day);
     }
-    if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(clean)) {
-      const parts = clean.split(/[\sT]/);
-      const [year, month, day] = parts[0].split('-').map(Number);
-      const timeParts = parts[1].split('.')[0].split(':').map(Number);
-      return new Date(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]);
+    if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}/.test(clean) && !clean.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(clean)) {
+      return new Date(clean.replace(' ', 'T') + '+05:30');
     }
   }
   const date = new Date(value);
