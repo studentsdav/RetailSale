@@ -516,7 +516,6 @@ FROM item_stock;
 
     const isFullSubscriptionSale = sale.payment_mode === 'SUBSCRIPTION';
     const saleTotalDiscount = isFullSubscriptionSale ? 0 : Math.max(toNumber(sale.total_discount) - subscriptionSubtotal, 0);
-    const saleTaxableAmount = toNumber(sale.taxable_amount) + subscriptionTaxable;
     const saleNetRevenue = toNumber(sale.net_amount) + subscriptionNet;
 
     // Calculate tax split matching sales report
@@ -532,7 +531,9 @@ FROM item_stock;
     if (saleGst === 0 && toNumber(sale.total_tax) > 0) {
       saleGst = toNumber(sale.total_tax);
     }
-    saleGst += subscriptionTax;
+    if (saleGst === 0 && subscriptionTax > 0) {
+      saleGst = subscriptionTax;
+    }
 
     const saleDateYmd = formatDateLocalYmd(sale.sale_date, timeZone);
     const isTodaySale = Boolean(saleDateYmd && saleDateYmd === todayStr);
@@ -588,6 +589,9 @@ FROM item_stock;
         itemEntry.zones[zone].sales = roundAmount(itemEntry.zones[zone].sales + lineNet);
       }
     }
+
+    const baseSaleTaxable = itemTaxableSum > 0 ? itemTaxableSum : toNumber(sale.taxable_amount);
+    const saleTaxableAmount = baseSaleTaxable > 0 ? roundAmount(baseSaleTaxable) : roundAmount(subscriptionTaxable);
 
     grandRevenue = roundAmount(grandRevenue + saleNetRevenue);
     grandTaxableRevenue = roundAmount(grandTaxableRevenue + saleTaxableAmount);
