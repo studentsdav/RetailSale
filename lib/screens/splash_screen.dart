@@ -78,19 +78,24 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Widget _famalthMascotFallback(double size) {
     return ClipOval(
-      child: Image.asset(
-        'assets/images/famalth_lynx_logo.png',
+      child: Container(
         width: size,
         height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(
+        padding: EdgeInsets.all(size * 0.10),
+        child: Image.asset(
+          'assets/images/famalth_lynx_logo.png',
           width: size,
           height: size,
-          decoration: const BoxDecoration(
-            color: Color(0xFF0F172A),
-            shape: BoxShape.circle,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Container(
+            width: size,
+            height: size,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0F172A),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 40),
           ),
-          child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 40),
         ),
       ),
     );

@@ -12,12 +12,31 @@ class BrandLogoWidget extends StatelessWidget {
 
   static final Map<String, Uint8List> _bytesCache = {};
 
+  final BoxFit fit;
+  final EdgeInsetsGeometry? padding;
+
   const BrandLogoWidget({
     super.key,
     required this.logoPath,
     this.size = 76,
     this.customFallback,
+    this.fit = BoxFit.contain,
+    this.padding,
   });
+
+  Widget _wrap(Widget child, Key key) {
+    final effectivePadding = padding ?? EdgeInsets.all(size * 0.10);
+    return ClipOval(
+      key: key,
+      child: Container(
+        width: size,
+        height: size,
+        color: Colors.transparent,
+        padding: effectivePadding,
+        child: child,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,32 +57,28 @@ class BrandLogoWidget extends StatelessWidget {
             _bytesCache[cleanStr] = bytes;
           }
 
-          return ClipOval(
-            key: ValueKey('logo-mem-${cleanStr.hashCode}-$size'),
-            child: Image.memory(
+          return _wrap(
+            Image.memory(
               bytes,
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
+              fit: fit,
               gaplessPlayback: true,
               errorBuilder: (_, __, ___) => _fallback(),
             ),
+            ValueKey('logo-mem-${cleanStr.hashCode}-$size'),
           );
         } catch (_) {}
       }
 
       // 2. Full HTTP / HTTPS URL
       if (path.startsWith('http://') || path.startsWith('https://')) {
-        return ClipOval(
-          key: ValueKey('logo-net-$path-$size'),
-          child: Image.network(
+        return _wrap(
+          Image.network(
             path,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
+            fit: fit,
             gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
+          ValueKey('logo-net-$path-$size'),
         );
       }
 
@@ -72,31 +87,27 @@ class BrandLogoWidget extends StatelessWidget {
         final baseUrl = AppConfig.baseUrl.replaceAll(RegExp(r'/$'), '');
         final fullUrl =
             path.startsWith('/') ? '$baseUrl$path' : '$baseUrl/$path';
-        return ClipOval(
-          key: ValueKey('logo-rel-$fullUrl-$size'),
-          child: Image.network(
+        return _wrap(
+          Image.network(
             fullUrl,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
+            fit: fit,
             gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
+          ValueKey('logo-rel-$fullUrl-$size'),
         );
       }
 
       // 4. Local File Path (non-web)
       if (!kIsWeb && File(path).existsSync()) {
-        return ClipOval(
-          key: ValueKey('logo-file-$path-$size'),
-          child: Image.file(
+        return _wrap(
+          Image.file(
             File(path),
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
+            fit: fit,
             gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _fallback(),
           ),
+          ValueKey('logo-file-$path-$size'),
         );
       }
     }
@@ -108,13 +119,10 @@ class BrandLogoWidget extends StatelessWidget {
   Widget _fallback() {
     if (customFallback != null) return customFallback!;
 
-    return ClipOval(
-      key: ValueKey('logo-fallback-mascot-$size'),
-      child: Image.asset(
+    return _wrap(
+      Image.asset(
         'assets/images/famalth_lynx_logo.png',
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
+        fit: fit,
         gaplessPlayback: true,
         errorBuilder: (_, __, ___) => Container(
           width: size,
@@ -127,6 +135,7 @@ class BrandLogoWidget extends StatelessWidget {
               color: Colors.white, size: size * 0.5),
         ),
       ),
+      ValueKey('logo-fallback-mascot-$size'),
     );
   }
 }
