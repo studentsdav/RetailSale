@@ -26,11 +26,14 @@ function formatDateLocalYmd(value, timeZone = 'Asia/Kolkata') {
   if (typeof value === 'string') {
     const clean = value.trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
-    if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}/.test(clean) && !clean.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(clean)) {
-      return toOutletDateYmd(new Date(clean.replace(' ', 'T') + '+05:30'), timeZone);
+    const parsed = new Date(clean);
+    if (!Number.isNaN(parsed.getTime())) {
+      return toOutletDateYmd(parsed, timeZone);
     }
   }
-  return toOutletDateYmd(value, timeZone);
+  const dt = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  return toOutletDateYmd(dt, timeZone);
 }
 
 function normalizeDate(value) {
@@ -40,9 +43,6 @@ function normalizeDate(value) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
       const [year, month, day] = clean.split('-').map(Number);
       return new Date(year, month - 1, day);
-    }
-    if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}/.test(clean) && !clean.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(clean)) {
-      return new Date(clean.replace(' ', 'T') + '+05:30');
     }
   }
   const date = new Date(value);
@@ -110,8 +110,8 @@ function growthPercent(current, previous) {
 
 exports.getInventoryDashboard = async (outletId, db) => {
   const timeZone = await getOutletTimeZone(outletId, db);
-  const now = getNowInLocalTime(timeZone);
-  const todayStr = formatDateLocalYmd(now, timeZone);
+  const now = new Date();
+  const todayStr = toOutletDateYmd(now, timeZone);
 
   const [
     kpis,
@@ -389,60 +389,91 @@ FROM item_stock;
     year: { current: { sales: 0, profit: 0, loss: 0 }, previous: { sales: 0, profit: 0, loss: 0 } }
   };
 
-  // now already declared at start of getInventoryDashboard
-  const currentDayStart = startOfDay(now);
-  const previousDayStart = new Date(currentDayStart);
-  previousDayStart.setDate(previousDayStart.getDate() - 1);
-  const currentWeekStart = startOfWeek(now);
-  const previousWeekStart = new Date(currentWeekStart);
-  previousWeekStart.setDate(previousWeekStart.getDate() - 7);
-  const currentMonthStart = startOfMonth(now);
-  const previousMonthStart = new Date(currentMonthStart);
-  previousMonthStart.setMonth(previousMonthStart.getMonth() - 1);
-  const currentYearStart = startOfYear(now);
-  const previousYearStart = new Date(currentYearStart);
-  previousYearStart.setFullYear(previousYearStart.getFullYear() - 1);
+  const yesterdayDt = new Date(now.getTime() - 86400000);
+  const yesterdayStr = toOutletDateYmd(yesterdayDt, timeZone);
 
-  const currentDayEnd = new Date(currentDayStart);
-  currentDayEnd.setDate(currentDayEnd.getDate() + 1);
-  const currentWeekEnd = new Date(currentWeekStart);
-  currentWeekEnd.setDate(currentWeekEnd.getDate() + 7);
-  const currentMonthEnd = new Date(currentMonthStart);
-  currentMonthEnd.setMonth(currentMonthEnd.getMonth() + 1);
-  const currentYearEnd = new Date(currentYearStart);
-  currentYearEnd.setFullYear(currentYearEnd.getFullYear() + 1);
+  const getWeekStartStr = (dateYmd) => {
+    if (!dateYmd) return '';
+    const [y, m, d] = dateYmd.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const day = dt.getDay();
+    const diff = (day + 6) % 7;
+    dt.setDate(dt.getDate() - diff);
+    const wy = dt.getFullYear();
+    const wm = String(dt.getMonth() + 1).padStart(2, '0');
+    const wd = String(dt.getDate()).padStart(2, '0');
+    return `${wy}-${wm}-${wd}`;
+  };
 
-  function fitsRange(date, start, end) {
-    const dStr = formatDateLocalYmd(date, timeZone);
-    const sStr = formatDateLocalYmd(start, timeZone);
-    const eStr = formatDateLocalYmd(end, timeZone);
-    if (!dStr || !sStr) return false;
-    if (eStr) return dStr >= sStr && dStr < eStr;
-    return dStr >= sStr;
-  }
+  const getPreviousWeekStartStr = (currentWeekStartStr) => {
+    if (!currentWeekStartStr) return '';
+    const [y, m, d] = currentWeekStartStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d - 7);
+    const wy = dt.getFullYear();
+    const wm = String(dt.getMonth() + 1).padStart(2, '0');
+    const wd = String(dt.getDate()).padStart(2, '0');
+    return `${wy}-${wm}-${wd}`;
+  };
+
+  const currentWeekStartStr = getWeekStartStr(todayStr);
+  const previousWeekStartStr = getPreviousWeekStartStr(currentWeekStartStr);
+
+  const currentMonthStr = todayStr.slice(0, 7);
+  const [cy, cm] = todayStr.split('-').map(Number);
+  const prevMonthDt = new Date(cy, cm - 2, 1);
+  const previousMonthStr = `${prevMonthDt.getFullYear()}-${String(prevMonthDt.getMonth() + 1).padStart(2, '0')}`;
+
+  const currentYearStr = todayStr.slice(0, 4);
+  const previousYearStr = String(Number(currentYearStr) - 1);
 
   function isSameDay(date1, date2) {
-    return formatDateLocalYmd(date1, timeZone) === formatDateLocalYmd(date2, timeZone);
+    const d1 = formatDateLocalYmd(date1, timeZone);
+    const d2 = formatDateLocalYmd(date2, timeZone);
+    return Boolean(d1 && d2 && d1 === d2);
   }
 
-  function addPeriod(rangeKey, date, salesValue, profitValue, lossValue) {
-    const bucket = periodAccumulator[rangeKey];
-    if (!bucket) return;
-    if (fitsRange(date, bucket.currentStart, bucket.currentEnd)) {
-      bucket.current.sales = roundAmount(bucket.current.sales + salesValue);
-      bucket.current.profit = roundAmount(bucket.current.profit + profitValue);
-      bucket.current.loss = roundAmount(bucket.current.loss + lossValue);
-    } else if (fitsRange(date, bucket.previousStart, bucket.previousEnd)) {
-      bucket.previous.sales = roundAmount(bucket.previous.sales + salesValue);
-      bucket.previous.profit = roundAmount(bucket.previous.profit + profitValue);
-      bucket.previous.loss = roundAmount(bucket.previous.loss + lossValue);
+  function addPeriodForDate(dateYmd, salesValue, profitValue, lossValue) {
+    if (!dateYmd) return;
+    if (dateYmd === todayStr) {
+      periodAccumulator.day.current.sales = roundAmount(periodAccumulator.day.current.sales + salesValue);
+      periodAccumulator.day.current.profit = roundAmount(periodAccumulator.day.current.profit + profitValue);
+      periodAccumulator.day.current.loss = roundAmount(periodAccumulator.day.current.loss + lossValue);
+    } else if (dateYmd === yesterdayStr) {
+      periodAccumulator.day.previous.sales = roundAmount(periodAccumulator.day.previous.sales + salesValue);
+      periodAccumulator.day.previous.profit = roundAmount(periodAccumulator.day.previous.profit + profitValue);
+      periodAccumulator.day.previous.loss = roundAmount(periodAccumulator.day.previous.loss + lossValue);
+    }
+
+    if (dateYmd >= currentWeekStartStr && dateYmd <= todayStr) {
+      periodAccumulator.week.current.sales = roundAmount(periodAccumulator.week.current.sales + salesValue);
+      periodAccumulator.week.current.profit = roundAmount(periodAccumulator.week.current.profit + profitValue);
+      periodAccumulator.week.current.loss = roundAmount(periodAccumulator.week.current.loss + lossValue);
+    } else if (dateYmd >= previousWeekStartStr && dateYmd < currentWeekStartStr) {
+      periodAccumulator.week.previous.sales = roundAmount(periodAccumulator.week.previous.sales + salesValue);
+      periodAccumulator.week.previous.profit = roundAmount(periodAccumulator.week.previous.profit + profitValue);
+      periodAccumulator.week.previous.loss = roundAmount(periodAccumulator.week.previous.loss + lossValue);
+    }
+
+    if (dateYmd.startsWith(currentMonthStr)) {
+      periodAccumulator.month.current.sales = roundAmount(periodAccumulator.month.current.sales + salesValue);
+      periodAccumulator.month.current.profit = roundAmount(periodAccumulator.month.current.profit + profitValue);
+      periodAccumulator.month.current.loss = roundAmount(periodAccumulator.month.current.loss + lossValue);
+    } else if (dateYmd.startsWith(previousMonthStr)) {
+      periodAccumulator.month.previous.sales = roundAmount(periodAccumulator.month.previous.sales + salesValue);
+      periodAccumulator.month.previous.profit = roundAmount(periodAccumulator.month.previous.profit + profitValue);
+      periodAccumulator.month.previous.loss = roundAmount(periodAccumulator.month.previous.loss + lossValue);
+    }
+
+    if (dateYmd.startsWith(currentYearStr)) {
+      periodAccumulator.year.current.sales = roundAmount(periodAccumulator.year.current.sales + salesValue);
+      periodAccumulator.year.current.profit = roundAmount(periodAccumulator.year.current.profit + profitValue);
+      periodAccumulator.year.current.loss = roundAmount(periodAccumulator.year.current.loss + lossValue);
+    } else if (dateYmd.startsWith(previousYearStr)) {
+      periodAccumulator.year.previous.sales = roundAmount(periodAccumulator.year.previous.sales + salesValue);
+      periodAccumulator.year.previous.profit = roundAmount(periodAccumulator.year.previous.profit + profitValue);
+      periodAccumulator.year.previous.loss = roundAmount(periodAccumulator.year.previous.loss + lossValue);
     }
   }
-
-  periodAccumulator.day = periodBetween(currentDayStart, previousDayStart, currentDayEnd, currentDayStart);
-  periodAccumulator.week = periodBetween(currentWeekStart, previousWeekStart, currentWeekEnd, currentWeekStart);
-  periodAccumulator.month = periodBetween(currentMonthStart, previousMonthStart, currentMonthEnd, previousMonthStart);
-  periodAccumulator.year = periodBetween(currentYearStart, previousYearStart, currentYearEnd, previousYearStart);
 
   let grandProfit = 0;
   let grandLoss = 0;
@@ -503,7 +534,9 @@ FROM item_stock;
     }
     saleGst += subscriptionTax;
 
-    const saleDate = normalizeDate(sale.sale_date);
+    const saleDateYmd = formatDateLocalYmd(sale.sale_date, timeZone);
+    const isTodaySale = Boolean(saleDateYmd && saleDateYmd === todayStr);
+
     let saleProfit = 0;
     let saleLoss = 0;
     let saleCogs = 0;
@@ -533,8 +566,8 @@ FROM item_stock;
       saleProfit += Math.max(lineProfit, 0);
       saleLoss += lineProfit < 0 ? Math.abs(lineProfit) : 0;
 
-      if (isSameDay(saleDate, now)) {
-        const zone = resolveSaleZone(saleDate, timeZone).key;
+      if (isTodaySale) {
+        const zone = resolveSaleZone(sale.sale_date, timeZone).key;
         const itemKey = `${item.item_name}||${item.item_code || ''}`;
         if (!topItemMap.has(itemKey)) {
           topItemMap.set(itemKey, {
@@ -561,7 +594,7 @@ FROM item_stock;
     grandProfit = roundAmount(grandProfit + saleProfit);
     grandLoss = roundAmount(grandLoss + saleLoss);
 
-    if (isSameDay(saleDate, now)) {
+    if (isTodaySale) {
       let subscriptionAmount = (sale.consumptions || [])
         .filter(c => !(c.status === 'PENDING' && toNumber(c.excess_qty) > 0 && sale.payment_mode !== 'SUBSCRIPTION'))
         .reduce((sum, c) => sum + toNumber(c.covered_amount), 0);
@@ -578,19 +611,16 @@ FROM item_stock;
       todayCogs = roundAmount(todayCogs + saleCogs);
     }
 
-    addPeriod('day', saleDate, saleTaxableAmount, saleProfit, saleLoss);
-    addPeriod('week', saleDate, saleTaxableAmount, saleProfit, saleLoss);
-    addPeriod('month', saleDate, saleTaxableAmount, saleProfit, saleLoss);
-    addPeriod('year', saleDate, saleTaxableAmount, saleProfit, saleLoss);
+    addPeriodForDate(saleDateYmd, saleTaxableAmount, saleProfit, saleLoss);
   }
 
   let todaySubscriptionQty = 0;
 
   for (const c of subscriptionConsumptionResult || []) {
-    const cDate = normalizeDate(c.txn_date);
+    const cDateYmd = formatDateLocalYmd(c.txn_date, timeZone);
     const cQty = toNumber(c.covered_qty);
 
-    if (fitsRange(cDate, currentDayStart, currentDayEnd)) {
+    if (cDateYmd === todayStr) {
       todaySubscriptionQty = roundAmount(todaySubscriptionQty + cQty);
     }
   }
@@ -605,31 +635,15 @@ FROM item_stock;
   let repaymentTotal = 0;
   let openingDepositTotal = 0;
   const monthlyTransactionTypeMap = new Map();
-  const cashPeriodMap = {
-    day: { current: 0, previous: 0 },
-    week: { current: 0, previous: 0 },
-    month: { current: 0, previous: 0 },
-    year: { current: 0, previous: 0 }
-  };
-
-  function addCashPeriod(rangeKey, date, netAmount) {
-    const bucket = cashPeriodMap[rangeKey];
-    if (!bucket) return;
-    if (fitsRange(date, periodAccumulator[rangeKey].currentStart, periodAccumulator[rangeKey].currentEnd)) {
-      bucket.current = roundAmount(bucket.current + netAmount);
-    } else if (fitsRange(date, periodAccumulator[rangeKey].previousStart, periodAccumulator[rangeKey].previousEnd)) {
-      bucket.previous = roundAmount(bucket.previous + netAmount);
-    }
-  }
 
   for (const entry of cashLedgerRows || []) {
     const type = String(entry.transaction_type || '').toUpperCase();
-    const entryDate = normalizeDate(entry.txn_date);
+    const entryDateYmd = formatDateLocalYmd(entry.txn_date, timeZone);
     const inAmount = toNumber(entry.amount_in);
     const outAmount = toNumber(entry.amount_out);
     const netAmount = roundAmount(inAmount - outAmount);
 
-    if (fitsRange(entryDate, currentDayStart, currentDayEnd)) {
+    if (entryDateYmd === todayStr) {
       if (type !== 'OPENING_DEPOSIT' && inAmount > 0) {
         todayCollection = roundAmount(todayCollection + inAmount);
       }
@@ -656,7 +670,7 @@ FROM item_stock;
       repaymentTotal = roundAmount(repaymentTotal + inAmount);
     }
 
-    if (entryDate >= currentMonthStart && entryDate < currentMonthEnd) {
+    if (entryDateYmd && entryDateYmd.startsWith(currentMonthStr)) {
       const summaryKey = type || 'UNKNOWN';
       if (!monthlyTransactionTypeMap.has(summaryKey)) {
         monthlyTransactionTypeMap.set(summaryKey, {
@@ -674,11 +688,6 @@ FROM item_stock;
       summaryRow.net = roundAmount(summaryRow.net + netAmount);
       summaryRow.count += 1;
     }
-
-    addCashPeriod('day', entryDate, netAmount);
-    addCashPeriod('week', entryDate, netAmount);
-    addCashPeriod('month', entryDate, netAmount);
-    addCashPeriod('year', entryDate, netAmount);
   }
 
   const grossProfitValue = roundAmount(grandTaxableRevenue - cogsTotal);
