@@ -587,11 +587,18 @@ FROM item_stock;
     }
 
     const itemLineDiscountSum = safeArray(sale.items).reduce((sum, i) => sum + toNumber(i.line_discount), 0);
-    const unallocatedDiscount = Math.max(0, saleTotalDiscount - itemLineDiscountSum);
 
-    const baseSaleTaxable = itemTaxableSum > 0 ? itemTaxableSum : toNumber(sale.taxable_amount);
-    const rawTaxable = baseSaleTaxable > 0 ? roundAmount(baseSaleTaxable) : roundAmount(subscriptionTaxable);
-    const saleTaxableAmount = Math.max(0, roundAmount(rawTaxable - unallocatedDiscount));
+    const headerTaxable = toNumber(sale.taxable_amount);
+    let saleTaxableAmount = 0;
+    if (headerTaxable > 0) {
+      saleTaxableAmount = headerTaxable;
+    } else if (saleNetRevenue > 0) {
+      saleTaxableAmount = Math.max(0, roundAmount(saleNetRevenue - saleGst));
+    } else {
+      const baseSaleTaxable = itemTaxableSum > 0 ? itemTaxableSum : 0;
+      const rawTaxable = baseSaleTaxable > 0 ? roundAmount(baseSaleTaxable) : roundAmount(subscriptionTaxable);
+      saleTaxableAmount = Math.max(0, roundAmount(rawTaxable - saleTotalDiscount));
+    }
 
     const netSaleMargin = roundAmount(saleTaxableAmount - saleCogs);
     saleProfit = netSaleMargin > 0 ? netSaleMargin : 0;
