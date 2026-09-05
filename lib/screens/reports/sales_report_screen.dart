@@ -333,53 +333,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           ),
         );
       }
-      for (final charge in sale.charges) {
-        final amount = charge.amount;
-        final taxAmount = charge.taxAmount;
-        if (amount == 0 && taxAmount == 0) continue;
-        if (amount < 0) continue;
-
-        final isIgst = sale.igstAmount > 0.009;
-        final cgst = isIgst ? 0.0 : taxAmount / 2;
-        final sgst = isIgst ? 0.0 : taxAmount / 2;
-        final igst = isIgst ? taxAmount : 0.0;
-
-        flattened.add(
-          _GstSalesRow(
-            invoiceDate: sale.saleDate,
-            invoiceNumber: sale.saleNo,
-            customerName: sale.customerName.trim().isEmpty
-                ? 'Walk-in Customer'
-                : sale.customerName.trim(),
-            customerGstin: customerGstin,
-            invoiceValue: sale.netAmount,
-            placeOfSupply: placeOfSupply,
-            itemDescription: charge.name.trim().isEmpty
-                ? 'Delivery Charge'
-                : charge.name.trim(),
-            itemGroup: 'Charges',
-            subCategory: 'Services',
-            brand: 'Service',
-            hsnSacCode: charge.code.trim().isNotEmpty
-                ? charge.code.trim()
-                : 'SAC 9968',
-            quantity: 1,
-            unit: 'NOS',
-            taxableValue: amount,
-            taxSaleValue: amount + taxAmount,
-            nonTaxSaleValue: taxAmount > 0.009 ? 0 : amount,
-            cgstAmount: cgst,
-            sgstAmount: sgst,
-            igstAmount: igst,
-            totalLineValue: amount + taxAmount,
-            totalInvoiceValue: sale.netAmount,
-            saleDateTime: sale.saleDate,
-            paymentMode: sale.paymentMode,
-            discount: 0,
-            subTotal: amount,
-          ),
-        );
-      }
     }
     final query = _itemSearchCtrl.text.trim().toLowerCase();
     return flattened.where((row) {
