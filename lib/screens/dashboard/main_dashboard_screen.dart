@@ -169,6 +169,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   double todayCogs = 0;
   double todayGrossProfit = 0;
   double todayGrossLoss = 0;
+  double todayExpenses = 0;
+  double todayNetProfit = 0;
+  double todayNetLoss = 0;
   double todayGst = 0;
   double todayTaxableRevenue = 0;
   Timer? _appBarTimer;
@@ -979,6 +982,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         todayCogs = safeDouble(data['kpis']['todayCogs']);
         todayGrossProfit = safeDouble(data['kpis']['todayGrossProfit']);
         todayGrossLoss = safeDouble(data['kpis']['todayGrossLoss']);
+        todayExpenses = safeDouble(data['kpis']['todayExpenses']);
+        todayNetProfit = safeDouble(data['kpis']['todayNetProfit']);
+        todayNetLoss = safeDouble(data['kpis']['todayNetLoss']);
         todayGst = safeDouble(data['kpis']['todayGst']);
         todayTaxableRevenue = safeDouble(data['kpis']['todayTaxableRevenue']);
         if (todayTaxableRevenue <= 0 && todayRevenue > 0) {
@@ -1799,8 +1805,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     final double netGrossProfit = (todayGrossProfit > 0 || todayGrossLoss > 0)
         ? (todayGrossProfit - todayGrossLoss)
         : (taxableRev - todayCogs);
-    final bool isProfit = netGrossProfit >= 0;
-    final double displayAmount = netGrossProfit.abs();
+    final bool isGrossProfit = netGrossProfit >= 0;
+    final double displayGrossAmount = netGrossProfit.abs();
+
+    final double calculatedNetProfit = netGrossProfit - todayExpenses;
+    final bool isNetProfit = calculatedNetProfit >= 0;
+    final double displayNetAmount = calculatedNetProfit.abs();
 
     showDialog(
       context: context,
@@ -1811,12 +1821,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isProfit ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                color: isNetProfit ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                isProfit ? Icons.trending_up : Icons.trending_down,
-                color: isProfit ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                isNetProfit ? Icons.trending_up : Icons.trending_down,
+                color: isNetProfit ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
               ),
             ),
             const SizedBox(width: 12),
@@ -1874,8 +1884,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Net Profit = Gross Profit - Operating Expenses',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                      'Net Profit = Today Revenue (Excl. Tax) - Today COGS - Operating Expenses\n(Net Profit = Gross Profit - Operating Expenses)',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
                     ),
                   ],
                 ),
@@ -1944,20 +1954,46 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   Text('Rs. ${todayCogs.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFC2410C))),
                 ],
               ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('• Less Operating Expenses:', style: TextStyle(fontSize: 12.5, color: Color(0xFF8B5CF6))),
+                  Text('- Rs. ${todayExpenses.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
+                ],
+              ),
               const Divider(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    isProfit ? '• Calculated Gross Profit:' : '• Calculated Gross Loss:',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    isGrossProfit ? '• Calculated Gross Profit:' : '• Calculated Gross Loss:',
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
                   Text(
-                    'Rs. ${displayAmount.toStringAsFixed(2)}',
+                    'Rs. ${displayGrossAmount.toStringAsFixed(2)}',
                     style: TextStyle(
-                      fontSize: 13.5,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: isGrossProfit ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isNetProfit ? '• Calculated Net Profit:' : '• Calculated Net Loss:',
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Rs. ${displayNetAmount.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.w800,
-                      color: isProfit ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                      color: isNetProfit ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
                     ),
                   ),
                 ],
@@ -1969,9 +2005,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
-                  '📌 Note: Operating expenses (rent, electricity, staff, etc.) are excluded from Gross Profit/Loss and are deducted under Net Operating Profit in the Financial Overview section below.',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF475569), height: 1.3),
+                child: Text(
+                  '📌 Formula Breakdown: Net Profit = Today Net Revenue (Rs. ${taxableRev.toStringAsFixed(2)}) - Today COGS (Rs. ${todayCogs.toStringAsFixed(2)}) - Operating Expenses (Rs. ${todayExpenses.toStringAsFixed(2)})',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF475569), height: 1.3),
                 ),
               ),
             ],

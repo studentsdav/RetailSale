@@ -637,6 +637,7 @@ FROM item_stock;
   let cashOutTotal = 0;
   let cashNetTotal = 0;
   let expenseTotal = 0;
+  let todayExpenses = 0;
   let withdrawalTotal = 0;
   let supplierPaymentTotal = 0;
   let customerAdvanceTotal = 0;
@@ -654,6 +655,9 @@ FROM item_stock;
     if (entryDateYmd === todayStr) {
       if (type !== 'OPENING_DEPOSIT' && inAmount > 0) {
         todayCollection = roundAmount(todayCollection + inAmount);
+      }
+      if (type === 'EXPENSE') {
+        todayExpenses = roundAmount(todayExpenses + outAmount);
       }
     }
 
@@ -704,6 +708,9 @@ FROM item_stock;
   const todayGrossProfitValue = roundAmount(todayTaxableRevenue - todayCogs);
   const todayGrossProfit = todayGrossProfitValue > 0 ? todayGrossProfitValue : 0;
   const todayGrossLoss = todayGrossProfitValue < 0 ? Math.abs(todayGrossProfitValue) : 0;
+  const todayNetProfitValue = roundAmount(todayTaxableRevenue - todayCogs - todayExpenses);
+  const todayNetProfit = todayNetProfitValue > 0 ? todayNetProfitValue : 0;
+  const todayNetLoss = todayNetProfitValue < 0 ? Math.abs(todayNetProfitValue) : 0;
   const grossMarginPercent = grandTaxableRevenue > 0 ? roundAmount((grossProfitValue / grandTaxableRevenue) * 100) : 0;
   const customerOutstanding = roundAmount(customerOutstandingResult?.[0]?.total_outstanding || 0);
   const supplierOutstanding = roundAmount(supplierOutstandingResult?.[0]?.total_outstanding || 0);
@@ -758,6 +765,7 @@ FROM item_stock;
       grossLoss,
       grossMarginPercent,
       expenseTotal,
+      todayExpenses,
       withdrawalTotal,
       customerOutstanding,
       supplierOutstanding,
@@ -776,6 +784,8 @@ FROM item_stock;
       todayCogs: todayCogs,
       todayGrossProfit: todayGrossProfit,
       todayGrossLoss: todayGrossLoss,
+      todayNetProfit: todayNetProfit,
+      todayNetLoss: todayNetLoss,
       todayGst: todayGst,
       netSubscription,
       netDebit: cashOutTotal
