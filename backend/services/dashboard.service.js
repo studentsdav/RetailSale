@@ -563,10 +563,6 @@ FROM item_stock;
       saleCogs += itemCost;
       cogsTotal = roundAmount(cogsTotal + itemCost);
 
-      const lineProfit = lineTaxable - itemCost;
-      saleProfit += Math.max(lineProfit, 0);
-      saleLoss += lineProfit < 0 ? Math.abs(lineProfit) : 0;
-
       if (isTodaySale) {
         const zone = resolveSaleZone(sale.sale_date, timeZone).key;
         const itemKey = `${item.item_name}||${item.item_code || ''}`;
@@ -590,8 +586,16 @@ FROM item_stock;
       }
     }
 
+    const itemLineDiscountSum = safeArray(sale.items).reduce((sum, i) => sum + toNumber(i.line_discount), 0);
+    const unallocatedDiscount = Math.max(0, saleTotalDiscount - itemLineDiscountSum);
+
     const baseSaleTaxable = itemTaxableSum > 0 ? itemTaxableSum : toNumber(sale.taxable_amount);
-    const saleTaxableAmount = baseSaleTaxable > 0 ? roundAmount(baseSaleTaxable) : roundAmount(subscriptionTaxable);
+    const rawTaxable = baseSaleTaxable > 0 ? roundAmount(baseSaleTaxable) : roundAmount(subscriptionTaxable);
+    const saleTaxableAmount = Math.max(0, roundAmount(rawTaxable - unallocatedDiscount));
+
+    const netSaleMargin = roundAmount(saleTaxableAmount - saleCogs);
+    saleProfit = netSaleMargin > 0 ? netSaleMargin : 0;
+    saleLoss = netSaleMargin < 0 ? Math.abs(netSaleMargin) : 0;
 
     grandRevenue = roundAmount(grandRevenue + saleNetRevenue);
     grandTaxableRevenue = roundAmount(grandTaxableRevenue + saleTaxableAmount);

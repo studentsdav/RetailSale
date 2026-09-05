@@ -1911,10 +1911,28 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
               ),
               const SizedBox(height: 8),
+              if (todayDiscount > 0) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('• Gross Sale (Excl. Tax):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
+                    Text('Rs. ${(taxableRev + todayDiscount).toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('• Less Discount Given:', style: TextStyle(fontSize: 12.5, color: Color(0xFFDC2626))),
+                    Text('- Rs. ${todayDiscount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                  ],
+                ),
+                const SizedBox(height: 4),
+              ],
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('• Today Revenue (Excl. Tax):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
+                  const Text('• Today Net Revenue (Excl. Tax):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
                   Text('Rs. ${taxableRev.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                 ],
               ),
@@ -1943,6 +1961,18 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '📌 Note: Operating expenses (rent, electricity, staff, etc.) are excluded from Gross Profit/Loss and are deducted under Net Operating Profit in the Financial Overview section below.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF475569), height: 1.3),
+                ),
               ),
             ],
           ),
