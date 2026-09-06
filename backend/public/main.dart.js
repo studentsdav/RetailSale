@@ -47709,7 +47709,7 @@ _.x=24
 _.y=31
 _.z=12
 _.Q=642300
-_.rx=_.RG=_.p3=_.p2=_.p1=_.ok=_.k4=_.k3=_.k2=_.k1=_.go=_.fy=_.fx=_.dx=_.db=_.cy=_.cx=_.CW=_.ay=_.ax=_.at=0
+_.rx=_.RG=_.R8=_.p4=_.p3=_.p2=_.p1=_.ok=_.k4=_.k3=_.k2=_.k1=_.go=_.fy=_.fx=_.dx=_.db=_.cy=_.cx=_.CW=_.ay=_.ax=_.at=0
 _.to=_.ry=null
 _.x1=c
 _.x2=null
@@ -192506,12 +192506,12 @@ q=A.I(A.aL(A.B(A.a([n.ya(n.bsH()),B.I,n.ya(n.be5())],r),B.l,B.j,B.i,0,B.p),B.k,m
 l=l.a.a>1000?420:320
 p.push(new A.P(m,760,A.v(A.a([q,B.aq,new A.P(l,m,A.aL(A.B(A.a([n.ya(n.bfW()),B.I,n.ya(n.bbp()),B.I,n.ya(n.bLu()),B.I,n.ya(n.bLv()),B.I,n.ya(n.bNd())],r),B.l,B.j,B.i,0,B.p),B.k,m,B.w,B.U,m,m,m,m,m,!1,B.Q),m)],r),B.l,B.j,B.i,0,m),m))
 return A.cc(j,m,new A.O(B.a2,A.aL(A.B(p,B.l,B.j,B.i,0,B.p),B.k,m,B.w,B.U,m,m,m,m,m,!1,B.Q),m),m,k,s)},
-bxI(){var s,r=this,q=null,p=r.ah.h(0,"day"),o=r.ah.h(0,"week"),n=r.ah.h(0,"month"),m=r.ah.h(0,"year"),l=r.aig("Today Revenue (No Sub)","Rs. "+B.e.l(r.k3-r.k1,0),B.jP,B.b8,new A.c9P(r)),k=r.aig("Today Revenue (With Sub)","Rs. "+B.e.l(r.k3,0),B.jP,B.mr,new A.c9Q(r)),j=r.Qk("Today COGS","Rs. "+B.e.l(r.ok,0),B.jf,B.HA,new A.c9R(r),!0),i=r.p1,h=r.p2
-i=i>=h?r.Qk("Gross Profit","Rs. "+B.e.l(i,0),B.wj,B.ct,new A.c9S(r),!0):r.Qk("Gross Loss","Rs. "+B.e.l(h,0),B.B9,B.bn,new A.c9T(r),!0)
-h=n==null?q:B.e.l(n.c,1)
-s=t.p
-h=A.QI(A.a([l,k,j,i,r.a2N("Month Growth",(h==null?"0.0":h)+"%",B.aTs,B.hZ),r.a2N("Today Subscription Sale","Rs. "+B.e.l(r.k1,0),B.Yl,B.mr),r.a2N("Today Discount","Rs. "+B.e.l(r.k2,0),B.wt,B.fL),r.aig("Today Collection","Rs. "+B.e.l(r.k4,0),B.Yi,B.Hq,new A.c9U(r)),r.a2N("Today GST","Rs. "+B.e.l(r.RG,0),B.ty,B.ayJ)],s),!0,!0,!0)
-return A.B(A.a([new A.y0(B.avj,h,q,B.Q,!1,q,q,B.d3,q,!0,q,0,q,9,B.o_,B.w,q,q,B.k,B.U,q),B.I,A.e2(new A.c9V(r,p,o,n,m)),B.I,r.bMR()],s),B.l,B.j,B.i,0,B.p)},
+bxI(){var s,r,q=this,p=null,o=q.ah.h(0,"day"),n=q.ah.h(0,"week"),m=q.ah.h(0,"month"),l=q.ah.h(0,"year"),k=q.aig("Today Revenue (No Sub)","Rs. "+B.e.l(q.k3-q.k1,0),B.jP,B.b8,new A.c9P(q)),j=q.aig("Today Revenue (With Sub)","Rs. "+B.e.l(q.k3,0),B.jP,B.mr,new A.c9Q(q)),i=q.Qk("Today COGS","Rs. "+B.e.l(q.ok,0),B.jf,B.HA,new A.c9R(q),!0),h=q.p4
+h=h>=0&&q.R8===0?q.Qk("Net Profit","Rs. "+B.e.l(h,0),B.wj,B.ct,new A.c9S(q),!0):q.Qk("Net Loss","Rs. "+B.e.l(q.R8,0),B.B9,B.bn,new A.c9T(q),!0)
+s=m==null?p:B.e.l(m.c,1)
+r=t.p
+s=A.QI(A.a([k,j,i,h,q.a2N("Month Growth",(s==null?"0.0":s)+"%",B.aTs,B.hZ),q.a2N("Today Subscription Sale","Rs. "+B.e.l(q.k1,0),B.Yl,B.mr),q.a2N("Today Discount","Rs. "+B.e.l(q.k2,0),B.wt,B.fL),q.aig("Today Collection","Rs. "+B.e.l(q.k4,0),B.Yi,B.Hq,new A.c9U(q)),q.a2N("Today GST","Rs. "+B.e.l(q.RG,0),B.ty,B.ayJ)],r),!0,!0,!0)
+return A.B(A.a([new A.y0(B.avj,s,p,B.Q,!1,p,p,B.d3,p,!0,p,0,p,9,B.o_,B.w,p,p,B.k,B.U,p),B.I,A.e2(new A.c9V(q,o,n,m,l)),B.I,q.bMR()],r),B.l,B.j,B.i,0,B.p)},
 biN(){var s,r,q=this,p=null,o=A.a([new A.k8("Gross Profit",q.at),new A.k8("COGS",q.ay),new A.k8("Gross Loss",q.ax),new A.k8("Expenses",q.CW),new A.k8("Withdrawals",q.cx),new A.k8("Customer Due",q.cy),new A.k8("Supplier Due",q.db),new A.k8("Net Collection",q.dx),new A.k8("Net Subscription",q.fy),new A.k8("Net Debit",q.go),new A.k8("Net Operating Profit",q.fx)],t.PF),n=A.u(q.ae,t.UD)
 B.f.cY(n,new A.c9d())
 n=A.kq(B.fD,B.hj,B.ma,B.kv,A.a([A.kY(B.ar8,p,B.j5,o,!0,p,new A.c9e(new A.c9h(q)),0.7,new A.c9f(),new A.c9g(),t.B5,t.N)],t.kl),B.eW,p,p)
@@ -192922,8 +192922,8 @@ l.ok=r.$1(J.c(i.h(j,m),"todayCogs"))
 l.p1=r.$1(J.c(i.h(j,m),"todayGrossProfit"))
 l.p2=r.$1(J.c(i.h(j,m),"todayGrossLoss"))
 l.p3=r.$1(J.c(i.h(j,m),"todayExpenses"))
-r.$1(J.c(i.h(j,m),"todayNetProfit"))
-r.$1(J.c(i.h(j,m),"todayNetLoss"))
+l.p4=r.$1(J.c(i.h(j,m),"todayNetProfit"))
+l.R8=r.$1(J.c(i.h(j,m),"todayNetLoss"))
 l.RG=r.$1(J.c(i.h(j,m),"todayGst"))
 q=r.$1(J.c(i.h(j,m),"todayTaxableRevenue"))
 l.rx=q

@@ -6,5 +6,10 @@
   "OUTLET202604212159": {
     "lastSyncTime": 1788553806963,
     "isCloudEnabled": true
+  },
+  "OUTLET202605102056": {
+    "lastSyncTime": null,
+    "isCloudEnabled": true,
+    "userManuallyDisabled": false
   }
 }

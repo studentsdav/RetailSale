@@ -1524,18 +1524,18 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               showInfoIcon: true,
               onTap: () => _showProfitFormulaDialog(context),
             ),
-            todayGrossProfit >= todayGrossLoss
+            (todayNetProfit >= 0 && todayNetLoss == 0)
                 ? _statCard(
-                    'Gross Profit',
-                    'Rs. ${todayGrossProfit.toStringAsFixed(0)}',
+                    'Net Profit',
+                    'Rs. ${todayNetProfit.toStringAsFixed(0)}',
                     Icons.trending_up,
                     const Color(0xFF16A34A),
                     showInfoIcon: true,
                     onTap: () => _showProfitFormulaDialog(context),
                   )
                 : _statCard(
-                    'Gross Loss',
-                    'Rs. ${todayGrossLoss.toStringAsFixed(0)}',
+                    'Net Loss',
+                    'Rs. ${todayNetLoss.toStringAsFixed(0)}',
                     Icons.trending_down,
                     const Color(0xFFDC2626),
                     showInfoIcon: true,

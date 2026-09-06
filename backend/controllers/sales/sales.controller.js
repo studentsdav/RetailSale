@@ -5836,7 +5836,8 @@ exports.listCustomerSubscriptions = async (req, res) => {
             const endDateStr = subscription.end_date ? formatDateLocalYmd(subscription.end_date) : null;
             const isStarted = !startDateStr || asOfDay >= startDateStr;
             const isEnded = endDateStr ? asOfDay > endDateStr : false;
-            const isApplicableToday = isStarted && !isEnded && subscription.status === 'ACTIVE' && subscription.active_subscription === true;
+            const isActiveSub = Boolean(subscription.active_subscription) || String(subscription.active_subscription).toLowerCase() === 'true' || subscription.active_subscription == 1;
+            const isApplicableToday = isStarted && !isEnded && subscription.status === 'ACTIVE' && isActiveSub;
 
             const coveredRows = await loadSubscriptionConsumptionRows(req, subscription);
             const advanceSummary = await getSubscriptionItemAdvanceSummary(req, subscription);

@@ -96,14 +96,23 @@ function getTimeZoneContext(timeZone = DEFAULT_TIMEZONE) {
             year: 'numeric'
         });
     } catch (_) {
-        // Fallback if timezone ID is unsupported
-        currentDateString = now.toISOString().split('T')[0];
-        currentDisplayString = now.toDateString();
-        currentTimeString = now.toTimeString();
+        // Fallback if timezone ID or Intl is unsupported in packaged Node environments (server.exe)
+        const offsetMs = timeZone === 'Asia/Kolkata' ? (5.5 * 60 * 60 * 1000) : (-now.getTimezoneOffset() * 60 * 1000);
+        const adjustedNow = new Date(now.getTime() + offsetMs);
+        const yNow = adjustedNow.getUTCFullYear();
+        const mNow = String(adjustedNow.getUTCMonth() + 1).padStart(2, '0');
+        const dNow = String(adjustedNow.getUTCDate()).padStart(2, '0');
+        currentDateString = `${yNow}-${mNow}-${dNow}`;
+        currentDisplayString = adjustedNow.toDateString();
+        currentTimeString = adjustedNow.toTimeString();
 
         const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        yesterdayDateString = y.toISOString().split('T')[0];
-        yesterdayDisplayString = y.toDateString();
+        const adjustedY = new Date(y.getTime() + offsetMs);
+        const py = adjustedY.getUTCFullYear();
+        const pm = String(adjustedY.getUTCMonth() + 1).padStart(2, '0');
+        const pd = String(adjustedY.getUTCDate()).padStart(2, '0');
+        yesterdayDateString = `${py}-${pm}-${pd}`;
+        yesterdayDisplayString = adjustedY.toDateString();
     }
 
     return {
@@ -117,15 +126,34 @@ function getTimeZoneContext(timeZone = DEFAULT_TIMEZONE) {
 }
 
 /**
- * Formats a Date object or timestamp into YYYY-MM-DD in the specified timezone.
+ * Formats a Date object, string, or timestamp into YYYY-MM-DD in the specified timezone.
+ * Guaranteed to return strict YYYY-MM-DD format under all Node runtime environments (including pkg).
  */
 function toOutletDateYmd(date = new Date(), timeZone = DEFAULT_TIMEZONE) {
-    const dt = date instanceof Date ? date : new Date(date);
-    try {
-        return dt.toLocaleDateString('en-CA', { timeZone });
-    } catch (_) {
-        return dt.toISOString().split('T')[0];
+    if (!date) return null;
+    if (typeof date === 'string') {
+        const clean = date.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+            return clean;
+        }
+        if (/^\d{4}-\d{2}-\d{2}[T ]/.test(clean)) {
+            return clean.slice(0, 10);
+        }
+        const mdy = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (mdy) {
+            const [_, m, d, y] = mdy;
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
     }
+    const dt = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(dt.getTime())) return null;
+
+    const offsetMs = timeZone === 'Asia/Kolkata' ? (5.5 * 60 * 60 * 1000) : (-dt.getTimezoneOffset() * 60 * 1000);
+    const adjusted = new Date(dt.getTime() + offsetMs);
+    const y = adjusted.getUTCFullYear();
+    const m = String(adjusted.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(adjusted.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
 
 /**
