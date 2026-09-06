@@ -1,13 +1,15 @@
 const { Op, Sequelize } = require('sequelize');
 const { getOutletDateBounds } = require('../../utils/timezoneHelper');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
 /**
  * Calculates stock valuation (Closing Stock) for an outlet
  */
-async function getClosingStockValuation(req, outlet_id) {
+async function getClosingStockValuation(req, inputOutletId) {
     try {
+        const scope = await resolveOutletScope(req, inputOutletId);
         const items = await req.propertyDb.models.item_master.findAll({
-            where: { outlet_id, is_active: true },
+            where: { outlet_id: scope.outlet_id, is_active: true },
             attributes: ['id', 'item_code', 'rate', 'retail_sale_price', 'mrp', 'opening_balance'],
             raw: true
         });
@@ -15,7 +17,7 @@ async function getClosingStockValuation(req, outlet_id) {
         if (!items || items.length === 0) return 0;
 
         const stockMovements = await req.propertyDb.models.stock_ledger.findAll({
-            where: { outlet_id },
+            where: { outlet_id: scope.outlet_id },
             attributes: [
                 'item_code',
                 [Sequelize.fn('SUM', Sequelize.literal('qty_in - qty_out')), 'net_qty']
@@ -48,14 +50,15 @@ async function getClosingStockValuation(req, outlet_id) {
 /**
  * Calculates completed sales revenue and itemized COGS for an outlet (matching Sales Report and Dashboard logic)
  */
-async function getCompletedSalesMetrics(req, outlet_id, startDateStr, endDateStr) {
+async function getCompletedSalesMetrics(req, inputOutletId, startDateStr, endDateStr) {
     try {
         const outletTz = req.outletTimeZone || 'Asia/Kolkata';
+        const scope = await resolveOutletScope(req, inputOutletId);
         const salesWhere = {
-            outlet_id,
             status: { [Op.in]: ['COMPLETED', 'RETURNED'] },
             is_deleted: false,
-            is_latest: true
+            is_latest: true,
+            outlet_id: scope.outlet_id
         };
 
         if (startDateStr && endDateStr) {
@@ -221,10 +224,11 @@ async function getCompletedSalesMetrics(req, outlet_id, startDateStr, endDateStr
 /**
  * Aggregates all operating expenses from expenses table, expense_entries table, and cash_ledger
  */
-async function getExpensesSummaryAndCategories(req, outlet_id, startDateStr, endDateStr) {
+async function getExpensesSummaryAndCategories(req, inputOutletId, startDateStr, endDateStr) {
     let totalExpenses = 0;
     const categoryMap = new Map();
     const processedIds = new Set();
+    const scope = await resolveOutletScope(req, inputOutletId);
 
     const dateWhere = {};
     if (startDateStr && endDateStr) {
@@ -240,7 +244,7 @@ async function getExpensesSummaryAndCategories(req, outlet_id, startDateStr, end
     if (req.propertyDb.models.expenses) {
         try {
             const expList = await req.propertyDb.models.expenses.findAll({
-                where: { outlet_id, ...dateWhere },
+                where: { outlet_id: scope.outlet_id, ...dateWhere },
                 include: [{
                     model: req.propertyDb.models.expense_categories,
                     as: 'category',
@@ -271,7 +275,7 @@ async function getExpensesSummaryAndCategories(req, outlet_id, startDateStr, end
     if (req.propertyDb.models.expense_entries) {
         try {
             const legacyList = await req.propertyDb.models.expense_entries.findAll({
-                where: { outlet_id, ...dateWhere },
+                where: { outlet_id: scope.outlet_id, ...dateWhere },
                 raw: true
             });
 
@@ -295,12 +299,9 @@ async function getExpensesSummaryAndCategories(req, outlet_id, startDateStr, end
     // 3. Query cash_ledger table for EXPENSE transactions (Cash/Bank Ledger Direct Expenses)
     if (req.propertyDb.models.cash_ledger) {
         try {
+            const cashExpWhere = { transaction_type: 'EXPENSE', outlet_id: scope.outlet_id, ...dateWhere };
             const cashExpList = await req.propertyDb.models.cash_ledger.findAll({
-                where: {
-                    outlet_id,
-                    transaction_type: 'EXPENSE',
-                    ...dateWhere
-                },
+                where: cashExpWhere,
                 raw: true
             });
 
@@ -336,8 +337,9 @@ async function getExpensesSummaryAndCategories(req, outlet_id, startDateStr, end
 /**
  * Aggregates Direct / Indirect Income entries
  */
-async function getIndirectIncomeTotal(req, outlet_id, startDateStr, endDateStr) {
+async function getIndirectIncomeTotal(req, inputOutletId, startDateStr, endDateStr) {
     let totalIncome = 0;
+    const scope = await resolveOutletScope(req, inputOutletId);
     const dateWhere = {};
     if (startDateStr && endDateStr) {
         dateWhere.txn_date = {
@@ -351,7 +353,7 @@ async function getIndirectIncomeTotal(req, outlet_id, startDateStr, endDateStr) 
     if (req.propertyDb.models.income_entries) {
         try {
             const inc = await req.propertyDb.models.income_entries.findOne({
-                where: { outlet_id, ...dateWhere },
+                where: { outlet_id: scope.outlet_id, ...dateWhere },
                 attributes: [[Sequelize.fn('SUM', Sequelize.col('amount')), 'total_inc']],
                 raw: true
             });
@@ -360,8 +362,9 @@ async function getIndirectIncomeTotal(req, outlet_id, startDateStr, endDateStr) 
     }
 
     try {
+        const cashIncWhere = { transaction_type: 'INCOME', outlet_id: scope.outlet_id, ...dateWhere };
         const cashInc = await req.propertyDb.models.cash_ledger.findOne({
-            where: { outlet_id, transaction_type: 'INCOME', ...dateWhere },
+            where: cashIncWhere,
             attributes: [[Sequelize.fn('SUM', Sequelize.col('amount_in')), 'total_inc']],
             raw: true
         });
@@ -374,12 +377,13 @@ async function getIndirectIncomeTotal(req, outlet_id, startDateStr, endDateStr) 
 /**
  * Aggregates Owner Drawings / Withdrawals
  */
-async function getOwnerWithdrawalsTotal(req, outlet_id) {
+async function getOwnerWithdrawalsTotal(req, inputOutletId) {
     let totalWithdrawals = 0;
+    const scope = await resolveOutletScope(req, inputOutletId);
     if (req.propertyDb.models.withdrawals) {
         try {
             const w = await req.propertyDb.models.withdrawals.findOne({
-                where: { outlet_id },
+                where: { outlet_id: scope.outlet_id },
                 attributes: [[Sequelize.fn('SUM', Sequelize.col('amount')), 'total_w']],
                 raw: true
             });
@@ -388,8 +392,9 @@ async function getOwnerWithdrawalsTotal(req, outlet_id) {
     }
 
     try {
+        const cashWWhere = { transaction_type: 'WITHDRAWAL', outlet_id: scope.outlet_id };
         const cashW = await req.propertyDb.models.cash_ledger.findOne({
-            where: { outlet_id, transaction_type: 'WITHDRAWAL' },
+            where: cashWWhere,
             attributes: [[Sequelize.fn('SUM', Sequelize.col('amount_out')), 'total_w']],
             raw: true
         });
@@ -402,11 +407,13 @@ async function getOwnerWithdrawalsTotal(req, outlet_id) {
 /**
  * Aggregates Customer Outstanding Dues (Sundry Debtors)
  */
-async function getSundryDebtorsTotal(req, outlet_id) {
+async function getSundryDebtorsTotal(req, inputOutletId) {
     let totalDues = 0;
+    const scope = await resolveOutletScope(req, inputOutletId);
     try {
+        const sWhere = { status: 'COMPLETED', outlet_id: scope.outlet_id };
         const s = await req.propertyDb.models.sales_headers.findOne({
-            where: { outlet_id, status: 'COMPLETED' },
+            where: sWhere,
             attributes: [[Sequelize.fn('SUM', Sequelize.col('balance_due')), 'total_due']],
             raw: true
         });
@@ -418,12 +425,13 @@ async function getSundryDebtorsTotal(req, outlet_id) {
 /**
  * Aggregates Customer Advances / Subscriptions
  */
-async function getCustomerAdvancesTotal(req, outlet_id) {
+async function getCustomerAdvancesTotal(req, inputOutletId) {
     let totalAdv = 0;
+    const scope = await resolveOutletScope(req, inputOutletId);
     if (req.propertyDb.models.customer_advances) {
         try {
             const adv = await req.propertyDb.models.customer_advances.findOne({
-                where: { outlet_id },
+                where: { outlet_id: scope.outlet_id },
                 attributes: [[Sequelize.fn('SUM', Sequelize.col('available_amount')), 'total_adv']],
                 raw: true
             });
@@ -436,15 +444,16 @@ async function getCustomerAdvancesTotal(req, outlet_id) {
 /**
  * Aggregates Capital Assets, Company Investments & Active Loans
  */
-async function getCapitalAssetsAndLoansSummary(req, outlet_id) {
+async function getCapitalAssetsAndLoansSummary(req, inputOutletId) {
     let totalAssetsVal = 0;
     const assetGroupMap = new Map();
     let totalLoanLiabilities = 0;
+    const scope = await resolveOutletScope(req, inputOutletId);
 
     if (req.propertyDb.models.capital_assets) {
         try {
             const list = await req.propertyDb.models.capital_assets.findAll({
-                where: { outlet_id },
+                where: { outlet_id: scope.outlet_id },
                 raw: true
             });
             list.forEach(a => {
@@ -465,7 +474,7 @@ async function getCapitalAssetsAndLoansSummary(req, outlet_id) {
     if (req.propertyDb.models.business_loans) {
         try {
             const loans = await req.propertyDb.models.business_loans.findAll({
-                where: { outlet_id, status: 'ACTIVE' },
+                where: { outlet_id: scope.outlet_id, status: 'ACTIVE' },
                 raw: true
             });
             loans.forEach(l => {
@@ -477,25 +486,80 @@ async function getCapitalAssetsAndLoansSummary(req, outlet_id) {
     return { totalAssetsVal, assetGroupMap, totalLoanLiabilities: Number(totalLoanLiabilities.toFixed(2)) };
 }
 
+function parseDateBoundsFromQuery(req) {
+    const { startDate, endDate, period } = req.query;
+    let startDateStr = startDate || null;
+    let endDateStr = endDate || null;
+
+    if (!startDateStr && !endDateStr && period) {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
+
+        const periodKey = String(period).toLowerCase();
+        if (periodKey === 'today') {
+            startDateStr = todayStr;
+            endDateStr = todayStr;
+        } else if (periodKey === 'yesterday') {
+            const yest = new Date(now.getTime() - 86400000);
+            const yY = yest.getFullYear();
+            const yM = String(yest.getMonth() + 1).padStart(2, '0');
+            const yD = String(yest.getDate()).padStart(2, '0');
+            startDateStr = `${yY}-${yM}-${yD}`;
+            endDateStr = startDateStr;
+        } else if (periodKey === 'this_week') {
+            const dayOfWeek = now.getDay();
+            const diff = (dayOfWeek + 6) % 7;
+            const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
+            const wY = startWeek.getFullYear();
+            const wM = String(startWeek.getMonth() + 1).padStart(2, '0');
+            const wD = String(startWeek.getDate()).padStart(2, '0');
+            startDateStr = `${wY}-${wM}-${wD}`;
+            endDateStr = todayStr;
+        } else if (periodKey === 'this_month') {
+            startDateStr = `${year}-${month}-01`;
+            endDateStr = todayStr;
+        } else if (periodKey === 'this_year') {
+            startDateStr = `${year}-01-01`;
+            endDateStr = todayStr;
+        }
+    }
+    return { startDateStr, endDateStr };
+}
+
 exports.getTrialBalance = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
+        const { startDateStr, endDateStr } = parseDateBoundsFromQuery(req);
 
         // 1. Fetch custom accounts from Chart of Accounts
         const customAccounts = await req.propertyDb.models.chart_of_accounts.findAll({
-            where: { outlet_id, is_active: true }
+            where: { outlet_id: scope.outlet_id, is_active: true }
         });
 
         // 2. Cash Drawer Balance (Physical Cash ONLY)
-        const cashSummary = await req.propertyDb.models.cash_ledger.findOne({
-            where: {
-                outlet_id,
-                [Op.or]: [
-                    { payment_method: 'CASH' },
-                    { payment_method: null },
-                    { transaction_type: 'SALE_CASH' }
+        const cashWhere = {
+            outlet_id: scope.outlet_id,
+            [Op.or]: [
+                { payment_method: 'CASH' },
+                { payment_method: null },
+                { transaction_type: 'SALE_CASH' }
+            ]
+        };
+        if (startDateStr && endDateStr) {
+            cashWhere.txn_date = {
+                [Op.between]: [
+                    new Date(`${startDateStr}T00:00:00.000Z`),
+                    new Date(`${endDateStr}T23:59:59.999Z`)
                 ]
-            },
+            };
+        }
+
+        const cashSummary = await req.propertyDb.models.cash_ledger.findOne({
+            where: cashWhere,
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('amount_in')), 'total_in'],
                 [Sequelize.fn('SUM', Sequelize.col('amount_out')), 'total_out']
@@ -508,16 +572,22 @@ exports.getTrialBalance = async (req, res) => {
 
         // 3. Bank Accounts Total
         const banks = await req.propertyDb.models.bank_accounts.findAll({
-            where: { outlet_id, is_active: true }
+            where: { outlet_id: scope.outlet_id, is_active: true }
         });
         const totalBankBalance = banks.reduce((sum, b) => sum + Number(b.current_balance || 0), 0);
 
         // 4. Sales Revenue & Output Tax
-        const { netSalesRevenue, totalOutputTax } = await getCompletedSalesMetrics(req, outlet_id);
+        const { netSalesRevenue, totalOutputTax } = await getCompletedSalesMetrics(req, reqOutlet, startDateStr, endDateStr);
 
         // 5. Purchases (GRN) & Input GST Taxes
+        const grnWhere = { outlet_id: scope.outlet_id };
+        if (startDateStr && endDateStr) {
+            grnWhere.receipt_date = {
+                [Op.between]: [startDateStr, endDateStr]
+            };
+        }
         const grnSummary = await req.propertyDb.models.goods_receipts.findOne({
-            where: { outlet_id },
+            where: grnWhere,
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('total_amount')), 'total_amount'],
                 [Sequelize.fn('SUM', Sequelize.col('total_gst')), 'total_tax'],
@@ -531,16 +601,16 @@ exports.getTrialBalance = async (req, res) => {
         const netPurchases = totalGrnSubtotal > 0 ? totalGrnSubtotal : Math.max(0, totalGrnNet - totalInputTax);
 
         // 6. Operating Expenses
-        const { totalExpenses } = await getExpensesSummaryAndCategories(req, outlet_id);
+        const { totalExpenses } = await getExpensesSummaryAndCategories(req, reqOutlet, startDateStr, endDateStr);
 
         // 7. Customer & Supplier Balances
-        const sundryDebtors = await getSundryDebtorsTotal(req, outlet_id);
-        const customerAdvances = await getCustomerAdvancesTotal(req, outlet_id);
+        const sundryDebtors = await getSundryDebtorsTotal(req, reqOutlet);
+        const customerAdvances = await getCustomerAdvancesTotal(req, reqOutlet);
 
         let sundryCreditors = 0;
         try {
             const supplierBillsSummary = await req.propertyDb.models.supplier_bills.findOne({
-                where: { outlet_id },
+                where: { outlet_id: scope.outlet_id },
                 attributes: [
                     [Sequelize.fn('SUM', Sequelize.literal('bill_amount - paid_amount')), 'total_payables']
                 ],
@@ -550,7 +620,7 @@ exports.getTrialBalance = async (req, res) => {
         } catch (_) {}
 
         // 8. Capital Assets & Loans
-        const { assetGroupMap, totalLoanLiabilities } = await getCapitalAssetsAndLoansSummary(req, outlet_id);
+        const { assetGroupMap, totalLoanLiabilities } = await getCapitalAssetsAndLoansSummary(req, reqOutlet);
 
         // Build Exact Trial Balance Account Rows
         const rows = [
@@ -710,54 +780,15 @@ exports.getTrialBalance = async (req, res) => {
 
 exports.getProfitAndLoss = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
-        const { startDate, endDate, period } = req.query;
-
-        let startDateStr = startDate || null;
-        let endDateStr = endDate || null;
-
-        if (!startDateStr && !endDateStr && period) {
-            const timeZone = 'Asia/Kolkata';
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const todayStr = `${year}-${month}-${day}`;
-
-            const periodKey = String(period).toLowerCase();
-            if (periodKey === 'today') {
-                startDateStr = todayStr;
-                endDateStr = todayStr;
-            } else if (periodKey === 'yesterday') {
-                const yest = new Date(now.getTime() - 86400000);
-                const yY = yest.getFullYear();
-                const yM = String(yest.getMonth() + 1).padStart(2, '0');
-                const yD = String(yest.getDate()).padStart(2, '0');
-                startDateStr = `${yY}-${yM}-${yD}`;
-                endDateStr = startDateStr;
-            } else if (periodKey === 'this_week') {
-                const dayOfWeek = now.getDay();
-                const diff = (dayOfWeek + 6) % 7;
-                const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
-                const wY = startWeek.getFullYear();
-                const wM = String(startWeek.getMonth() + 1).padStart(2, '0');
-                const wD = String(startWeek.getDate()).padStart(2, '0');
-                startDateStr = `${wY}-${wM}-${wD}`;
-                endDateStr = todayStr;
-            } else if (periodKey === 'this_month') {
-                startDateStr = `${year}-${month}-01`;
-                endDateStr = todayStr;
-            } else if (periodKey === 'this_year') {
-                startDateStr = `${year}-01-01`;
-                endDateStr = todayStr;
-            }
-        }
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
+        const { startDateStr, endDateStr } = parseDateBoundsFromQuery(req);
 
         // Sales Revenue & COGS Metrics (matching Dashboard)
-        const { netSalesRevenue, grossSalesRevenue, salesDiscounts, itemizedCogs } = await getCompletedSalesMetrics(req, outlet_id, startDateStr, endDateStr);
+        const { netSalesRevenue, grossSalesRevenue, salesDiscounts, itemizedCogs } = await getCompletedSalesMetrics(req, reqOutlet, startDateStr, endDateStr);
 
         // Purchases & GRN
-        const grnWhere = { outlet_id };
+        const grnWhere = { outlet_id: scope.outlet_id };
         if (startDateStr && endDateStr) {
             grnWhere.receipt_date = {
                 [Op.between]: [
@@ -784,7 +815,7 @@ exports.getProfitAndLoss = async (req, res) => {
 
         // COGS (Itemized COGS = Sold Quantity x Item Purchase Cost Rate, matching Dashboard formula)
         const cogs = itemizedCogs;
-        const closingStockReal = await getClosingStockValuation(req, outlet_id);
+        const closingStockReal = await getClosingStockValuation(req, reqOutlet);
         const closingStock = itemizedCogs > 0
             ? Number(Math.max(0, openingStock + purchasesNet + directFreight - cogs).toFixed(2))
             : closingStockReal;
@@ -797,7 +828,7 @@ exports.getProfitAndLoss = async (req, res) => {
         const grossLoss = grossMarginValue < 0 ? Math.abs(grossMarginValue) : 0;
 
         // Operating Expenses Breakdown
-        const { totalExpenses, categoryMap } = await getExpensesSummaryAndCategories(req, outlet_id, startDateStr, endDateStr);
+        const { totalExpenses, categoryMap } = await getExpensesSummaryAndCategories(req, reqOutlet, startDateStr, endDateStr);
 
         const defaultCategories = [
             'Shop Rent / Office Expenses',
@@ -820,7 +851,7 @@ exports.getProfitAndLoss = async (req, res) => {
             }
         });
 
-        const indirectIncome = await getIndirectIncomeTotal(req, outlet_id, startDateStr, endDateStr);
+        const indirectIncome = await getIndirectIncomeTotal(req, reqOutlet, startDateStr, endDateStr);
         const totalOperatingIncome = Number((grossProfit + indirectIncome).toFixed(2));
 
         // Net Profit = Net Revenue (Excl. Tax) - COGS - Operating Expenses + Indirect Income
@@ -878,18 +909,30 @@ exports.getProfitAndLoss = async (req, res) => {
 
 exports.getBalanceSheet = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
+        const { startDateStr, endDateStr } = parseDateBoundsFromQuery(req);
 
         // Cash in Hand (Physical Cash ONLY)
-        const cashSummary = await req.propertyDb.models.cash_ledger.findOne({
-            where: {
-                outlet_id,
-                [Op.or]: [
-                    { payment_method: 'CASH' },
-                    { payment_method: null },
-                    { transaction_type: 'SALE_CASH' }
+        const cashWhere = {
+            outlet_id: scope.outlet_id,
+            [Op.or]: [
+                { payment_method: 'CASH' },
+                { payment_method: null },
+                { transaction_type: 'SALE_CASH' }
+            ]
+        };
+        if (startDateStr && endDateStr) {
+            cashWhere.txn_date = {
+                [Op.between]: [
+                    new Date(`${startDateStr}T00:00:00.000Z`),
+                    new Date(`${endDateStr}T23:59:59.999Z`)
                 ]
-            },
+            };
+        }
+
+        const cashSummary = await req.propertyDb.models.cash_ledger.findOne({
+            where: cashWhere,
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('amount_in')), 'total_in'],
                 [Sequelize.fn('SUM', Sequelize.col('amount_out')), 'total_out']
@@ -902,16 +945,22 @@ exports.getBalanceSheet = async (req, res) => {
 
         // Bank Balances
         const banks = await req.propertyDb.models.bank_accounts.findAll({
-            where: { outlet_id, is_active: true }
+            where: { outlet_id: scope.outlet_id, is_active: true }
         });
         const bankBalance = banks.reduce((sum, b) => sum + Number(b.current_balance || 0), 0);
 
         // Sales & Output Tax
-        const { netSalesRevenue: salesNet, totalOutputTax: outputGstPayable, itemizedCogs } = await getCompletedSalesMetrics(req, outlet_id);
+        const { netSalesRevenue: salesNet, totalOutputTax: outputGstPayable, itemizedCogs } = await getCompletedSalesMetrics(req, reqOutlet, startDateStr, endDateStr);
 
         // GRN & Input Tax
+        const grnWhere = { outlet_id: scope.outlet_id };
+        if (startDateStr && endDateStr) {
+            grnWhere.receipt_date = {
+                [Op.between]: [startDateStr, endDateStr]
+            };
+        }
         const grnSummary = await req.propertyDb.models.goods_receipts.findOne({
-            where: { outlet_id },
+            where: grnWhere,
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('total_gst')), 'total_input_tax'],
                 [Sequelize.fn('SUM', Sequelize.col('total_amount')), 'total_grn'],
@@ -925,13 +974,13 @@ exports.getBalanceSheet = async (req, res) => {
         const purchasesNet = grnSubTotal > 0 ? grnSubTotal : Math.max(0, grnNet - inputGstCredit);
 
         // Customer & Supplier Dues
-        const sundryDebtors = await getSundryDebtorsTotal(req, outlet_id);
-        const customerAdvances = await getCustomerAdvancesTotal(req, outlet_id);
+        const sundryDebtors = await getSundryDebtorsTotal(req, reqOutlet);
+        const customerAdvances = await getCustomerAdvancesTotal(req, reqOutlet);
 
         let sundryCreditors = 0;
         try {
             const supplierBillsSummary = await req.propertyDb.models.supplier_bills.findOne({
-                where: { outlet_id },
+                where: { outlet_id: scope.outlet_id },
                 attributes: [
                     [Sequelize.fn('SUM', Sequelize.literal('bill_amount - paid_amount')), 'total_payables']
                 ],
@@ -941,11 +990,11 @@ exports.getBalanceSheet = async (req, res) => {
         } catch (_) {}
 
         // Closing Stock Valuation
-        const closingStock = await getClosingStockValuation(req, outlet_id);
+        const closingStock = await getClosingStockValuation(req, reqOutlet);
 
         // Expenses & Indirect Income
-        const { totalExpenses } = await getExpensesSummaryAndCategories(req, outlet_id);
-        const indirectIncome = await getIndirectIncomeTotal(req, outlet_id);
+        const { totalExpenses } = await getExpensesSummaryAndCategories(req, reqOutlet, startDateStr, endDateStr);
+        const indirectIncome = await getIndirectIncomeTotal(req, reqOutlet, startDateStr, endDateStr);
 
         // Net Profit Calculation
         const cogs = itemizedCogs > 0 ? itemizedCogs : Math.max(0, purchasesNet - closingStock);
@@ -954,7 +1003,7 @@ exports.getBalanceSheet = async (req, res) => {
         const netProfit = Number((totalOperatingIncome - totalExpenses).toFixed(2));
 
         // Capital Assets & Investments
-        const { assetGroupMap, totalLoanLiabilities } = await getCapitalAssetsAndLoansSummary(req, outlet_id);
+        const { assetGroupMap, totalLoanLiabilities } = await getCapitalAssetsAndLoansSummary(req, reqOutlet);
 
         const assets = [
             { name: 'Bank Balances', amount: Number(bankBalance.toFixed(2)) },
@@ -1022,18 +1071,20 @@ exports.getBalanceSheet = async (req, res) => {
 
 exports.getBankReconciliation = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
         const { bank_account_id } = req.query;
 
-        const bank = bank_account_id
-            ? await req.propertyDb.models.bank_accounts.findOne({ where: { id: bank_account_id, outlet_id } })
-            : await req.propertyDb.models.bank_accounts.findOne({ where: { outlet_id, is_active: true }, order: [['id', 'ASC']] });
+        const bankWhere = { is_active: true, outlet_id: scope.outlet_id };
+        if (bank_account_id) bankWhere.id = bank_account_id;
+
+        const bank = await req.propertyDb.models.bank_accounts.findOne({ where: bankWhere, order: [['id', 'ASC']] });
+
+        const voucherWhere = { outlet_id: scope.outlet_id };
+        if (bank?.id) voucherWhere.bank_account_id = bank.id;
 
         const vouchers = await req.propertyDb.models.accounting_vouchers.findAll({
-            where: {
-                outlet_id,
-                ...(bank?.id ? { bank_account_id: bank.id } : {})
-            },
+            where: voucherWhere,
             order: [['voucher_date', 'DESC'], ['id', 'DESC']]
         });
 

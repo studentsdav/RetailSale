@@ -15,9 +15,20 @@ router.post('/outlet/module', outletCtrl.updateOutletModule);
 router.get('/property-info', ctrl.getPropertyInfo);
 router.get('/outlets', async (req, res) => {
     try {
+        const { getLinkedOutletIds } = require('../utils/outletScopeHelper');
+        const sessionOutletId = req.user?.outlet_id || req.query?.outlet_id;
+        let where = { is_active: true };
+        if (sessionOutletId) {
+            const linkedIds = await getLinkedOutletIds(req, sessionOutletId);
+            if (linkedIds.length > 0) {
+                const { Op } = require('sequelize');
+                where.id = { [Op.in]: linkedIds };
+            }
+        }
         const outlets = await req.propertyDb.models.outlets.findAll({
-            where: { is_active: true },
-            attributes: ['id', 'outlet_code', 'outlet_name']
+            where,
+            attributes: ['id', 'outlet_code', 'outlet_name', 'parent_outlet_id', 'is_master'],
+            bypassOutletFilter: true
         });
         res.json({ success: true, data: outlets });
     } catch (error) {

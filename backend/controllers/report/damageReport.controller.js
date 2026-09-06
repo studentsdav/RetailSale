@@ -1,6 +1,9 @@
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
+
 exports.getDamageReport = async (req, res) => {
   try {
-    const outlet_id = req.user.outlet_id;
+    const reqOutlet = req.query.outlet_id || req.query.outletId;
+    const scope = await resolveOutletScope(req, reqOutlet);
     const { from, to } = req.query;
 
     const [rows] = await req.propertyDb.query(
@@ -25,13 +28,13 @@ exports.getDamageReport = async (req, res) => {
       LEFT JOIN users u
         ON u.id = dh.created_by
 
-      WHERE dh.outlet_id = :outlet_id
+      WHERE dh.outlet_id IN (:outletIds)
         AND dh.damage_date BETWEEN :from AND :to
 
       ORDER BY dh.damage_date DESC
       `,
       {
-        replacements: { outlet_id, from, to }
+        replacements: { outletIds: scope.outletIds, from, to }
       }
     );
 

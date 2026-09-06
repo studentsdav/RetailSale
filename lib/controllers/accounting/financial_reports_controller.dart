@@ -10,11 +10,15 @@ class FinancialReportsController extends ChangeNotifier {
   Map<String, dynamic> balanceSheetData = {};
   Map<String, dynamic> brsData = {};
 
-  Future<void> fetchTrialBalance() async {
+  Future<void> fetchTrialBalance({String? outletId}) async {
     loading = true;
     notifyListeners();
     try {
-      final res = await ApiClient.get(ApiEndpoints.accountingTrialBalance);
+      String url = ApiEndpoints.accountingTrialBalance;
+      if (outletId != null && outletId.isNotEmpty) {
+        url += '?outlet_id=$outletId';
+      }
+      final res = await ApiClient.get(url);
       if (res['success'] == true) {
         trialBalanceData = res;
       }
@@ -26,7 +30,7 @@ class FinancialReportsController extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchProfitLoss({String? startDate, String? endDate, String? period}) async {
+  Future<void> fetchProfitLoss({String? startDate, String? endDate, String? period, String? outletId}) async {
     loading = true;
     notifyListeners();
     try {
@@ -35,6 +39,7 @@ class FinancialReportsController extends ChangeNotifier {
       if (startDate != null && startDate.isNotEmpty) params.add('startDate=$startDate');
       if (endDate != null && endDate.isNotEmpty) params.add('endDate=$endDate');
       if (period != null && period.isNotEmpty) params.add('period=$period');
+      if (outletId != null && outletId.isNotEmpty) params.add('outlet_id=$outletId');
       if (params.isNotEmpty) {
         url += '?${params.join('&')}';
       }
@@ -50,11 +55,15 @@ class FinancialReportsController extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchBalanceSheet() async {
+  Future<void> fetchBalanceSheet({String? outletId}) async {
     loading = true;
     notifyListeners();
     try {
-      final res = await ApiClient.get(ApiEndpoints.accountingBalanceSheet);
+      String url = ApiEndpoints.accountingBalanceSheet;
+      if (outletId != null && outletId.isNotEmpty) {
+        url += '?outlet_id=$outletId';
+      }
+      final res = await ApiClient.get(url);
       if (res['success'] == true) {
         balanceSheetData = res['data'] ?? {};
       }
@@ -66,13 +75,16 @@ class FinancialReportsController extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchBrs({int? bankId}) async {
+  Future<void> fetchBrs({int? bankId, String? outletId}) async {
     loading = true;
     notifyListeners();
     try {
       String url = ApiEndpoints.accountingBrs;
-      if (bankId != null) {
-        url += '?bank_account_id=$bankId';
+      List<String> params = [];
+      if (bankId != null) params.add('bank_account_id=$bankId');
+      if (outletId != null && outletId.isNotEmpty) params.add('outlet_id=$outletId');
+      if (params.isNotEmpty) {
+        url += '?${params.join('&')}';
       }
       final res = await ApiClient.get(url);
       if (res['success'] == true) {

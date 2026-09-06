@@ -1,8 +1,10 @@
 const { Op } = require('sequelize');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
 exports.getRequestReport = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
 
         const {
             from_date,
@@ -13,7 +15,7 @@ exports.getRequestReport = async (req, res) => {
             search
         } = req.query;
 
-        const where = { outlet_id };
+        const where = { ...scope.outletWhere };
 
         // 🔒 Enforce user isolation if the user is not an ADMIN
         if (req.user.role !== 'ADMIN') {

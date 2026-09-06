@@ -109,7 +109,9 @@ function growthPercent(current, previous) {
 }
 
 exports.getInventoryDashboard = async (outletId, db) => {
-  const timeZone = await getOutletTimeZone(outletId, db);
+  const isAllOutlets = !outletId || outletId === 'ALL' || outletId === 'null' || outletId === 'undefined';
+  const effectiveOutletId = isAllOutlets ? null : outletId;
+  const timeZone = await getOutletTimeZone(effectiveOutletId, db);
   const now = new Date();
   const todayStr = toOutletDateYmd(now, timeZone);
 
@@ -136,9 +138,9 @@ exports.getInventoryDashboard = async (outletId, db) => {
             COALESCE(SUM(qty_in),0) AS today_in,
             COALESCE(SUM(qty_out),0) AS today_out
           FROM stock_ledger
-          WHERE outlet_id = :outletId
-          AND txn_date = :today::DATE
-        `, { replacements: { outletId, today: todayStr }, type: QueryTypes.SELECT }),
+          WHERE txn_date = :today::DATE
+          ${isAllOutlets ? '' : 'AND outlet_id = :outletId'}
+        `, { replacements: { outletId: effectiveOutletId, today: todayStr }, type: QueryTypes.SELECT }),
 
     // Low stock items (calculated from stock_ledger)
     db.query(`
@@ -148,9 +150,9 @@ SELECT
 FROM item_master im
 LEFT JOIN stock_ledger sl
   ON sl.item_code = im.item_code
-  AND sl.outlet_id = :outletId
-WHERE im.outlet_id = :outletId
-  AND im.is_active = TRUE
+  ${isAllOutlets ? '' : 'AND sl.outlet_id = :outletId'}
+WHERE im.is_active = TRUE
+  ${isAllOutlets ? '' : 'AND im.outlet_id = :outletId'}
 GROUP BY im.id, im.item_name, im.brand, im.min_level, im.opening_balance
 HAVING
   (
@@ -159,7 +161,7 @@ HAVING
     COALESCE(SUM(sl.qty_in - sl.qty_out), 0)
   ) <= im.min_level
 `, {
-      replacements: { outletId },
+      replacements: { outletId: effectiveOutletId },
       type: QueryTypes.SELECT
     }),
 
@@ -171,11 +173,11 @@ HAVING
             SUM(qty_in) AS received,
             SUM(qty_out) AS issued
           FROM stock_ledger
-          WHERE outlet_id = :outletId
-          AND txn_date >= :today::DATE - INTERVAL '6 days'
+          WHERE txn_date >= :today::DATE - INTERVAL '6 days'
+          ${isAllOutlets ? '' : 'AND outlet_id = :outletId'}
           GROUP BY txn_date
           ORDER BY txn_date
-        `, { replacements: { outletId, today: todayStr }, type: QueryTypes.SELECT }),
+        `, { replacements: { outletId: effectiveOutletId, today: todayStr }, type: QueryTypes.SELECT }),
 
     // Department wise issue
     db.query(`
@@ -184,9 +186,9 @@ HAVING
             SUM(i.qty) AS qty
           FROM issue_headers h
           JOIN issue_items i ON i.issue_id = h.id
-          WHERE h.outlet_id = :outletId
+          ${isAllOutlets ? '' : 'WHERE h.outlet_id = :outletId'}
           GROUP BY h.department
-        `, { replacements: { outletId }, type: QueryTypes.SELECT }),
+        `, { replacements: { outletId: effectiveOutletId }, type: QueryTypes.SELECT }),
 
     // Damage trend
     db.query(`
@@ -195,11 +197,11 @@ HAVING
             SUM(i.qty) AS qty
           FROM damage_headers h
           JOIN damage_items i ON i.damage_id = h.id
-          WHERE h.outlet_id = :outletId
-          AND damage_date >= :today::DATE - INTERVAL '6 days'
+          WHERE damage_date >= :today::DATE - INTERVAL '6 days'
+          ${isAllOutlets ? '' : 'AND h.outlet_id = :outletId'}
           GROUP BY damage_date
           ORDER BY damage_date
-        `, { replacements: { outletId, today: todayStr }, type: QueryTypes.SELECT }),
+        `, { replacements: { outletId: effectiveOutletId, today: todayStr }, type: QueryTypes.SELECT }),
 
     // Category stock % (ledger-based, no nested aggregates)
     db.query(`
@@ -216,8 +218,8 @@ WITH item_stock AS (
   FROM item_master im
   LEFT JOIN stock_ledger sl
     ON sl.item_code = im.item_code
-    AND sl.outlet_id = :outletId
-  WHERE im.outlet_id = :outletId
+    ${isAllOutlets ? '' : 'AND sl.outlet_id = :outletId'}
+  ${isAllOutlets ? '' : 'WHERE im.outlet_id = :outletId'}
   GROUP BY im.id, im.item_group, im.rate, im.opening_balance
 ),
 category_value AS (
@@ -239,7 +241,7 @@ SELECT
   ) AS percent
 FROM category_value;
 `, {
-      replacements: { outletId },
+      replacements: { outletId: effectiveOutletId },
       type: QueryTypes.SELECT
     }),
 
@@ -258,15 +260,15 @@ WITH item_stock AS (
   FROM item_master im
   LEFT JOIN stock_ledger sl
     ON sl.item_code = im.item_code
-    AND sl.outlet_id = :outletId
-  WHERE im.outlet_id = :outletId
+    ${isAllOutlets ? '' : 'AND sl.outlet_id = :outletId'}
+  ${isAllOutlets ? '' : 'WHERE im.outlet_id = :outletId'}
   GROUP BY im.id, im.rate, im.opening_balance
 )
 SELECT
   COALESCE(SUM(current_stock * rate), 0) AS total_stock_value
 FROM item_stock;
 `, {
-      replacements: { outletId },
+      replacements: { outletId: effectiveOutletId },
       type: QueryTypes.SELECT
     }),
 
@@ -278,9 +280,9 @@ FROM item_stock;
             SUM(b.bill_amount - b.paid_amount) AS unpaid
           FROM supplier_bills b
           JOIN supplier_master s ON s.id = b.supplier_id
-          WHERE b.outlet_id = :outletId
+          ${isAllOutlets ? '' : 'WHERE b.outlet_id = :outletId'}
           GROUP BY s.supplier_name
-        `, { replacements: { outletId }, type: QueryTypes.SELECT }),
+        `, { replacements: { outletId: effectiveOutletId }, type: QueryTypes.SELECT }),
 
     // Unpaid supplier list
     db.query(`
@@ -289,28 +291,28 @@ FROM item_stock;
             SUM(b.bill_amount - b.paid_amount) AS amount
           FROM supplier_bills b
           JOIN supplier_master s ON s.id = b.supplier_id
-          WHERE b.outlet_id = :outletId
-          AND b.bill_amount > b.paid_amount
+          WHERE b.bill_amount > b.paid_amount
+          ${isAllOutlets ? '' : 'AND b.outlet_id = :outletId'}
           GROUP BY s.supplier_name
           ORDER BY amount DESC
-        `, { replacements: { outletId }, type: QueryTypes.SELECT })
+        `, { replacements: { outletId: effectiveOutletId }, type: QueryTypes.SELECT })
     ,
     db.query(`
       SELECT
         COALESCE(SUM(GREATEST(COALESCE(balance_due, 0), 0)), 0) AS total_outstanding
       FROM sales_headers
-      WHERE outlet_id = :outletId
-        AND status = 'COMPLETED'
+      WHERE status = 'COMPLETED'
         AND is_latest = TRUE
         AND is_deleted = FALSE
         AND NOT (order_type = 'DELIVERY' AND COALESCE(payment_mode, '') != 'CREDIT')
-    `, { replacements: { outletId }, type: QueryTypes.SELECT }),
+        ${isAllOutlets ? '' : 'AND outlet_id = :outletId'}
+    `, { replacements: { outletId: effectiveOutletId }, type: QueryTypes.SELECT }),
     db.query(`
       SELECT
         COALESCE(SUM(GREATEST(COALESCE(bill_amount, 0) - COALESCE(paid_amount, 0), 0)), 0) AS total_outstanding
       FROM supplier_bills
-      WHERE outlet_id = :outletId
-    `, { replacements: { outletId }, type: QueryTypes.SELECT }),
+      ${isAllOutlets ? '' : 'WHERE outlet_id = :outletId'}
+    `, { replacements: { outletId: effectiveOutletId }, type: QueryTypes.SELECT }),
     db.query(`
       SELECT
         sh.id,
@@ -321,9 +323,9 @@ FROM item_stock;
         sh.total_discount,
         sh.total_tax
       FROM sales_headers sh
-      WHERE sh.outlet_id = :outletId
+      ${isAllOutlets ? '' : 'WHERE sh.outlet_id = :outletId'}
       ORDER BY sh.sale_date DESC, sh.id DESC
-    `, { replacements: { outletId }, type: QueryTypes.SELECT })
+    `, { replacements: { outletId: effectiveOutletId }, type: QueryTypes.SELECT })
     ,
     db.query(`
       SELECT
@@ -334,9 +336,9 @@ FROM item_stock;
         adjustment_amount,
         reference_type
       FROM cash_ledger
-      WHERE outlet_id = :outletId
+      ${isAllOutlets ? '' : 'WHERE outlet_id = :outletId'}
       ORDER BY txn_date ASC, id ASC
-    `, { replacements: { outletId }, type: QueryTypes.SELECT }),
+    `, { replacements: { outletId: effectiveOutletId }, type: QueryTypes.SELECT }),
     db.query(`
       SELECT
         c.txn_date,
@@ -344,19 +346,23 @@ FROM item_stock;
         c.covered_amount
       FROM milk_subscription_consumptions c
       LEFT JOIN sales_headers sh ON c.sale_id = sh.id
-      WHERE c.outlet_id = :outletId
-        AND c.status != 'CANCELLED'
+      WHERE c.status != 'CANCELLED'
         AND NOT (c.status = 'PENDING' AND c.excess_qty > 0 AND sh.payment_mode != 'SUBSCRIPTION')
-    `, { replacements: { outletId }, type: QueryTypes.SELECT })
+        ${isAllOutlets ? '' : 'AND c.outlet_id = :outletId'}
+    `, { replacements: { outletId: effectiveOutletId }, type: QueryTypes.SELECT })
   ]);
 
+  const salesWhere = {
+    status: { [Op.in]: ['COMPLETED', 'RETURNED'] },
+    is_deleted: false,
+    is_latest: true
+  };
+  if (!isAllOutlets) {
+    salesWhere.outlet_id = effectiveOutletId;
+  }
+
   const sales = await db.models.sales_headers.findAll({
-    where: {
-      outlet_id: outletId,
-      status: { [Op.in]: ['COMPLETED', 'RETURNED'] },
-      is_deleted: false,
-      is_latest: true
-    },
+    where: salesWhere,
     include: [
       {
         model: db.models.sales_items,

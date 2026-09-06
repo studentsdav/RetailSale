@@ -156,9 +156,19 @@ int _toIntSafe(dynamic value) {
 }
 
 class StoreAnalysisController {
+  int? outletId;
+
+  String get _outletQuery {
+    if (outletId != null) {
+      if (outletId == -1) return '?outlet_id=ALL';
+      return '?outlet_id=$outletId';
+    }
+    return '';
+  }
+
   Future<List<RfmSegmentPoint>> fetchRfmSegments() async {
     try {
-      final res = await ApiClient.get(ApiEndpoints.analyticsRfmSegments);
+      final res = await ApiClient.get('${ApiEndpoints.analyticsRfmSegments}$_outletQuery');
       final rows = List<Map<String, dynamic>>.from(
         (res['data'] as List? ?? const []).map(
           (e) => Map<String, dynamic>.from(e as Map),
@@ -178,7 +188,7 @@ class StoreAnalysisController {
 
   Future<List<SalesTrendPoint>> fetchSalesTrend() async {
     try {
-      final res = await ApiClient.get(ApiEndpoints.analyticsSalesTrend);
+      final res = await ApiClient.get('${ApiEndpoints.analyticsSalesTrend}$_outletQuery');
       final rows = List<Map<String, dynamic>>.from(
         (res['data'] as List? ?? const []).map(
           (e) => Map<String, dynamic>.from(e as Map),
@@ -192,7 +202,7 @@ class StoreAnalysisController {
 
   Future<List<MarketBasketPoint>> fetchMarketBasket() async {
     try {
-      final res = await ApiClient.get(ApiEndpoints.analyticsMarketBasket);
+      final res = await ApiClient.get('${ApiEndpoints.analyticsMarketBasket}$_outletQuery');
       final rows = List<Map<String, dynamic>>.from(
         (res['data'] as List? ?? const []).map(
           (e) => Map<String, dynamic>.from(e as Map),
@@ -210,7 +220,7 @@ class StoreAnalysisController {
 
   Future<List<TopCustomerItemPoint>> fetchTopCustomerItems() async {
     try {
-      final res = await ApiClient.get(ApiEndpoints.analyticsTopCustomerItems);
+      final res = await ApiClient.get('${ApiEndpoints.analyticsTopCustomerItems}$_outletQuery');
       final rows = List<Map<String, dynamic>>.from(
         (res['data'] as List? ?? const []).map(
           (e) => Map<String, dynamic>.from(e as Map),

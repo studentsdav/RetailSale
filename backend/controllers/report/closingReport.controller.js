@@ -1,8 +1,10 @@
 const { toOutletDateYmd } = require('../../utils/timezoneHelper');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
 exports.getClosingReport = async (req, res) => {
   try {
-    const outlet_id = req.user.outlet_id;
+    const reqOutlet = req.query.outlet_id || req.query.outletId;
+    const scope = await resolveOutletScope(req, reqOutlet);
     const { from_date, to_date } = req.query;
 
     const outletTz = req.outletTimeZone || 'Asia/Kolkata';
@@ -11,6 +13,10 @@ exports.getClosingReport = async (req, res) => {
         startDate = req.toOutletDateYmd ? req.toOutletDateYmd(new Date()) : toOutletDateYmd(new Date(), outletTz);
     }
     const endDate = to_date || startDate;
+
+    const dialect = (req.propertyDb.getDialect ? req.propertyDb.getDialect() : (req.propertyDb.options?.dialect || 'sqlite'));
+    const isSqlite = dialect === 'sqlite';
+    const dateSql = isSqlite ? 'DATE(sl.txn_date)' : 'DATE(sl.txn_date AT TIME ZONE :outletTz)';
 
     const [rows] = await req.propertyDb.query(`
       SELECT
@@ -25,19 +31,19 @@ exports.getClosingReport = async (req, res) => {
           COALESCE(im.opening_balance,0)
           +
           COALESCE(SUM(
-            CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) < :startDate
+            CASE WHEN ${dateSql} < :startDate
                  THEN COALESCE(sl.qty_in,0) - COALESCE(sl.qty_out,0) ELSE 0 END
           ),0)
         ) AS "opening",
 
         /* Movement Inside Range */
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
+          CASE WHEN ${dateSql} BETWEEN :startDate AND :endDate
                THEN COALESCE(sl.qty_in,0) ELSE 0 END
         ),0) AS "receive",
 
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
+          CASE WHEN ${dateSql} BETWEEN :startDate AND :endDate
                AND sl.txn_type IN (
                  'RETURN','RETURN_UPDATE','RETURN_REVERSE','RETURN_DELETE','RETURN_CANCEL',
                  'SALE_MODIFY_REVERSE','GRN_UPDATE','GRN_MODIFY_IN','DAMAGE_DELETE','DAMAGE_REVERSE',
@@ -47,18 +53,18 @@ exports.getClosingReport = async (req, res) => {
         ),0) AS "returned",
 
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
+          CASE WHEN ${dateSql} BETWEEN :startDate AND :endDate
                AND sl.txn_type = 'SUPPLIER_RETURN'
                THEN sl.qty_out ELSE 0 END
         ),0) AS "supplierReturnQty",
 
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
+          CASE WHEN ${dateSql} BETWEEN :startDate AND :endDate
                THEN COALESCE(sl.qty_out,0) ELSE 0 END
         ),0) AS "issue",
 
         COALESCE(SUM(
-          CASE WHEN DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
+          CASE WHEN ${dateSql} BETWEEN :startDate AND :endDate
                AND sl.txn_type IN ('DAMAGE','DAMAGE_UPDATE')
                THEN sl.qty_out ELSE 0 END
         ),0) AS "damage"
@@ -68,7 +74,7 @@ exports.getClosingReport = async (req, res) => {
         ON sl.item_code = im.item_code
         AND sl.outlet_id = im.outlet_id
 
-      WHERE im.outlet_id = :outlet_id
+      WHERE im.outlet_id IN (:outletIds)
 
       GROUP BY
         im.item_group,
@@ -80,7 +86,7 @@ exports.getClosingReport = async (req, res) => {
       ORDER BY im.item_group, im.item_name
     `, {
       replacements: {
-        outlet_id,
+        outletIds: scope.outletIds,
         startDate,
         endDate,
         outletTz
@@ -117,12 +123,12 @@ exports.getClosingReport = async (req, res) => {
       LEFT JOIN item_master im
         ON im.item_code = sl.item_code
        AND im.outlet_id = sl.outlet_id
-      WHERE sl.outlet_id = :outlet_id
-        AND DATE(sl.txn_date AT TIME ZONE :outletTz) BETWEEN :startDate AND :endDate
+      WHERE sl.outlet_id IN (:outletIds)
+        AND ${dateSql} BETWEEN :startDate AND :endDate
       ORDER BY sl.txn_date ASC, sl.id ASC
     `, {
       replacements: {
-        outlet_id,
+        outletIds: scope.outletIds,
         startDate,
         endDate,
         outletTz

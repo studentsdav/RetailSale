@@ -1,23 +1,25 @@
 const { createLedgerEntry } = require('../../services/cashLedger.service');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
 // Get all Loans & Fixed Assets Summary dynamically from Database
 exports.getLoansAndAssets = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id;
+        const scope = await resolveOutletScope(req, reqOutlet);
         
         let loans = [];
         let assets = [];
 
         if (req.propertyDb.models.business_loans) {
             loans = await req.propertyDb.models.business_loans.findAll({
-                where: { outlet_id },
+                where: scope.outletWhere,
                 order: [['id', 'DESC']]
             });
         }
 
         if (req.propertyDb.models.capital_assets) {
             assets = await req.propertyDb.models.capital_assets.findAll({
-                where: { outlet_id },
+                where: scope.outletWhere,
                 order: [['id', 'DESC']]
             });
         }

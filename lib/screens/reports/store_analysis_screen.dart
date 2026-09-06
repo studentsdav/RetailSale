@@ -11,6 +11,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../controllers/reports/sales_report_controller.dart';
 import '../../controllers/reports/stock_balance_controller.dart';
 import '../../controllers/reports/store_analysis_controller.dart';
+import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../models/reports/sales_report_model.dart';
 import '../../models/reports/stock_item_model.dart';
 
@@ -25,6 +26,9 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
   final StoreAnalysisController _controller = StoreAnalysisController();
   final SalesReportController _salesController = SalesReportController();
   final StockBalanceController _stockBalanceController = StockBalanceController();
+  final StockTransferController _transferCtrl = StockTransferController();
+  Map<String, dynamic>? _hierarchyData;
+  int? _selectedOutletId;
 
   DateTime fromDate = DateTime.now().subtract(const Duration(days: 29));
   DateTime toDate = DateTime.now();
@@ -43,10 +47,10 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
   int _selectedTabIndex = 0;
   bool _isLoading = false;
 
-  late Future<List<RfmSegmentPoint>> _rfmFuture;
-  late Future<List<SalesTrendPoint>> _trendFuture;
-  late Future<List<MarketBasketPoint>> _basketFuture;
-  late Future<List<TopCustomerItemPoint>> _topCustomerItemsFuture;
+  Future<List<RfmSegmentPoint>> _rfmFuture = Future.value([]);
+  Future<List<SalesTrendPoint>> _trendFuture = Future.value([]);
+  Future<List<MarketBasketPoint>> _basketFuture = Future.value([]);
+  Future<List<TopCustomerItemPoint>> _topCustomerItemsFuture = Future.value([]);
 
   final TooltipBehavior _rfmTooltip = TooltipBehavior(enable: true);
   final TooltipBehavior _trendTooltip = TooltipBehavior(enable: true);
@@ -71,10 +75,85 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
     _fromCtrl.text = DateFormat('dd-MMM-yyyy').format(fromDate);
     _toCtrl.text = DateFormat('dd-MMM-yyyy').format(toDate);
     _reload();
+    _initData();
+  }
+
+  Future<void> _initData() async {
+    await _loadOutletHierarchy();
+    if (_selectedOutletId != null) {
+      _controller.outletId = _selectedOutletId;
+    }
+    _reload();
+  }
+
+  Future<void> _loadOutletHierarchy() async {
+    final data = await _transferCtrl.fetchHierarchy();
+    if (mounted) {
+      setState(() {
+        _hierarchyData = data;
+        final currentOutletId = data?['current_outlet']?['id'];
+        if (_selectedOutletId == null && currentOutletId != null) {
+          _selectedOutletId = currentOutletId;
+          _controller.outletId = _selectedOutletId;
+        }
+      });
+    }
+  }
+
+  Widget _buildOutletScopeSelector() {
+    final outlets = (_hierarchyData?['all_outlets'] as List?) ?? [];
+    if (outlets.length <= 1) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.storefront, color: Colors.blue),
+            const SizedBox(width: 10),
+            const Text('Store View Scope:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int?>(
+                  isExpanded: true,
+                  value: _selectedOutletId,
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: -1,
+                      child: Text('🌐 All Linked Outlets (Combined Store Analytics)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    ...outlets.map<DropdownMenuItem<int?>>((o) {
+                      return DropdownMenuItem<int?>(
+                        value: o['id'],
+                        child: Text('🏬 ${o['outlet_name']} (${o['outlet_code']})', style: const TextStyle(fontSize: 13)),
+                      );
+                    }).toList(),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedOutletId = val;
+                    });
+                    _reload();
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _reload() {
     setState(() => _isLoading = true);
+    _controller.outletId = _selectedOutletId;
+    _salesController.outletId = _selectedOutletId;
+    _stockBalanceController.outletId = _selectedOutletId;
     _salesController.fromDate = fromDate;
     _salesController.toDate = toDate;
     _rfmFuture = _controller.fetchRfmSegments();
@@ -512,6 +591,7 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _buildOutletScopeSelector(),
                   _filterCard(),
 
                   // Top Executive Metric Cards

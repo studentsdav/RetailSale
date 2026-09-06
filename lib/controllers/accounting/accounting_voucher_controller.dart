@@ -90,14 +90,17 @@ class AccountingVoucherController extends ChangeNotifier {
     return difference < 0.01 && totalDebit > 0;
   }
 
-  Future<void> fetchVouchers({String? type}) async {
+  Future<void> fetchVouchers({String? type, String? outletId}) async {
     loading = true;
     notifyListeners();
 
     try {
       String url = ApiEndpoints.accountingVouchers;
-      if (type != null && type.isNotEmpty) {
-        url += '?voucher_type=$type';
+      List<String> params = [];
+      if (type != null && type.isNotEmpty) params.add('voucher_type=$type');
+      if (outletId != null && outletId.isNotEmpty) params.add('outlet_id=$outletId');
+      if (params.isNotEmpty) {
+        url += '?${params.join('&')}';
       }
       final res = await ApiClient.get(url);
       if (res['success'] == true && res['data'] is List) {

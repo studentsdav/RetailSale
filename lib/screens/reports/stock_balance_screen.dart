@@ -11,6 +11,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import 'package:intl/intl.dart';
 import '../../controllers/reports/stock_balance_controller.dart';
+import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../models/reports/stock_item_model.dart';
 import '../../utils/pdf_report_builder.dart';
 
@@ -23,6 +24,9 @@ class StockBalanceScreen extends StatefulWidget {
 
 class _StockBalanceScreenState extends State<StockBalanceScreen> {
   final ctrl = StockBalanceController();
+  final _transferCtrl = StockTransferController();
+  Map<String, dynamic>? _hierarchyData;
+  int? _selectedOutletId;
   final searchCtrl = TextEditingController();
   final ScrollController _horizontalScrollController = ScrollController();
 
@@ -32,7 +36,79 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
   @override
   void initState() {
     super.initState();
-    ctrl.load();
+    _initData();
+  }
+
+  Future<void> _initData() async {
+    await _loadOutletHierarchy();
+    if (_selectedOutletId != null) {
+      ctrl.outletId = _selectedOutletId;
+    }
+    await ctrl.load();
+  }
+
+  Future<void> _loadOutletHierarchy() async {
+    final data = await _transferCtrl.fetchHierarchy();
+    if (mounted) {
+      setState(() {
+        _hierarchyData = data;
+        final currentOutletId = data?['current_outlet']?['id'];
+        if (_selectedOutletId == null && currentOutletId != null) {
+          _selectedOutletId = currentOutletId;
+          ctrl.outletId = _selectedOutletId;
+        }
+      });
+    }
+  }
+
+  Widget _buildOutletScopeSelector() {
+    final outlets = (_hierarchyData?['all_outlets'] as List?) ?? [];
+    if (outlets.length <= 1) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.storefront, color: Colors.blue),
+            const SizedBox(width: 10),
+            const Text('Stock View Scope:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int?>(
+                  isExpanded: true,
+                  value: _selectedOutletId,
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: -1,
+                      child: Text('🌐 All Linked Outlets (Combined Inventory Stock)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    ...outlets.map<DropdownMenuItem<int?>>((o) {
+                      return DropdownMenuItem<int?>(
+                        value: o['id'],
+                        child: Text('🏬 ${o['outlet_name']} (${o['outlet_code']})', style: const TextStyle(fontSize: 13)),
+                      );
+                    }).toList(),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedOutletId = val;
+                      ctrl.outletId = val;
+                    });
+                    ctrl.load();
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -336,6 +412,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                _buildOutletScopeSelector(),
                 _filterBar(),
                 const SizedBox(height: 12),
                 _kpiWrap(),

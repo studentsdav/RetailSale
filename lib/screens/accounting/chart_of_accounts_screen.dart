@@ -3,7 +3,8 @@ import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 
 class ChartOfAccountsScreen extends StatefulWidget {
-  const ChartOfAccountsScreen({super.key});
+  final String? outletId;
+  const ChartOfAccountsScreen({super.key, this.outletId});
 
   @override
   State<ChartOfAccountsScreen> createState() => _ChartOfAccountsScreenState();
@@ -38,7 +39,8 @@ class _ChartOfAccountsScreenState extends State<ChartOfAccountsScreen> {
   Future<void> _fetchAccounts() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.get(ApiEndpoints.accountingTrialBalance);
+      final query = (widget.outletId != null && widget.outletId!.isNotEmpty) ? '?outlet_id=${widget.outletId}' : '';
+      final res = await ApiClient.get('${ApiEndpoints.accountingTrialBalance}$query');
       if (res['success'] == true && res['data'] is List) {
         setState(() {
           _accounts = res['data'] as List;

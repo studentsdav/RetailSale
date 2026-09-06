@@ -15,6 +15,7 @@ import '../../controllers/reports/sales_report_controller.dart';
 import '../../controllers/reports/stock_in_report_controller.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class SalesReportScreen extends StatefulWidget {
@@ -62,6 +63,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   final ctrl = SalesReportController();
   final purchaseCtrl = StockInReportController();
   final propertyCtrl = PropertyInfoController();
+  final _transferCtrl = StockTransferController();
+  Map<String, dynamic>? _hierarchyData;
+  int? _selectedOutletId;
   final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
   final _itemSearchCtrl = TextEditingController();
@@ -130,7 +134,80 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     super.initState();
     propertyCtrl.load();
     _syncDates();
-    _loadReports();
+    _initData();
+  }
+
+  Future<void> _initData() async {
+    await _loadOutletHierarchy();
+    if (_selectedOutletId != null) {
+      ctrl.outletId = _selectedOutletId;
+    }
+    await _loadReports();
+  }
+
+  Future<void> _loadOutletHierarchy() async {
+    final data = await _transferCtrl.fetchHierarchy();
+    if (mounted) {
+      setState(() {
+        _hierarchyData = data;
+        final currentOutletId = data?['current_outlet']?['id'];
+        if (_selectedOutletId == null && currentOutletId != null) {
+          _selectedOutletId = currentOutletId;
+          ctrl.outletId = currentOutletId;
+        }
+      });
+    }
+  }
+
+  Widget _buildOutletScopeSelector() {
+    final outlets = (_hierarchyData?['all_outlets'] as List?) ?? [];
+    if (outlets.length <= 1) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.storefront, color: Colors.blue),
+            const SizedBox(width: 10),
+            const Text('Report View Scope:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int?>(
+                  isExpanded: true,
+                  value: _selectedOutletId,
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: -1,
+                      child: Text('🌐 All Linked Outlets (Combined Report)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    ...outlets.map<DropdownMenuItem<int?>>((o) {
+                      return DropdownMenuItem<int?>(
+                        value: o['id'],
+                        child: Text('🏬 ${o['outlet_name']} (${o['outlet_code']})', style: const TextStyle(fontSize: 13)),
+                      );
+                    }).toList(),
+                  ],
+                  onChanged: (val) async {
+                    setState(() {
+                      _selectedOutletId = val;
+                      ctrl.outletId = val;
+                    });
+                    await ctrl.load();
+                    setState(() {});
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -2424,6 +2501,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              _buildOutletScopeSelector(),
               _buildTopFilters(),
               const SizedBox(height: 16),
               _buildSummaryRow(),

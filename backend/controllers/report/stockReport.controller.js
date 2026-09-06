@@ -1,7 +1,10 @@
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
+
 exports.getStockOutReport = async (req, res) => {
     try {
         const { from_date, to_date, type, department, item_id } = req.query;
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
 
         if (!from_date || !to_date) {
             return res.status(400).json({
@@ -40,7 +43,7 @@ exports.getStockOutReport = async (req, res) => {
                 FROM issue_headers ih
                 JOIN issue_items ii ON ii.issue_id = ih.id
                 JOIN item_master im ON im.id = ii.item_id
-                WHERE ih.outlet_id = :outlet_id
+                WHERE ih.outlet_id IN (:outletIds)
                   AND ih.issue_date BETWEEN :from_date AND :to_date
                   ${departmentFilter}
                   ${itemFilter}
@@ -48,7 +51,7 @@ exports.getStockOutReport = async (req, res) => {
                 ORDER BY im.item_name
                 `,
                 {
-                    replacements: { outlet_id, from_date, to_date, department, item_id }
+                    replacements: { outletIds: scope.outletIds, from_date, to_date, department, item_id }
                 }
             );
 
@@ -78,14 +81,14 @@ exports.getStockOutReport = async (req, res) => {
             FROM issue_headers ih
             JOIN issue_items ii ON ii.issue_id = ih.id
             JOIN item_master im ON im.id = ii.item_id
-            WHERE ih.outlet_id = :outlet_id
+            WHERE ih.outlet_id IN (:outletIds)
               AND ih.issue_date BETWEEN :from_date AND :to_date
               ${departmentFilter}
               ${itemFilter}
-            ORDER BY ih.issue_date, ih.issue_no
+            ORDER BY ih.issue_date DESC, ih.issue_no DESC
             `,
             {
-                replacements: { outlet_id, from_date, to_date, department, item_id }
+                replacements: { outletIds: scope.outletIds, from_date, to_date, department, item_id }
             }
         );
 

@@ -68,6 +68,60 @@ function buildCustomerScope(identity = {}) {
     return null;
 }
 
+const getSharedOutletIds = async (req, outletId) => {
+    const defaultIds = [Number(outletId)];
+    if (!outletId) return defaultIds;
+    try {
+        const models = req.propertyDb.models;
+        if (!models || !models.outlets) return defaultIds;
+
+        if (models.system_settings) {
+            try {
+                const setting = await models.system_settings.findOne({
+                    where: {
+                        [Op.or]: [
+                            { outlet_id: outletId },
+                            { outlet_id: null }
+                        ]
+                    },
+                    order: [['outlet_id', 'DESC']],
+                    bypassOutletFilter: true
+                });
+                if (setting && setting.share_contact_info === false) {
+                    return defaultIds;
+                }
+            } catch (_) {}
+        }
+
+        const outlets = await models.outlets.findAll({
+            where: { is_active: true },
+            bypassOutletFilter: true
+        });
+
+        if (!outlets || outlets.length <= 1) return defaultIds;
+
+        const currentOutlet = outlets.find(o => o.id === Number(outletId));
+        if (!currentOutlet) return defaultIds;
+
+        let masterId = null;
+        if (currentOutlet.is_master || currentOutlet.outlet_role === 'MASTER') {
+            masterId = currentOutlet.id;
+        } else if (currentOutlet.parent_outlet_id) {
+            masterId = Number(currentOutlet.parent_outlet_id);
+        }
+
+        if (masterId) {
+            const family = outlets.filter(o => o.id === masterId || Number(o.parent_outlet_id) === masterId);
+            return family.map(o => o.id);
+        }
+
+        return defaultIds;
+    } catch (err) {
+        console.error('Error resolving shared outlet IDs:', err.message);
+        return defaultIds;
+    }
+};
+
 function dateOnly(value) {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return null;
@@ -4945,9 +4999,10 @@ exports.listSales = async (req, res) => {
 exports.listCustomers = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
+        const sharedOutletIds = await getSharedOutletIds(req, outlet_id);
         const search = String(req.query.search || '').trim();
 
-        const where = { outlet_id };
+        const where = { outlet_id: { [Op.in]: sharedOutletIds } };
         if (search) {
             where[Op.or] = [
                 { customer_name: { [Op.iLike]: `%${search}%` } },
@@ -4959,10 +5014,39 @@ exports.listCustomers = async (req, res) => {
 
         const rows = await req.propertyDb.models.customers.findAll({
             where,
-            order: [['id', 'DESC']]
+            order: [['id', 'DESC']],
+            bypassOutletFilter: true
         });
 
-        res.json({ success: true, data: rows });
+        let outletMap = new Map();
+        try {
+            if (req.propertyDb.models.outlets) {
+                const outletsList = await req.propertyDb.models.outlets.findAll({
+                    attributes: ['id', 'outlet_name', 'outlet_code'],
+                    bypassOutletFilter: true,
+                    raw: true
+                });
+                outletsList.forEach(o => {
+                    outletMap.set(Number(o.id), o.outlet_name || o.outlet_code || `Outlet #${o.id}`);
+                });
+            }
+        } catch (_) {}
+
+        const seen = new Set();
+        const deduplicatedRows = [];
+        for (const row of rows) {
+            const phone = row.customer_phone ? String(row.customer_phone).replace(/\D/g, '').slice(-10) : '';
+            const name = String(row.customer_name || '').trim().toLowerCase();
+            const key = phone ? `phone:${phone}` : (name ? `name:${name}` : `id:${row.id}`);
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const plain = typeof row.get === 'function' ? row.get({ plain: true }) : { ...row };
+            plain.outlet_name = outletMap.get(Number(plain.outlet_id)) || (plain.outlet_id ? `Outlet #${plain.outlet_id}` : 'Store');
+            deduplicatedRows.push(plain);
+        }
+
+        res.json({ success: true, data: deduplicatedRows });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -4970,6 +5054,8 @@ exports.listCustomers = async (req, res) => {
 
 exports.createCustomer = async (req, res) => {
     try {
+        const outlet_id = req.user.outlet_id;
+        const sharedOutletIds = await getSharedOutletIds(req, outlet_id);
         const identity = normalizeCustomerIdentity(req.body);
         const payload = {
             customer_name: identity.customer_name || null,
@@ -4984,9 +5070,10 @@ exports.createCustomer = async (req, res) => {
 
         const existing = await req.propertyDb.models.customers.findOne({
             where: {
-                outlet_id: req.user.outlet_id,
+                outlet_id: { [Op.in]: sharedOutletIds },
                 ...scope
-            }
+            },
+            bypassOutletFilter: true
         });
 
         if (existing) {
@@ -4995,7 +5082,7 @@ exports.createCustomer = async (req, res) => {
         }
 
         const created = await req.propertyDb.models.customers.create({
-            outlet_id: req.user.outlet_id,
+            outlet_id,
             ...payload
         });
 
@@ -5007,11 +5094,15 @@ exports.createCustomer = async (req, res) => {
 
 exports.updateCustomer = async (req, res) => {
     try {
+        const outlet_id = req.user.outlet_id;
+        const sharedOutletIds = await getSharedOutletIds(req, outlet_id);
+
         const source = await req.propertyDb.models.customers.findOne({
             where: {
                 id: req.params.id,
-                outlet_id: req.user.outlet_id
-            }
+                outlet_id: { [Op.in]: sharedOutletIds }
+            },
+            bypassOutletFilter: true
         });
 
         if (!source) {
@@ -5037,9 +5128,10 @@ exports.updateCustomer = async (req, res) => {
             advancePayload,
             {
                 where: {
-                    outlet_id: req.user.outlet_id,
+                    outlet_id: { [Op.in]: sharedOutletIds },
                     ...(scope ?? { id: -1 })
-                }
+                },
+                bypassOutletFilter: true
             }
         );
 
@@ -5051,11 +5143,15 @@ exports.updateCustomer = async (req, res) => {
 
 exports.deleteCustomer = async (req, res) => {
     try {
+        const outlet_id = req.user.outlet_id;
+        const sharedOutletIds = await getSharedOutletIds(req, outlet_id);
+
         const source = await req.propertyDb.models.customers.findOne({
             where: {
                 id: req.params.id,
-                outlet_id: req.user.outlet_id
-            }
+                outlet_id: { [Op.in]: sharedOutletIds }
+            },
+            bypassOutletFilter: true
         });
 
         if (!source) {
@@ -5071,7 +5167,6 @@ exports.deleteCustomer = async (req, res) => {
             });
         }
 
-        const outlet_id = req.user.outlet_id;
         const [
             linkedSalesCount,
             linkedAdvancesCount,
@@ -5082,27 +5177,33 @@ exports.deleteCustomer = async (req, res) => {
         ] = await Promise.all([
             req.propertyDb.models.sales_headers.count({
                 where: {
-                    outlet_id,
+                    outlet_id: { [Op.in]: sharedOutletIds },
                     status: 'COMPLETED',
                     is_latest: true,
                     is_deleted: false,
                     ...scope
-                }
+                },
+                bypassOutletFilter: true
             }),
             req.propertyDb.models.customer_advances.count({
-                where: { outlet_id, ...scope }
+                where: { outlet_id: { [Op.in]: sharedOutletIds }, ...scope },
+                bypassOutletFilter: true
             }),
             req.propertyDb.models.customer_item_advances.count({
-                where: { outlet_id, ...scope }
+                where: { outlet_id: { [Op.in]: sharedOutletIds }, ...scope },
+                bypassOutletFilter: true
             }),
             req.propertyDb.models.sales_scheme_customers.count({
-                where: { outlet_id, ...scope }
+                where: { outlet_id: { [Op.in]: sharedOutletIds }, ...scope },
+                bypassOutletFilter: true
             }),
             req.propertyDb.models.milk_subscriptions.count({
-                where: { outlet_id, ...scope }
+                where: { outlet_id: { [Op.in]: sharedOutletIds }, ...scope },
+                bypassOutletFilter: true
             }),
             req.propertyDb.models.customer_loyalty_ledger.count({
-                where: { outlet_id, ...scope }
+                where: { outlet_id: { [Op.in]: sharedOutletIds }, ...scope },
+                bypassOutletFilter: true
             })
         ]);
 
@@ -5132,9 +5233,9 @@ exports.deleteCustomer = async (req, res) => {
 
         const deleted = await req.propertyDb.models.customers.destroy({
             where: {
-                id: source.id,
-                outlet_id
-            }
+                id: source.id
+            },
+            bypassOutletFilter: true
         });
 
         if (!deleted) {

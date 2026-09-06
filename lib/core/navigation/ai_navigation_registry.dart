@@ -61,6 +61,7 @@ import '../../screens/settings/loyalty_master_config_screen.dart';
 import '../../screens/settings/happy_hour_config_screen.dart';
 import '../../screens/settings/document_sequence_screen.dart';
 import '../../screens/settings/stock_location_screen.dart';
+import '../../screens/settings/outlet_hierarchy_linking_screen.dart';
 import '../../screens/auth/user_management_screen.dart';
 import '../../screens/dashboard/autonomous_agent_screen.dart';
 import '../../screens/dashboard/lynx_feature_testing_screen.dart';
@@ -120,6 +121,13 @@ class AiNavigationRegistry {
       case 'SUBSCRIPTION_DASHBOARD':
       case 'SUBSCRIPTIONS':
         targetScreen = const SubscriptionScreen();
+        break;
+
+      case 'OUTLET_HIERARCHY':
+      case 'CHILD_OUTLET':
+      case 'MAKE_CHILD_OUTLET':
+      case 'LINK_OUTLET':
+        targetScreen = const OutletHierarchyLinkingScreen();
         break;
 
       case 'SUBSCRIPTION_REPORTS':

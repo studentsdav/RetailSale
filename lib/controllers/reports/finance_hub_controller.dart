@@ -7,6 +7,7 @@ import '../../models/reports/finance_models.dart';
 
 class FinanceHubController extends ChangeNotifier {
   bool loading = false;
+  int? outletId;
 
   List<LedgerDayGroup> ledgerDays = [];
   double openingBalance = 0;
@@ -67,6 +68,13 @@ class FinanceHubController extends ChangeNotifier {
         'from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}',
         'to_date=${DateFormat('yyyy-MM-dd').format(toDate)}',
       ];
+      if (outletId != null) {
+        if (outletId == -1) {
+          params.add('outlet_id=ALL');
+        } else {
+          params.add('outlet_id=$outletId');
+        }
+      }
       if (search.trim().isNotEmpty) params.add('search=${Uri.encodeComponent(search.trim())}');
       if (type.trim().isNotEmpty) params.add('type=${Uri.encodeComponent(type.trim())}');
       if (paymentMethod.trim().isNotEmpty) {
@@ -96,6 +104,13 @@ class FinanceHubController extends ChangeNotifier {
         'from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}',
         'to_date=${DateFormat('yyyy-MM-dd').format(toDate)}',
       ];
+      if (outletId != null) {
+        if (outletId == -1) {
+          params.add('outlet_id=ALL');
+        } else {
+          params.add('outlet_id=$outletId');
+        }
+      }
       if (customer.trim().isNotEmpty) params.add('customer=${Uri.encodeComponent(customer.trim())}');
       final res = await ApiClient.get('${ApiEndpoints.financeCreditReport}?${params.join('&')}');
       totalOutstanding = _num(res['summary']?['total_outstanding']);

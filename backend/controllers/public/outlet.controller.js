@@ -130,8 +130,11 @@ exports.createOutlet = async (req, res) => {
             business_module,
             contact_email,
             contact_phone,
+            parent_outlet_id: req.body.parent_outlet_id || null,
+            is_master: req.body.is_master || false,
+            outlet_role: req.body.outlet_role || (req.body.is_master ? 'MASTER' : 'BRANCH'),
             recovery_pin_hash: pinHash,
-            tax_id,
+            tax_id: tax_id || 'TAX_DEFAULT',
             is_active: true
         });
 

@@ -7,6 +7,34 @@ const { touchClient } = require("../../modules/sheetService");
 const { internalCheckOutlet } = require("../public/outlet.controller");
 const { sendOtpEmail } = require('../../modules/emailService');
 
+const DEFAULT_ROLE_PERMISSIONS = {
+    ADMIN: ['*'],
+    STORE: [
+        'ITEM_REQUEST', 'PURCHASE_ORDER', 'STOCK_IN', 'STOCK_OUT', 'RETURN', 'DAMAGE',
+        'ITEM_MASTER', 'SUPPLIER_MASTER', 'STOCK_LOCATION',
+        'STOCK_BALANCE', 'DAMAGE_SUMMARY', 'STOCK_IN_REPORT', 'STOCK_OUT_REPORT',
+        'DAMAGE_REPORT', 'REQUEST_REPORT', 'PURCHASE_REPORT', 'RETURN_REPORT',
+        'STOCK_TRANSFER', 'PRODUCT_ASSEMBLY', 'RETURN_ISSUE', 'SUPPLIER_RETURN',
+        'STOCK_TRANSFER_REPORT', 'SUBMISSIONS_STATUS'
+    ],
+    RETAIL: [
+        'RETAIL_SALES', 'REPRINT_SALES_BILL', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT',
+        'CUSTOMER_APP', 'RETAILER_CONSOLE', 'RIDER_PORTAL'
+    ],
+    ACCOUNTS: [
+        'SUPPLIER_PAYMENT', 'REPORTS', 'STOCK_BALANCE', 'DAMAGE_SUMMARY', 'STOCK_IN_REPORT',
+        'STOCK_OUT_REPORT', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT', 'PURCHASE_REPORT',
+        'RETURN_REPORT', 'REQUEST_REPORT', 'DAMAGE_REPORT',
+        'SUPPLIER_RETURN_REFUND', 'PENDING_REFUNDS', 'CASH_LEDGER', 'STOCK_LEDGER_REPORT',
+        'VENDOR_PAYMENT_REPORT', 'SUBSCRIPTION_REPORT', 'SCHEME_REPORT', 'SCHEME_ANALYSIS',
+        'LOYALTY_REPORT', 'STORE_ANALYSIS', 'BRAND_ANALYSIS', 'SOURCE_ANALYSIS',
+        'COMMISSION_REPORT', 'PAYMENT_ANALYSIS', 'AI_QUERY_ANALYTICS'
+    ],
+    HR: [
+        'HR_EMPLOYEES', 'HR_ATTENDANCE', 'HR_PAYROLL', 'HR_MASTERS'
+    ]
+};
+
 exports.login = async (req, res, next) => {
     try {
         let licenseState = 'VALID';
@@ -19,13 +47,6 @@ exports.login = async (req, res, next) => {
         if (!outlet_code) {
             return res.status(400).json({ success: false, message: 'Outlet code is required for login.' });
         }
-
-        // if (fs.existsSync(CLIENT_FILE)) {
-        //     const existingfile = JSON.parse(fs.readFileSync(CLIENT_FILE));
-        //     if (existingfile.outlet_code !== outlet_code) {
-        //         return res.status(403).json({ success: false, message: 'Terminal mismatch. This device is not registered to this outlet.' });
-        //     }
-        // }
 
         const currentOutlet = await db.models.outlets.findOne({
             where: {
@@ -75,34 +96,6 @@ exports.login = async (req, res, next) => {
             console.warn(`[AUTH] Cloud license check bypassed: ${err.message}`);
         }
 
-        const ROLE_PERMISSIONS = {
-            ADMIN: ['*'],
-            STORE: [
-                'ITEM_REQUEST', 'PURCHASE_ORDER', 'STOCK_IN', 'STOCK_OUT', 'RETURN', 'DAMAGE',
-                'ITEM_MASTER', 'SUPPLIER_MASTER', 'STOCK_LOCATION',
-                'STOCK_BALANCE', 'DAMAGE_SUMMARY', 'STOCK_IN_REPORT', 'STOCK_OUT_REPORT',
-                'DAMAGE_REPORT', 'REQUEST_REPORT', 'PURCHASE_REPORT', 'RETURN_REPORT',
-                'STOCK_TRANSFER', 'PRODUCT_ASSEMBLY', 'RETURN_ISSUE', 'SUPPLIER_RETURN',
-                'STOCK_TRANSFER_REPORT', 'SUBMISSIONS_STATUS'
-            ],
-            RETAIL: [
-                'RETAIL_SALES', 'REPRINT_SALES_BILL', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT',
-                'CUSTOMER_APP', 'RETAILER_CONSOLE', 'RIDER_PORTAL'
-            ],
-            ACCOUNTS: [
-                'SUPPLIER_PAYMENT', 'REPORTS', 'STOCK_BALANCE', 'DAMAGE_SUMMARY', 'STOCK_IN_REPORT',
-                'STOCK_OUT_REPORT', 'RETAIL_SALES_REPORT', 'CLOSING_REPORT', 'PURCHASE_REPORT',
-                'RETURN_REPORT', 'REQUEST_REPORT', 'DAMAGE_REPORT',
-                'SUPPLIER_RETURN_REFUND', 'PENDING_REFUNDS', 'CASH_LEDGER', 'STOCK_LEDGER_REPORT',
-                'VENDOR_PAYMENT_REPORT', 'SUBSCRIPTION_REPORT', 'SCHEME_REPORT', 'SCHEME_ANALYSIS',
-                'LOYALTY_REPORT', 'STORE_ANALYSIS', 'BRAND_ANALYSIS', 'SOURCE_ANALYSIS',
-                'COMMISSION_REPORT', 'PAYMENT_ANALYSIS', 'AI_QUERY_ANALYTICS'
-            ],
-            HR: [
-                'HR_EMPLOYEES', 'HR_ATTENDANCE', 'HR_PAYROLL', 'HR_MASTERS'
-            ]
-        };
-
         let permissions = [];
         if (user.role === 'ADMIN') {
             permissions = ['*'];
@@ -113,7 +106,7 @@ exports.login = async (req, res, next) => {
             permissions = perms.map(p => p.perm_key);
 
             if (permissions.length === 0) {
-                const defaultPerms = ROLE_PERMISSIONS[user.role] || [];
+                const defaultPerms = DEFAULT_ROLE_PERMISSIONS[user.role] || [];
                 if (defaultPerms.length > 0) {
                     await db.models.user_permissions.bulkCreate(
                         defaultPerms.map(p => ({ user_id: user.id, perm_key: p }))
@@ -125,6 +118,7 @@ exports.login = async (req, res, next) => {
 
         const token = jwt.sign({
             user_id: user.id,
+            username: user.username,
             outlet_id: currentOutlet.id,
             role: user.role,
             outlet_code: currentOutlet.outlet_code,
@@ -346,5 +340,172 @@ exports.verifySupplierOtp = async (req, res) => {
     } catch (error) {
         console.error('[OTP VERIFY ERROR]', error);
         res.status(500).json({ success: false, message: 'Internal server error during OTP verification.' });
+    }
+};
+
+exports.switchOutlet = async (req, res) => {
+    try {
+        const db = req.propertyDb;
+        const currentOutletId = req.user?.outlet_id;
+        const targetRawId = req.body.target_outlet_id || req.body.outlet_id || req.body.target_outlet_code || req.body.outlet_code;
+
+        if (!targetRawId) {
+            return res.status(400).json({ success: false, message: 'Target outlet is required for switch' });
+        }
+
+        const allOutlets = await db.models.outlets.findAll({
+            where: { is_active: true },
+            bypassOutletFilter: true
+        });
+
+        let targetOutlet = null;
+        if (typeof targetRawId === 'number' || !isNaN(Number(targetRawId))) {
+            targetOutlet = allOutlets.find(o => o.id === Number(targetRawId));
+        } else {
+            targetOutlet = allOutlets.find(o => o.outlet_code === String(targetRawId).trim());
+        }
+
+        if (!targetOutlet) {
+            return res.status(404).json({ success: false, message: 'Target outlet not found or inactive' });
+        }
+
+        const currentOutlet = allOutlets.find(o => o.id === Number(currentOutletId));
+
+        const isLinked =
+            allOutlets.length > 1 &&
+            (
+                Number(targetOutlet.id) === Number(currentOutletId) ||
+                Number(targetOutlet.parent_outlet_id) === Number(currentOutletId) ||
+                Number(currentOutlet?.parent_outlet_id) === Number(targetOutlet.id) ||
+                (currentOutlet?.parent_outlet_id && Number(currentOutlet.parent_outlet_id) === Number(targetOutlet.parent_outlet_id)) ||
+                currentOutlet?.is_master ||
+                targetOutlet.is_master
+            );
+
+        if (!isLinked) {
+            return res.status(403).json({ success: false, message: 'Direct login is only allowed for linked outlets' });
+        }
+
+        // Fetch full details of the currently authenticated user
+        const currentUser = await db.models.users.findOne({
+            where: { id: req.user.user_id || req.user.id },
+            bypassOutletFilter: true
+        });
+
+        let targetUser = null;
+
+        if (currentUser?.username) {
+            targetUser = await db.models.users.findOne({
+                where: {
+                    username: currentUser.username,
+                    outlet_id: targetOutlet.id,
+                    is_active: true
+                },
+                bypassOutletFilter: true
+            });
+        }
+
+        if (!targetUser) {
+            targetUser = await db.models.users.findOne({
+                where: {
+                    outlet_id: targetOutlet.id,
+                    is_active: true
+                },
+                order: [['role', 'ASC']],
+                bypassOutletFilter: true
+            });
+        }
+
+        if (!targetUser && currentUser) {
+            targetUser = await db.models.users.create({
+                outlet_id: targetOutlet.id,
+                username: currentUser.username,
+                password_hash: currentUser.password_hash,
+                full_name: currentUser.full_name,
+                mobile: currentUser.mobile,
+                role: currentUser.role,
+                is_active: true
+            }, { bypassOutletFilter: true });
+        }
+
+        if (!targetUser) {
+            return res.status(400).json({ success: false, message: 'No active user account found in target outlet' });
+        }
+
+        let permissions = [];
+        if (targetUser.role === 'ADMIN') {
+            permissions = ['*'];
+        } else {
+            const perms = await db.models.user_permissions.findAll({
+                where: { user_id: targetUser.id },
+                bypassOutletFilter: true
+            });
+            permissions = perms.map(p => p.perm_key);
+
+            if (permissions.length === 0) {
+                const defaultPerms = DEFAULT_ROLE_PERMISSIONS[targetUser.role] || [];
+                if (defaultPerms.length > 0) {
+                    try {
+                        await db.models.user_permissions.bulkCreate(
+                            defaultPerms.map(p => ({ user_id: targetUser.id, perm_key: p })),
+                            { bypassOutletFilter: true }
+                        );
+                    } catch (_) {}
+                    permissions = defaultPerms;
+                }
+            }
+        }
+
+        const token = jwt.sign({
+            user_id: targetUser.id,
+            username: targetUser.username,
+            outlet_id: targetOutlet.id,
+            role: targetUser.role,
+            outlet_code: targetOutlet.outlet_code,
+            permissions
+        });
+
+        try {
+            await audit.log({
+                req,
+                module: 'AUTH',
+                action: 'DIRECT_SWITCH_OUTLET',
+                table: 'users',
+                recordId: targetUser.id,
+                newData: { username: targetUser.username, from_outlet: currentOutletId, to_outlet: targetOutlet.id },
+                outlet_id: targetOutlet.id,
+                user_id: targetUser.id
+            });
+        } catch (auditErr) {
+            console.warn('[SWITCH OUTLET AUDIT WARN]', auditErr.message);
+        }
+
+        const property = await db.models.property_info.findOne({
+            where: { outlet_id: targetOutlet.id },
+            attributes: ['property_name'],
+            bypassOutletFilter: true
+        });
+
+        return res.json({
+            success: true,
+            message: `Direct login to ${targetOutlet.outlet_name} successful`,
+            token,
+            user: {
+                username: targetUser.username,
+                name: targetUser.full_name,
+                role: targetUser.role,
+                mobile: targetUser.mobile,
+                max_discount_percent: targetUser.max_discount_percent || 10.0,
+                outlet_id: targetOutlet.id,
+                outlet_code: targetOutlet.outlet_code,
+                property_name: property?.property_name || targetOutlet.outlet_name,
+                outlet_type: targetOutlet.outlet_type || '',
+                business_module: targetOutlet.business_module || 'ALL',
+                permissions
+            }
+        });
+    } catch (error) {
+        console.error('[SWITCH OUTLET ERROR]', error);
+        return res.status(500).json({ success: false, message: 'Failed to complete direct outlet login: ' + error.message });
     }
 };

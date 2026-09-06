@@ -3,7 +3,8 @@ import 'package:intl/intl.dart';
 import '../../controllers/accounting/financial_reports_controller.dart';
 
 class ProfitLossScreen extends StatefulWidget {
-  const ProfitLossScreen({super.key});
+  final String? outletId;
+  const ProfitLossScreen({super.key, this.outletId});
 
   @override
   State<ProfitLossScreen> createState() => _ProfitLossScreenState();
@@ -35,9 +36,9 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
     if (_selectedPeriod == 'custom' && _customDateRange != null) {
       final start = DateFormat('yyyy-MM-dd').format(_customDateRange!.start);
       final end = DateFormat('yyyy-MM-dd').format(_customDateRange!.end);
-      ctrl.fetchProfitLoss(startDate: start, endDate: end);
+      ctrl.fetchProfitLoss(startDate: start, endDate: end, outletId: widget.outletId);
     } else {
-      ctrl.fetchProfitLoss(period: _selectedPeriod);
+      ctrl.fetchProfitLoss(period: _selectedPeriod, outletId: widget.outletId);
     }
   }
 

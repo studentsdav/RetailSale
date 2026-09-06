@@ -30,6 +30,7 @@ import 'happy_hour_config_screen.dart';
 import 'bill_value_promo_config_screen.dart';
 import 'property_info_screen.dart';
 import 'outlet_detail_modification_screen.dart';
+import 'outlet_hierarchy_linking_screen.dart';
 import '../../controllers/public/outlet_controller.dart';
 import '../../core/auth/token_storage.dart';
 import 'package:file_picker/file_picker.dart';
@@ -608,7 +609,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _settingRow(
                         title: 'Update Registration Info',
                         description: 'Edit store registration details, logo, contact, tax numbers, and receipt footer note',
-                        isLast: true,
+                        isLast: false,
                         control: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFFF7A1A),
@@ -621,6 +622,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           icon: const Icon(Icons.edit_note_rounded, size: 18),
                           label: const Text('Update Registration Info', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Master & Child Outlet Linking',
+                        description: 'Configure Master Outlet and create or link child outlets for stock transfers',
+                        isLast: true,
+                        control: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const OutletHierarchyLinkingScreen()),
+                          ),
+                          icon: const Icon(Icons.account_tree_rounded, size: 18),
+                          label: const Text('Master & Child Outlets', style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],

@@ -54,6 +54,19 @@ module.exports = (sequelize, DataTypes) => {
         is_active: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
+        },
+        parent_outlet_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
+        is_master: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        outlet_role: {
+            type: DataTypes.STRING(30),
+            allowNull: true,
+            defaultValue: 'BRANCH'
         }
     }, {
         tableName: 'outlets',

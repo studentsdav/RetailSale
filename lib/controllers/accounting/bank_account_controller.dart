@@ -7,12 +7,16 @@ class BankAccountController extends ChangeNotifier {
   bool loading = false;
   List<BankAccountModel> banks = [];
 
-  Future<void> fetchBanks({bool includeInactive = true}) async {
+  Future<void> fetchBanks({bool includeInactive = true, String? outletId}) async {
     loading = true;
     notifyListeners();
 
     try {
-      final url = includeInactive ? '${ApiEndpoints.accountingBanks}?include_inactive=true' : ApiEndpoints.accountingBanks;
+      List<String> params = [];
+      if (includeInactive) params.add('include_inactive=true');
+      if (outletId != null && outletId.isNotEmpty) params.add('outlet_id=$outletId');
+      final query = params.isNotEmpty ? '?${params.join('&')}' : '';
+      final url = '${ApiEndpoints.accountingBanks}$query';
       final res = await ApiClient.get(url);
       if (res['success'] == true && res['data'] is List) {
         banks = (res['data'] as List)

@@ -8,6 +8,7 @@ import '../../models/reports/sales_report_model.dart';
 
 class SalesReportController extends ChangeNotifier {
   bool loading = false;
+  int? outletId;
 
   DateTime fromDate = DateTimeService.instance.nowInTimeZone;
   DateTime toDate = DateTimeService.instance.nowInTimeZone;
@@ -41,6 +42,14 @@ class SalesReportController extends ChangeNotifier {
     try {
       var query = '?from_date=${DateFormat("yyyy-MM-dd").format(fromDate)}'
           '&to_date=${DateFormat("yyyy-MM-dd").format(toDate)}';
+
+      if (outletId != null) {
+        if (outletId == -1) {
+          query += '&outlet_id=ALL';
+        } else {
+          query += '&outlet_id=$outletId';
+        }
+      }
 
       if (paymentMode != null && paymentMode!.isNotEmpty) {
         query += '&payment_mode=$paymentMode';

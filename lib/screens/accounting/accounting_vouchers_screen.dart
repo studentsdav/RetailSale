@@ -9,7 +9,8 @@ import '../inventory/goods_receiving_screen.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 
 class AccountingVouchersScreen extends StatefulWidget {
-  const AccountingVouchersScreen({super.key});
+  final String? outletId;
+  const AccountingVouchersScreen({super.key, this.outletId});
 
   @override
   State<AccountingVouchersScreen> createState() =>
@@ -26,8 +27,8 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
   @override
   void initState() {
     super.initState();
-    bankCtrl.fetchBanks();
-    ctrl.fetchVouchers(type: ctrl.activeType);
+    bankCtrl.fetchBanks(outletId: widget.outletId);
+    ctrl.fetchVouchers(type: ctrl.activeType, outletId: widget.outletId);
   }
 
   @override

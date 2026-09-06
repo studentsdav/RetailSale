@@ -6,6 +6,11 @@ class ApiEndpoints {
 
   static const items = '/api/inventory/items';
   static const stockTransfer = '/api/inventory/stock-transfer';
+  static const stockTransferDispatch = '/api/inventory/stock-transfers/dispatch';
+  static const stockTransferReceive = '/api/inventory/stock-transfers';
+  static const stockTransferOverallProgress = '/api/inventory/stock-transfers/overall-progress';
+  static const stockTransferOutletProgress = '/api/inventory/stock-transfers/outlet-progress';
+  static const stockTransferHierarchy = '/api/inventory/stock-transfers/hierarchy';
 
   static const propertyInfo = '/api/inventory/property-info';
   static const publicPropertyInfo = '/api/public/property-info';

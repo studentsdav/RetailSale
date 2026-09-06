@@ -3,7 +3,8 @@ import '../../controllers/accounting/bank_account_controller.dart';
 import '../../models/accounting/bank_account_model.dart';
 
 class BankAccountsScreen extends StatefulWidget {
-  const BankAccountsScreen({super.key});
+  final String? outletId;
+  const BankAccountsScreen({super.key, this.outletId});
 
   @override
   State<BankAccountsScreen> createState() => _BankAccountsScreenState();
@@ -22,7 +23,7 @@ class _BankAccountsScreenState extends State<BankAccountsScreen> {
   @override
   void initState() {
     super.initState();
-    ctrl.fetchBanks();
+    ctrl.fetchBanks(outletId: widget.outletId);
   }
 
   void _clearForm() {

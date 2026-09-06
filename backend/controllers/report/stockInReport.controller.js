@@ -1,7 +1,10 @@
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
+
 exports.getStockInReport = async (req, res) => {
     try {
         const { from_date, to_date, search = '' } = req.query;
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
 
         if (!from_date || !to_date) {
             return res.status(400).json({
@@ -43,7 +46,7 @@ exports.getStockInReport = async (req, res) => {
        AND sb.supplier_id = gr.supplier_id
        AND sb.bill_no = gr.supplier_bill_no
 
-      WHERE gr.outlet_id = :outlet_id
+      WHERE gr.outlet_id IN (:outletIds)
         AND gr.receipt_date BETWEEN :from_date AND :to_date
         AND (
           im.item_name ILIKE :search
@@ -54,7 +57,7 @@ exports.getStockInReport = async (req, res) => {
       `,
             {
                 replacements: {
-                    outlet_id,
+                    outletIds: scope.outletIds,
                     from_date,
                     to_date,
                     search: `%${search}%`

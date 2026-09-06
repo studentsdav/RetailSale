@@ -1,6 +1,13 @@
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
+
 exports.getStockBalance = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
+
+        let whereClause = 'WHERE im.outlet_id IN (:outletIds) AND im.is_active = TRUE';
+        let replacements = { outletIds: scope.outletIds };
+
         const [rows] = await req.propertyDb.query(`
   SELECT
     im.item_name       AS name,
@@ -22,8 +29,7 @@ exports.getStockBalance = async (req, res) => {
     ON sl.item_code = im.item_code
    AND sl.outlet_id = im.outlet_id
 
-  WHERE im.outlet_id = :outlet_id
-    AND im.is_active = TRUE
+  ${whereClause}
 
   GROUP BY
     im.id,
@@ -37,7 +43,7 @@ exports.getStockBalance = async (req, res) => {
 
   ORDER BY im.item_name
 `,
-            { replacements: { outlet_id } });
+            { replacements });
 
 
         res.json({

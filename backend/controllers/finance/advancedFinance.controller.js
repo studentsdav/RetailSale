@@ -1,5 +1,6 @@
 const { Op, Sequelize } = require('sequelize');
 const { getNextNumber } = require('../../services/numbering.service');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 const { isBankPayment, isBankPaymentMethod, getDefaultBankAccount, creditBankBalance, debitBankBalance } = require('../../services/bankAccount.service');
 const {
     createLedgerEntry,
@@ -2343,28 +2344,32 @@ exports.getPaymentFlowReport = async (req, res) => {
 
 exports.getCreditReport = async (req, res) => {
     try {
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
+
         const where = {
-            outlet_id: req.user.outlet_id,
             status: 'COMPLETED',
             is_latest: true,
-            is_deleted: false
+            is_deleted: false,
+            ...scope.outletWhere
         };
+
         const customerMatch = buildCustomerMatch(String(req.query.customer || req.query.search || '').trim());
         if (customerMatch) Object.assign(where, customerMatch);
 
         const sales = await req.propertyDb.models.sales_headers.findAll({
             where,
             include: [{ model: req.propertyDb.models.customer_repayments, as: 'repayments', required: false }],
-            order: [['sale_date', 'DESC'], ['id', 'DESC']]
+            order: [['sale_date', 'DESC'], ['id', 'DESC']],
+            bypassOutletFilter: true
         });
-        const advanceWhere = {
-            outlet_id: req.user.outlet_id
-        };
+        const advanceWhere = { ...scope.outletWhere };
         const customerAdvanceMatch = buildCustomerMatch(String(req.query.customer || req.query.search || '').trim());
         if (customerAdvanceMatch) Object.assign(advanceWhere, customerAdvanceMatch);
         const advances = await req.propertyDb.models.customer_advances.findAll({
             where: advanceWhere,
-            order: [['advance_date', 'ASC'], ['id', 'ASC']]
+            order: [['advance_date', 'ASC'], ['id', 'ASC']],
+            bypassOutletFilter: true
         });
 
         const customers = new Map();

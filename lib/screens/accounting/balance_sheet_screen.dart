@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../../controllers/accounting/financial_reports_controller.dart';
 
 class BalanceSheetScreen extends StatefulWidget {
-  const BalanceSheetScreen({super.key});
+  final String? outletId;
+  const BalanceSheetScreen({super.key, this.outletId});
 
   @override
   State<BalanceSheetScreen> createState() => _BalanceSheetScreenState();
@@ -14,7 +15,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
   @override
   void initState() {
     super.initState();
-    ctrl.fetchBalanceSheet();
+    ctrl.fetchBalanceSheet(outletId: widget.outletId);
   }
 
   @override

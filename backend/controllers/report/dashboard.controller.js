@@ -2,7 +2,7 @@ const dashboardService = require('../../services/dashboard.service');
 
 exports.inventoryDashboard = async (req, res) => {
     try {
-        const outletId = req.user.outlet_id;
+        const outletId = req.query.outlet_id || req.user.outlet_id;
 
         const data = await dashboardService.getInventoryDashboard(outletId, req.propertyDb);
 

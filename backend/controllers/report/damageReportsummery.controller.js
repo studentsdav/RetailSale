@@ -1,9 +1,11 @@
 const { Op } = require('sequelize');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
 exports.getDamageReport = async (req, res) => {
     try {
         const { from_date, to_date, item_id } = req.query;
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
 
         if (!from_date || !to_date) {
             return res.status(400).json({
@@ -13,7 +15,7 @@ exports.getDamageReport = async (req, res) => {
         }
 
         const whereHeader = {
-            outlet_id,
+            ...scope.outletWhere,
             damage_date: {
                 [Op.between]: [from_date, to_date]
             }

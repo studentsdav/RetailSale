@@ -192,6 +192,10 @@ propertyDb.models.audit_logs =
 
 propertyDb.models.stock_ledger =
     require('../../models/property/stockLedger.model')(propertyDb, DataTypes);
+propertyDb.models.stock_transfer_headers =
+    require('../../models/property/stockTransferHeader.model')(propertyDb, DataTypes);
+propertyDb.models.stock_transfer_items =
+    require('../../models/property/stockTransferItem.model')(propertyDb, DataTypes);
 
 propertyDb.models.item_subcategories =
     require('../../models/property/subcategory.model')(propertyDb, DataTypes);
@@ -327,17 +331,36 @@ Object.values(propertyDb.models).forEach(model => {
 // Enforce request-scoped outlet context automatically on all database queries and writes
 const { contextStorage } = require('../../utils/context');
 
+function hasOutletIdCondition(where) {
+    if (!where) return false;
+    if (where.outlet_id !== undefined) return true;
+    if (Array.isArray(where)) {
+        return where.some(cond => hasOutletIdCondition(cond));
+    }
+    if (typeof where === 'object') {
+        const symbols = Object.getOwnPropertySymbols(where);
+        for (const sym of symbols) {
+            if (Array.isArray(where[sym])) {
+                if (where[sym].some(cond => hasOutletIdCondition(cond))) return true;
+            }
+        }
+    }
+    return false;
+}
+
 function applyOutletFilter(options, outletId) {
     if (!options) return;
     if (options.bypassOutletFilter) return;
 
     if (options.model && options.model.rawAttributes && options.model.rawAttributes.outlet_id) {
-        if (!options.where) {
-            options.where = { outlet_id: outletId };
-        } else if (Array.isArray(options.where)) {
-            options.where.push({ outlet_id: outletId });
-        } else if (typeof options.where === 'object') {
-            options.where.outlet_id = outletId;
+        if (!hasOutletIdCondition(options.where)) {
+            if (!options.where) {
+                options.where = { outlet_id: outletId };
+            } else if (Array.isArray(options.where)) {
+                options.where.push({ outlet_id: outletId });
+            } else if (typeof options.where === 'object') {
+                options.where.outlet_id = outletId;
+            }
         }
     }
 
@@ -361,20 +384,26 @@ propertyDb.addHook('beforeFind', (options) => {
 });
 
 propertyDb.addHook('beforeCreate', (instance, options) => {
+    if (options.bypassOutletFilter) return;
     const store = contextStorage.getStore();
     const outletId = store?.get('outlet_id');
     if (outletId && instance.constructor.rawAttributes && instance.constructor.rawAttributes.outlet_id) {
-        instance.outlet_id = outletId;
+        if (!instance.outlet_id) {
+            instance.outlet_id = outletId;
+        }
     }
 });
 
 propertyDb.addHook('beforeBulkCreate', (instances, options) => {
+    if (options.bypassOutletFilter) return;
     const store = contextStorage.getStore();
     const outletId = store?.get('outlet_id');
     if (outletId) {
         instances.forEach(instance => {
             if (instance.constructor.rawAttributes && instance.constructor.rawAttributes.outlet_id) {
-                instance.outlet_id = outletId;
+                if (!instance.outlet_id) {
+                    instance.outlet_id = outletId;
+                }
             }
         });
     }

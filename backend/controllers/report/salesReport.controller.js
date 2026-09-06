@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const { toOutletDateYmd, getOutletDateBounds } = require('../../utils/timezoneHelper');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
 const SALES_ZONES = [
     { key: 'MORNING', label: 'Morning', startHour: 5, endHour: 11 },
@@ -131,15 +132,17 @@ function buildPeriodComparison(entries) {
 
 exports.getSalesReport = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
         const { from_date, to_date, payment_mode, search } = req.query;
+
+        const scope = await resolveOutletScope(req, reqOutlet);
 
         // Query sales headers
         const where = {
-            outlet_id,
             status: { [Op.in]: ['COMPLETED', 'RETURNED'] },
             is_deleted: false,
-            is_latest: true
+            is_latest: true,
+            ...scope.outletWhere
         };
 
         const outletTz = req.outletTimeZone || 'Asia/Kolkata';
@@ -176,6 +179,7 @@ exports.getSalesReport = async (req, res) => {
 
         const sales = await req.propertyDb.models.sales_headers.findAll({
             where,
+            bypassOutletFilter: true,
             include: [
                 {
                     model: req.propertyDb.models.sales_items,
@@ -201,9 +205,8 @@ exports.getSalesReport = async (req, res) => {
         });
 
         // Query sales credit notes in parallel
-        const cnWhere = {
-            outlet_id,
-        };
+        const cnWhere = { ...scope.outletWhere };
+
         if (from_date && to_date) {
             cnWhere.credit_note_date = {
                 [Op.between]: [from_date, to_date]
@@ -237,6 +240,7 @@ exports.getSalesReport = async (req, res) => {
 
         const creditNotes = await req.propertyDb.models.sales_credit_notes.findAll({
             where: cnWhere,
+            bypassOutletFilter: Boolean(reqOutlet),
             include: cnInclude,
             order: [['credit_note_date', 'DESC'], ['id', 'DESC']]
         });
@@ -302,11 +306,10 @@ exports.getSalesReport = async (req, res) => {
                 if (namesToLookup.size > 0) {
                     orConds.push({ customer_name: { [Op.or]: Array.from(namesToLookup).map(n => ({ [Op.iLike]: n })) } });
                 }
+                const custWhere = { [Op.or]: orConds, ...scope.outletWhere };
                 const custRows = await req.propertyDb.models.customers.findAll({
-                    where: {
-                        outlet_id,
-                        [Op.or]: orConds
-                    }
+                    where: custWhere,
+                    bypassOutletFilter: true
                 });
                 for (const c of custRows) {
                     if (c.customer_phone) {

@@ -28,6 +28,11 @@ function buildLastNDays(n) {
     return days;
 }
 
+function outletCond(field, outletId) {
+    if (outletId === 'ALL' || !outletId) return '1=1';
+    return `${field} = :outletId`;
+}
+
 async function buildRfmSegments(db, outletId) {
     const rows = await db.query(
         `
@@ -39,7 +44,7 @@ async function buildRfmSegments(db, outletId) {
                 COUNT(*)::int AS purchase_count,
                 COALESCE(SUM(net_amount), 0)::numeric AS total_spend
             FROM sales_headers
-            WHERE outlet_id = :outletId
+            WHERE ${outletCond('outlet_id', outletId)}
               AND COALESCE(is_deleted, FALSE) = FALSE
               AND UPPER(COALESCE(status, '')) NOT IN ('DRAFT', 'CANCELLED', 'DELETED', 'VOID')
               AND sale_date IS NOT NULL
@@ -67,7 +72,7 @@ async function buildRfmSegments(db, outletId) {
         GROUP BY 1
         `,
         {
-            replacements: { outletId },
+            replacements: { outletId: outletId === 'ALL' ? 0 : outletId },
             type: QueryTypes.SELECT
         }
     );
@@ -89,14 +94,14 @@ async function buildSalesTrend(db, outletId) {
             DATE(sale_date) AS day_key,
             COALESCE(SUM(net_amount), 0)::numeric AS revenue
         FROM sales_headers
-        WHERE outlet_id = :outletId
+        WHERE ${outletCond('outlet_id', outletId)}
           AND COALESCE(is_deleted, FALSE) = FALSE
           AND UPPER(COALESCE(status, '')) NOT IN ('DRAFT', 'CANCELLED', 'DELETED', 'VOID')
           AND DATE(sale_date) >= :startDate
         GROUP BY 1
         `,
         {
-            replacements: { outletId, startDate },
+            replacements: { outletId: outletId === 'ALL' ? 0 : outletId, startDate },
             type: QueryTypes.SELECT
         }
     );
@@ -107,12 +112,12 @@ async function buildSalesTrend(db, outletId) {
             txn_date AS day_key,
             COALESCE(SUM(cart_qty), 0)::numeric AS subscription_volume
         FROM milk_subscription_consumptions
-        WHERE outlet_id = :outletId
+        WHERE ${outletCond('outlet_id', outletId)}
           AND txn_date >= :startDate
         GROUP BY 1
         `,
         {
-            replacements: { outletId, startDate },
+            replacements: { outletId: outletId === 'ALL' ? 0 : outletId, startDate },
             type: QueryTypes.SELECT
         }
     );
@@ -145,7 +150,7 @@ async function buildMarketBasket(db, outletId) {
                AND i1.item_id < i2.item_id
             INNER JOIN sales_headers sh
                 ON sh.id = i1.sale_id
-            WHERE sh.outlet_id = :outletId
+            WHERE ${outletCond('sh.outlet_id', outletId)}
               AND COALESCE(sh.is_deleted, FALSE) = FALSE
               AND UPPER(COALESCE(sh.status, '')) NOT IN ('DRAFT', 'CANCELLED', 'DELETED', 'VOID')
         )
@@ -159,7 +164,7 @@ async function buildMarketBasket(db, outletId) {
         LIMIT 10
         `,
         {
-            replacements: { outletId },
+            replacements: { outletId: outletId === 'ALL' ? 0 : outletId },
             type: QueryTypes.SELECT
         }
     );
@@ -180,7 +185,7 @@ async function buildTopCustomerItems(db, outletId) {
             COUNT(DISTINCT sh.id)::int AS bill_count
         FROM sales_items si
         INNER JOIN sales_headers sh ON sh.id = si.sale_id
-        WHERE sh.outlet_id = :outletId
+        WHERE ${outletCond('sh.outlet_id', outletId)}
           AND COALESCE(sh.is_deleted, FALSE) = FALSE
           AND UPPER(COALESCE(sh.status, '')) NOT IN ('DRAFT', 'CANCELLED', 'DELETED', 'VOID')
         GROUP BY 1, 2
@@ -188,7 +193,7 @@ async function buildTopCustomerItems(db, outletId) {
         LIMIT 10
         `,
         {
-            replacements: { outletId },
+            replacements: { outletId: outletId === 'ALL' ? 0 : outletId },
             type: QueryTypes.SELECT
         }
     );

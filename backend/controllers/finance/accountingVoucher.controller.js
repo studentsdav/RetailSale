@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const { createLedgerEntry } = require('../../services/cashLedger.service');
 const { getNextNumber } = require('../../services/numbering.service');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
 exports.createVoucher = async (req, res) => {
     const t = await req.propertyDb.transaction();
@@ -157,9 +158,10 @@ exports.createVoucher = async (req, res) => {
 
 exports.getVouchers = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id;
+        const scope = await resolveOutletScope(req, reqOutlet);
         const { voucher_type, from_date, to_date, search } = req.query;
-        const where = { outlet_id };
+        const where = { ...scope.outletWhere };
 
         if (voucher_type && voucher_type !== 'ALL') {
             where.voucher_type = voucher_type;

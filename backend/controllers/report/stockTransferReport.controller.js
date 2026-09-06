@@ -1,7 +1,10 @@
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
+
 exports.getStockTransferReport = async (req, res) => {
     try {
         const { from_date, to_date, search = '' } = req.query;
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
 
         if (!from_date || !to_date) {
             return res.status(400).json({
@@ -29,7 +32,7 @@ exports.getStockTransferReport = async (req, res) => {
             JOIN item_master im
               ON im.item_code = sl.item_code
              AND im.outlet_id = sl.outlet_id
-            WHERE sl.outlet_id = :outlet_id
+            WHERE sl.outlet_id IN (:outletIds)
               AND sl.txn_type = 'OPEN_PACK'
               AND sl.txn_date BETWEEN :from_date AND :to_date
               AND (
@@ -43,7 +46,7 @@ exports.getStockTransferReport = async (req, res) => {
             `,
             {
                 replacements: {
-                    outlet_id,
+                    outletIds: scope.outletIds,
                     from_date,
                     to_date,
                     search: search ? `%${search}%` : ''

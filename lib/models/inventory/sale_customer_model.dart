@@ -6,6 +6,8 @@ class SaleCustomer {
   final String customerGstin;
   final int? schemeId;
   final String? schemeName;
+  final int? outletId;
+  final String? outletName;
 
   const SaleCustomer({
     required this.id,
@@ -15,6 +17,8 @@ class SaleCustomer {
     this.customerGstin = '',
     this.schemeId,
     this.schemeName,
+    this.outletId,
+    this.outletName,
   });
 
   factory SaleCustomer.fromJson(Map<String, dynamic> json) {
@@ -26,6 +30,8 @@ class SaleCustomer {
       customerGstin: json['customer_gstin'] ?? '',
       schemeId: json['scheme_id'],
       schemeName: json['scheme_name'],
+      outletId: json['outlet_id'],
+      outletName: json['outlet_name'] ?? json['outlet']?['outlet_name'],
     );
   }
 

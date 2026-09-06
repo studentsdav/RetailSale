@@ -21,6 +21,7 @@ const brandingSettingsCtrl = require('../controllers/settings/appBranding.contro
 const groupCtrl = require('../controllers/inventory/group.controller');
 const subCtrl = require('../controllers/inventory/subcategory.controller');
 const brandCtrl = require('../controllers/inventory/brand.controller');
+const stockTransferCtrl = require('../controllers/inventory/stockTransfer.controller');
 const backupController = require('../controllers/public/backup.controller');
 const syncDatabase = require('../modules/sheetService');
 
@@ -188,5 +189,21 @@ router.put('/requests/:id/modify', requestCtrl.modifyRequest);
 router.put('/requests/:id/cancel', requestCtrl.cancelRequest);
 
 
+
+// STOCK TRANSFERS & OUTLET HIERARCHY
+router.get('/stock-transfers/hierarchy', stockTransferCtrl.getOutletsHierarchy);
+router.post('/stock-transfers/hierarchy/role', stockTransferCtrl.setOutletRole);
+router.post('/stock-transfers/hierarchy/link-by-pin', stockTransferCtrl.linkOutletByPin);
+router.post('/stock-transfers/hierarchy/unlink', stockTransferCtrl.unlinkOutlet);
+router.post('/stock-transfers/hierarchy/request-otp', stockTransferCtrl.requestLinkOtp);
+router.post('/stock-transfers/hierarchy/verify-otp', stockTransferCtrl.verifyLinkOtp);
+router.post('/stock-transfers/toggle-contact-sharing', stockTransferCtrl.toggleContactSharing);
+router.post('/stock-transfers/dispatch', stockTransferCtrl.createDispatch);
+router.post('/stock-transfers/:id/receive', stockTransferCtrl.receiveTransfer);
+router.get('/stock-transfers/overall-progress', stockTransferCtrl.getOverallProgress);
+router.get('/stock-transfers/outlet-progress', stockTransferCtrl.getIndividualOutletProgress);
+router.get('/stock-transfers/outlet-progress/:outlet_id', stockTransferCtrl.getIndividualOutletProgress);
+router.get('/stock-transfers', stockTransferCtrl.listTransfers);
+router.get('/stock-transfers/:id', stockTransferCtrl.getTransferDetails);
 
 module.exports = router;

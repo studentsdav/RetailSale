@@ -1,6 +1,13 @@
 const analyticsService = require('../../services/analytics.service');
 
 function resolveOutletId(req) {
+    const rawOutlet = req.query?.outlet_id || req.query?.outletId;
+    if (rawOutlet === 'ALL' || rawOutlet === 'null') {
+        return 'ALL';
+    }
+    if (rawOutlet && !isNaN(Number(rawOutlet))) {
+        return Number(rawOutlet);
+    }
     return Number(req?.user?.outlet_id) || 0;
 }
 

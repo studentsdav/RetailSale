@@ -66,8 +66,10 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
           '${row['itemName'] ?? ''} ${row['itemCode'] ?? ''} ${row['refNo'] ?? ''}'
               .toLowerCase();
 
-      final matchesType =
-          selectedTxnType == 'ALL' || txnType == selectedTxnType;
+      bool matchesType = selectedTxnType == 'ALL' || txnType == selectedTxnType;
+      if (selectedTxnType == 'TRANSFER') {
+        matchesType = txnType.contains('TRANSFER');
+      }
       final matchesSearch = query.isEmpty || itemText.contains(query);
       return matchesType && matchesSearch;
     }).toList();
@@ -408,6 +410,9 @@ class _StockLedgerReportScreenState extends State<StockLedgerReportScreen> {
               ),
               items: const [
                 DropdownMenuItem(value: 'ALL', child: Text('All Types')),
+                DropdownMenuItem(value: 'TRANSFER', child: Text('STOCK TRANSFER')),
+                DropdownMenuItem(value: 'TRANSFER_DISPATCH_OUT', child: Text('TRANSFER DISPATCH')),
+                DropdownMenuItem(value: 'TRANSFER_RECEIVE_IN', child: Text('TRANSFER RECEIVE')),
                 DropdownMenuItem(value: 'IN', child: Text('IN')),
                 DropdownMenuItem(value: 'ISSUE', child: Text('ISSUE / SALE')),
                 DropdownMenuItem(value: 'SALE', child: Text('SALE')),

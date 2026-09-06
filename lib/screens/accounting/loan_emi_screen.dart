@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 
 class LoanEmiScreen extends StatefulWidget {
-  const LoanEmiScreen({super.key});
+  final String? outletId;
+  const LoanEmiScreen({super.key, this.outletId});
 
   @override
   State<LoanEmiScreen> createState() => _LoanEmiScreenState();
@@ -39,14 +40,15 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
   Future<void> _fetchLoanAssetsData() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.get('/api/accounting/loans-assets');
+      final query = (widget.outletId != null && widget.outletId!.isNotEmpty) ? '?outlet_id=${widget.outletId}' : '';
+      final res = await ApiClient.get('/api/accounting/loans-assets$query');
       if (res['success'] == true && res['data'] != null) {
         setState(() {
           _loans = (res['data']['loans'] as List? ?? []);
           _assets = (res['data']['assets'] as List? ?? []);
         });
       }
-      final bankRes = await ApiClient.get('/api/accounting/banks');
+      final bankRes = await ApiClient.get('/api/accounting/banks$query');
       if (bankRes['success'] == true && bankRes['data'] != null) {
         setState(() {
           _bankAccounts = (bankRes['data'] as List? ?? []);

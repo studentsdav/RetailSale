@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/reports/night_audit_controller.dart';
+import '../../controllers/inventory/stock_transfer_controller.dart';
 import 'dart:io';
 import 'package:retailpos/models/security/app_user_model.dart';
 import 'package:retailpos/screens/dashboard/system_update_screen.dart';
@@ -27,6 +28,8 @@ import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/navigation/home_route_helper.dart';
 import '../../core/config/app_config.dart';
 import '../../core/navigation/ai_navigation_registry.dart';
 import '../../controllers/notes/user_notes_controller.dart';
@@ -45,6 +48,9 @@ import '../inventory/goods_receiving_screen.dart';
 import '../inventory/stock_request_screen.dart';
 import '../inventory/salescreen.dart';
 import '../inventory/stock_transfer_screen.dart';
+import '../inventory/stock_dispatch_screen.dart';
+import '../inventory/stock_receive_screen.dart';
+import '../reports/transfer_progress_dashboard_screen.dart';
 import '../inventory/assembly_screen.dart';
 import '../inventory/return_issue_screen.dart';
 import '../inventory/supplier_return_refund_screen.dart';
@@ -65,6 +71,7 @@ import '../inventory/approval_center_screen.dart';
 import '../inventory/submitted_status_screen.dart';
 import '../settings/property_info_screen.dart';
 import '../settings/outlet_detail_modification_screen.dart';
+import '../settings/outlet_hierarchy_linking_screen.dart';
 import '../settings/outlet_setup_checklist_screen.dart';
 import 'customer_app_screen.dart';
 import 'lynx_feature_testing_screen.dart';
@@ -132,6 +139,11 @@ class MainDashboardScreen extends StatefulWidget {
 }
 
 class _MainDashboardScreenState extends State<MainDashboardScreen> {
+  // OUTLET HIERARCHY & CONTACT DIRECTORY
+  int? _selectedDashboardOutletId;
+  Map<String, dynamic>? _dashboardHierarchyData;
+  final StockTransferController _dashboardTransferCtrl = StockTransferController();
+
   // USER SESSION
   final Set<int> _shownNotificationIds = {};
   bool _hasPendingDraw = false;
@@ -358,7 +370,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
     _loadPropertyInfo();
 
-    _loadDashboard();
+    _loadDashboardHierarchy();
 
     _verifyDataProtection();
     _dataProtectionTimer = Timer.periodic(const Duration(hours: 1), (timer) {
@@ -601,6 +613,318 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   ),
           ],
         ],
+      ),
+    );
+  }
+
+  Future<void> _loadDashboardHierarchy() async {
+    final data = await _dashboardTransferCtrl.fetchHierarchy();
+    if (mounted) {
+      setState(() {
+        _dashboardHierarchyData = data;
+        final currentOutletId = data?['current_outlet']?['id'];
+        if (_selectedDashboardOutletId == null && currentOutletId != null) {
+          _selectedDashboardOutletId = currentOutletId;
+          _loadDashboard();
+        }
+      });
+    }
+  }
+
+  Widget _buildDashboardOutletScopeSelector() {
+    final outlets = (_dashboardHierarchyData?['all_outlets'] as List?) ?? [];
+    if (outlets.length <= 1) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.storefront, color: Colors.blue),
+            const SizedBox(width: 10),
+            const Text('Dashboard View Scope:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int?>(
+                  isExpanded: true,
+                  value: _selectedDashboardOutletId,
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: -1,
+                      child: Text('🌐 All Linked Outlets (Combined Enterprise Metrics)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    ...outlets.map<DropdownMenuItem<int?>>((o) {
+                      return DropdownMenuItem<int?>(
+                        value: o['id'],
+                        child: Text('🏬 ${o['outlet_name']} (${o['outlet_code']})', style: const TextStyle(fontSize: 13)),
+                      );
+                    }).toList(),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedDashboardOutletId = val;
+                    });
+                    _loadDashboard();
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleDirectOutletLogin(Map<String, dynamic> targetOutlet) async {
+    final outletName = targetOutlet['outlet_name'] ?? 'Outlet';
+    final outletCode = targetOutlet['outlet_code'] ?? '';
+    final targetId = targetOutlet['id'];
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.swap_horizontal_circle, color: Colors.blue),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Direct Switch to $outletName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+          ],
+        ),
+        content: Text(
+          'Login directly to $outletName ($outletCode) without entering user ID and password?',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.blue),
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.login_outlined),
+            label: const Text('Direct Login'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logging in directly to $outletName ($outletCode)...')),
+        );
+      }
+
+      await AuthService.switchOutlet(targetId);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Switched to $outletName ($outletCode) successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FutureBuilder<Widget>(
+            future: HomeRouteHelper.resolve(),
+            builder: (context, snapshot) =>
+                snapshot.data ??
+                const Scaffold(
+                    body: Center(child: CircularProgressIndicator())),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to switch outlet: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildLinkedOutletsDirectoryCard() {
+    final outlets = (_dashboardHierarchyData?['all_outlets'] as List?) ?? [];
+    if (outlets.length <= 1) return const SizedBox.shrink();
+    final currentOutlet = _dashboardHierarchyData?['current_outlet'];
+    final currentOutletId = currentOutlet?['id'];
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.storefront_outlined, color: Colors.blue),
+                const SizedBox(width: 10),
+                const Text(
+                  'Linked Outlets Contact & Direct Login',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${outlets.length} Outlets Linked',
+                    style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: outlets.map<Widget>((o) {
+                final isMaster = o['is_master'] == true ||
+                    o['is_master'] == 1 ||
+                    o['is_master'] == '1' ||
+                    (o['outlet_role']?.toString().toUpperCase() == 'MASTER') ||
+                    o['parent_outlet_id'] == null;
+                final isCurrent = currentOutletId != null && o['id'] == currentOutletId;
+                final phone = o['contact_phone'] ?? '';
+                final email = o['contact_email'] ?? '';
+
+                return Container(
+                  width: 280,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isCurrent ? Colors.blue.withOpacity(0.04) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: isCurrent ? Colors.blue.withOpacity(0.3) : Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: isMaster ? Colors.purple.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+                            child: Icon(
+                              isMaster ? Icons.star : Icons.store,
+                              size: 16,
+                              color: isMaster ? Colors.purple : Colors.blue,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              o['outlet_name'] ?? 'Outlet',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isMaster ? Colors.purple.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              isMaster ? 'MASTER' : 'BRANCH',
+                              style: TextStyle(
+                                color: isMaster ? Colors.purple : Colors.green,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 9,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Code: ${o['outlet_code']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      if (phone.toString().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(Icons.phone, size: 12, color: Colors.blueGrey),
+                            const SizedBox(width: 4),
+                            Text('$phone', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                      ],
+                      if (email.toString().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(Icons.email, size: 12, color: Colors.blueGrey),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                '$email',
+                                style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      if (isCurrent)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.check_circle, size: 14, color: Colors.green),
+                              SizedBox(width: 6),
+                              Text('Active Session', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 11)),
+                            ],
+                          ),
+                        )
+                      else
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.tonalIcon(
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              backgroundColor: Colors.blue.withOpacity(0.1),
+                              foregroundColor: Colors.blue,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            onPressed: () => _handleDirectOutletLogin(o),
+                            icon: const Icon(Icons.login_outlined, size: 14),
+                            label: const Text('⚡ Direct Login', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -938,7 +1262,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     try {
       _checkNotifications();
       Future.delayed(const Duration(seconds: 1));
-      final data = await dashboardCtrl.load();
+      final data = await dashboardCtrl.load(
+        outletId: _selectedDashboardOutletId != null ? _selectedDashboardOutletId.toString() : 'ALL',
+      );
 
       int safeInt(dynamic value) {
         if (value is int) return value;
@@ -1413,6 +1739,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                       },
                     ),
                     _buildBackupStatusBanner(),
+                    _buildDashboardOutletScopeSelector(),
+                    _buildLinkedOutletsDirectoryCard(),
                     if (_hasPendingDraw) ...[
                       _buildLuckyDrawPendingBanner(),
                       const SizedBox(height: 12),
@@ -2565,6 +2893,24 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
       {
         'category': 'Operations',
+        'icon': Icons.local_shipping,
+        'label': 'Inter-Outlet Stock Dispatch',
+        'subLabel': 'Dispatch stock from current outlet to a child outlet',
+        'permission': 'STOCK_TRANSFER',
+        'keywords': ['inter outlet stock dispatch', 'dispatch to child outlet', 'outlet transfer dispatch', 'stock dispatch', 'outlet dispatch'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockDispatchScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.call_received,
+        'label': 'Receive Stock at Child Outlet',
+        'subLabel': 'Confirm receipt and credit stock at destination outlet',
+        'permission': 'STOCK_TRANSFER',
+        'keywords': ['receive stock child outlet', 'receive outlet stock', 'credit child outlet stock', 'inbound outlet transfer', 'receive dispatch'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockReceiveScreen())),
+      },
+      {
+        'category': 'Operations',
         'icon': Icons.build,
         'label': 'Product Assembly',
         'permission': 'PRODUCT_ASSEMBLY',
@@ -2706,6 +3052,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'Outlet Detail Modification',
         'permission': 'PROPERTY_INFORMATION',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OutletDetailModificationScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.account_tree_rounded,
+        'label': 'Master & Child Outlets Setup',
+        'permission': 'PROPERTY_INFORMATION',
+        'keywords': ['master child outlet', 'link outlet', 'create child outlet', 'make child outlet', 'outlet hierarchy', 'branch setup'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OutletHierarchyLinkingScreen())),
       },
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
@@ -2912,6 +3266,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'Stock Transfer Report',
         'permission': 'STOCK_TRANSFER_REPORT',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockTransferReportScreen())),
+      },
+      {
+        'category': 'Reports',
+        'icon': Icons.analytics,
+        'label': 'Stock Transfer Progress Dashboard',
+        'subLabel': 'Overall progress for all outlets or individual outlet view',
+        'permission': 'STOCK_TRANSFER_REPORT',
+        'keywords': ['stock transfer progress', 'inter outlet progress', 'overall outlet progress', 'individual outlet progress', 'transfer tracking'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransferProgressDashboardScreen())),
       },
       if (_showRetailSalesReportSection) ...[
         {

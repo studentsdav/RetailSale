@@ -40,11 +40,14 @@ exports.createBankAccount = async (req, res) => {
     }
 };
 
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
+
 exports.getBankAccounts = async (req, res) => {
     try {
-        const outlet_id = req.user.outlet_id;
+        const reqOutlet = req.query.outlet_id;
+        const scope = await resolveOutletScope(req, reqOutlet);
         const includeInactive = req.query.include_inactive === 'true';
-        const where = { outlet_id };
+        const where = { ...scope.outletWhere };
         if (!includeInactive) {
             where.is_active = true;
         }

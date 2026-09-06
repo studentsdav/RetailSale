@@ -60,6 +60,39 @@ class AuthService {
     }
   }
 
+  static Future<bool> switchOutlet(dynamic targetOutletId) async {
+    try {
+      final res = await ApiClient.post(
+        '/api/auth/switch-outlet',
+        {'target_outlet_id': targetOutletId},
+      );
+
+      if (res == null || res['success'] != true) {
+        throw Exception(res?['message'] ?? 'Failed to switch outlet');
+      }
+
+      final token = res['token'];
+      final user = res['user'] ?? {};
+      final role = user['role'] ?? '';
+      final permissions = List<String>.from(user['permissions'] ?? <String>[]);
+
+      PermissionService.init(
+        role: role,
+        permissions: permissions,
+      );
+
+      await TokenStorage.save(token);
+      await TokenStorage.saveRole(role);
+      await TokenStorage.savePermissions(permissions);
+      await TokenStorage.saveUser(user);
+      await TokenStorage.saveLoginTime();
+
+      return true;
+    } catch (e) {
+      throw Exception(e.toString().replaceAll('Exception:', '').trim());
+    }
+  }
+
   static Future<void> logout() async {
     await TokenStorage.clear();
   }

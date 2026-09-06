@@ -8,6 +8,7 @@ import '../../models/reports/sales_report_model.dart';
 
 class RestaurantAnalyticsReportsController extends ChangeNotifier {
   bool loading = false;
+  int? outletId;
 
   DateTime fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 30));
   DateTime toDate = DateTimeService.instance.nowInTimeZone;
@@ -25,8 +26,17 @@ class RestaurantAnalyticsReportsController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      String outletParam = '';
+      if (outletId != null) {
+        if (outletId == -1) {
+          outletParam = '&outlet_id=ALL';
+        } else {
+          outletParam = '&outlet_id=$outletId';
+        }
+      }
       final query = '?from_date=${DateFormat("yyyy-MM-dd").format(fromDate)}'
           '&to_date=${DateFormat("yyyy-MM-dd").format(toDate)}'
+          '$outletParam'
           '${search != null && search!.trim().isNotEmpty ? "&search=${Uri.encodeComponent(search!.trim())}" : ""}';
 
       final res = await ApiClient.get('${ApiEndpoints.salesReport}$query');

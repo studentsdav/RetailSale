@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/restaurant/restaurant_analytics_reports_controller.dart';
+import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class RestaurantAnalyticsReportsScreen extends StatefulWidget {
@@ -23,6 +24,9 @@ class _RestaurantAnalyticsReportsScreenState
     extends State<RestaurantAnalyticsReportsScreen> {
   final RestaurantAnalyticsReportsController _controller =
       RestaurantAnalyticsReportsController();
+  final StockTransferController _transferCtrl = StockTransferController();
+  Map<String, dynamic>? _hierarchyData;
+  int? _selectedOutletId;
 
   final TextEditingController _fromCtrl = TextEditingController();
   final TextEditingController _toCtrl = TextEditingController();
@@ -55,6 +59,7 @@ class _RestaurantAnalyticsReportsScreenState
   void initState() {
     super.initState();
     _syncDates();
+    _loadOutletHierarchy();
     _loadData();
   }
 
@@ -71,8 +76,72 @@ class _RestaurantAnalyticsReportsScreenState
     _toCtrl.text = DateFormat('dd-MM-yyyy').format(_controller.toDate);
   }
 
+  Future<void> _loadOutletHierarchy() async {
+    final data = await _transferCtrl.fetchHierarchy();
+    if (mounted) {
+      setState(() {
+        _hierarchyData = data;
+        final currentOutletId = data?['current_outlet']?['id'];
+        if (_selectedOutletId == null && currentOutletId != null) {
+          _selectedOutletId = currentOutletId;
+          _controller.outletId = _selectedOutletId;
+        }
+      });
+    }
+  }
+
+  Widget _buildOutletScopeSelector() {
+    final outlets = (_hierarchyData?['all_outlets'] as List?) ?? [];
+    if (outlets.length <= 1) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.storefront, color: Colors.blue),
+            const SizedBox(width: 10),
+            const Text('Restaurant View Scope:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int?>(
+                  isExpanded: true,
+                  value: _selectedOutletId,
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: -1,
+                      child: Text('🌐 All Linked Outlets (Combined Restaurant Analytics)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    ...outlets.map<DropdownMenuItem<int?>>((o) {
+                      return DropdownMenuItem<int?>(
+                        value: o['id'],
+                        child: Text('🏬 ${o['outlet_name']} (${o['outlet_code']})', style: const TextStyle(fontSize: 13)),
+                      );
+                    }).toList(),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedOutletId = val;
+                    });
+                    _loadData();
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    _controller.outletId = _selectedOutletId;
     await _controller.load();
     if (mounted) {
       setState(() => _isLoading = false);
@@ -548,6 +617,7 @@ class _RestaurantAnalyticsReportsScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _buildOutletScopeSelector(),
                   // 1. Top Filters
                   Container(
                     padding: const EdgeInsets.all(16),
