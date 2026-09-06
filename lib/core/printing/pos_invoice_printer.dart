@@ -1611,37 +1611,15 @@ class PosInvoicePrinter {
   }
 
   static double _billRoundOff(SaleOrder order) {
-    if (order.roundOffAmount.abs() > 0.0009) {
+    if (order.roundOffAmount.abs() > 0.0009 && order.roundOffAmount.abs() <= 0.99) {
       return order.roundOffAmount;
     }
-    final appSubDiscount = _appSubscriptionDiscountAmount(order);
-    final hasSubscriptionItems = appSubDiscount > 0.0009 ||
-        order.paymentMode.trim().toUpperCase() == 'SUBSCRIPTION' ||
-        order.items.any((item) => item.isAdvanceFree);
-    if (hasSubscriptionItems) {
-      final nonTaxableBase = order.items
-          .where((item) => item.taxPercent <= 0 && !item.isAdvanceFree)
-          .fold<double>(0, (sum, item) => sum + (item.rate > 0 ? (item.qty * item.rate) : (item.qty * _displayRate(item))));
-      final itemBase = _adjustedItemTaxableTotal(order) + nonTaxableBase;
-      final chargeBase = order.chargeTotal;
-      final itemGroupedTaxes = _adjustedItemGroupedTaxes(order, _groupedTaxBreakup(order));
-      final chargeGroupedTaxes = _groupedChargeTaxBreakup(order);
-      final summaryTax = _taxAmountFromBreakup(itemGroupedTaxes, 'CGST') +
-          _taxAmountFromBreakup(itemGroupedTaxes, 'SGST') +
-          _taxAmountFromBreakup(itemGroupedTaxes, 'IGST') +
-          _taxAmountFromBreakup(chargeGroupedTaxes, 'CGST') +
-          _taxAmountFromBreakup(chargeGroupedTaxes, 'SGST') +
-          _taxAmountFromBreakup(chargeGroupedTaxes, 'IGST');
-      final displayNetPayable = _displayNetPayable(order);
-      final subAdj = _subscriptionAdjustmentAmount(order);
-      final diff = displayNetPayable - (itemBase + chargeBase + summaryTax - subAdj);
-      if (diff.abs() < 0.015) {
-        return 0.0;
-      }
-      return double.parse(diff.toStringAsFixed(2));
-    }
     final computedTotal = _displayNetPayable(order);
-    return double.parse((computedTotal - computedTotal.roundToDouble()).toStringAsFixed(2));
+    final diff = computedTotal - computedTotal.roundToDouble();
+    if (diff.abs() > 0.50) {
+      return 0.0;
+    }
+    return double.parse(diff.toStringAsFixed(2));
   }
 
   static pw.Widget _partyCard({
