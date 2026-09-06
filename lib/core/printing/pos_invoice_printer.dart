@@ -1616,7 +1616,10 @@ class PosInvoicePrinter {
         order.paymentMode.trim().toUpperCase() == 'SUBSCRIPTION' ||
         order.items.any((item) => item.isAdvanceFree);
     if (hasSubscriptionItems) {
-      final itemBase = _adjustedItemTaxableTotal(order);
+      final nonTaxableBase = order.items
+          .where((item) => item.taxPercent <= 0 && !item.isAdvanceFree)
+          .fold<double>(0, (sum, item) => sum + (item.rate > 0 ? (item.qty * item.rate) : (item.qty * _displayRate(item))));
+      final itemBase = _adjustedItemTaxableTotal(order) + nonTaxableBase;
       final chargeBase = order.chargeTotal;
       final itemGroupedTaxes = _adjustedItemGroupedTaxes(order, _groupedTaxBreakup(order));
       final chargeGroupedTaxes = _groupedChargeTaxBreakup(order);

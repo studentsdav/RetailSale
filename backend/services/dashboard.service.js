@@ -590,10 +590,10 @@ FROM item_stock;
 
     const headerTaxable = toNumber(sale.taxable_amount);
     let saleTaxableAmount = 0;
-    if (headerTaxable > 0) {
-      saleTaxableAmount = headerTaxable;
-    } else if (saleNetRevenue > 0) {
+    if (saleNetRevenue > 0) {
       saleTaxableAmount = Math.max(0, roundAmount(saleNetRevenue - saleGst));
+    } else if (headerTaxable > 0) {
+      saleTaxableAmount = headerTaxable;
     } else {
       const baseSaleTaxable = itemTaxableSum > 0 ? itemTaxableSum : 0;
       const rawTaxable = baseSaleTaxable > 0 ? roundAmount(baseSaleTaxable) : roundAmount(subscriptionTaxable);
