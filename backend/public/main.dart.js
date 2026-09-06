@@ -42359,8 +42359,8 @@ if(a.p3>0.0009||a.ok>0.0009||a.p1>0.0009||a.p2>0.0009||a.rx>0.0009)return!0
 if(!B.f.c7(A.dGU(a),new A.b1C()))s=B.f.c7(a.bd,new A.b1D())&&A.a_1(a)>0.0009
 else s=!0
 return s},
-dp0(a){var s,r,q,p,o,n,m,l,k,j,i,h,g=null,f=A.dGK(a)
-if(f>0.0009||B.h.n(a.cy).toUpperCase()==="SUBSCRIPTION"||B.f.c7(a.bd,new A.b0U())){s=a.bd
+dp0(a){var s,r,q,p,o,n,m,l,k,j,i,h,g,f=null
+if(A.dGK(a)>0.0009||B.h.n(a.cy).toUpperCase()==="SUBSCRIPTION"||B.f.c7(a.bd,new A.b0U())){s=a.bd
 r=new A.aa(s,new A.b0V(),A.K(s).i("aa<1>")).a5(0,0,new A.b0W())
 s=A.a_1(a)
 q=A.Il(a)
@@ -42371,12 +42371,14 @@ m=A.k0(q,"IGST")
 l=A.k0(p,"CGST")
 k=A.k0(p,"SGST")
 j=A.k0(p,"IGST")
-i=A.b1v(a,g,g,g)-(s+r+a.RG+(o+n+m+l+k+j)-f-A.dGL(a))
-if(Math.abs(i)<0.015)return 0
-return A.cN(B.e.l(i,2))}s=a.x2
+i=A.b1v(a,f,f,f)
+A.dGL(a)
+h=i-(s+r+a.RG+(o+n+m+l+k+j))
+if(Math.abs(h)<0.015)return 0
+return A.cN(B.e.l(h,2))}s=a.x2
 if(Math.abs(s)>0.0009)return s
-h=A.b1v(a,g,g,g)
-return A.cN(B.e.l(h-B.e.pB(h),2))},
+g=A.b1v(a,f,f,f)
+return A.cN(B.e.l(g-B.e.pB(g),2))},
 dGV(a2,a3,a4){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d=null,c=" (Incl.)",b=new A.hr(B.n2),a=a3.D,a0=!1,a1=!1
 if(a!=null&&a.length!==0)for(s=a.length,r=a2.a,q=a2.c,p=a2.b,o=a3.ae==="EXCHANGE",n=0;n<a.length;a.length===s||(0,A.V)(a),++n){m=a[n]
 l=J.z(m)

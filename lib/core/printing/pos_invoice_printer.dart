@@ -1631,7 +1631,7 @@ class PosInvoicePrinter {
           _taxAmountFromBreakup(chargeGroupedTaxes, 'IGST');
       final displayNetPayable = _displayNetPayable(order);
       final subscriptionTax = _appSubscriptionTaxAdjustmentAmount(order);
-      final diff = displayNetPayable - (itemBase + chargeBase + summaryTax - appSubDiscount - subscriptionTax);
+      final diff = displayNetPayable - (itemBase + chargeBase + summaryTax);
       if (diff.abs() < 0.015) {
         return 0.0;
       }
