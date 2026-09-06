@@ -12,6 +12,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
   bool _loading = false;
   List<dynamic> _loans = [];
   List<dynamic> _assets = [];
+  List<dynamic> _bankAccounts = [];
 
   final _loanNameCtrl = TextEditingController();
   final _lenderCtrl = TextEditingController();
@@ -45,6 +46,12 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
           _assets = (res['data']['assets'] as List? ?? []);
         });
       }
+      final bankRes = await ApiClient.get('/api/accounting/banks');
+      if (bankRes['success'] == true && bankRes['data'] != null) {
+        setState(() {
+          _bankAccounts = (bankRes['data'] as List? ?? []);
+        });
+      }
     } catch (e) {
       debugPrint('Error fetching Loan & Asset data: $e');
     } finally {
@@ -59,93 +66,140 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
     _interestRateCtrl.text = '10.5';
     _tenureCtrl.text = '36';
     _emiAmountCtrl.clear();
+    String? selectedBankId;
 
     showDialog(
       context: context,
       builder: (dialogCtx) {
-        final messenger = ScaffoldMessenger.of(context);
-        final nav = Navigator.of(dialogCtx);
-        return AlertDialog(
-          title: const Text('Add Active Business Loan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0B5CAD))),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _loanNameCtrl,
-                  decoration: const InputDecoration(labelText: 'Loan Name (e.g. HDFC Business Loan)', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _lenderCtrl,
-                  decoration: const InputDecoration(labelText: 'Lender / Bank Name', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _principalCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Sanctioned Principal Amount (₹)', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                Row(
+        return StatefulBuilder(
+          builder: (context, setDlgState) {
+            final messenger = ScaffoldMessenger.of(context);
+            final nav = Navigator.of(dialogCtx);
+            return AlertDialog(
+              title: const Text('Add Active Business Loan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0B5CAD))),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _interestRateCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Interest Rate (% p.a.)', border: OutlineInputBorder()),
+                    if (_bankAccounts.isNotEmpty) ...[
+                      DropdownButtonFormField<String>(
+                        value: selectedBankId,
+                        decoration: const InputDecoration(
+                          labelText: 'Select Bank Account from Master',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.account_balance, color: Color(0xFF0B5CAD)),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('-- Custom / Other Lender --'),
+                          ),
+                          ..._bankAccounts.map((b) {
+                            final String bName = b['bank_name'] ?? 'Bank';
+                            final String aNum = b['account_number'] ?? '';
+                            return DropdownMenuItem<String>(
+                              value: b['id'].toString(),
+                              child: Text('$bName ${aNum.isNotEmpty ? "($aNum)" : ""}'),
+                            );
+                          }),
+                        ],
+                        onChanged: (val) {
+                          setDlgState(() {
+                            selectedBankId = val;
+                            if (val != null) {
+                              final matchedBank = _bankAccounts.firstWhere(
+                                (b) => b['id'].toString() == val,
+                                orElse: () => null,
+                              );
+                              if (matchedBank != null) {
+                                _lenderCtrl.text = matchedBank['bank_name'] ?? '';
+                                if (_loanNameCtrl.text.isEmpty || _loanNameCtrl.text.endsWith('Loan')) {
+                                  _loanNameCtrl.text = '${matchedBank['bank_name']} Loan';
+                                }
+                              }
+                            }
+                          });
+                        },
                       ),
+                      const SizedBox(height: 10),
+                    ],
+                    TextField(
+                      controller: _loanNameCtrl,
+                      decoration: const InputDecoration(labelText: 'Loan Name (e.g. HDFC Business Loan)', border: OutlineInputBorder()),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _tenureCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Tenure (Months)', border: OutlineInputBorder()),
-                      ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _lenderCtrl,
+                      decoration: const InputDecoration(labelText: 'Lender / Bank Name', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _principalCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Sanctioned Principal Amount (₹)', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _interestRateCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Interest Rate (% p.a.)', border: OutlineInputBorder()),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _tenureCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Tenure (Months)', border: OutlineInputBorder()),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _emiAmountCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Monthly EMI Amount (₹)', border: OutlineInputBorder()),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _emiAmountCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Monthly EMI Amount (₹)', border: OutlineInputBorder()),
+              ),
+              actions: [
+                TextButton(onPressed: () => nav.pop(), child: const Text('Cancel')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B5CAD)),
+                  onPressed: () async {
+                    final double p = double.tryParse(_principalCtrl.text) ?? 0.0;
+                    final double emi = double.tryParse(_emiAmountCtrl.text) ?? 0.0;
+                    if (_loanNameCtrl.text.isEmpty || p <= 0) return;
+
+                    try {
+                      final res = await ApiClient.post('/api/accounting/loans', {
+                        'loan_name': _loanNameCtrl.text,
+                        'lender_name': _lenderCtrl.text,
+                        'principal_amount': p,
+                        'interest_rate': double.tryParse(_interestRateCtrl.text) ?? 0.0,
+                        'tenure_months': int.tryParse(_tenureCtrl.text) ?? 12,
+                        'monthly_emi': emi,
+                        'remaining_principal': p,
+                      });
+                      nav.pop();
+                      if (res['success'] == true) {
+                        messenger.showSnackBar(const SnackBar(content: Text('Business Loan Added!'), backgroundColor: Colors.green));
+                        _fetchLoanAssetsData();
+                      }
+                    } catch (e) {
+                      debugPrint('Add Loan Error: $e');
+                    }
+                  },
+                  child: const Text('Save Loan', style: TextStyle(color: Colors.white)),
                 ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => nav.pop(), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B5CAD)),
-              onPressed: () async {
-                final double p = double.tryParse(_principalCtrl.text) ?? 0.0;
-                final double emi = double.tryParse(_emiAmountCtrl.text) ?? 0.0;
-                if (_loanNameCtrl.text.isEmpty || p <= 0) return;
-
-                try {
-                  final res = await ApiClient.post('/api/accounting/loans', {
-                    'loan_name': _loanNameCtrl.text,
-                    'lender_name': _lenderCtrl.text,
-                    'principal_amount': p,
-                    'interest_rate': double.tryParse(_interestRateCtrl.text) ?? 0.0,
-                    'tenure_months': int.tryParse(_tenureCtrl.text) ?? 12,
-                    'monthly_emi': emi,
-                    'remaining_principal': p,
-                  });
-                  nav.pop();
-                  if (res['success'] == true) {
-                    messenger.showSnackBar(const SnackBar(content: Text('Business Loan Added!'), backgroundColor: Colors.green));
-                    _fetchLoanAssetsData();
-                  }
-                } catch (e) {
-                  debugPrint('Add Loan Error: $e');
-                }
-              },
-              child: const Text('Save Loan', style: TextStyle(color: Colors.white)),
-            ),
-          ],
+            );
+          },
         );
       },
     );
@@ -229,11 +283,19 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
   }
 
   void _showPayEmiDialog(dynamic loan) {
-    _loanNameCtrl.text = loan != null ? (loan['loan_name'] ?? 'Business Loan') : '';
-    final double emiVal = loan != null ? (double.tryParse(loan['monthly_emi'].toString()) ?? 0.0) : 0.0;
-    _emiAmountCtrl.text = emiVal > 0 ? emiVal.toStringAsFixed(2) : '';
-    _payPrincipalCtrl.text = (emiVal * 0.75).toStringAsFixed(2);
-    _payInterestCtrl.text = (emiVal * 0.25).toStringAsFixed(2);
+    dynamic currentSelectedLoan = loan ?? (_loans.isNotEmpty ? _loans.first : null);
+    if (currentSelectedLoan != null) {
+      _loanNameCtrl.text = currentSelectedLoan['loan_name'] ?? 'Business Loan';
+      final double emiVal = double.tryParse(currentSelectedLoan['monthly_emi'].toString()) ?? 0.0;
+      _emiAmountCtrl.text = emiVal > 0 ? emiVal.toStringAsFixed(2) : '';
+      _payPrincipalCtrl.text = (emiVal * 0.75).toStringAsFixed(2);
+      _payInterestCtrl.text = (emiVal * 0.25).toStringAsFixed(2);
+    } else {
+      _loanNameCtrl.clear();
+      _emiAmountCtrl.clear();
+      _payPrincipalCtrl.clear();
+      _payInterestCtrl.clear();
+    }
 
     showDialog(
       context: context,
@@ -247,6 +309,40 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (_loans.isNotEmpty) ...[
+                    DropdownButtonFormField<int>(
+                      value: currentSelectedLoan != null ? currentSelectedLoan['id'] : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Loan Account from Master',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.credit_card, color: Color(0xFF0B5CAD)),
+                      ),
+                      items: _loans.map((l) {
+                        final String lName = l['loan_name'] ?? 'Loan';
+                        final String lender = l['lender_name'] ?? '';
+                        return DropdownMenuItem<int>(
+                          value: l['id'],
+                          child: Text('$lName ${lender.isNotEmpty ? "($lender)" : ""}'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          final matched = _loans.firstWhere((l) => l['id'] == val, orElse: () => null);
+                          if (matched != null) {
+                            setDlgState(() {
+                              currentSelectedLoan = matched;
+                              _loanNameCtrl.text = matched['loan_name'] ?? '';
+                              final double emiVal = double.tryParse(matched['monthly_emi'].toString()) ?? 0.0;
+                              _emiAmountCtrl.text = emiVal > 0 ? emiVal.toStringAsFixed(2) : '';
+                              _payPrincipalCtrl.text = (emiVal * 0.75).toStringAsFixed(2);
+                              _payInterestCtrl.text = (emiVal * 0.25).toStringAsFixed(2);
+                            });
+                          }
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   TextField(
                     controller: _loanNameCtrl,
                     decoration: const InputDecoration(labelText: 'Loan Account Name', border: OutlineInputBorder()),
@@ -288,9 +384,17 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                   DropdownButtonFormField<String>(
                     value: _paymentMode,
                     decoration: const InputDecoration(labelText: 'Payment Mode / Bank Account', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'BANK_TRANSFER', child: Text('Bank Transfer')),
-                      DropdownMenuItem(value: 'CASH', child: Text('Main Cash Drawer')),
+                    items: [
+                      const DropdownMenuItem(value: 'CASH', child: Text('Main Cash Drawer')),
+                      const DropdownMenuItem(value: 'BANK_TRANSFER', child: Text('Bank Transfer (General)')),
+                      ..._bankAccounts.map((b) {
+                        final String bName = b['bank_name'] ?? 'Bank';
+                        final String accNo = b['account_number'] ?? '';
+                        return DropdownMenuItem<String>(
+                          value: bName,
+                          child: Text('$bName ${accNo.isNotEmpty ? "($accNo)" : ""}'),
+                        );
+                      }),
                     ],
                     onChanged: (val) {
                       if (val != null) setDlgState(() => _paymentMode = val);
@@ -315,7 +419,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
 
                   try {
                     final res = await ApiClient.post('/api/accounting/loans/pay-emi', {
-                      if (loan != null && loan['id'] != null) 'loan_id': loan['id'],
+                      if (currentSelectedLoan != null && currentSelectedLoan['id'] != null) 'loan_id': currentSelectedLoan['id'],
                       'loan_name': _loanNameCtrl.text,
                       'total_emi_amount': total,
                       'principal_amount': prin,

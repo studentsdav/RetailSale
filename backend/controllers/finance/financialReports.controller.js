@@ -1,4 +1,5 @@
 const { Op, Sequelize } = require('sequelize');
+const { getOutletDateBounds } = require('../../utils/timezoneHelper');
 
 /**
  * Calculates stock valuation (Closing Stock) for an outlet
@@ -45,10 +46,11 @@ async function getClosingStockValuation(req, outlet_id) {
 }
 
 /**
- * Calculates completed sales revenue and itemized COGS for an outlet
+ * Calculates completed sales revenue and itemized COGS for an outlet (matching Sales Report and Dashboard logic)
  */
 async function getCompletedSalesMetrics(req, outlet_id, startDateStr, endDateStr) {
     try {
+        const outletTz = req.outletTimeZone || 'Asia/Kolkata';
         const salesWhere = {
             outlet_id,
             status: { [Op.in]: ['COMPLETED', 'RETURNED'] },
@@ -57,76 +59,151 @@ async function getCompletedSalesMetrics(req, outlet_id, startDateStr, endDateStr
         };
 
         if (startDateStr && endDateStr) {
-            salesWhere.sale_date = {
-                [Op.between]: [
-                    new Date(`${startDateStr}T00:00:00.000Z`),
-                    new Date(`${endDateStr}T23:59:59.999Z`)
-                ]
-            };
+            const { startDate, endDate } = getOutletDateBounds(startDateStr, endDateStr, outletTz);
+            if (startDate && endDate) {
+                salesWhere.sale_date = {
+                    [Op.between]: [startDate, endDate]
+                };
+            }
         }
 
-        const salesHeaderSummary = await req.propertyDb.models.sales_headers.findOne({
+        const sales = await req.propertyDb.models.sales_headers.findAll({
             where: salesWhere,
-            attributes: [
-                [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'total_net'],
-                [Sequelize.fn('SUM', Sequelize.col('total_tax')), 'total_tax'],
-                [Sequelize.fn('SUM', Sequelize.col('taxable_amount')), 'total_taxable'],
-                [Sequelize.fn('SUM', Sequelize.col('total_discount')), 'total_discount']
-            ],
-            raw: true
-        });
-
-        const salesItems = await req.propertyDb.models.sales_items.findAll({
             include: [
                 {
-                    model: req.propertyDb.models.sales_headers,
-                    as: 'sale',
-                    where: salesWhere,
-                    attributes: []
-                },
-                {
-                    model: req.propertyDb.models.item_master,
-                    as: 'item',
-                    attributes: ['rate', 'retail_sale_price']
+                    model: req.propertyDb.models.sales_items,
+                    as: 'items',
+                    include: [{
+                        model: req.propertyDb.models.item_master,
+                        as: 'item',
+                        attributes: ['rate', 'retail_sale_price', 'item_group', 'sub_category', 'brand', 'is_tax_inclusive']
+                    }]
                 }
-            ],
-            raw: true,
-            nest: true
+            ]
         });
 
+        let totalTaxableRevenue = 0;
+        let totalDiscounts = 0;
+        let totalOutputTax = 0;
         let itemizedCogs = 0;
-        let itemizedTaxableRevenue = 0;
-        for (const si of salesItems || []) {
-            const qty = Number(si.qty || 0);
-            const costRate = Number(si.item?.rate || 0);
-            itemizedCogs += qty * costRate;
+        let totalNetRevenue = 0;
 
-            const lineTaxable = Number(si.taxable_amount || 0);
-            const lineTax = Number(si.tax_amount || 0);
-            const lineNet = Number(si.net_amount || 0);
-            const taxable = lineTaxable > 0 ? lineTaxable : (lineNet > 0 ? Math.max(0, lineNet - lineTax) : Number(si.amount || 0));
-            itemizedTaxableRevenue += taxable;
+        for (const sale of sales || []) {
+            const items = sale.items || [];
+            const subItems = items.filter(i => i.is_advance_free);
+            const subscriptionTax = subItems.reduce((sum, i) => sum + Number(i.tax_amount || 0), 0);
+            const subscriptionTaxable = subItems.reduce((sum, i) => sum + Number(i.taxable_amount || 0), 0);
+            const subscriptionNet = subItems.reduce((sum, i) => {
+                const dbNet = Number(i.net_amount || 0);
+                if (dbNet > 0) return sum + dbNet;
+                const dbLineTotal = Number(i.line_total || 0);
+                if (dbLineTotal > 0) return sum + dbLineTotal;
+                const isInclusive = i.tax_type === 'GST_INCLUSIVE' || i.is_tax_inclusive === true || i.isTaxInclusive === true;
+                if (isInclusive) {
+                    const amt = Number(i.amount || 0);
+                    if (amt > 0) return sum + amt;
+                    const taxable = Number(i.taxable_amount || 0);
+                    const taxAmt = Number(i.tax_amount || 0);
+                    if (taxable > 0 && taxAmt > 0) return sum + taxable + taxAmt;
+                    return sum + taxable;
+                } else {
+                    const taxPct = Number(i.tax_percent || i.taxPercent || 0);
+                    const taxAmt = Number(i.tax_amount || 0) > 0 ? Number(i.tax_amount || 0) : (Number(i.taxable_amount || 0) * (taxPct / 100));
+                    const calcNet = Number(i.taxable_amount || 0) + taxAmt;
+                    return sum + (calcNet > 0 ? calcNet : (Number(i.amount || 0) * (1 + taxPct / 100)));
+                }
+            }, 0);
+
+            const isFullSubscriptionSale = sale.payment_mode === 'SUBSCRIPTION';
+            const saleNetRevenue = Number(sale.net_amount || 0) + subscriptionNet;
+
+            const saleBreakup = Array.isArray(sale.tax_breakup) ? sale.tax_breakup : [];
+            let saleGst = 0;
+            for (const tax of saleBreakup) {
+                const code = String(tax.code || tax.label || '').toUpperCase();
+                const amount = Number(tax.tax_amount || 0);
+                if (code.includes('CGST') || code.includes('SGST') || code.includes('IGST') || code.includes('GST')) {
+                    saleGst += amount;
+                }
+            }
+            if (saleGst === 0 && Number(sale.total_tax || 0) > 0) {
+                saleGst = Number(sale.total_tax || 0);
+            }
+            if (saleGst === 0 && subscriptionTax > 0) {
+                saleGst = subscriptionTax;
+            }
+
+            let saleCogs = 0;
+            let itemTaxableSum = 0;
+            let saleItemDiscountSum = 0;
+
+            for (const item of items) {
+                const qty = Number(item.qty || 0);
+                const lineAmount = Number(item.amount || 0);
+                const dbLineNet = Number(item.net_amount || 0);
+                const lineTaxableRaw = Number(item.taxable_amount || 0);
+                const lineTax = Number(item.tax_amount || 0);
+
+                let lineNet = dbLineNet;
+                if (item.is_advance_free) {
+                    const calculatedItemNet = lineTaxableRaw + lineTax;
+                    lineNet = dbLineNet > 0 ? dbLineNet : (calculatedItemNet > 0 ? calculatedItemNet : lineAmount);
+                } else {
+                    const isTaxInclusive = !!(item.item?.is_tax_inclusive);
+                    let effectiveDiscount = 0;
+                    if (isTaxInclusive) {
+                        effectiveDiscount = Math.max(lineAmount - dbLineNet, 0);
+                    } else {
+                        const targetNetWithTax = dbLineNet > lineTaxableRaw ? dbLineNet : (lineTaxableRaw + lineTax);
+                        effectiveDiscount = Math.max(lineAmount + lineTax - targetNetWithTax, 0);
+                    }
+                    saleItemDiscountSum += effectiveDiscount;
+                }
+
+                let lineTaxable = lineTaxableRaw;
+                if (lineTaxable <= 0) {
+                    lineTaxable = lineNet > 0 ? Math.max(0, lineNet - lineTax) : lineAmount;
+                }
+                itemTaxableSum += lineTaxable;
+
+                const itemCost = Number(item.item?.rate || 0) * qty;
+                saleCogs += itemCost;
+            }
+
+            const headerTaxable = Number(sale.taxable_amount || 0);
+            let saleTaxableAmount = 0;
+            if (saleNetRevenue > 0) {
+                saleTaxableAmount = Math.max(0, Number((saleNetRevenue - saleGst).toFixed(2)));
+            } else if (headerTaxable > 0) {
+                saleTaxableAmount = headerTaxable;
+            } else {
+                const baseSaleTaxable = itemTaxableSum > 0 ? itemTaxableSum : 0;
+                const rawTaxable = baseSaleTaxable > 0 ? Number(baseSaleTaxable.toFixed(2)) : Number(subscriptionTaxable.toFixed(2));
+                const headerDisc = isFullSubscriptionSale ? 0 : Math.max(Number(sale.total_discount || 0) - subscriptionTaxable, 0);
+                saleTaxableAmount = Math.max(0, Number((rawTaxable - headerDisc).toFixed(2)));
+            }
+
+            const headerDiscount = Number(sale.total_discount || 0);
+            const saleTotalDiscount = isFullSubscriptionSale ? 0 : (headerDiscount > 0 ? headerDiscount : Number(saleItemDiscountSum.toFixed(2)));
+
+            totalNetRevenue += saleNetRevenue;
+            totalTaxableRevenue += saleTaxableAmount;
+            totalDiscounts += saleTotalDiscount;
+            totalOutputTax += saleGst;
+            itemizedCogs += saleCogs;
         }
 
-        const rawNet = Number(salesHeaderSummary?.total_net || 0);
-        const rawTax = Number(salesHeaderSummary?.total_tax || 0);
-        const rawTaxable = Number(salesHeaderSummary?.total_taxable || 0);
-        const salesDiscounts = Number(salesHeaderSummary?.total_discount || 0);
-
-        const netSalesRevenue = itemizedTaxableRevenue > 0
-            ? Number(itemizedTaxableRevenue.toFixed(2))
-            : (rawTaxable > 0 ? Number(rawTaxable.toFixed(2)) : Number(Math.max(0, rawNet - rawTax - salesDiscounts).toFixed(2)));
-
+        const netSalesRevenue = Number(totalTaxableRevenue.toFixed(2));
+        const salesDiscounts = Number(totalDiscounts.toFixed(2));
         const grossSalesRevenue = Number((netSalesRevenue + salesDiscounts).toFixed(2));
-        const totalOutputTax = Number(rawTax.toFixed(2));
 
         return {
             netSalesRevenue,
             grossSalesRevenue,
             salesDiscounts,
-            totalOutputTax,
+            totalOutputTax: Number(totalOutputTax.toFixed(2)),
             itemizedCogs: Number(itemizedCogs.toFixed(2)),
-            rawSalesNet: rawNet
+            rawSalesNet: Number(totalNetRevenue.toFixed(2))
         };
     } catch (err) {
         console.error('Error in getCompletedSalesMetrics:', err);
@@ -285,24 +362,6 @@ async function getIndirectIncomeTotal(req, outlet_id, startDateStr, endDateStr) 
     try {
         const cashInc = await req.propertyDb.models.cash_ledger.findOne({
             where: { outlet_id, transaction_type: 'INCOME', ...dateWhere },
-            attributes: [[Sequelize.fn('SUM', Sequelize.col('amount_in')), 'total_inc']],
-            raw: true
-        });
-        totalIncome += Number(cashInc?.total_inc || 0);
-    } catch (_) {}
-
-    return Number(totalIncome.toFixed(2));
-}
-                attributes: [[Sequelize.fn('SUM', Sequelize.col('amount')), 'total_inc']],
-                raw: true
-            });
-            totalIncome += Number(inc?.total_inc || 0);
-        } catch (_) {}
-    }
-
-    try {
-        const cashInc = await req.propertyDb.models.cash_ledger.findOne({
-            where: { outlet_id, transaction_type: 'INCOME' },
             attributes: [[Sequelize.fn('SUM', Sequelize.col('amount_in')), 'total_inc']],
             raw: true
         });
@@ -700,10 +759,10 @@ exports.getProfitAndLoss = async (req, res) => {
         // Purchases & GRN
         const grnWhere = { outlet_id };
         if (startDateStr && endDateStr) {
-            grnWhere.received_date = {
+            grnWhere.receipt_date = {
                 [Op.between]: [
-                    new Date(`${startDateStr}T00:00:00.000Z`),
-                    new Date(`${endDateStr}T23:59:59.999Z`)
+                    startDateStr,
+                    endDateStr
                 ]
             };
         }
