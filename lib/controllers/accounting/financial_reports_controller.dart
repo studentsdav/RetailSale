@@ -26,11 +26,19 @@ class FinancialReportsController extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchProfitLoss() async {
+  Future<void> fetchProfitLoss({String? startDate, String? endDate, String? period}) async {
     loading = true;
     notifyListeners();
     try {
-      final res = await ApiClient.get(ApiEndpoints.accountingProfitLoss);
+      String url = ApiEndpoints.accountingProfitLoss;
+      List<String> params = [];
+      if (startDate != null && startDate.isNotEmpty) params.add('startDate=$startDate');
+      if (endDate != null && endDate.isNotEmpty) params.add('endDate=$endDate');
+      if (period != null && period.isNotEmpty) params.add('period=$period');
+      if (params.isNotEmpty) {
+        url += '?${params.join('&')}';
+      }
+      final res = await ApiClient.get(url);
       if (res['success'] == true) {
         profitLossData = res['data'] ?? {};
       }

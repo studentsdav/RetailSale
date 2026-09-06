@@ -47,10 +47,26 @@ async function getClosingStockValuation(req, outlet_id) {
 /**
  * Calculates completed sales revenue and itemized COGS for an outlet
  */
-async function getCompletedSalesMetrics(req, outlet_id) {
+async function getCompletedSalesMetrics(req, outlet_id, startDateStr, endDateStr) {
     try {
+        const salesWhere = {
+            outlet_id,
+            status: { [Op.in]: ['COMPLETED', 'RETURNED'] },
+            is_deleted: false,
+            is_latest: true
+        };
+
+        if (startDateStr && endDateStr) {
+            salesWhere.sale_date = {
+                [Op.between]: [
+                    new Date(`${startDateStr}T00:00:00.000Z`),
+                    new Date(`${endDateStr}T23:59:59.999Z`)
+                ]
+            };
+        }
+
         const salesHeaderSummary = await req.propertyDb.models.sales_headers.findOne({
-            where: { outlet_id, status: 'COMPLETED', is_deleted: false },
+            where: salesWhere,
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('net_amount')), 'total_net'],
                 [Sequelize.fn('SUM', Sequelize.col('total_tax')), 'total_tax'],
@@ -65,7 +81,7 @@ async function getCompletedSalesMetrics(req, outlet_id) {
                 {
                     model: req.propertyDb.models.sales_headers,
                     as: 'sale',
-                    where: { outlet_id, status: 'COMPLETED', is_deleted: false, is_latest: true },
+                    where: salesWhere,
                     attributes: []
                 },
                 {
@@ -109,7 +125,7 @@ async function getCompletedSalesMetrics(req, outlet_id) {
             grossSalesRevenue,
             salesDiscounts,
             totalOutputTax,
-            itemizedCogs,
+            itemizedCogs: Number(itemizedCogs.toFixed(2)),
             rawSalesNet: rawNet
         };
     } catch (err) {
@@ -128,16 +144,26 @@ async function getCompletedSalesMetrics(req, outlet_id) {
 /**
  * Aggregates all operating expenses from expenses table, expense_entries table, and cash_ledger
  */
-async function getExpensesSummaryAndCategories(req, outlet_id) {
+async function getExpensesSummaryAndCategories(req, outlet_id, startDateStr, endDateStr) {
     let totalExpenses = 0;
     const categoryMap = new Map();
     const processedIds = new Set();
+
+    const dateWhere = {};
+    if (startDateStr && endDateStr) {
+        dateWhere.txn_date = {
+            [Op.between]: [
+                new Date(`${startDateStr}T00:00:00.000Z`),
+                new Date(`${endDateStr}T23:59:59.999Z`)
+            ]
+        };
+    }
 
     // 1. Query expenses table (Modern Expense Master & Quick Entries)
     if (req.propertyDb.models.expenses) {
         try {
             const expList = await req.propertyDb.models.expenses.findAll({
-                where: { outlet_id },
+                where: { outlet_id, ...dateWhere },
                 include: [{
                     model: req.propertyDb.models.expense_categories,
                     as: 'category',
@@ -168,7 +194,7 @@ async function getExpensesSummaryAndCategories(req, outlet_id) {
     if (req.propertyDb.models.expense_entries) {
         try {
             const legacyList = await req.propertyDb.models.expense_entries.findAll({
-                where: { outlet_id },
+                where: { outlet_id, ...dateWhere },
                 raw: true
             });
 
@@ -195,7 +221,8 @@ async function getExpensesSummaryAndCategories(req, outlet_id) {
             const cashExpList = await req.propertyDb.models.cash_ledger.findAll({
                 where: {
                     outlet_id,
-                    transaction_type: 'EXPENSE'
+                    transaction_type: 'EXPENSE',
+                    ...dateWhere
                 },
                 raw: true
             });
@@ -232,12 +259,40 @@ async function getExpensesSummaryAndCategories(req, outlet_id) {
 /**
  * Aggregates Direct / Indirect Income entries
  */
-async function getIndirectIncomeTotal(req, outlet_id) {
+async function getIndirectIncomeTotal(req, outlet_id, startDateStr, endDateStr) {
     let totalIncome = 0;
+    const dateWhere = {};
+    if (startDateStr && endDateStr) {
+        dateWhere.txn_date = {
+            [Op.between]: [
+                new Date(`${startDateStr}T00:00:00.000Z`),
+                new Date(`${endDateStr}T23:59:59.999Z`)
+            ]
+        };
+    }
+
     if (req.propertyDb.models.income_entries) {
         try {
             const inc = await req.propertyDb.models.income_entries.findOne({
-                where: { outlet_id },
+                where: { outlet_id, ...dateWhere },
+                attributes: [[Sequelize.fn('SUM', Sequelize.col('amount')), 'total_inc']],
+                raw: true
+            });
+            totalIncome += Number(inc?.total_inc || 0);
+        } catch (_) {}
+    }
+
+    try {
+        const cashInc = await req.propertyDb.models.cash_ledger.findOne({
+            where: { outlet_id, transaction_type: 'INCOME', ...dateWhere },
+            attributes: [[Sequelize.fn('SUM', Sequelize.col('amount_in')), 'total_inc']],
+            raw: true
+        });
+        totalIncome += Number(cashInc?.total_inc || 0);
+    } catch (_) {}
+
+    return Number(totalIncome.toFixed(2));
+}
                 attributes: [[Sequelize.fn('SUM', Sequelize.col('amount')), 'total_inc']],
                 raw: true
             });
@@ -597,14 +652,63 @@ exports.getTrialBalance = async (req, res) => {
 exports.getProfitAndLoss = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
+        const { startDate, endDate, period } = req.query;
 
-        // Sales Revenue & COGS Metrics
-        const { netSalesRevenue, grossSalesRevenue, salesDiscounts, itemizedCogs } = await getCompletedSalesMetrics(req, outlet_id);
-        const salesRevenue = grossSalesRevenue;
+        let startDateStr = startDate || null;
+        let endDateStr = endDate || null;
 
-        // Purchases (COGS)
+        if (!startDateStr && !endDateStr && period) {
+            const timeZone = 'Asia/Kolkata';
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const todayStr = `${year}-${month}-${day}`;
+
+            const periodKey = String(period).toLowerCase();
+            if (periodKey === 'today') {
+                startDateStr = todayStr;
+                endDateStr = todayStr;
+            } else if (periodKey === 'yesterday') {
+                const yest = new Date(now.getTime() - 86400000);
+                const yY = yest.getFullYear();
+                const yM = String(yest.getMonth() + 1).padStart(2, '0');
+                const yD = String(yest.getDate()).padStart(2, '0');
+                startDateStr = `${yY}-${yM}-${yD}`;
+                endDateStr = startDateStr;
+            } else if (periodKey === 'this_week') {
+                const dayOfWeek = now.getDay();
+                const diff = (dayOfWeek + 6) % 7;
+                const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
+                const wY = startWeek.getFullYear();
+                const wM = String(startWeek.getMonth() + 1).padStart(2, '0');
+                const wD = String(startWeek.getDate()).padStart(2, '0');
+                startDateStr = `${wY}-${wM}-${wD}`;
+                endDateStr = todayStr;
+            } else if (periodKey === 'this_month') {
+                startDateStr = `${year}-${month}-01`;
+                endDateStr = todayStr;
+            } else if (periodKey === 'this_year') {
+                startDateStr = `${year}-01-01`;
+                endDateStr = todayStr;
+            }
+        }
+
+        // Sales Revenue & COGS Metrics (matching Dashboard)
+        const { netSalesRevenue, grossSalesRevenue, salesDiscounts, itemizedCogs } = await getCompletedSalesMetrics(req, outlet_id, startDateStr, endDateStr);
+
+        // Purchases & GRN
+        const grnWhere = { outlet_id };
+        if (startDateStr && endDateStr) {
+            grnWhere.received_date = {
+                [Op.between]: [
+                    new Date(`${startDateStr}T00:00:00.000Z`),
+                    new Date(`${endDateStr}T23:59:59.999Z`)
+                ]
+            };
+        }
         const grn = await req.propertyDb.models.goods_receipts.findOne({
-            where: { outlet_id },
+            where: grnWhere,
             attributes: [
                 [Sequelize.fn('SUM', Sequelize.col('total_amount')), 'total_grn'],
                 [Sequelize.fn('SUM', Sequelize.col('total_gst')), 'total_tax'],
@@ -619,14 +723,22 @@ exports.getProfitAndLoss = async (req, res) => {
         const openingStock = 0.00;
         const directFreight = 0.00;
 
-        // Closing Stock Valuation
+        // COGS (Itemized COGS = Sold Quantity x Item Purchase Cost Rate, matching Dashboard formula)
+        const cogs = itemizedCogs;
         const closingStockReal = await getClosingStockValuation(req, outlet_id);
-        const cogs = itemizedCogs > 0 ? Number(itemizedCogs.toFixed(2)) : Number(Math.max(0, openingStock + purchasesNet + directFreight - closingStockReal).toFixed(2));
-        const closingStock = itemizedCogs > 0 ? Number(Math.max(0, openingStock + purchasesNet + directFreight - cogs).toFixed(2)) : closingStockReal;
-        const grossProfit = Number((netSalesRevenue - cogs).toFixed(2));
+        const closingStock = itemizedCogs > 0
+            ? Number(Math.max(0, openingStock + purchasesNet + directFreight - cogs).toFixed(2))
+            : closingStockReal;
+
+        // Dashboard Profit & Loss Formulas:
+        // Gross Profit = Net Sales Revenue (Excl. Tax) - COGS (when Net Revenue >= COGS)
+        // Gross Loss = COGS - Net Sales Revenue (Excl. Tax) (when COGS > Net Revenue)
+        const grossMarginValue = Number((netSalesRevenue - cogs).toFixed(2));
+        const grossProfit = grossMarginValue >= 0 ? grossMarginValue : 0;
+        const grossLoss = grossMarginValue < 0 ? Math.abs(grossMarginValue) : 0;
 
         // Operating Expenses Breakdown
-        const { totalExpenses, categoryMap } = await getExpensesSummaryAndCategories(req, outlet_id);
+        const { totalExpenses, categoryMap } = await getExpensesSummaryAndCategories(req, outlet_id, startDateStr, endDateStr);
 
         const defaultCategories = [
             'Shop Rent / Office Expenses',
@@ -649,31 +761,53 @@ exports.getProfitAndLoss = async (req, res) => {
             }
         });
 
-        const indirectIncome = await getIndirectIncomeTotal(req, outlet_id);
+        const indirectIncome = await getIndirectIncomeTotal(req, outlet_id, startDateStr, endDateStr);
         const totalOperatingIncome = Number((grossProfit + indirectIncome).toFixed(2));
-        const netProfit = Number((totalOperatingIncome - totalExpenses).toFixed(2));
+
+        // Net Profit = Net Revenue (Excl. Tax) - COGS - Operating Expenses + Indirect Income
+        // (Net Profit = Gross Profit - Operating Expenses + Indirect Income)
+        const netProfitMarginValue = Number((grossMarginValue + indirectIncome - totalExpenses).toFixed(2));
+        const netProfit = netProfitMarginValue >= 0 ? netProfitMarginValue : 0;
+        const netLoss = netProfitMarginValue < 0 ? Math.abs(netProfitMarginValue) : 0;
 
         res.json({
             success: true,
             data: {
                 tradingAccount: {
-                    totalRevenue: Number(salesRevenue.toFixed(2)),
+                    totalRevenue: Number(grossSalesRevenue.toFixed(2)),
                     salesDiscounts: Number(salesDiscounts.toFixed(2)),
-                    netSalesRevenue,
+                    netSalesRevenue: Number(netSalesRevenue.toFixed(2)),
                     openingStock,
                     purchases: Number(purchasesNet.toFixed(2)),
                     directFreight,
                     closingStock,
                     costOfGoodsSold: cogs,
-                    grossProfit
+                    grossProfit,
+                    grossLoss,
+                    isGrossProfit: grossMarginValue >= 0
                 },
                 profitAndLossAccount: {
                     grossProfit,
+                    grossLoss,
                     indirectIncome,
                     totalOperatingIncome,
                     operatingExpenses: totalExpenses,
                     expenseBreakdown,
-                    netProfit
+                    netProfit,
+                    netLoss,
+                    isNetProfit: netProfitMarginValue >= 0
+                },
+                formulaMetrics: {
+                    grossSalesRevenue: Number(grossSalesRevenue.toFixed(2)),
+                    salesDiscounts: Number(salesDiscounts.toFixed(2)),
+                    netSalesRevenue: Number(netSalesRevenue.toFixed(2)),
+                    cogs: Number(cogs.toFixed(2)),
+                    operatingExpenses: Number(totalExpenses.toFixed(2)),
+                    indirectIncome: Number(indirectIncome.toFixed(2)),
+                    grossProfit: Number(grossProfit.toFixed(2)),
+                    grossLoss: Number(grossLoss.toFixed(2)),
+                    netProfit: Number(netProfit.toFixed(2)),
+                    netLoss: Number(netLoss.toFixed(2))
                 }
             }
         });
