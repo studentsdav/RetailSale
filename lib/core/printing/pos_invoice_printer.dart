@@ -1611,6 +1611,9 @@ class PosInvoicePrinter {
   }
 
   static double _billRoundOff(SaleOrder order) {
+    if (order.roundOffAmount.abs() > 0.0009) {
+      return order.roundOffAmount;
+    }
     final appSubDiscount = _appSubscriptionDiscountAmount(order);
     final hasSubscriptionItems = appSubDiscount > 0.0009 ||
         order.paymentMode.trim().toUpperCase() == 'SUBSCRIPTION' ||
@@ -1630,15 +1633,12 @@ class PosInvoicePrinter {
           _taxAmountFromBreakup(chargeGroupedTaxes, 'SGST') +
           _taxAmountFromBreakup(chargeGroupedTaxes, 'IGST');
       final displayNetPayable = _displayNetPayable(order);
-      final subscriptionTax = _appSubscriptionTaxAdjustmentAmount(order);
-      final diff = displayNetPayable - (itemBase + chargeBase + summaryTax);
+      final subAdj = _subscriptionAdjustmentAmount(order);
+      final diff = displayNetPayable - (itemBase + chargeBase + summaryTax - subAdj);
       if (diff.abs() < 0.015) {
         return 0.0;
       }
       return double.parse(diff.toStringAsFixed(2));
-    }
-    if (order.roundOffAmount.abs() > 0.0009) {
-      return order.roundOffAmount;
     }
     final computedTotal = _displayNetPayable(order);
     return double.parse((computedTotal - computedTotal.roundToDouble()).toStringAsFixed(2));
