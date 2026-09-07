@@ -1,30 +1,28 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:retailpos/main.dart';
+import 'package:retailpos/models/settings/app_branding_model.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('AppBrandingModel Unit Tests', () {
+    test('AppBrandingModel.defaults provides correct default branding values', () {
+      final defaults = AppBrandingModel.defaults();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      expect(defaults.companyName, 'Famalth Business Solutions');
+      expect(defaults.productName, 'FAMALTH LYNX');
+      expect(defaults.supportEmail, 'help@famalth.com');
+      expect(defaults.poweredByLabel, 'Powered by FAMALTH LYNX Ecosystem');
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('AppBrandingModel.fromJson correctly parses JSON overrides', () {
+      final json = {
+        'company_name': 'Custom Enterprise POS',
+        'support_email': 'support@custompos.com',
+      };
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+      final model = AppBrandingModel.fromJson(json);
+
+      expect(model.companyName, 'Custom Enterprise POS');
+      expect(model.supportEmail, 'support@custompos.com');
+      expect(model.productName, 'FAMALTH LYNX'); // Falls back to default
+    });
   });
 }
-
