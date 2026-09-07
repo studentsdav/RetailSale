@@ -546,7 +546,7 @@ class _SmtpSettingsScreenState extends State<SmtpSettingsScreen> {
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
                       labelText: 'Sender Gmail Address',
-                      hintText: 'xyz@gmail.com',
+                      hintText: 'your-email@gmail.com',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.email),
                     ),

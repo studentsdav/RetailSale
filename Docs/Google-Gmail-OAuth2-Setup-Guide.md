@@ -14,7 +14,7 @@ This step-by-step guide explains how to set up **Google Gmail OAuth2 authenticat
 
 ## 📋 Prerequisites
 
-* A Gmail or Google Workspace account (`xyz@gmail.com`).
+* A Gmail or Google Workspace account (`your-email@gmail.com`).
 * Access to [Google Cloud Console](https://console.cloud.google.com/).
 * Access to [Google OAuth2 Playground](https://developers.google.com/oauthplayground).
 
@@ -52,7 +52,7 @@ This step-by-step guide explains how to set up **Google Gmail OAuth2 authenticat
    * Check the box next to `https://mail.google.com/` -> Click **Update**.
 6. Click **Save and Continue**.
 7. **Test Users:** Click **+ Add Users**:
-   * Add your sender Gmail address (`xyz@gmail.com`).
+   * Add your sender Gmail address (`your-email@gmail.com`).
 8. Click **Save and Continue**.
 
 ---
@@ -99,7 +99,7 @@ In your Render Dashboard (or `.env` file), set the following key-value pairs:
 
 ```env
 EMAIL_PROVIDER=GMAIL
-EMAIL_USER=xyz@gmail.com
+EMAIL_USER=your-email@gmail.com
 GMAIL_CLIENT_ID=123456789-xyz.apps.googleusercontent.com
 GMAIL_CLIENT_SECRET=GOCSPX-your_client_secret_here
 GMAIL_REFRESH_TOKEN=1//04_your_refresh_token_here
@@ -112,9 +112,9 @@ GMAIL_REFRESH_TOKEN=1//04_your_refresh_token_here
 Once deployed on Render with these environment variables, check your container logs:
 
 ```text
-🔍 [EMAIL DEBUG] Target: customer@example.com | Provider Mode: GMAIL | User: YES (xyz@gmail.com)
+🔍 [EMAIL DEBUG] Target: customer@example.com | Provider Mode: GMAIL | User: YES (your-email@gmail.com)
 [EMAIL MODE] Sending strictly via Gmail OAuth2 REST API (Port 443) to customer@example.com...
-[GMAIL API] Fetching OAuth2 access token for xyz@gmail.com...
+[GMAIL API] Fetching OAuth2 access token for your-email@gmail.com...
 [GMAIL API SUCCESS] Sent to customer@example.com: {"id": "191...", "threadId": "191..."}
 ```
 
