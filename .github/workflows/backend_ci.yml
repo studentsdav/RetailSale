@@ -1,0 +1,39 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main, master, 'release/*' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend_check:
+    name: Node.js Backend Check
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          npm ci || npm install
+
+      - name: Validate JavaScript Syntax Across Controllers and Routes
+        run: |
+          cd backend
+          node --check server.js
+          node --check app.js
+          find routes/ controllers/ -name "*.js" -exec node --check {} +

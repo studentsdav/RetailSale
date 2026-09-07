@@ -163,7 +163,23 @@ http://127.0.0.1:3000
 
 ---
 
-## 🤝 Contributing
+## 🤝 Contributing & Open Source Community
 
-Please update the relevant guide when setup, runtime behavior, or APIs change.
+We welcome open-source contributions from developers of all skill levels!
+
+- 📖 **[Contributor Guidelines](./CONTRIBUTING.md)** - Workflow rules, local setup, coding standards, and PR guidelines.
+- 🤝 **[Code of Conduct](./CODE_OF_CONDUCT.md)** - Community pledge and standards (Contributor Covenant v2.1).
+- 🔒 **[Security Policy](./SECURITY.md)** - Responsible disclosure instructions for security vulnerabilities.
+- 🐛 **[Report a Bug](.github/ISSUE_TEMPLATE/bug_report.md)** - Open a structured bug report.
+- ✨ **[Request a Feature](.github/ISSUE_TEMPLATE/feature_request.md)** - Suggest new features or ERP workflow improvements.
+
+### 🏷️ Community Task Labels
+
+Look for the following labels when looking for tasks to work on:
+* `good first issue`: Ideal for new contributors (localization, minor UI fixes, tooltips).
+* `help wanted`: Features or fixes where maintainers are seeking community assistance.
+* `bug`: Reported bugs requiring fixes.
+* `enhancement`: Feature enhancements and UI/UX improvements.
+* `documentation`: Docs updates and guide improvements.
+
 
