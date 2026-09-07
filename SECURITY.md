@@ -22,7 +22,7 @@ Because **RetailSale** handles critical enterprise operations—including point-
 
 If you discover a security vulnerability, please disclose it responsibly by sending an email to:
 
-📧 **security@famalth.com**
+📧 **help@famalth.com**
 
 Please include as much of the following information as possible to help us understand and resolve the issue quickly:
 

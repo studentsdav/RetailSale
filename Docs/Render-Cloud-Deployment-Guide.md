@@ -74,11 +74,11 @@ In your Web Service, go to the **Environment** tab and add the following key-val
 | :--- | :--- | :--- |
 | `EMAIL_PROVIDER` | `RESEND` | Explicit mode: **`RESEND`** (Resend API), **`GMAIL`** (Gmail OAuth2), **`SMTP`** (SMTP only), or **`AUTO`** |
 | `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails over Port 443 |
-| `EMAIL_FROM` | `"Retail POS" <noreply@famalth.com>` | Custom verified sender header name & email address |
+| `EMAIL_FROM` | `"Retail POS" <help@famalth.com>` | Custom verified sender header name & email address |
 | `GMAIL_CLIENT_ID` | `123456-xyz.apps.googleusercontent.com` | Google Cloud OAuth2 Client ID (See [Gmail OAuth2 Guide](./Google-Gmail-OAuth2-Setup-Guide.md)) |
 | `GMAIL_CLIENT_SECRET` | `GOCSPX-your_client_secret` | Google Cloud OAuth2 Client Secret |
 | `GMAIL_REFRESH_TOKEN` | `1//04_your_oauth_refresh_token` | Google OAuth2 Refresh Token (from OAuth Playground) |
-| `EMAIL_USER` | `famalth.retail@famalth.com` | Primary Sender Email Address (used for SMTP and Gmail OAuth2) |
+| `EMAIL_USER` | `help@famalth.com` | Primary Sender Email Address (used for SMTP and Gmail OAuth2) |
 | `EMAIL_PASS` | `abcd1234efgh` | App Password generated in Zoho Mail or Gmail Security (for password auth) |
 | `EMAIL_HOST` | `smtp.zoho.in` | SMTP Server Host (`smtp.zoho.in` / `smtp.gmail.com`) |
 | `EMAIL_PORT` | `587` | SMTP Port (`587` for STARTTLS, `465` for SSL) |

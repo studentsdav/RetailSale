@@ -29,7 +29,7 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
-        value: "Retail POS <noreply@famalth.com>"
+        value: "Retail POS <help@famalth.com>"
       - key: EMAIL_HOST
         value: smtp.zoho.in
       - key: EMAIL_PORT

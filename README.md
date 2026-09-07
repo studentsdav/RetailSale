@@ -73,7 +73,7 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 | **Authentication**| `JWT_SECRET` | `super-secret-jwt-key-2026-prod` | Secret key used to sign JWT tokens |
 | **Email Provider Mode** | `EMAIL_PROVIDER` | `RESEND` | Provider mode: **`RESEND`** (Resend API), **`GMAIL`** (Gmail OAuth2), **`SMTP`** (SMTP only), or **`AUTO`** |
 | **Resend API** | `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails over Port 443 |
-| | `EMAIL_FROM` | `"Retail POS" <noreply@famalth.com>` | Custom verified sender header name & email address |
+| | `EMAIL_FROM` | `"Retail POS" <help@famalth.com>` | Custom verified sender header name & email address |
 | **Gmail OAuth2** | `GMAIL_CLIENT_ID` | `1234567-xyz.apps.googleusercontent.com` | Google Cloud OAuth2 Client ID |
 | | `GMAIL_CLIENT_SECRET` | `GOCSPX-your_secret` | Google Cloud OAuth2 Client Secret |
 | | `GMAIL_REFRESH_TOKEN` | `1//04_your_token` | Google OAuth2 Refresh Token |
@@ -81,7 +81,7 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 | | `EMAIL_PORT` | `587` | SMTP Port (`587` for STARTTLS, `465` for SSL) |
 | | `EMAIL_SECURITY` | `STARTTLS` | Security Protocol: **`STARTTLS`** (587), **`SSL`** (465), or **`NONE`** (25) |
 | | `EMAIL_SECURE` | `false` | Set `false` for Port 587 STARTTLS, `true` for Port 465 SSL |
-| | `EMAIL_USER` | `famalth.retail@famalth.com` | SMTP / OAuth2 Sender Email Address |
+| | `EMAIL_USER` | `help@famalth.com` | SMTP / OAuth2 Sender Email Address |
 | | `EMAIL_PASS` | `abcd1234efgh` | Zoho / Gmail 16-character App Password (for password auth) |
 | | `EMAIL_TIMEOUT` | `20000` | Connection timeout in milliseconds (Default: 20000) |
 | **Google Sync** | `ROOT_FOLDER_ID` | `1A2B3C4D5E6F7G8H` | Google Drive Root Folder ID for automated backups |
