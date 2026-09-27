@@ -7,6 +7,7 @@ class SalesReportCharge {
   final double taxPercent;
   final double taxAmount;
   final bool taxable;
+  final List<SalesTaxBreakupEntry> taxBreakup;
 
   const SalesReportCharge({
     required this.name,
@@ -15,6 +16,7 @@ class SalesReportCharge {
     required this.taxPercent,
     required this.taxAmount,
     required this.taxable,
+    this.taxBreakup = const [],
   });
 
   factory SalesReportCharge.fromJson(Map<String, dynamic> json) {
@@ -32,6 +34,9 @@ class SalesReportCharge {
       taxPercent: taxPct,
       taxAmount: taxAmt,
       taxable: isTaxable,
+      taxBreakup: (json['tax_breakup'] as List? ?? json['taxBreakup'] as List? ?? [])
+          .map((e) => SalesTaxBreakupEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
     );
   }
 }

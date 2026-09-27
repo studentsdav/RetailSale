@@ -160,6 +160,52 @@ module.exports = (sequelize, DataTypes) => {
         device_printer_mappings: {
             type: DataTypes.JSONB,
             defaultValue: {}
+        },
+        base_currency_code: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'KES'
+        },
+        base_currency_symbol: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'KSh'
+        },
+        currency_symbol_position: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'BEFORE'
+        },
+        currency_decimals: {
+            type: DataTypes.INTEGER,
+            defaultValue: 2
+        },
+        payment_modes: {
+            type: DataTypes.JSONB,
+            defaultValue: [
+                { id: 'CASH', name: 'Cash', enabled: true },
+                { id: 'CARD', name: 'Card', enabled: true },
+                { id: 'MPESA_TILL', name: 'M-Pesa Till', enabled: true },
+                { id: 'MPESA_PAYBILL', name: 'M-Pesa Paybill', enabled: true },
+                { id: 'BANK_TRANSFER', name: 'Bank Transfer', enabled: true }
+            ]
+        },
+        receipt_template_config: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },
+        a4_template_config: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },
+        kot_template_config: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },
+        token_template_config: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },
+        restaurant_settlement_mode: {
+            type: DataTypes.STRING(30),
+            defaultValue: 'DIRECT'
         }
     }, {
         tableName: 'system_settings',

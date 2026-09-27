@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/currency/currency_service.dart';
 
 class BillValuePromoConfigScreen extends StatefulWidget {
   const BillValuePromoConfigScreen({super.key});
@@ -148,7 +149,7 @@ class _BillValuePromoConfigScreenState extends State<BillValuePromoConfigScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('• Min Bill Value: Rs. ${double.tryParse(promo['min_bill_amount'].toString())?.toStringAsFixed(2) ?? "0.00"}'),
+                              Text('• Min Bill Value: ${CurrencyService.format(double.tryParse(promo['min_bill_amount'].toString()) ?? 0.0)}'),
                               const SizedBox(height: 2),
                               Text('• Reward Item: $targetItemName ${targetItemCode.isNotEmpty ? "($targetItemCode)" : ""}'),
                               const SizedBox(height: 2),
@@ -308,9 +309,9 @@ class _AddEditPromoDialogState extends State<_AddEditPromoDialog> {
                 TextFormField(
                   controller: _minBillAmountController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Minimum Bill Value (Rs.)',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: 'Minimum Bill Value (${CurrencyService.symbol})',
+                    border: const OutlineInputBorder(),
                   ),
                   validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
                 ),

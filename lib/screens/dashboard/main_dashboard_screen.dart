@@ -25,6 +25,7 @@ import '../../controllers/security/user_controller.dart';
 import '../../controllers/settings/notification_services.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/token_storage.dart';
@@ -123,7 +124,6 @@ import '../reports/stock_out_report_screen.dart';
 import '../reports/supplier_payment_screen.dart';
 import '../settings/help_screen.dart';
 import '../settings/document_sequence_screen.dart';
-import '../settings/property_info_screen.dart';
 import '../settings/stock_location_screen.dart';
 import '../settings/loyalty_master_config_screen.dart';
 import '../settings/whatsapp_dashboard_screen.dart';
@@ -215,6 +215,70 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   String _drawerSearchQuery = '';
   Set<String> _favoriteDrawerItems = {};
   final UserNotesController _notesCtrl = UserNotesController();
+
+  String get _billingCountry {
+    try {
+      final systemSettings = context.read<SystemSettingsController>().settings;
+      final country = (systemSettings?.billingCountry ?? '').trim();
+      if (country.isNotEmpty) return country;
+    } catch (_) {}
+    return 'India';
+  }
+
+  bool get _isIndiaTax {
+    try {
+      final systemSettings = context.read<SystemSettingsController>().settings;
+      final taxMode = (systemSettings?.billingTaxMode ?? '').trim().toUpperCase();
+      if (taxMode == 'CGST_SGST' || taxMode == 'IGST') return true;
+      if (taxMode == 'US_SALES_TAX' || taxMode == 'VAT' || taxMode == 'COMPOSITE') return false;
+      final country = _billingCountry.toLowerCase();
+      return country == 'india' || country.isEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  String get _currencyPrefix {
+    try {
+      final systemSettings = context.read<SystemSettingsController>().settings;
+      if (systemSettings != null && systemSettings.baseCurrencySymbol.trim().isNotEmpty) {
+        return systemSettings.baseCurrencySymbol.trim();
+      }
+    } catch (_) {}
+    if (!_isIndiaTax) {
+      final c = _billingCountry.toLowerCase();
+      if (c == 'usa' || c == 'united states') return '\$';
+      if (c == 'kenya') return 'KSh';
+      if (c == 'uk' || c == 'united kingdom') return '£';
+      if (c == 'uae') return 'AED';
+      return CurrencyService.symbol;
+    }
+    return CurrencyService.symbol;
+  }
+
+  IconData get _currencyIcon {
+    if (_isIndiaTax) {
+      return Icons.currency_rupee;
+    }
+    final c = _billingCountry.toLowerCase();
+    if (c == 'usa' || c == 'united states') return Icons.attach_money;
+    if (c == 'uk' || c == 'united kingdom') return Icons.currency_pound;
+    if (c == 'europe') return Icons.euro;
+    return Icons.payments_outlined;
+  }
+
+  String get _taxTerm {
+    if (_isIndiaTax) return 'GST';
+    final c = _billingCountry.toLowerCase();
+    if (c == 'usa' || c == 'united states') return 'Sales Tax';
+    if (c == 'kenya' || c == 'uk' || c == 'uae') return 'VAT';
+    return 'Tax';
+  }
+
+  String _formatMoney(num amount, {int decimals = 0}) {
+    final prefix = _currencyPrefix;
+    return '$prefix ${amount.toDouble().toStringAsFixed(decimals)}';
+  }
 
   Future<void> _loadFavorites() async {
     final list = await LocalPreferences.getFavoriteDrawerItems();
@@ -1818,7 +1882,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           children: [
             _statCard(
               'Today Revenue (No Sub)',
-              'Rs. ${(todayRevenue - todaySubscriptionAmount).toStringAsFixed(0)}',
+              _formatMoney(todayRevenue - todaySubscriptionAmount),
               Icons.payments_outlined,
               const Color(0xFF2563EB),
               onTap: () {
@@ -1832,7 +1896,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             ),
             _statCard(
               'Today Revenue (With Sub)',
-              'Rs. ${todayRevenue.toStringAsFixed(0)}',
+              _formatMoney(todayRevenue),
               Icons.payments_outlined,
               const Color(0xFF0EA5E9),
               onTap: () {
@@ -1846,7 +1910,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             ),
             _statCard(
               'Today COGS',
-              'Rs. ${todayCogs.toStringAsFixed(0)}',
+              _formatMoney(todayCogs),
               Icons.shopping_bag_outlined,
               const Color(0xFFF97316),
               showInfoIcon: true,
@@ -1855,7 +1919,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             (todayNetProfit >= 0 && todayNetLoss == 0)
                 ? _statCard(
                     'Net Profit',
-                    'Rs. ${todayNetProfit.toStringAsFixed(0)}',
+                    _formatMoney(todayNetProfit),
                     Icons.trending_up,
                     const Color(0xFF16A34A),
                     showInfoIcon: true,
@@ -1863,7 +1927,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   )
                 : _statCard(
                     'Net Loss',
-                    'Rs. ${todayNetLoss.toStringAsFixed(0)}',
+                    _formatMoney(todayNetLoss),
                     Icons.trending_down,
                     const Color(0xFFDC2626),
                     showInfoIcon: true,
@@ -1877,19 +1941,19 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             ),
             _statCard(
               'Today Subscription Sale',
-              'Rs. ${todaySubscriptionAmount.toStringAsFixed(0)}',
+              _formatMoney(todaySubscriptionAmount),
               Icons.subscriptions_outlined,
               const Color(0xFF0EA5E9),
             ),
             _statCard(
               'Today Discount',
-              'Rs. ${todayDiscount.toStringAsFixed(0)}',
+              _formatMoney(todayDiscount),
               Icons.percent_outlined,
               const Color(0xFFF59E0B),
             ),
             _statCard(
               'Today Collection',
-              'Rs. ${todayCollection.toStringAsFixed(0)}',
+              _formatMoney(todayCollection),
               Icons.savings_outlined,
               const Color(0xFF6366F1),
               onTap: () {
@@ -1902,8 +1966,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               },
             ),
             _statCard(
-              'Today GST',
-              'Rs. ${todayGst.toStringAsFixed(0)}',
+              'Today $_taxTerm',
+              _formatMoney(todayGst),
               Icons.account_balance_outlined,
               const Color(0xFFE11D48),
             ),
@@ -2102,12 +2166,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                       cells: [
                         DataCell(Text(entry.transactionLabel)),
                         DataCell(
-                            Text('Rs. ${entry.credited.toStringAsFixed(0)}')),
+                            Text(_formatMoney(entry.credited))),
                         DataCell(
-                            Text('Rs. ${entry.debited.toStringAsFixed(0)}')),
+                            Text(_formatMoney(entry.debited))),
                         DataCell(
                           Text(
-                            'Rs. ${entry.net.toStringAsFixed(0)}',
+                            _formatMoney(entry.net),
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: entry.net >= 0
@@ -2139,6 +2203,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     final double calculatedNetProfit = netGrossProfit - todayExpenses;
     final bool isNetProfit = calculatedNetProfit >= 0;
     final double displayNetAmount = calculatedNetProfit.abs();
+    final String taxName = _taxTerm;
 
     showDialog(
       context: context,
@@ -2191,9 +2256,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Gross Profit = Today Revenue (Excl. Tax) - Today COGS',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                    Text(
+                      'Gross Profit = Today Revenue (Excl. $taxName) - Today COGS',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
                     ),
                     const Divider(height: 16),
                     const Text(
@@ -2201,9 +2266,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Gross Loss = Today COGS - Today Revenue (Excl. Tax)',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                    Text(
+                      'Gross Loss = Today COGS - Today Revenue (Excl. $taxName)',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
                     ),
                     const Divider(height: 16),
                     const Text(
@@ -2211,9 +2276,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Net Profit = Today Revenue (Excl. Tax) - Today COGS - Operating Expenses\n(Net Profit = Gross Profit - Operating Expenses)',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                    Text(
+                      'Net Profit = Today Revenue (Excl. $taxName) - Today COGS - Operating Expenses\n(Net Profit = Gross Profit - Operating Expenses)',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
                     ),
                   ],
                 ),
@@ -2226,19 +2291,19 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFFBFDBFE)),
                 ),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '💡 TAX & GST HANDLING NOTE:',
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1E40AF)),
+                      '💡 TAX & $taxName HANDLING NOTE:',
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1E40AF)),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
-                      '• Same universal formula applies for Taxable, Non-Taxable, Inclusive, & Exclusive GST sales.\n'
-                      '• GST collected is a government liability, NOT revenue. For Inclusive GST, tax is deducted before calculating Gross Profit.\n'
+                      '• Same universal formula applies for Taxable, Non-Taxable, Inclusive, & Exclusive $taxName sales.\n'
+                      '• $taxName collected is a government liability, NOT revenue. For Inclusive $taxName, tax is deducted before calculating Gross Profit.\n'
                       '• COGS = Sold Quantity × Item Purchase Cost Rate.',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF1E3A8A), height: 1.35),
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF1E3A8A), height: 1.35),
                     ),
                   ],
                 ),
@@ -2253,8 +2318,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('• Gross Sale (Excl. Tax):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
-                    Text('Rs. ${(taxableRev + todayDiscount).toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    Text('• Gross Sale (Excl. $taxName):', style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
+                    Text(_formatMoney(taxableRev + todayDiscount, decimals: 2), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -2262,7 +2327,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('• Less Discount Given:', style: TextStyle(fontSize: 12.5, color: Color(0xFFDC2626))),
-                    Text('- Rs. ${todayDiscount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                    Text('- ${_formatMoney(todayDiscount, decimals: 2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -2270,8 +2335,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('• Today Net Revenue (Excl. Tax):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
-                  Text('Rs. ${taxableRev.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                  Text('• Today Net Revenue (Excl. $taxName):', style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
+                  Text(_formatMoney(taxableRev, decimals: 2), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -2279,7 +2344,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('• Today COGS (Cost of Goods):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
-                  Text('Rs. ${todayCogs.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFC2410C))),
+                  Text(_formatMoney(todayCogs, decimals: 2), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFC2410C))),
                 ],
               ),
               const SizedBox(height: 4),
@@ -2287,7 +2352,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('• Less Operating Expenses:', style: TextStyle(fontSize: 12.5, color: Color(0xFF8B5CF6))),
-                  Text('- Rs. ${todayExpenses.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
+                  Text('- ${_formatMoney(todayExpenses, decimals: 2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
                 ],
               ),
               const Divider(height: 16),
@@ -2299,7 +2364,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
                   Text(
-                    'Rs. ${displayGrossAmount.toStringAsFixed(2)}',
+                    _formatMoney(displayGrossAmount, decimals: 2),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -2317,7 +2382,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    'Rs. ${displayNetAmount.toStringAsFixed(2)}',
+                    _formatMoney(displayNetAmount, decimals: 2),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
@@ -2334,7 +2399,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '📌 Formula Breakdown: Net Profit = Today Net Revenue (Rs. ${taxableRev.toStringAsFixed(2)}) - Today COGS (Rs. ${todayCogs.toStringAsFixed(2)}) - Operating Expenses (Rs. ${todayExpenses.toStringAsFixed(2)})',
+                  '📌 Formula Breakdown: Net Profit = Today Net Revenue (${_formatMoney(taxableRev, decimals: 2)}) - Today COGS (${_formatMoney(todayCogs, decimals: 2)}) - Operating Expenses (${_formatMoney(todayExpenses, decimals: 2)})',
                   style: const TextStyle(fontSize: 11, color: Color(0xFF475569), height: 1.3),
                 ),
               ),
@@ -2522,7 +2587,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                         DataCell(_heatCell(item.zones['NIGHT']?.sales ?? 0)),
                         DataCell(
                           Text(
-                            'Rs. ${item.totalSales.toStringAsFixed(0)}',
+                            _formatMoney(item.totalSales),
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ),
@@ -2550,7 +2615,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
-        'Rs. ${amount.toStringAsFixed(0)}',
+        _formatMoney(amount),
         style: TextStyle(
           fontWeight: FontWeight.w700,
           color: intensity > 0.55 ? Colors.white : const Color(0xFF0F172A),
@@ -2610,7 +2675,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             leading: const Icon(Icons.warning_amber, color: Colors.red),
             title: Text(e.supplier),
             trailing: Text(
-              'Rs. ${e.amount.toStringAsFixed(0)}',
+              _formatMoney(e.amount),
               style: const TextStyle(
                   color: Colors.red, fontWeight: FontWeight.bold),
             ),
@@ -4692,8 +4757,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         const SizedBox(width: 12),
         _kpi('Low Stock', '$lowStock', Icons.warning, Colors.red),
         const SizedBox(width: 12),
-        _kpi('Stock Value', 'Rs. ${stockValue.toStringAsFixed(0)}',
-            Icons.currency_rupee, Colors.purple),
+        _kpi('Stock Value', _formatMoney(stockValue),
+            _currencyIcon, Colors.purple),
       ],
     );
   }

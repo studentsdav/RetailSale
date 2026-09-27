@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/currency/currency_service.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({Key? key}) : super(key: key);
@@ -749,8 +750,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text('Amount Requested: ₹$amount', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1F2937))),
-                  Text('Proposed EMI: ₹$emi/month', style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                  Text('Amount Requested: ${CurrencyService.format(double.tryParse(amount.toString()) ?? 0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1F2937))),
+                  Text('Proposed EMI: ${CurrencyService.format(double.tryParse(emi.toString()) ?? 0)}/month', style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
                   if (loan['notes'] != null && loan['notes'].toString().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text('Notes: "${loan['notes']}"', style: const TextStyle(fontSize: 12, color: Color(0xFF4B5563), fontStyle: FontStyle.italic)),

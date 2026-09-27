@@ -40,6 +40,16 @@ class SystemSettings {
   String kotPrintMode; // 'DIRECT', 'DIALOG', 'NONE' (KDS Only)
   bool enableKotPrint;
   Map<String, dynamic> devicePrinterMappings;
+  String baseCurrencyCode;
+  String baseCurrencySymbol;
+  String currencySymbolPosition; // 'BEFORE', 'AFTER'
+  int currencyDecimals;
+  List<Map<String, dynamic>> paymentModes;
+  Map<String, dynamic> receiptTemplateConfig;
+  Map<String, dynamic> a4TemplateConfig;
+  Map<String, dynamic> kotTemplateConfig;
+  Map<String, dynamic> tokenTemplateConfig;
+  String restaurantSettlementMode; // 'DIRECT' or 'AFTER_BILL_PRINT'
 
   SystemSettings({
     required this.autoReorder,
@@ -77,7 +87,29 @@ class SystemSettings {
     this.kotPrintMode = 'DIRECT',
     this.enableKotPrint = true,
     Map<String, dynamic>? devicePrinterMappings,
-  }) : devicePrinterMappings = devicePrinterMappings ?? {};
+    this.baseCurrencyCode = 'KES',
+    this.baseCurrencySymbol = 'KSh',
+    this.currencySymbolPosition = 'BEFORE',
+    this.currencyDecimals = 2,
+    List<Map<String, dynamic>>? paymentModes,
+    Map<String, dynamic>? receiptTemplateConfig,
+    Map<String, dynamic>? a4TemplateConfig,
+    Map<String, dynamic>? kotTemplateConfig,
+    Map<String, dynamic>? tokenTemplateConfig,
+    this.restaurantSettlementMode = 'DIRECT',
+  })  : devicePrinterMappings = devicePrinterMappings ?? {},
+        paymentModes = paymentModes ??
+            [
+              {'id': 'CASH', 'name': 'Cash', 'enabled': true},
+              {'id': 'CARD', 'name': 'Card', 'enabled': true},
+              {'id': 'MPESA_TILL', 'name': 'M-Pesa Till', 'enabled': true},
+              {'id': 'MPESA_PAYBILL', 'name': 'M-Pesa Paybill', 'enabled': true},
+              {'id': 'BANK_TRANSFER', 'name': 'Bank Transfer', 'enabled': true},
+            ],
+        receiptTemplateConfig = receiptTemplateConfig ?? {},
+        a4TemplateConfig = a4TemplateConfig ?? {},
+        kotTemplateConfig = kotTemplateConfig ?? {},
+        tokenTemplateConfig = tokenTemplateConfig ?? {};
 
   static bool _parseBool(dynamic val, [bool fallback = false]) {
     if (val == null) return fallback;
@@ -139,6 +171,75 @@ class SystemSettings {
       subDeliveryChargeGstPercent: double.tryParse(json['sub_delivery_charge_gst_percent']?.toString() ?? json['subDeliveryChargeGstPercent']?.toString() ?? '0.0') ?? 0.0,
       subDeliveryFreeAbove: double.tryParse(json['sub_delivery_free_above']?.toString() ?? json['subDeliveryFreeAbove']?.toString() ?? '0.0') ?? 0.0,
       enableSalespersonTagging: _parseBool(json['enable_salesperson_tagging'] ?? json['enableSalespersonTagging'], false),
+      baseCurrencyCode: (json['base_currency_code'] ?? json['baseCurrencyCode'] ?? 'KES').toString(),
+      baseCurrencySymbol: (json['base_currency_symbol'] ?? json['baseCurrencySymbol'] ?? 'KSh').toString(),
+      currencySymbolPosition: (json['currency_symbol_position'] ?? json['currencySymbolPosition'] ?? 'BEFORE').toString(),
+      currencyDecimals: int.tryParse(json['currency_decimals']?.toString() ?? json['currencyDecimals']?.toString() ?? '2') ?? 2,
+      paymentModes: () {
+        final rawPM = json['payment_modes'] ?? json['paymentModes'];
+        if (rawPM is List) {
+          return rawPM.map((e) => Map<String, dynamic>.from(e)).toList();
+        } else if (rawPM is String && rawPM.trim().isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawPM);
+            if (decoded is List) {
+              return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+            }
+          } catch (_) {}
+        }
+        return [
+          {'id': 'CASH', 'name': 'Cash', 'enabled': true},
+          {'id': 'CARD', 'name': 'Card', 'enabled': true},
+          {'id': 'MPESA_TILL', 'name': 'M-Pesa Till', 'enabled': true},
+          {'id': 'MPESA_PAYBILL', 'name': 'M-Pesa Paybill', 'enabled': true},
+          {'id': 'BANK_TRANSFER', 'name': 'Bank Transfer', 'enabled': true},
+        ];
+      }(),
+      receiptTemplateConfig: () {
+        final rawRC = json['receipt_template_config'] ?? json['receiptTemplateConfig'];
+        if (rawRC is Map) return Map<String, dynamic>.from(rawRC);
+        if (rawRC is String && rawRC.trim().isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawRC);
+            if (decoded is Map) return Map<String, dynamic>.from(decoded);
+          } catch (_) {}
+        }
+        return <String, dynamic>{};
+      }(),
+      a4TemplateConfig: () {
+        final rawA4 = json['a4_template_config'] ?? json['a4TemplateConfig'];
+        if (rawA4 is Map) return Map<String, dynamic>.from(rawA4);
+        if (rawA4 is String && rawA4.trim().isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawA4);
+            if (decoded is Map) return Map<String, dynamic>.from(decoded);
+          } catch (_) {}
+        }
+        return <String, dynamic>{};
+      }(),
+      kotTemplateConfig: () {
+        final rawKC = json['kot_template_config'] ?? json['kotTemplateConfig'];
+        if (rawKC is Map) return Map<String, dynamic>.from(rawKC);
+        if (rawKC is String && rawKC.trim().isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawKC);
+            if (decoded is Map) return Map<String, dynamic>.from(decoded);
+          } catch (_) {}
+        }
+        return <String, dynamic>{};
+      }(),
+      tokenTemplateConfig: () {
+        final rawTC = json['token_template_config'] ?? json['tokenTemplateConfig'];
+        if (rawTC is Map) return Map<String, dynamic>.from(rawTC);
+        if (rawTC is String && rawTC.trim().isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawTC);
+            if (decoded is Map) return Map<String, dynamic>.from(decoded);
+          } catch (_) {}
+        }
+        return <String, dynamic>{};
+      }(),
+      restaurantSettlementMode: (json['restaurant_settlement_mode'] ?? json['restaurantSettlementMode'] ?? 'DIRECT').toString(),
       defaultCharges: rawCharges is List
           ? rawCharges
               .map((e) => BillingCharge.fromJson(Map<String, dynamic>.from(e)))
@@ -196,6 +297,15 @@ class SystemSettings {
       'time_zone': timeZone,
       'billing_tax_mode': billingTaxMode,
       'bill_format': billFormat,
+      'base_currency_code': baseCurrencyCode,
+      'base_currency_symbol': baseCurrencySymbol,
+      'currency_symbol_position': currencySymbolPosition,
+      'currency_decimals': currencyDecimals,
+      'payment_modes': paymentModes,
+      'receipt_template_config': receiptTemplateConfig,
+      'a4_template_config': a4TemplateConfig,
+      'kot_template_config': kotTemplateConfig,
+      'token_template_config': tokenTemplateConfig,
       'default_charges':
           defaultCharges.map((charge) => charge.toJson()).toList(),
       'is_cloud_enabled': isCloudEnabled,
@@ -219,6 +329,7 @@ class SystemSettings {
       'kot_print_mode': kotPrintMode,
       'enable_kot_print': enableKotPrint,
       'device_printer_mappings': devicePrinterMappings,
+      'restaurant_settlement_mode': restaurantSettlementMode,
     };
   }
 }

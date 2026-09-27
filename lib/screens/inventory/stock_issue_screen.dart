@@ -19,6 +19,9 @@ import '../../models/inventory/stock_location_model.dart';
 import '../../utils/date_picker_helper.dart';
 import '../../utils/branding_storage.dart';
 import '../../widgets/entry_shortcuts.dart';
+import '../../core/utils/country_tax_helper.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 class StockIssueScreen extends StatefulWidget {
   const StockIssueScreen({super.key});
@@ -463,6 +466,10 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
 
   // ================= ITEM ENTRY =================
   Widget _itemEntryCard() {
+    final settings = context.watch<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+
     return _card(
       title: 'Item Entry',
       child: Wrap(
@@ -606,7 +613,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
               focusNode: _rateNode,
               prevNode: _qtyNode,
               onSubmit: () => _taxNode.requestFocus()),
-          _number(_tax, 'Tax %',
+          _number(_tax, CountryTaxHelper.taxPercentLabel(country, taxMode),
               focusNode: _taxNode,
               prevNode: _rateNode,
               onSubmit: () => _addBtnFocus.requestFocus()),
@@ -805,11 +812,16 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
 
   // ================= FOOTER =================
   Widget _footerCard() {
+    final settings = context.watch<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+    final taxLabel = CountryTaxHelper.taxName(country, taxMode);
+
     return _card(
       child: Row(
         children: [
           _totalChip('Amount', totalAmount),
-          _totalChip('GST', totalGST),
+          _totalChip(taxLabel, totalGST),
           _totalChip('Net', netAmount, highlight: true),
           const Spacer(),
 
@@ -1106,6 +1118,8 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
   }
 
   Future<void> _printIssue() async {
+    final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
+    final sysTaxMode = mounted ? context.read<SystemSettingsController>().settings?.billingTaxMode : null;
     final pdf = pw.Document();
 
     final property = propertyCtrl.data;
@@ -1120,6 +1134,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
+            country: sysCountry,
             rightWidget: pw.Container(
               padding: const pw.EdgeInsets.all(8),
               decoration: pw.BoxDecoration(border: pw.Border.all()),
@@ -1195,8 +1210,22 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                   _cell("Unit", bold: true, alignment: pw.Alignment.center),
                   _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
                   _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
-                  _cell("GST %", bold: true, alignment: pw.Alignment.centerRight),
-                  _cell("GST Amt", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell(
+                    CountryTaxHelper.taxPercentLabel(
+                      sysCountry,
+                      sysTaxMode,
+                    ),
+                    bold: true,
+                    alignment: pw.Alignment.centerRight,
+                  ),
+                  _cell(
+                    CountryTaxHelper.taxAmountLabel(
+                      sysCountry,
+                      sysTaxMode,
+                    ),
+                    bold: true,
+                    alignment: pw.Alignment.centerRight,
+                  ),
                   _cell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
@@ -1229,7 +1258,13 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
               child: pw.Column(
                 children: [
                   _total("Sub Total", totalAmount),
-                  _total("GST", totalGST),
+                  _total(
+                    CountryTaxHelper.taxName(
+                      sysCountry,
+                      sysTaxMode,
+                    ),
+                    totalGST,
+                  ),
                   pw.Divider(color: PdfColors.grey400, thickness: 0.5),
                   _total("Net Amount", netAmount, bold: true),
                 ],

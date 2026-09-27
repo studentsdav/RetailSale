@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/reports/sales_report_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class PaymentAnalysisScreen extends StatefulWidget {
@@ -22,11 +23,7 @@ class _PaymentAnalysisScreenState extends State<PaymentAnalysisScreen> {
   DateTime _toDate = DateTime.now();
   bool _isLoading = false;
 
-  final NumberFormat _inr = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 2,
-  );
+  NumberFormat get _inr => CurrencyService.currencyFormat;
 
   final NumberFormat _qtyFmt = NumberFormat.decimalPattern();
 
@@ -311,7 +308,7 @@ class _PaymentAnalysisScreenState extends State<PaymentAnalysisScreen> {
                                               majorGridLines: MajorGridLines(width: 0),
                                             ),
                                             primaryYAxis: NumericAxis(
-                                              numberFormat: NumberFormat.compactSimpleCurrency(locale: 'en_IN'),
+                                              numberFormat: CurrencyService.compactCurrencyFormat,
                                               majorGridLines: const MajorGridLines(width: 0.5, dashArray: [4, 4]),
                                             ),
                                             tooltipBehavior: TooltipBehavior(enable: true),

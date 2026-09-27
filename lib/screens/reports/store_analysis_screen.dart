@@ -1,3 +1,4 @@
+import '../../core/utils/country_tax_helper.dart';
 import 'dart:io';
 import 'package:excel/excel.dart' as exc;
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../../controllers/reports/sales_report_controller.dart';
 import '../../controllers/reports/stock_balance_controller.dart';
 import '../../controllers/reports/store_analysis_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/reports/sales_report_model.dart';
 import '../../models/reports/stock_item_model.dart';
 
@@ -38,11 +40,7 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
 
   String _velocityFilter = 'ALL'; // 'ALL', 'FAST', 'MODERATE', 'SLOW', 'DEADSTOCK'
 
-  final NumberFormat _inr = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 2,
-  );
+  NumberFormat get _inr => CurrencyService.currencyFormat;
 
   int _selectedTabIndex = 0;
   bool _isLoading = false;
@@ -288,7 +286,7 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
       'Metric / Item Name',
       'Category / Detail',
       'Volume / Count',
-      'Value (₹)'
+      'Value (${CurrencyService.symbol})'
     ].map(exc.TextCellValue.new).toList());
 
     sheet.appendRow([
@@ -738,7 +736,7 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
                         intervalType: DateTimeIntervalType.days,
                         dateFormat: DateFormat('dd MMM'),
                       ),
-                      primaryYAxis: const NumericAxis(title: AxisTitle(text: 'Revenue (₹)')),
+                      primaryYAxis: NumericAxis(title: AxisTitle(text: 'Revenue (${CurrencyService.symbol})')),
                       axes: const <ChartAxis>[
                         NumericAxis(
                           name: 'subscriptionAxis',
@@ -793,10 +791,10 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
           const SizedBox(height: 12),
           DataTable(
             headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-            columns: const [
+            columns: [
               DataColumn(label: Text('Financial Parameter')),
               DataColumn(label: Text('Description')),
-              DataColumn(label: Text('Amount (₹)')),
+              DataColumn(label: Text('Amount (${CurrencyService.symbol})')),
             ],
             rows: [
               DataRow(cells: [
@@ -806,11 +804,11 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
               ]),
               DataRow(cells: [
                 const DataCell(Text('Pre-Tax Taxable Amount', style: TextStyle(fontWeight: FontWeight.w700))),
-                const DataCell(Text('Net sales value excluding GST')),
+                DataCell(Text('Net sales value excluding ${CountryTaxHelper.taxName()}')),
                 DataCell(Text(_inr.format(_taxableAmount))),
               ]),
               DataRow(cells: [
-                const DataCell(Text('Total GST Liability Collected', style: TextStyle(fontWeight: FontWeight.w700))),
+                DataCell(Text('Total ${CountryTaxHelper.taxName()} Liability Collected', style: const TextStyle(fontWeight: FontWeight.w700))),
                 const DataCell(Text('CGST + SGST + IGST collected from buyers')),
                 DataCell(Text(_inr.format(_totalGst), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w700))),
               ]),
@@ -846,20 +844,20 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('GST Compliance & Tax Breakdown Summary', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          Text('${CountryTaxHelper.taxName()} Compliance & Tax Breakdown Summary', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
           DataTable(
             headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-            columns: const [
+            columns: [
               DataColumn(label: Text('Tax Bracket / Component')),
               DataColumn(label: Text('Tax Rate')),
-              DataColumn(label: Text('Taxable Amount (₹)')),
-              DataColumn(label: Text('GST Amount (₹)')),
+              DataColumn(label: Text('Taxable Amount (${CurrencyService.symbol})')),
+              DataColumn(label: Text('${CountryTaxHelper.taxName()} Amount (${CurrencyService.symbol})')),
             ],
             rows: rates.map((r) {
               final bandData = bands[r] ?? (taxableValue: 0.0, taxAmount: 0.0);
               return DataRow(cells: [
-                DataCell(Text(r == 0 ? 'GST 0% (Exempt)' : 'GST $r%', style: const TextStyle(fontWeight: FontWeight.w700))),
+                DataCell(Text(r == 0 ? '${CountryTaxHelper.taxName()} 0% (Exempt)' : '${CountryTaxHelper.taxName()} $r%', style: const TextStyle(fontWeight: FontWeight.w700))),
                 DataCell(Text('$r%')),
                 DataCell(Text(_inr.format(bandData.taxableValue))),
                 DataCell(Text(_inr.format(bandData.taxAmount), style: TextStyle(color: bandData.taxAmount > 0 ? Colors.green : Colors.black, fontWeight: bandData.taxAmount > 0 ? FontWeight.w700 : FontWeight.normal))),
@@ -1041,7 +1039,7 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
             scrollDirection: Axis.horizontal,
             child: DataTable(
               headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-              columns: const [
+              columns: [
                 DataColumn(label: Text('Item Name')),
                 DataColumn(label: Text('Stock Available')),
                 DataColumn(label: Text('Units Sold')),

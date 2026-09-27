@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../controllers/accounting/bank_account_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/accounting/bank_account_model.dart';
 
 class BankAccountsScreen extends StatefulWidget {
@@ -76,7 +77,7 @@ class _BankAccountsScreenState extends State<BankAccountsScreen> {
                 TextField(
                   controller: _openingCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Opening Balance (₹)', border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: 'Opening Balance (${CurrencyService.symbol})', border: const OutlineInputBorder()),
                 ),
               ],
             ),
@@ -162,7 +163,7 @@ class _BankAccountsScreenState extends State<BankAccountsScreen> {
                   enabled: canEditOpening,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: 'Opening Balance (₹)',
+                    labelText: 'Opening Balance (${CurrencyService.symbol})',
                     border: const OutlineInputBorder(),
                     helperText: canEditOpening ? 'Editable (No transactions linked)' : 'Locked (Transactions exist for this account)',
                     helperStyle: TextStyle(color: canEditOpening ? Colors.green.shade800 : Colors.red.shade800, fontSize: 11),
@@ -321,7 +322,7 @@ class _BankAccountsScreenState extends State<BankAccountsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '₹${b.currentBalance.toStringAsFixed(2)}',
+                              CurrencyService.format(b.currentBalance),
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryColor, fontFamily: 'monospace'),
                             ),
                             const Text('Live Balance', style: TextStyle(fontSize: 10, color: Colors.grey)),

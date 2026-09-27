@@ -2442,7 +2442,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Non-Chargeable orders are 100% complimentary (Rs. 0 charge) and clear automatically without generating a financial bill.',
+                      'Non-Chargeable orders are 100% complimentary (zero charge) and clear automatically without generating a financial bill.',
                       style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                     ),
                     const SizedBox(height: 14),

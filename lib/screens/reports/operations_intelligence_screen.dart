@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/currency/currency_service.dart';
 import '../inventory/purchase_order_screen.dart';
 
 class OperationsIntelligenceScreen extends StatefulWidget {
@@ -136,7 +137,7 @@ class _OperationsIntelligenceScreenState extends State<OperationsIntelligenceScr
                         const SizedBox(width: 10),
                         _buildKpiCard("Expiry Warnings", "$expiryCount Near Expiry", Icons.alarm, Colors.red, isDark, cardBg, borderColor, textColor, subtitleColor),
                         const SizedBox(width: 10),
-                        _buildKpiCard("Pending Supplier", "₹${supplierAmount.toString()}", Icons.account_balance_wallet, Colors.amber, isDark, cardBg, borderColor, textColor, subtitleColor),
+                        _buildKpiCard("Pending Supplier", CurrencyService.format(double.tryParse(supplierAmount.toString()) ?? 0), Icons.account_balance_wallet, Colors.amber, isDark, cardBg, borderColor, textColor, subtitleColor),
                       ],
                     ),
                   ),

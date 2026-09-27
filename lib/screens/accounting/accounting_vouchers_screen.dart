@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/accounting/accounting_voucher_controller.dart';
 import '../../controllers/accounting/bank_account_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/accounting/accounting_voucher_model.dart';
 import '../inventory/salescreen.dart';
 import '../inventory/goods_receiving_screen.dart';
@@ -393,7 +394,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  '₹${v.totalDebit.toStringAsFixed(2)}',
+                                  CurrencyService.format(v.totalDebit),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
@@ -763,7 +764,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                         style: const TextStyle(
                             fontSize: 12, fontFamily: 'monospace'),
                         decoration: InputDecoration(
-                          hintText: 'Debit (₹)',
+                          hintText: 'Debit (${CurrencyService.symbol})',
                           contentPadding:
                               const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           border: OutlineInputBorder(
@@ -791,7 +792,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                         style: const TextStyle(
                             fontSize: 12, fontFamily: 'monospace'),
                         decoration: InputDecoration(
-                          hintText: 'Credit (₹)',
+                          hintText: 'Credit (${CurrencyService.symbol})',
                           contentPadding:
                               const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           border: OutlineInputBorder(
@@ -845,7 +846,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Total Debit:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Text('₹${ctrl.totalDebit.toStringAsFixed(2)}',
+              Text(CurrencyService.format(ctrl.totalDebit),
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
             ],
           ),
@@ -854,7 +855,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Total Credit:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Text('₹${ctrl.totalCredit.toStringAsFixed(2)}',
+              Text(CurrencyService.format(ctrl.totalCredit),
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
             ],
           ),
@@ -877,8 +878,8 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
                 Expanded(
                   child: Text(
                     ctrl.isBalanced
-                        ? 'Voucher Balanced (₹0.00)'
-                        : 'Unbalanced (Diff: ₹${ctrl.difference.toStringAsFixed(2)})',
+                        ? 'Voucher Balanced (${CurrencyService.format(0)})'
+                        : 'Unbalanced (Diff: ${CurrencyService.format(ctrl.difference)})',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -1022,7 +1023,7 @@ class _AccountingVouchersScreenState extends State<AccountingVouchersScreen> {
             Text('Type: ${voucher.voucherType}'),
             Text('Date: ${voucher.voucherDate}'),
             Text('Payment Mode: ${voucher.paymentMode}'),
-            Text('Total Amount: ₹${voucher.totalDebit.toStringAsFixed(2)}'),
+            Text('Total Amount: ${CurrencyService.format(voucher.totalDebit)}'),
             if (voucher.narration != null) Text('Remarks: ${voucher.narration}'),
           ],
         ),

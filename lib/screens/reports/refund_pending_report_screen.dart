@@ -13,6 +13,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/sales/sales_controller.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 import '../../core/utils/timezone_utils.dart';
 import '../../utils/pdf_report_builder.dart';
 
@@ -201,7 +202,7 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
 
   Future<void> exportToPdf() async {
     final refunds = this.refunds;
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     double totalPendingValue = 0;
     double totalPaid = 0;
     double totalBalance = 0;
@@ -311,7 +312,7 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
               if (amt <= 0) {
                 errorText = 'Refund amount must be positive';
               } else if (amt > remainingBalance + 0.009) {
-                errorText = 'Amount exceeds remaining balance (Rs. ${remainingBalance.toStringAsFixed(2)})';
+                errorText = 'Amount exceeds remaining balance (${CurrencyService.format(remainingBalance)})';
               } else {
                 errorText = null;
               }
@@ -461,7 +462,7 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Rs. ${remainingBalance.toStringAsFixed(2)}',
+                                      CurrencyService.format(remainingBalance),
                                       style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w800,
@@ -684,11 +685,11 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
                       children: [
                         _summaryChip('Refund Records', refunds.length.toString()),
                         const SizedBox(width: 8),
-                        _summaryChip('Total Return Val', 'Rs. ${_fmt(totalRefundAmount)}'),
+                        _summaryChip('Total Return Val', CurrencyService.format(totalRefundAmount)),
                         const SizedBox(width: 8),
-                        _summaryChip('Total Paid', 'Rs. ${_fmt(totalPaidAmount)}'),
+                        _summaryChip('Total Paid', CurrencyService.format(totalPaidAmount)),
                         const SizedBox(width: 8),
-                        _summaryChip('Total Pending', 'Rs. ${_fmt(totalPendingBalance)}', isWarning: totalPendingBalance > 0),
+                        _summaryChip('Total Pending', CurrencyService.format(totalPendingBalance), isWarning: totalPendingBalance > 0),
                       ],
                     ),
                   ),
@@ -746,10 +747,10 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
                                         DataCell(Text(displayDate)),
                                         DataCell(Text('${row['sale']?['sale_no'] ?? '--'}')),
                                         DataCell(Text(customerStr)),
-                                        DataCell(Text('Rs. ${_fmt(pending)}')),
-                                        DataCell(Text('Rs. ${_fmt(paid)}')),
+                                        DataCell(Text(CurrencyService.format(pending))),
+                                        DataCell(Text(CurrencyService.format(paid))),
                                         DataCell(Text(
-                                          'Rs. ${_fmt(balance)}',
+                                          CurrencyService.format(balance),
                                           style: TextStyle(
                                             fontWeight: balance > 0 ? FontWeight.bold : FontWeight.normal,
                                             color: balance > 0 ? Colors.red.shade700 : Colors.black87,

@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/currency/currency_service.dart';
 import 'pay_schedule_screen.dart';
 
 class PayrollScreen extends StatefulWidget {
@@ -680,7 +681,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
   Widget _buildStatsGrid(double gross, double deduct, double net, double paidAmt, int paidCount, double unpaidAmt, int unpaidCount, double holdAmt, int holdCount) {
     final card1 = _buildSummaryCard(
       label: 'GROSS PAY',
-      value: '₹ ${gross.toStringAsFixed(2)}',
+      value: CurrencyService.format(gross),
       icon: Icons.account_balance_wallet,
       color: const Color(0xFF1E3A5F),
       iconBgColor: const Color(0xFF1E3A5F),
@@ -688,7 +689,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card2 = _buildSummaryCard(
       label: 'TOTAL DEDUCTIONS',
-      value: '₹ ${deduct.toStringAsFixed(2)}',
+      value: CurrencyService.format(deduct),
       icon: Icons.money_off,
       color: const Color(0xFFDC2626),
       iconBgColor: const Color(0xFFDC2626),
@@ -696,7 +697,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card3 = _buildSummaryCard(
       label: 'NET PAY',
-      value: '₹ ${net.toStringAsFixed(2)}',
+      value: CurrencyService.format(net),
       icon: Icons.payments,
       color: const Color(0xFF059669),
       iconBgColor: const Color(0xFF059669),
@@ -704,7 +705,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card4 = _buildSummaryCard(
       label: 'PAID SALARY',
-      value: '₹ ${paidAmt.toStringAsFixed(2)} ($paidCount)',
+      value: '${CurrencyService.format(paidAmt)} ($paidCount)',
       icon: Icons.check_circle,
       color: const Color(0xFF047857),
       iconBgColor: const Color(0xFF059669),
@@ -712,7 +713,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card5 = _buildSummaryCard(
       label: 'UNPAID SALARY',
-      value: '₹ ${unpaidAmt.toStringAsFixed(2)} ($unpaidCount)',
+      value: '${CurrencyService.format(unpaidAmt)} ($unpaidCount)',
       icon: Icons.pending_actions,
       color: const Color(0xFFB91C1C),
       iconBgColor: const Color(0xFFDC2626),
@@ -720,7 +721,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card6 = _buildSummaryCard(
       label: 'ON HOLD SALARY',
-      value: '₹ ${holdAmt.toStringAsFixed(2)} ($holdCount)',
+      value: '${CurrencyService.format(holdAmt)} ($holdCount)',
       icon: Icons.pause_circle,
       color: const Color(0xFFB45309),
       iconBgColor: const Color(0xFFD97706),
@@ -1164,35 +1165,35 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
                           ],
                         ),
                       ),
-                      DataCell(Text('₹${basicVal.toStringAsFixed(2)}')),
-                      DataCell(Text('₹${hra.toStringAsFixed(2)}')),
-                      DataCell(Text('₹${da.toStringAsFixed(2)}')),
-                      DataCell(Text('₹${arrears.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF059669)))),
-                      DataCell(Text('₹${commission.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF059669)))),
-                      DataCell(Text('₹${emiPenalties.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFDC2626)))),
-                      DataCell(Text('₹${bonus.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF059669)))),
-                      DataCell(Text('₹${tcs.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFDC2626)))),
-                      DataCell(Text('₹${tds.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFDC2626)))),
-                      DataCell(Text('₹${epf.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFDC2626)))),
-                      DataCell(Text('₹${esi.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFDC2626)))),
-                      DataCell(Text('₹${deductions.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFDC2626)))),
+                      DataCell(Text(CurrencyService.format(basicVal))),
+                      DataCell(Text(CurrencyService.format(hra))),
+                      DataCell(Text(CurrencyService.format(da))),
+                      DataCell(Text(CurrencyService.format(arrears), style: const TextStyle(color: Color(0xFF059669)))),
+                      DataCell(Text(CurrencyService.format(commission), style: const TextStyle(color: Color(0xFF059669)))),
+                      DataCell(Text(CurrencyService.format(emiPenalties), style: const TextStyle(color: Color(0xFFDC2626)))),
+                      DataCell(Text(CurrencyService.format(bonus), style: const TextStyle(color: Color(0xFF059669)))),
+                      DataCell(Text(CurrencyService.format(tcs), style: const TextStyle(color: Color(0xFFDC2626)))),
+                      DataCell(Text(CurrencyService.format(tds), style: const TextStyle(color: Color(0xFFDC2626)))),
+                      DataCell(Text(CurrencyService.format(epf), style: const TextStyle(color: Color(0xFFDC2626)))),
+                      DataCell(Text(CurrencyService.format(esi), style: const TextStyle(color: Color(0xFFDC2626)))),
+                      DataCell(Text(CurrencyService.format(deductions), style: const TextStyle(color: Color(0xFFDC2626)))),
                       DataCell(Text(paidDays.toStringAsFixed(1))),
                       DataCell(Text('${workHours.toStringAsFixed(1)} hrs')),
                       DataCell(Text('${otHours.toStringAsFixed(1)} hrs')),
-                      DataCell(Text('₹${otAdd.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF059669)))),
+                      DataCell(Text(CurrencyService.format(otAdd), style: const TextStyle(color: Color(0xFF059669)))),
                       DataCell(Text('${lessHours.toStringAsFixed(1)} hrs')),
-                      DataCell(Text('₹${lessHoursDed.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFDC2626)))),
+                      DataCell(Text(CurrencyService.format(lessHoursDed), style: const TextStyle(color: Color(0xFFDC2626)))),
                       DataCell(Text('$lateMins mins')),
                       DataCell(Text(leaves.toStringAsFixed(1))),
                       DataCell(Text(unpaidLeaves.toStringAsFixed(1))),
-                      DataCell(Text('₹${unpaidLeaveDed.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFDC2626)))),
+                      DataCell(Text(CurrencyService.format(unpaidLeaveDed), style: const TextStyle(color: Color(0xFFDC2626)))),
                       DataCell(Text(absent.toStringAsFixed(1))),
                       DataCell(Text('${reqHours.toStringAsFixed(1)} hrs')),
                       DataCell(Text('${doneHours.toStringAsFixed(1)} hrs')),
-                      DataCell(Text('₹${absentDed.toStringAsFixed(2)}')),
+                      DataCell(Text(CurrencyService.format(absentDed))),
                       DataCell(Text('$weekdays')),
                       DataCell(Text('$holidays')),
-                      DataCell(Text('₹${net.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: net < 0 ? const Color(0xFFDC2626) : const Color(0xFF059669)))),
+                      DataCell(Text(CurrencyService.format(net), style: TextStyle(fontWeight: FontWeight.bold, color: net < 0 ? const Color(0xFFDC2626) : const Color(0xFF059669)))),
                       if (_activeRunId != null)
                         DataCell(
                           ElevatedButton(
@@ -1255,7 +1256,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
                       majorGridLines: MajorGridLines(width: 0),
                     ),
                     primaryYAxis: NumericAxis(
-                      numberFormat: NumberFormat.compactSimpleCurrency(locale: 'en_IN'),
+                      numberFormat: CurrencyService.compactCurrencyFormat,
                       majorGridLines: const MajorGridLines(width: 0.5, color: Color(0xFFE5E7EB)),
                     ),
                     series: <CartesianSeries>[
@@ -1360,8 +1361,8 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
 
                 return DataRow(cells: [
                   DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                  DataCell(Text('₹${prev.toStringAsFixed(0)}')),
-                  DataCell(Text('₹${next.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669)))),
+                  DataCell(Text(CurrencyService.format(prev))),
+                  DataCell(Text(CurrencyService.format(next), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669)))),
                   DataCell(Text(date)),
                   DataCell(_buildStatusChip(status)),
                 ]);
@@ -1418,7 +1419,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
 
                 return DataRow(cells: [
                   DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                  DataCell(Text('₹${amt.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669)))),
+                  DataCell(Text(CurrencyService.format(amt), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669)))),
                   DataCell(Text(reason)),
                   DataCell(Text(month)),
                   DataCell(_buildStatusChip(status)),
@@ -1823,8 +1824,8 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
 
                 return DataRow(cells: [
                   DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                  DataCell(Text('₹${amt.toStringAsFixed(0)}')),
-                  DataCell(Text('₹${bal.toStringAsFixed(0)}')),
+                  DataCell(Text(CurrencyService.format(amt))),
+                  DataCell(Text(CurrencyService.format(bal))),
                   DataCell(_buildStatusChip(status)),
                 ]);
               }).toList(),
@@ -1863,8 +1864,8 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
 
                       return DataRow(cells: [
                         DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                        DataCell(Text('₹${prev.toStringAsFixed(0)}')),
-                        DataCell(Text('₹${next.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669)))),
+                        DataCell(Text(CurrencyService.format(prev))),
+                        DataCell(Text(CurrencyService.format(next), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669)))),
                         DataCell(Text(date)),
                         DataCell(Row(
                           children: [
@@ -1917,7 +1918,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
 
                       return DataRow(cells: [
                         DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                        DataCell(Text('₹${amt.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669)))),
+                        DataCell(Text(CurrencyService.format(amt), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669)))),
                         DataCell(Text(reason)),
                         DataCell(Text(month)),
                         DataCell(Row(
@@ -2076,7 +2077,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
                     ),
                     Expanded(
                       child: RadioListTile<String>(
-                        title: const Text('₹', style: TextStyle(fontSize: 13)),
+                        title: Text(CurrencyService.symbol, style: const TextStyle(fontSize: 13)),
                         value: 'Amount',
                         groupValue: revisionType,
                         activeColor: const Color(0xFFE03E2D),
@@ -2091,9 +2092,9 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
                   controller: valueCtrl,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: revisionType == 'Percentage' ? 'Percentage Value (%)' : 'Revision Amount (₹)',
+                    labelText: revisionType == 'Percentage' ? 'Percentage Value (%)' : 'Revision Amount (${CurrencyService.symbol})',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    prefixIcon: Icon(revisionType == 'Percentage' ? Icons.percent : Icons.currency_rupee, size: 20),
+                    prefixIcon: Icon(revisionType == 'Percentage' ? Icons.percent : Icons.attach_money, size: 20),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -2302,7 +2303,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
                     children: [
                       Expanded(
                         child: RadioListTile<String>(
-                          title: const Text('Fixed (₹)', style: TextStyle(fontSize: 13)),
+                          title: Text('Fixed (${CurrencyService.symbol})', style: const TextStyle(fontSize: 13)),
                           value: 'Amount',
                           groupValue: bonusType,
                           activeColor: const Color(0xFFE03E2D),
@@ -2328,9 +2329,9 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
                     keyboardType: TextInputType.number,
                     onChanged: (v) => setDs(() {}),
                     decoration: InputDecoration(
-                      labelText: bonusType == 'Percentage' ? 'Percentage Value (%)' : 'Bonus Amount (₹)',
+                      labelText: bonusType == 'Percentage' ? 'Percentage Value (%)' : 'Bonus Amount (${CurrencyService.symbol})',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      prefixIcon: Icon(bonusType == 'Percentage' ? Icons.percent : Icons.currency_rupee, size: 20),
+                      prefixIcon: Icon(bonusType == 'Percentage' ? Icons.percent : Icons.attach_money, size: 20),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -2450,7 +2451,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '₹ ${cost.toStringAsFixed(2)} (${targets.length} Employees)',
+                                '${CurrencyService.format(cost)} (${targets.length} Employees)',
                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E3A5F)),
                               ),
                             ],
@@ -2605,7 +2606,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
 
     final card1 = _buildSummaryCard(
       label: 'LEAVE DEDUCTIONS',
-      value: '₹ ${leaveDed.toStringAsFixed(2)}',
+      value: CurrencyService.format(leaveDed),
       icon: Icons.time_to_leave,
       color: Colors.red.shade700,
       iconBgColor: Colors.red.shade700,
@@ -2613,7 +2614,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card2 = _buildSummaryCard(
       label: 'ABSENT DEDUCTIONS',
-      value: '₹ ${absentDed.toStringAsFixed(2)}',
+      value: CurrencyService.format(absentDed),
       icon: Icons.cancel_presentation,
       color: Colors.red.shade800,
       iconBgColor: Colors.red.shade800,
@@ -2621,7 +2622,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card3 = _buildSummaryCard(
       label: 'LATE / SHORT HOURS',
-      value: '₹ ${lateDed.toStringAsFixed(2)}',
+      value: CurrencyService.format(lateDed),
       icon: Icons.more_time,
       color: Colors.orange.shade700,
       iconBgColor: Colors.orange.shade700,
@@ -2629,7 +2630,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card4 = _buildSummaryCard(
       label: 'OVERTIME PAID',
-      value: '₹ ${otPaid.toStringAsFixed(2)}',
+      value: CurrencyService.format(otPaid),
       icon: Icons.add_alarm,
       color: Colors.green.shade700,
       iconBgColor: Colors.green.shade700,
@@ -2637,7 +2638,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card5 = _buildSummaryCard(
       label: 'BONUS PAID',
-      value: '₹ ${bonusPaid.toStringAsFixed(2)}',
+      value: CurrencyService.format(bonusPaid),
       icon: Icons.workspace_premium,
       color: Colors.indigo.shade700,
       iconBgColor: Colors.indigo.shade700,
@@ -2645,7 +2646,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card6 = _buildSummaryCard(
       label: 'NET PAID (SALARY)',
-      value: '₹ ${netPaid.toStringAsFixed(2)}',
+      value: CurrencyService.format(netPaid),
       icon: Icons.monetization_on,
       color: Colors.teal.shade700,
       iconBgColor: Colors.teal.shade700,
@@ -2653,7 +2654,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card7 = _buildSummaryCard(
       label: 'TOTAL DEDUCTIONS',
-      value: '₹ ${totalDeduct.toStringAsFixed(2)}',
+      value: CurrencyService.format(totalDeduct),
       icon: Icons.remove_circle_outline,
       color: Colors.red.shade900,
       iconBgColor: Colors.red.shade900,
@@ -2661,7 +2662,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
     );
     final card8 = _buildSummaryCard(
       label: 'MONTHLY INCREMENT',
-      value: '${increment >= 0 ? "+" : ""}₹ ${increment.toStringAsFixed(2)}',
+      value: '${increment >= 0 ? "+" : ""}${CurrencyService.format(increment)}',
       icon: increment >= 0 ? Icons.trending_up : Icons.trending_down,
       color: increment >= 0 ? Colors.green.shade800 : Colors.red.shade800,
       iconBgColor: increment >= 0 ? Colors.green.shade800 : Colors.red.shade800,

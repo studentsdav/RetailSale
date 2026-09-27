@@ -517,6 +517,8 @@ class SalesController extends ChangeNotifier {
     DateTime? fromDate,
     DateTime? toDate,
     String? search,
+    String? source,
+    dynamic userId,
     bool latestOnly = true,
   }) async {
     final params = <String>[];
@@ -536,16 +538,43 @@ class SalesController extends ChangeNotifier {
     if (search != null && search.trim().isNotEmpty) {
       params.add('search=${Uri.encodeComponent(search.trim())}');
     }
+    if (source != null && source.trim().isNotEmpty && source.toUpperCase() != 'ALL') {
+      params.add('source=${Uri.encodeComponent(source.trim())}');
+    }
+    if (userId != null && userId.toString().trim().isNotEmpty && userId.toString().toUpperCase() != 'ALL') {
+      params.add('user_id=${Uri.encodeComponent(userId.toString().trim())}');
+    }
     if (!latestOnly) {
       params.add('latest_only=false');
     }
     final query = params.isEmpty
         ? ApiEndpoints.sales
-   : '${ApiEndpoints.sales}?${params.join('&')}';
+        : '${ApiEndpoints.sales}?${params.join('&')}';
     final res = await ApiClient.get(query);
     return (res['data'] as List? ?? const [])
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
+  }
+
+  Future<Map<String, dynamic>> settleSaleBill({
+    required int saleId,
+    required String paymentMode,
+    List<Map<String, dynamic>> paymentLines = const [],
+    double? amountPaid,
+  }) async {
+    final payload = <String, dynamic>{
+      'status': 'COMPLETED',
+      'payment_mode': paymentMode,
+      if (amountPaid != null) 'amount_paid': amountPaid,
+    };
+    if (paymentLines.isNotEmpty) {
+      payload['payment_lines'] = paymentLines;
+    }
+    final res = await ApiClient.put(
+      '${ApiEndpoints.sales}/$saleId/settle',
+      payload,
+    );
+    return Map<String, dynamic>.from(res);
   }
 
   Future<Map<String, dynamic>> getSaleDetails(int id) async {

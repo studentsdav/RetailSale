@@ -1,3 +1,6 @@
+import 'tax_breakdown_model.dart';
+import 'tax_group_model.dart';
+
 class BillingCharge {
   final String name;
   final String code;
@@ -9,6 +12,9 @@ class BillingCharge {
   final bool isEnabled;
   final String taxType;
   final double taxPercent;
+  final String? taxGroupId;
+  final TaxGroup? taxGroup;
+  final List<TaxBreakdown> taxBreakup;
 
   const BillingCharge({
     required this.name,
@@ -21,9 +27,22 @@ class BillingCharge {
     required this.isEnabled,
     required this.taxType,
     required this.taxPercent,
+    this.taxGroupId,
+    this.taxGroup,
+    this.taxBreakup = const [],
   }) : calculationValue = calculationValue ?? amount;
 
   factory BillingCharge.fromJson(Map<String, dynamic> json) {
+    TaxGroup? parsedTaxGroup;
+    if (json['tax_group'] != null && json['tax_group'] is Map) {
+      parsedTaxGroup = TaxGroup.fromJson(Map<String, dynamic>.from(json['tax_group']));
+    }
+
+    final rawBreakup = json['tax_breakup'] as List?;
+    final parsedBreakup = rawBreakup != null
+        ? rawBreakup.map((e) => TaxBreakdown.fromJson(Map<String, dynamic>.from(e))).toList()
+        : const <TaxBreakdown>[];
+
     return BillingCharge(
       name: json['name'] ?? '',
       code: json['code'] ?? (json['name'] ?? '').toString().toUpperCase().replaceAll(' ', '_'),
@@ -43,6 +62,9 @@ class BillingCharge {
             (json['tax_percent'] ?? json['taxPercent']).toString(),
           ) ??
           0,
+      taxGroupId: json['tax_group_id']?.toString() ?? json['taxGroupId']?.toString(),
+      taxGroup: parsedTaxGroup,
+      taxBreakup: parsedBreakup,
     );
   }
 
@@ -57,6 +79,9 @@ class BillingCharge {
     bool? isEnabled,
     String? taxType,
     double? taxPercent,
+    String? taxGroupId,
+    TaxGroup? taxGroup,
+    List<TaxBreakdown>? taxBreakup,
   }) {
     return BillingCharge(
       name: name ?? this.name,
@@ -69,6 +94,9 @@ class BillingCharge {
       isEnabled: isEnabled ?? this.isEnabled,
       taxType: taxType ?? this.taxType,
       taxPercent: taxPercent ?? this.taxPercent,
+      taxGroupId: taxGroupId ?? this.taxGroupId,
+      taxGroup: taxGroup ?? this.taxGroup,
+      taxBreakup: taxBreakup ?? this.taxBreakup,
     );
   }
 
@@ -84,6 +112,9 @@ class BillingCharge {
       'is_enabled': isEnabled,
       'tax_type': taxType,
       'tax_percent': taxPercent,
+      if (taxGroupId != null) 'tax_group_id': taxGroupId,
+      if (taxGroup != null) 'tax_group': taxGroup!.toJson(),
+      if (taxBreakup.isNotEmpty) 'tax_breakup': taxBreakup.map((t) => t.toJson()).toList(),
     };
   }
 

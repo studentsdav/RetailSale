@@ -5,8 +5,11 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'package:provider/provider.dart';
 import '../../controllers/inventory/return_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/inventory/issued_item_model.dart';
 import '../../utils/branding_storage.dart';
 
@@ -471,6 +474,7 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
   }
 
   Future<void> _printReturn(String issueNo) async {
+    final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
     final pdf = pw.Document();
 
     final property = propertyCtrl.data; // ensure loaded
@@ -482,41 +486,18 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
           /// ================= HEADER =================
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              if (logo != null)
-                pw.Container(
-                  width: 56,
-                  height: 56,
-                  margin: const pw.EdgeInsets.only(right: 12),
-                  child: pw.Image(logo, fit: pw.BoxFit.contain),
-                ),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      property?.propertyName ?? '',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(property?.address ?? ''),
-                    pw.Text("GSTIN: ${property?.gstNo ?? ''}"),
-                  ],
-                ),
+          PosInvoicePrinter.buildStandardA4Header(
+            property: property,
+            country: sysCountry,
+            logo: logo,
+            rightWidget: pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(border: pw.Border.all()),
+              child: pw.Text(
+                "STOCK RETURN SLIP",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
               ),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(border: pw.Border.all()),
-                child: pw.Text(
-                  "STOCK RETURN SLIP",
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-            ],
+            ),
           ),
 
           pw.SizedBox(height: 20),

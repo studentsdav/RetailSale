@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
+import '../../core/currency/currency_service.dart';
 
 enum Period { day, week, month }
 
@@ -157,8 +158,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       Expanded(
                           child: _kpi(
                               'Stock Value',
-                              '₹${_stockValue.toStringAsFixed(0)}',
-                              Icons.currency_rupee,
+                              CurrencyService.format(_stockValue),
+                              Icons.payments_outlined,
                               Colors.purple)),
                     ],
                   ),

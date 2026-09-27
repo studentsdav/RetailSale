@@ -8,7 +8,6 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../models/common/property_info_model.dart';
-import '../../models/inventory/billing_charge_model.dart';
 import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../../models/inventory/tax_breakdown_model.dart';
@@ -20,6 +19,7 @@ import '../utils/timezone_utils.dart';
 import '../../utils/branding_storage.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../currency/currency_service.dart';
 
 class PosInvoicePrinter {
   PosInvoicePrinter._();
@@ -46,12 +46,22 @@ class PosInvoicePrinter {
   static final DateFormat _time = DateFormat('hh:mm a');
   static final DateFormat _dateTime = DateFormat('dd-MMM-yyyy hh:mm a');
 
-  static bool _isThermalFormat(String billFormat) =>
-      _thermalWidths.containsKey(billFormat);
+  static bool _isThermalFormat(String billFormat) {
+    final f = billFormat.toUpperCase();
+    return _thermalWidths.containsKey(billFormat) || f.contains('THERMAL') || f.contains('80MM') || f.contains('58MM') || f.contains('76MM');
+  }
 
-  static PdfPageFormat _thermalSheetFor(String billFormat) {
-    final widthMm = _thermalWidths[billFormat] ?? 80;
-    final horizontalMargin = widthMm <= 58 ? 2.5 : 3.0;
+  static PdfPageFormat _thermalSheetFor(String billFormat, [String? configWidth]) {
+    double widthMm = 80;
+    if (configWidth != null && configWidth.isNotEmpty) {
+      final cw = configWidth.toLowerCase();
+      if (cw.contains('58')) widthMm = 58;
+      if (cw.contains('76')) widthMm = 76;
+      if (cw.contains('80')) widthMm = 80;
+    } else {
+      widthMm = _thermalWidths[billFormat] ?? (billFormat.toUpperCase().contains('58') ? 58 : 80);
+    }
+    final horizontalMargin = widthMm <= 58 ? 2.0 : 3.0;
     return PdfPageFormat(
       widthMm * PdfPageFormat.mm,
       297 * PdfPageFormat.mm,
@@ -65,8 +75,8 @@ class PosInvoicePrinter {
   /// Returns the [PdfPageFormat] that matches [billFormat].
   /// Thermal formats (THERMAL_58 / 72 / 76 / 80) return the correct narrow
   /// roll width; everything else returns [PdfPageFormat.a4].
-  static PdfPageFormat pageFormatFor(String billFormat) {
-    if (_isThermalFormat(billFormat)) return _thermalSheetFor(billFormat);
+  static PdfPageFormat pageFormatFor(String billFormat, [String? configWidth]) {
+    if (_isThermalFormat(billFormat)) return _thermalSheetFor(billFormat, configWidth);
     return PdfPageFormat.a4;
   }
 
@@ -141,44 +151,79 @@ class PosInvoicePrinter {
     String thankYouMessage = 'Thank you for your business.',
     String authorizedSignatureLabel = 'Authorized Signatory',
     int copyCount = 1,
+    SystemSettings? settings,
   }) async {
-    final settingsCtrl = SystemSettingsController();
-    await settingsCtrl.load();
-    final bool showBrandName = settingsCtrl.settings?.showBrandName ?? true;
-    final bool enableTokenSystem = settingsCtrl.settings?.enableTokenSystem ?? false;
+    SystemSettings? sysSettings = settings;
+    if (sysSettings == null) {
+      final settingsCtrl = SystemSettingsController();
+      await settingsCtrl.load();
+      sysSettings = settingsCtrl.settings;
+    }
+
+    PropertyInfo? prop = property;
+    if (prop == null) {
+      final propCtrl = PropertyInfoController();
+      await propCtrl.load();
+      prop = propCtrl.data;
+    }
+
+    final receiptConfig = sysSettings?.receiptTemplateConfig ?? {};
+    final a4Config = sysSettings?.a4TemplateConfig ?? {};
+    final bool showBrandName = receiptConfig['show_brand'] ?? (sysSettings?.showBrandName ?? true);
+    final bool enableTokenSystem = receiptConfig['show_token'] ?? (sysSettings?.enableTokenSystem ?? false);
 
     final document = pw.Document();
-    final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
+    final logo = await BrandingStorage.loadPdfLogo(prop?.logoPath);
     final invoiceData = _InvoiceContext(
       order: order,
-      property: property,
+      property: prop,
       cashierName: cashierName,
       terminalNo: terminalNo,
       cashierId: cashierId,
       amountReceived: amountReceived,
       changeDue: changeDue,
-      sellerStateCode: sellerStateCode ?? _stateCodeFor(property?.state),
-      buyerState: buyerState ?? _deriveBuyerState(order, property),
+      sellerStateCode: sellerStateCode ?? _stateCodeFor(prop?.state),
+      buyerState: buyerState ?? _deriveBuyerState(order, prop),
       buyerStateCode: buyerStateCode ??
           _stateCodeFor(buyerState) ??
           _stateCodeFromGstin(order.customerGstin) ??
-          _stateCodeFor(_deriveBuyerState(order, property)),
-      bankName: bankName,
-      bankAccountNo: bankAccountNo,
-      bankIfscCode: bankIfscCode,
-      termsAndConditions: termsAndConditions,
-      thankYouMessage: thankYouMessage,
-      authorizedSignatureLabel: authorizedSignatureLabel,
+          _stateCodeFor(_deriveBuyerState(order, prop)),
+      bankName: (a4Config['bank_name']?.toString().trim().isNotEmpty == true)
+          ? a4Config['bank_name'].toString().trim()
+          : (bankName.isNotEmpty ? bankName : (prop?.bankName ?? '')),
+      bankAccountNo: (a4Config['bank_account_no']?.toString().trim().isNotEmpty == true)
+          ? a4Config['bank_account_no'].toString().trim()
+          : (bankAccountNo.isNotEmpty ? bankAccountNo : (prop?.bankAccNo ?? '')),
+      bankIfscCode: (a4Config['bank_ifsc']?.toString().trim().isNotEmpty == true)
+          ? a4Config['bank_ifsc'].toString().trim()
+          : (bankIfscCode.isNotEmpty ? bankIfscCode : (prop?.bankIfsc ?? '')),
+      termsAndConditions: (receiptConfig['terms_and_conditions']?.toString().trim().isNotEmpty == true)
+          ? receiptConfig['terms_and_conditions'].toString().trim()
+          : ((a4Config['terms_and_conditions']?.toString().trim().isNotEmpty == true)
+              ? a4Config['terms_and_conditions'].toString().trim()
+              : (prop?.termsAndConditions.isNotEmpty == true ? prop!.termsAndConditions : termsAndConditions)),
+      thankYouMessage: (receiptConfig['footer_note']?.toString().trim().isNotEmpty == true)
+          ? receiptConfig['footer_note'].toString().trim()
+          : ((a4Config['footer_note']?.toString().trim().isNotEmpty == true)
+              ? a4Config['footer_note'].toString().trim()
+              : (prop?.thermalFooterNote.isNotEmpty == true ? prop!.thermalFooterNote : thankYouMessage)),
+      authorizedSignatureLabel: (a4Config['signatory_label']?.toString().trim().isNotEmpty == true)
+          ? a4Config['signatory_label'].toString().trim()
+          : authorizedSignatureLabel,
       showBrandName: showBrandName,
       enableTokenSystem: enableTokenSystem,
+      receiptTemplateConfig: receiptConfig,
+      a4TemplateConfig: a4Config,
     );
+
+    final String thermalWidthSetting = (receiptConfig['thermal_width'] ?? '').toString();
 
     final int numCopies = copyCount > 1 ? copyCount : 1;
     for (int c = 0; c < numCopies; c++) {
       if (_isThermalFormat(order.billFormat)) {
         document.addPage(
           pw.MultiPage(
-            pageFormat: _thermalSheetFor(order.billFormat),
+            pageFormat: _thermalSheetFor(order.billFormat, thermalWidthSetting),
             build: (_) => [_buildThermalReceipt(invoiceData, logo)],
           ),
         );
@@ -206,16 +251,25 @@ class PosInvoicePrinter {
   static pw.Widget _buildThermalReceipt(
       _InvoiceContext data, pw.MemoryImage? logo) {
     final order = data.order;
+    final cfg = data.receiptTemplateConfig;
+    _currentShowCurrency = (cfg['show_currency_symbol'] == true || cfg['show_currency'] == true);
+
+    // Dynamic typography scaling based on font_size in template config
+    final String fontSizeSetting = (cfg['font_size'] ?? 'MEDIUM').toString().toUpperCase();
+    double scale = 1.0;
+    if (fontSizeSetting == 'SMALL') scale = 0.85;
+    if (fontSizeSetting == 'LARGE') scale = 1.25;
+
     final regular = pw.Font.helvetica();
     final bold = pw.Font.helveticaBold();
     final bodyStyle =
-        pw.TextStyle(font: regular, fontSize: 8.9, color: _thermalSecondary);
+        pw.TextStyle(font: regular, fontSize: 8.9 * scale, color: _thermalSecondary);
     final emphasisStyle =
-        pw.TextStyle(font: bold, fontSize: 9.6, color: _thermalPrimary);
+        pw.TextStyle(font: bold, fontSize: 9.6 * scale, color: _thermalPrimary);
     final storeStyle =
-        pw.TextStyle(font: bold, fontSize: 12.8, color: _thermalPrimary);
+        pw.TextStyle(font: bold, fontSize: 12.8 * scale, color: _thermalPrimary);
     final grandStyle =
-        pw.TextStyle(font: bold, fontSize: 14, color: _thermalPrimary);
+        pw.TextStyle(font: bold, fontSize: 14 * scale, color: _thermalPrimary);
     final totalItems = order.items.length;
     final roundOff = _billRoundOff(order);
     final subscriptionAdjustment = _subscriptionAdjustmentAmount(order);
@@ -238,6 +292,8 @@ class PosInvoicePrinter {
       subscriptionAdjustment: subscriptionAdjustment,
     );
 
+    final bool showToken = cfg['show_token'] ?? (data.enableTokenSystem);
+
     return pw.DefaultTextStyle(
       style: bodyStyle,
       child: pw.Column(
@@ -248,26 +304,29 @@ class PosInvoicePrinter {
             logo: logo,
             fontRegular: regular,
             fontBold: bold,
+            country: order.billingCountry,
+            receiptTemplateConfig: cfg,
+            scale: scale,
           ),
           pw.Center(
             child: pw.Column(
               children: [
-                pw.SizedBox(height: 4),
+                pw.SizedBox(height: 4 * scale),
                 pw.Text(
                   _receiptTitle(order, hasTaxData),
                   style: emphasisStyle,
                 ),
-                if (data.enableTokenSystem && !_isRestaurantOrder(order) && (order.tokenNo ?? '').trim().isNotEmpty) ...[
-                  pw.SizedBox(height: 4),
+                if (showToken && !_isRestaurantOrder(order) && (order.tokenNo ?? '').trim().isNotEmpty) ...[
+                  pw.SizedBox(height: 4 * scale),
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+                    padding: pw.EdgeInsets.symmetric(vertical: 3 * scale, horizontal: 8),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: PdfColors.black, width: 1.5),
                       borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
                     ),
                     child: pw.Text(
                       'TOKEN NO: ${order.tokenNo!.trim()}',
-                      style: pw.TextStyle(font: bold, fontSize: 15, color: PdfColors.black),
+                      style: pw.TextStyle(font: bold, fontSize: 15 * scale, color: PdfColors.black),
                     ),
                   ),
                 ],
@@ -311,16 +370,17 @@ class PosInvoicePrinter {
               '',
               '',
             ),
-          _thermalMetaRow(
-            'Cashier',
-            data.cashierName.trim().isEmpty
-                ? 'System'
-                : data.cashierName.trim(),
-            'Time',
-            formatTzTime(order.saleDate),
-          ),
-          if ((order.customerName ?? '').trim().isNotEmpty ||
-              (order.customerPhone ?? '').trim().isNotEmpty)
+          if (cfg['show_cashier'] ?? true)
+            _thermalMetaRow(
+              'Cashier',
+              data.cashierName.trim().isEmpty
+                  ? 'System'
+                  : data.cashierName.trim(),
+              'Time',
+              formatTzTime(order.saleDate),
+            ),
+          if ((cfg['show_customer'] ?? true) && ((order.customerName ?? '').trim().isNotEmpty ||
+              (order.customerPhone ?? '').trim().isNotEmpty))
             _thermalMetaRow(
               'Customer',
               (order.customerName ?? '').trim().isEmpty
@@ -332,7 +392,7 @@ class PosInvoicePrinter {
                   : order.customerPhone!.trim(),
             ),
           if ((order.customerGstin ?? '').trim().isNotEmpty)
-            _thermalMetaRow('GSTIN', order.customerGstin!.trim(), '', ''),
+            _thermalMetaRow(_taxIdLabel(order.billingCountry), order.customerGstin!.trim(), '', ''),
           if ((order.doctorName ?? '').trim().isNotEmpty ||
               (order.patientName ?? '').trim().isNotEmpty)
             _thermalMetaRow(
@@ -542,6 +602,40 @@ class PosInvoicePrinter {
           ),
           pw.SizedBox(height: 5),
           ...(() {
+            final rawStatus = order.status.trim().toUpperCase();
+            final rawMode = order.paymentMode.trim().toUpperCase();
+            final bool isUnsettled = rawMode == 'UNSETTLED' || rawStatus == 'PRINTED' || rawStatus == 'RUNNING' || rawStatus == 'DRAFT';
+
+            if (isUnsettled) {
+              return [
+                _thermalMetaRow(
+                  'Payment Status',
+                  'UNSETTLED / RUNNING',
+                  'Amount Paid',
+                  _money(order.amountPaid),
+                ),
+                _thermalMetaRow(
+                  'Balance Due',
+                  _money(order.balanceDue > 0 ? order.balanceDue : displayNetPayable),
+                  '',
+                  '',
+                ),
+                pw.SizedBox(height: 3),
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey700, width: 0.5),
+                  ),
+                  child: pw.Text(
+                    '*** AWAITING CASHIER SETTLEMENT ***',
+                    style: emphasisStyle.copyWith(fontSize: 8.5),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                ),
+              ];
+            }
+
             final pmts = _calculateActualPayments(order, data.amountReceived);
             final splits = _parseSplitPayments(order);
             if (splits.length > 1) {
@@ -647,42 +741,61 @@ class PosInvoicePrinter {
 
           // --- Custom Thermal Receipt Footer ---
           // UPI QR Code Section (if enabled)
-          if (data.property?.printUpiQr == true && (data.property?.upiId ?? '').trim().isNotEmpty) ...[
-            pw.SizedBox(height: 6),
+          if ((cfg['show_upi_qr'] ?? (data.property?.printUpiQr == true)) && (data.property?.upiId ?? '').trim().isNotEmpty) ...[
+            pw.SizedBox(height: 6 * scale),
             pw.Center(
               child: pw.BarcodeWidget(
                 barcode: pw.Barcode.qrCode(),
                 data: 'upi://pay?pa=${data.property!.upiId.trim()}&pn=${Uri.encodeComponent(data.property!.upiPayeeName.isNotEmpty ? data.property!.upiPayeeName.trim() : (data.property!.legalName.isNotEmpty ? data.property!.legalName.trim() : data.property!.propertyName.trim()))}&am=${order.netAmount.toStringAsFixed(2)}&tr=${order.saleNo}&cu=INR',
-                width: 70,
-                height: 70,
+                width: 65 * scale,
+                height: 65 * scale,
               ),
             ),
-            pw.SizedBox(height: 3),
-            pw.Text('Scan to Pay via UPI', style: emphasisStyle.copyWith(fontSize: 8.5), textAlign: pw.TextAlign.center),
-            pw.Text('UPI ID: ${data.property!.upiId.trim()}', style: bodyStyle.copyWith(fontSize: 8), textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 4),
+            pw.SizedBox(height: 3 * scale),
+            pw.Text('Scan to Pay via UPI', style: emphasisStyle.copyWith(fontSize: 8.5 * scale), textAlign: pw.TextAlign.center),
+            pw.Text('UPI ID: ${data.property!.upiId.trim()}', style: bodyStyle.copyWith(fontSize: 8 * scale), textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 4 * scale),
           ],
 
           // Bank Details Section (if enabled)
-          if (data.property?.printBankDetails == true && 
+          if ((cfg['show_bank_details'] ?? (data.property?.printBankDetails == true)) && 
               ((data.property?.bankName ?? '').trim().isNotEmpty || 
                (data.property?.bankAccNo ?? '').trim().isNotEmpty)) ...[
-            pw.SizedBox(height: 4),
-            pw.Text('--- Bank Details ---', style: emphasisStyle.copyWith(fontSize: 8.5), textAlign: pw.TextAlign.center),
-            pw.Text('Bank: ${data.property!.bankName.trim()}', style: bodyStyle.copyWith(fontSize: 8), textAlign: pw.TextAlign.center),
-            pw.Text('A/c No: ${data.property!.bankAccNo.trim()}', style: bodyStyle.copyWith(fontSize: 8), textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 4 * scale),
+            pw.Text('--- Bank Details ---', style: emphasisStyle.copyWith(fontSize: 8.5 * scale), textAlign: pw.TextAlign.center),
+            pw.Text('Bank: ${data.property!.bankName.trim()}', style: bodyStyle.copyWith(fontSize: 8 * scale), textAlign: pw.TextAlign.center),
+            pw.Text('A/c No: ${data.property!.bankAccNo.trim()}', style: bodyStyle.copyWith(fontSize: 8 * scale), textAlign: pw.TextAlign.center),
             if (data.property!.bankIfsc.isNotEmpty)
-              pw.Text('IFSC: ${data.property!.bankIfsc.trim()}', style: bodyStyle.copyWith(fontSize: 8), textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 6),
+              pw.Text('IFSC: ${data.property!.bankIfsc.trim()}', style: bodyStyle.copyWith(fontSize: 8 * scale), textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 6 * scale),
           ],
-          // -------------------------------------
 
-          pw.Text(
-            (data.property?.thermalFooterNote ?? '').trim().isNotEmpty
-                ? data.property!.thermalFooterNote.trim()
-                : data.thankYouMessage,
-            textAlign: pw.TextAlign.center,
-          ),
+          if ((data.termsAndConditions).trim().isNotEmpty) ...[
+            pw.SizedBox(height: 4 * scale),
+            pw.Text(
+              data.termsAndConditions.trim(),
+              style: pw.TextStyle(font: regular, fontSize: 8.0 * scale, color: PdfColors.grey700),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.SizedBox(height: 4 * scale),
+          ],
+
+          if (data.thankYouMessage.trim().isNotEmpty)
+            pw.Text(
+              data.thankYouMessage.trim(),
+              style: pw.TextStyle(font: bold, fontSize: 9.0 * scale, color: PdfColors.black),
+              textAlign: pw.TextAlign.center,
+            ),
+          
+          if (cfg['show_reseller_footer'] ?? true) ...[
+            pw.SizedBox(height: 6 * scale),
+            pw.Center(
+              child: pw.Text(
+                '--- ${_resellerFooterText(cfg)} ---',
+                style: pw.TextStyle(font: regular, fontSize: 7.5 * scale, color: PdfColors.grey600),
+              ),
+            ),
+          ],
           if (order.luckyDrawVouchers != null && order.luckyDrawVouchers!.isNotEmpty) ...[
             pw.SizedBox(height: 8),
             _buildThermalVoucherTicketEmbedded(order, order.luckyDrawVouchers!, regular, bold, data.property, isCustomerCopy: true),
@@ -695,50 +808,100 @@ class PosInvoicePrinter {
     );
   }
 
+  static String _resellerFooterText(Map<String, dynamic> cfg) {
+    String text = '';
+    final custom = cfg['reseller_footer_text']?.toString().trim();
+    if (custom != null && custom.isNotEmpty) {
+      text = custom.startsWith('---') ? custom.replaceAll('---', '').trim() : custom;
+    } else {
+      final brand = AppBrand.poweredByLabel.trim();
+      if (brand.isNotEmpty) {
+        text = brand;
+      } else {
+        final company = AppBrand.companyName.trim();
+        if (company.isNotEmpty) {
+          text = 'Powered by $company';
+        } else {
+          text = 'Powered by RetailPOS Cloud';
+        }
+      }
+    }
+    // Clean unsupported PDF font unicode characters like bullets '•' to standard ASCII '|'
+    return text.replaceAll('•', '|').replaceAll('·', '-').trim();
+  }
+
   static pw.Widget _buildA4Invoice(_InvoiceContext data, pw.MemoryImage? logo) {
     final order = data.order;
+    final a4Cfg = data.a4TemplateConfig;
+    _currentShowCurrency = (a4Cfg['show_currency_symbol'] == true || a4Cfg['show_currency'] == true);
     final sellerState = data.property?.state ?? '';
     final buyerName = (order.customerName ?? '').trim().isEmpty
         ? 'Walk-in Customer'
         : order.customerName!.trim();
     final amountInWords = _amountInWords(order.netAmount);
-    final sellerName = data.property?.legalName.isNotEmpty == true
-        ? data.property!.legalName
-        : data.property?.propertyName ?? AppBrand.productName;
+
+    final String a4FontSizeSetting = (a4Cfg['font_size'] ?? 'MEDIUM').toString().toUpperCase();
+    double a4Scale = 1.0;
+    if (a4FontSizeSetting == 'SMALL') a4Scale = 0.85;
+    if (a4FontSizeSetting == 'LARGE') a4Scale = 1.18;
+
+    PdfColor themeColor = PdfColor.fromHex('#0B5CAD');
+    final String themeKey = (a4Cfg['theme_color'] ?? 'BLUE').toString().toUpperCase();
+    if (themeKey == 'SLATE') themeColor = PdfColor.fromHex('#1E293B');
+    if (themeKey == 'EMERALD') themeColor = PdfColor.fromHex('#047857');
+    if (themeKey == 'CRIMSON') themeColor = PdfColor.fromHex('#991B1B');
+
+    final bool a4ShowLogo = a4Cfg['show_logo'] ?? true;
+    final bool a4ShowAddress = a4Cfg['show_address'] ?? true;
+    final bool a4ShowContact = a4Cfg['show_contact'] ?? true;
+    final bool a4ShowTaxReg = a4Cfg['show_tax_reg'] ?? true;
+
+    final sellerName = (a4Cfg['header_title']?.toString().trim().isNotEmpty == true)
+        ? a4Cfg['header_title'].toString().trim()
+        : (data.property?.legalName.isNotEmpty == true
+            ? data.property!.legalName
+            : data.property?.propertyName ?? AppBrand.productName);
+    
+    final sellerAddressStr = (a4Cfg['header_subtext']?.toString().trim().isNotEmpty == true)
+        ? a4Cfg['header_subtext'].toString().trim()
+        : _sellerAddress(data);
+
     final hasTaxData = _hasTaxData(order);
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
         pw.Container(
-          padding: const pw.EdgeInsets.all(12),
+          padding: pw.EdgeInsets.all(12 * a4Scale),
           decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: PdfColors.blueGrey700, width: 1),
+            border: pw.Border.all(color: themeColor, width: 1.5),
           ),
           child: pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Container(
-                width: 74,
-                height: 74,
-                alignment: pw.Alignment.center,
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.blueGrey700),
-                ),
-                child: logo == null
-                    ? pw.Text(
-                        'LOGO',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
+              if (a4ShowLogo) ...[
+                pw.Container(
+                  width: 74 * a4Scale,
+                  height: 74 * a4Scale,
+                  alignment: pw.Alignment.center,
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: themeColor.luminance > 0.5 ? PdfColors.grey400 : themeColor),
+                  ),
+                  child: logo == null
+                      ? pw.Text(
+                          'LOGO',
+                          style: pw.TextStyle(
+                            fontSize: 10 * a4Scale,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        )
+                      : pw.Padding(
+                          padding: pw.EdgeInsets.all(6 * a4Scale),
+                          child: pw.Image(logo, fit: pw.BoxFit.contain),
                         ),
-                      )
-                    : pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
-                        child: pw.Image(logo, fit: pw.BoxFit.contain),
-                      ),
-              ),
-              pw.SizedBox(width: 12),
+                ),
+                pw.SizedBox(width: 12 * a4Scale),
+              ],
               pw.Expanded(
                 child: pw.Center(
                   child: pw.Column(
@@ -749,14 +912,15 @@ class PosInvoicePrinter {
                             .replaceFirst('BILL', 'INVOICE')
                             .replaceFirst('RECEIPT', 'INVOICE'),
                         style: pw.TextStyle(
-                          fontSize: 20,
+                          fontSize: 20 * a4Scale,
                           fontWeight: pw.FontWeight.bold,
+                          color: themeColor,
                         ),
                       ),
                       if (data.enableTokenSystem && (order.tokenNo ?? '').trim().isNotEmpty) ...[
-                        pw.SizedBox(height: 4),
+                        pw.SizedBox(height: 4 * a4Scale),
                         pw.Container(
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: pw.EdgeInsets.symmetric(horizontal: 10 * a4Scale, vertical: 4 * a4Scale),
                           decoration: pw.BoxDecoration(
                             border: pw.Border.all(color: PdfColors.black, width: 1.5),
                             borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -764,7 +928,7 @@ class PosInvoicePrinter {
                           child: pw.Text(
                             'TOKEN NO: ${order.tokenNo!.trim()}',
                             style: pw.TextStyle(
-                              fontSize: 14,
+                              fontSize: 14 * a4Scale,
                               fontWeight: pw.FontWeight.bold,
                               color: PdfColors.black,
                             ),
@@ -775,50 +939,65 @@ class PosInvoicePrinter {
                   ),
                 ),
               ),
-              pw.SizedBox(width: 12),
+              pw.SizedBox(width: 12 * a4Scale),
               pw.SizedBox(
-                width: 210,
+                width: 220 * a4Scale,
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
                       sellerName,
                       style: pw.TextStyle(
-                        fontSize: 12,
+                        fontSize: 12 * a4Scale,
                         fontWeight: pw.FontWeight.bold,
+                        color: themeColor,
                       ),
                     ),
-                    pw.SizedBox(height: 3),
-                    if (_sellerAddress(data).isNotEmpty)
-                      pw.Text(_sellerAddress(data),
-                          style: const pw.TextStyle(fontSize: 8.8)),
-                    if (data.property?.printMobile != false && (data.property?.mobile ?? '').isNotEmpty)
-                      pw.Text('Contact: ${data.property!.mobile}',
-                          style: const pw.TextStyle(fontSize: 8.8)),
-                    if (data.property?.printEmail != false && (data.property?.email ?? '').isNotEmpty)
-                      pw.Text('Email: ${data.property!.email}',
-                          style: const pw.TextStyle(fontSize: 8.8)),
-                    if (data.property?.printWebsite != false && (data.property?.website ?? '').isNotEmpty)
-                      pw.Text('Website: ${data.property!.website}',
-                          style: const pw.TextStyle(fontSize: 8.8)),
-                    pw.Text(
-                      'GSTIN: ${((data.property?.gstNo ?? '').trim().isEmpty) ? '--' : data.property!.gstNo.trim()}',
-                      style: pw.TextStyle(
-                        fontSize: 8.8,
-                        fontWeight: pw.FontWeight.bold,
+                    pw.SizedBox(height: 3 * a4Scale),
+                    if (a4ShowAddress && sellerAddressStr.isNotEmpty)
+                      pw.Text(sellerAddressStr,
+                          style: pw.TextStyle(fontSize: 8.8 * a4Scale)),
+                    if (a4ShowContact) ...[
+                      if (data.property?.printMobile != false && (data.property?.mobile ?? '').isNotEmpty)
+                        pw.Text('Contact: ${data.property!.mobile}',
+                            style: pw.TextStyle(fontSize: 8.8 * a4Scale)),
+                      if (data.property?.printEmail != false && (data.property?.email ?? '').isNotEmpty)
+                        pw.Text('Email: ${data.property!.email}',
+                            style: pw.TextStyle(fontSize: 8.8 * a4Scale)),
+                      if (data.property?.printWebsite != false && (data.property?.website ?? '').isNotEmpty)
+                        pw.Text('Website: ${data.property!.website}',
+                            style: pw.TextStyle(fontSize: 8.8 * a4Scale)),
+                    ],
+                    if (a4ShowTaxReg) ...[
+                      pw.Text(
+                        '${_taxIdLabel(order.billingCountry)}: ${(a4Cfg['tax_reg_no']?.toString().trim().isNotEmpty == true) ? a4Cfg['tax_reg_no'].toString().trim() : (((data.property?.gstNo ?? '').trim().isEmpty) ? '--' : data.property!.gstNo.trim())}',
+                        style: pw.TextStyle(
+                          fontSize: 8.8 * a4Scale,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
                       ),
-                    ),
+                      if ((a4Cfg['pan_no']?.toString().trim().isNotEmpty == true) || (data.property?.panNo ?? '').trim().isNotEmpty)
+                        pw.Text(
+                          '${_businessRegLabel(order.billingCountry)}: ${(a4Cfg['pan_no']?.toString().trim().isNotEmpty == true) ? a4Cfg['pan_no'].toString().trim() : data.property!.panNo.trim()}',
+                          style: pw.TextStyle(fontSize: 8.8 * a4Scale),
+                        ),
+                    ],
+                    if ((data.property?.fssaiNo ?? '').trim().isNotEmpty && _isIndiaCountry(order.billingCountry))
+                      pw.Text(
+                        'FSSAI: ${data.property!.fssaiNo.trim()}',
+                        style: pw.TextStyle(fontSize: 8.8 * a4Scale),
+                      ),
                     if ((data.property?.drugLicenseNo ?? '').isNotEmpty)
                       pw.Text(
                         'DL No: ${data.property!.drugLicenseNo}',
                         style: pw.TextStyle(
-                          fontSize: 8.8,
+                          fontSize: 8.8 * a4Scale,
                           fontWeight: pw.FontWeight.bold,
                         ),
                       ),
                     pw.Text(
                       'State: ${sellerState.isEmpty ? '--' : sellerState} / ${data.sellerStateCode ?? '--'}',
-                      style: const pw.TextStyle(fontSize: 8.8),
+                      style: pw.TextStyle(fontSize: 8.8 * a4Scale),
                     ),
                   ],
                 ),
@@ -1302,9 +1481,9 @@ class PosInvoicePrinter {
                 ),
               ),
             if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
-            if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
-            if (hasTaxData) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
-            if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
+            if (hasTaxData && cgstTotal > 0) _a4AmountRow('Total CGST Amount', cgstTotal),
+            if (hasTaxData && sgstTotal > 0) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
+            if (hasTaxData && igstTotal > 0) _a4AmountRow('Total IGST Amount', igstTotal),
           ] else ...[
             _a4AmountRow(
               'Subtotal',
@@ -1327,9 +1506,9 @@ class PosInvoicePrinter {
                 ),
               ),
             if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
-            if (hasTaxData) _a4AmountRow('Total CGST Amount', cgstTotal),
-            if (hasTaxData) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
-            if (hasTaxData) _a4AmountRow('Total IGST Amount', igstTotal),
+            if (hasTaxData && cgstTotal > 0) _a4AmountRow('Total CGST Amount', cgstTotal),
+            if (hasTaxData && sgstTotal > 0) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
+            if (hasTaxData && igstTotal > 0) _a4AmountRow('Total IGST Amount', igstTotal),
           ],
           if (roundOff.abs() > 0.0009)
             _a4AmountRow(
@@ -1382,6 +1561,46 @@ class PosInvoicePrinter {
     return 'Total Savings';
   }
 
+  static bool _isIndiaCountry(String? country) {
+    if (country == null || country.trim().isEmpty) {
+      return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR';
+    }
+    final c = country.trim().toLowerCase();
+    if (c == 'usa' || c == 'united states' || c == 'kenya' || c == 'uk' || c == 'united kingdom' || c == 'uae') {
+      return false;
+    }
+    if (c == 'india') return true;
+    return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR';
+  }
+
+  static String _taxIdLabel([String? country]) {
+    final c = (country ?? '').trim().toLowerCase();
+    if (c == 'usa' || c == 'united states') return 'Tax ID';
+    if (c == 'kenya') return 'PIN';
+    if (c == 'uk' || c == 'united kingdom') return 'VAT Reg No';
+    if (c == 'uae') return 'TRN';
+    if (c == 'india' || _isIndiaCountry(country)) return 'GSTIN';
+    if (CurrencyService.symbol == '\$') return 'Tax ID';
+    if (CurrencyService.code == 'KES') return 'PIN';
+    if (CurrencyService.symbol == '£') return 'VAT Reg No';
+    if (CurrencyService.code == 'AED') return 'TRN';
+    return 'Tax ID';
+  }
+
+  static String _businessRegLabel([String? country]) {
+    final c = (country ?? '').trim().toLowerCase();
+    if (c == 'usa' || c == 'united states') return 'State Tax ID';
+    if (c == 'kenya') return 'Business Reg No';
+    if (c == 'uk' || c == 'united kingdom') return 'CRN';
+    if (c == 'uae') return 'Trade License';
+    if (c == 'india' || _isIndiaCountry(country)) return 'PAN';
+    if (CurrencyService.symbol == '\$') return 'State Tax ID';
+    if (CurrencyService.code == 'KES') return 'Business Reg No';
+    if (CurrencyService.symbol == '£') return 'CRN';
+    if (CurrencyService.code == 'AED') return 'Trade License';
+    return 'State Tax ID';
+  }
+
   static bool _isExchangeOrder(SaleOrder order) {
     final paymentMode = order.paymentMode.trim().toUpperCase();
     return order.returnType == 'EXCHANGE' || paymentMode == 'EXCHANGE';
@@ -1418,8 +1637,17 @@ class PosInvoicePrinter {
   }
 
   static List<Map<String, dynamic>> _parseSplitPayments(SaleOrder order) {
+    final rawStatus = order.status.trim().toUpperCase();
+    final rawMode = order.paymentMode.trim().toUpperCase();
+    if (rawMode == 'UNSETTLED' || rawStatus == 'PRINTED' || rawStatus == 'RUNNING' || rawStatus == 'DRAFT') {
+      return [];
+    }
+
     final List<Map<String, dynamic>> result = [];
-    final ref = (order.paymentReference ?? '').trim();
+    String ref = (order.paymentReference ?? '').trim();
+    if (ref.startsWith('POSPAY:')) {
+      ref = ref.substring(7).trim();
+    }
 
     if (ref.startsWith('[') && ref.endsWith(']')) {
       try {
@@ -1442,13 +1670,17 @@ class PosInvoicePrinter {
         final pIdx = notesStr.indexOf('Payment:');
         if (pIdx != -1) {
           final pSub = notesStr.substring(pIdx + 8).split('\n').first;
-          final parts = pSub.split('|');
+          final parts = pSub.contains(',') ? pSub.split(',') : pSub.split('|');
           for (final part in parts) {
-            final tokens = part.trim().split(' ');
+            final cleanPart = part.trim();
+            if (cleanPart.toLowerCase().contains('retail round off') || cleanPart.toLowerCase().contains('round off')) {
+              continue;
+            }
+            final tokens = cleanPart.split(RegExp(r'\s+'));
             if (tokens.length >= 2) {
               final String mode = tokens.first.toUpperCase().trim();
               final double amt = double.tryParse(tokens.last.replaceAll(',', '')) ?? 0.0;
-              if (amt > 0) {
+              if (amt > 0 && mode != 'RETAIL') {
                 result.add({'method': mode, 'amount': amt});
               }
             }
@@ -1461,6 +1693,11 @@ class PosInvoicePrinter {
   }
 
   static String _displayPaymentMode(SaleOrder order) {
+    final rawStatus = order.status.trim().toUpperCase();
+    final rawMode = order.paymentMode.trim().toUpperCase();
+    if (rawMode == 'UNSETTLED' || rawStatus == 'PRINTED' || rawStatus == 'RUNNING' || rawStatus == 'DRAFT') {
+      return 'UNSETTLED (Awaiting Payment)';
+    }
     if (_isExchangeOrder(order)) {
       return 'EXCHANGE';
     }
@@ -1468,8 +1705,7 @@ class PosInvoicePrinter {
     if (splits.length > 1) {
       return 'SPLIT PAYMENT (${splits.length} Modes)';
     }
-    final rawMode = order.paymentMode.trim().isEmpty ? 'CASH' : order.paymentMode.trim();
-    if (rawMode.toUpperCase() == 'CREDIT') {
+    if (rawMode == 'CREDIT') {
       if (order.balanceDue <= 0.009) {
         return 'CREDIT (FULLY REPAID)';
       } else if (order.repayments.isNotEmpty || order.amountPaid > (order.initialAmountPaid > 0 ? order.initialAmountPaid : 0)) {
@@ -1698,11 +1934,10 @@ class PosInvoicePrinter {
       qtyUnitRate,
       if (item.isSchemeFree || item.isAdvanceFree) 'FREE',
       if (item.taxPercent > 0)
-        // Show plain "GST 18% = Rs. X.XX" so customer clearly sees rate + amount
-        'GST ${_formatTaxPercent(item.taxPercent)}%${item.isTaxInclusive ? ' (Incl.)' : ''}'
+        '${_taxPrefix(order, item)} ${_formatTaxPercent(item.taxPercent)}%${item.isTaxInclusive ? ' (Incl.)' : ''}'
             '${item.taxAmount > 0 ? ' = ${_money(item.taxAmount)}' : ''}'
       else
-        'GST NILL',
+        '${_taxPrefix(order, item)} NILL',
       if (itemDiscount > 0.01) 'Disc ${_money(itemDiscount)}',
     ];
 
@@ -1955,7 +2190,15 @@ class PosInvoicePrinter {
     ].where((part) => part.trim().isNotEmpty).join(', ');
   }
 
-  static String _money(double value) => _currency.format(value);
+  static bool _currentShowCurrency = false;
+
+  static String _money(double value, [bool? showCurrency]) {
+    final useCurrency = showCurrency ?? _currentShowCurrency;
+    if (useCurrency) {
+      return CurrencyService.format(value);
+    }
+    return _currency.format(value);
+  }
 
   static String _qty(double value) =>
       value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
@@ -2018,20 +2261,44 @@ class PosInvoicePrinter {
     double sum = 0;
     for (final tax in taxes) {
       final code = tax.code.toUpperCase();
-      if (code == 'CGST' || code == 'IGST' || code == 'VAT' || code == 'CUSTOM') {
-        sum += tax.taxableAmount;
+      // Skip secondary component lines that share the primary taxable base (e.g. SGST/UTGST in CGST+SGST, CITY_TAX/COUNTY_TAX in multi-tier sales tax)
+      if (code == 'SGST' || code == 'UTGST' || code == 'CITY_TAX' || code == 'COUNTY_TAX') {
+        continue;
       }
+      sum += tax.taxableAmount;
+    }
+    if (sum <= 0.0009 && taxes.isNotEmpty) {
+      return taxes.first.taxableAmount;
     }
     return sum;
   }
 
   static double _adjustedItemTaxableTotal(SaleOrder order) {
-    final grouped = _groupedTaxBreakup(order);
-    double groupedTaxableSum = 0;
-    if (grouped.isNotEmpty) {
-      groupedTaxableSum = _groupTaxableTotal(grouped);
+    final hasSubscriptionItems = order.items.any((item) => item.isAdvanceFree);
+    if (order.taxableAmount > 0.0009 && !hasSubscriptionItems) {
+      return order.taxableAmount;
     }
-    return groupedTaxableSum;
+    double total = 0.0;
+    for (final item in order.items) {
+      if (item.taxPercent > 0 || item.taxAmount > 0 || item.taxBreakup.isNotEmpty || item.taxGroup != null) {
+        total += _displayItemTaxableAmount(order, item);
+      }
+    }
+    if (total > 0.0009) {
+      return total;
+    }
+    final grouped = _groupedTaxBreakup(order);
+    if (grouped.isNotEmpty) {
+      return _groupTaxableTotal(grouped);
+    }
+    final allItemsTotal = order.items.fold<double>(
+      0.0,
+      (sum, item) => sum + _displayItemTaxableAmount(order, item),
+    );
+    if (allItemsTotal > 0.0009) {
+      return allItemsTotal;
+    }
+    return order.taxableAmount > 0.0009 ? order.taxableAmount : order.subTotal;
   }
 
   static List<TaxBreakdown> _adjustedItemGroupedTaxes(SaleOrder order, List<TaxBreakdown> original) {
@@ -2116,78 +2383,167 @@ class PosInvoicePrinter {
     final billingMode = order.billingTaxMode.trim().toUpperCase();
     final grouped = <String, TaxBreakdown>{};
 
+    void addTax(TaxBreakdown tax) {
+      final key = '${tax.code}|${tax.label}|${tax.rate}';
+      final existing = grouped[key];
+      if (existing == null) {
+        grouped[key] = tax;
+      } else {
+        grouped[key] = TaxBreakdown(
+          code: existing.code,
+          label: existing.label,
+          taxType: existing.taxType,
+          rate: existing.rate,
+          taxableAmount: existing.taxableAmount + tax.taxableAmount,
+          taxAmount: existing.taxAmount + tax.taxAmount,
+        );
+      }
+    }
+
     for (final charge in order.charges) {
       final taxableAmount = charge.amount.abs();
       final taxAmount = taxableAmount * charge.taxPercent / 100.0;
       if (taxableAmount <= 0 || taxAmount <= 0) continue;
 
-      if (billingMode == 'IGST') {
-        final key = 'IGST|${charge.taxPercent}';
-        final existing = grouped[key];
-        grouped[key] = existing == null
-            ? TaxBreakdown(
-                code: 'IGST',
-                label: 'IGST ${_formatTaxPercent(charge.taxPercent)}%',
-                taxType: 'GST',
-                rate: charge.taxPercent,
-                taxableAmount: taxableAmount,
-                taxAmount: taxAmount,
-              )
-            : TaxBreakdown(
-                code: 'IGST',
-                label: existing.label,
-                taxType: 'GST',
-                rate: charge.taxPercent,
-                taxableAmount: existing.taxableAmount + taxableAmount,
-                taxAmount: existing.taxAmount + taxAmount,
-              );
+      if (charge.taxBreakup.isNotEmpty) {
+        for (final tax in charge.taxBreakup) {
+          addTax(tax);
+        }
+        continue;
+      }
+
+      if (charge.taxGroup != null && charge.taxGroup!.components.isNotEmpty) {
+        for (final comp in charge.taxGroup!.components) {
+          final compAmount = taxableAmount * comp.rate / 100;
+          addTax(
+            TaxBreakdown(
+              code: comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX',
+              label: '${comp.componentName} (${_formatTaxPercent(comp.rate)}%)',
+              taxType: comp.componentCode,
+              rate: comp.rate,
+              taxableAmount: taxableAmount,
+              taxAmount: compAmount,
+            ),
+          );
+        }
+        continue;
+      }
+
+      final normalizedType = charge.taxType.trim().toUpperCase();
+
+      if (normalizedType.contains('USA') ||
+          normalizedType.contains('US_') ||
+          normalizedType.contains('SALES') ||
+          normalizedType == 'COMPOSITE' ||
+          billingMode == 'US_SALES_TAX' ||
+          billingMode == 'SALES_TAX') {
+        final stateRate = charge.taxPercent > 1.0 ? double.parse((charge.taxPercent - 1.0).toStringAsFixed(2)) : charge.taxPercent;
+        final cityRate = charge.taxPercent > 1.0 ? 1.0 : 0.0;
+
+        addTax(
+          TaxBreakdown(
+            code: 'STATE_TAX',
+            label: 'STATE SALES TAX (${_formatTaxPercent(stateRate)}%)',
+            taxType: 'STATE_TAX',
+            rate: stateRate,
+            taxableAmount: taxableAmount,
+            taxAmount: taxableAmount * stateRate / 100,
+          ),
+        );
+        if (cityRate > 0) {
+          addTax(
+            TaxBreakdown(
+              code: 'CITY_TAX',
+              label: 'CITY TAX (${_formatTaxPercent(cityRate)}%)',
+              taxType: 'CITY_TAX',
+              rate: cityRate,
+              taxableAmount: taxableAmount,
+              taxAmount: taxableAmount * cityRate / 100,
+            ),
+          );
+        }
+        continue;
+      }
+
+      if (billingMode == 'IGST' || normalizedType == 'IGST') {
+        addTax(
+          TaxBreakdown(
+            code: 'IGST',
+            label: 'IGST ${_formatTaxPercent(charge.taxPercent)}%',
+            taxType: 'GST',
+            rate: charge.taxPercent,
+            taxableAmount: taxableAmount,
+            taxAmount: taxAmount,
+          ),
+        );
+        continue;
+      }
+
+      if (billingMode == 'VAT' || normalizedType == 'VAT') {
+        addTax(
+          TaxBreakdown(
+            code: 'VAT',
+            label: 'VAT ${_formatTaxPercent(charge.taxPercent)}%',
+            taxType: 'VAT',
+            rate: charge.taxPercent,
+            taxableAmount: taxableAmount,
+            taxAmount: taxAmount,
+          ),
+        );
+        continue;
+      }
+
+      if (normalizedType == 'CESS') {
+        addTax(
+          TaxBreakdown(
+            code: 'CESS',
+            label: 'CESS ${_formatTaxPercent(charge.taxPercent)}%',
+            taxType: 'CESS',
+            rate: charge.taxPercent,
+            taxableAmount: taxableAmount,
+            taxAmount: taxAmount,
+          ),
+        );
+        continue;
+      }
+
+      if (normalizedType != 'GST' && normalizedType != 'CGST_SGST' && billingMode != 'CGST_SGST') {
+        addTax(
+          TaxBreakdown(
+            code: normalizedType.isNotEmpty ? normalizedType : 'TAX',
+            label: '${normalizedType.isNotEmpty ? normalizedType : "Tax"} (${_formatTaxPercent(charge.taxPercent)}%)',
+            taxType: normalizedType.isNotEmpty ? normalizedType : 'TAX',
+            rate: charge.taxPercent,
+            taxableAmount: taxableAmount,
+            taxAmount: taxAmount,
+          ),
+        );
         continue;
       }
 
       final halfRate = charge.taxPercent / 2;
       final halfTaxAmount = taxAmount / 2;
-      final cgstKey = 'CGST|${halfRate}';
-      final sgstKey = 'SGST|${halfRate}';
-
-      final cgstExisting = grouped[cgstKey];
-      grouped[cgstKey] = cgstExisting == null
-          ? TaxBreakdown(
-              code: 'CGST',
-              label: 'CGST ${_formatTaxPercent(halfRate)}%',
-              taxType: 'GST',
-              rate: halfRate,
-              taxableAmount: taxableAmount,
-              taxAmount: halfTaxAmount,
-            )
-          : TaxBreakdown(
-              code: 'CGST',
-              label: cgstExisting.label,
-              taxType: 'GST',
-              rate: halfRate,
-              taxableAmount: cgstExisting.taxableAmount + taxableAmount,
-              taxAmount: cgstExisting.taxAmount + halfTaxAmount,
-            );
-
-      final sgstExisting = grouped[sgstKey];
-      grouped[sgstKey] = sgstExisting == null
-          ? TaxBreakdown(
-              code: 'SGST',
-              label: 'SGST/UTGST ${_formatTaxPercent(halfRate)}%',
-              taxType: 'GST',
-              rate: halfRate,
-              taxableAmount: taxableAmount,
-              taxAmount: halfTaxAmount,
-            )
-          : TaxBreakdown(
-              code: 'SGST',
-              label: sgstExisting.label,
-              taxType: 'GST',
-              rate: halfRate,
-              taxableAmount: sgstExisting.taxableAmount + taxableAmount,
-              taxAmount: sgstExisting.taxAmount + halfTaxAmount,
-            );
+      addTax(
+        TaxBreakdown(
+          code: 'CGST',
+          label: 'CGST ${_formatTaxPercent(halfRate)}%',
+          taxType: 'GST',
+          rate: halfRate,
+          taxableAmount: taxableAmount,
+          taxAmount: halfTaxAmount,
+        ),
+      );
+      addTax(
+        TaxBreakdown(
+          code: 'SGST',
+          label: 'SGST/UTGST ${_formatTaxPercent(halfRate)}%',
+          taxType: 'GST',
+          rate: halfRate,
+          taxableAmount: taxableAmount,
+          taxAmount: halfTaxAmount,
+        ),
+      );
     }
-
     return grouped.values.toList();
   }
 
@@ -2301,6 +2657,10 @@ class PosInvoicePrinter {
     final taxPercent = item.taxPercent;
     if (taxPercent <= 0) return const <TaxBreakdown>[];
 
+    if (item.taxBreakup.isNotEmpty) {
+      return item.taxBreakup;
+    }
+
     final double taxableAmount;
     final double taxAmount;
     final isTaxInclusive = item.isTaxInclusive ||
@@ -2324,6 +2684,51 @@ class PosInvoicePrinter {
     }
     if (taxableAmount <= 0) return const <TaxBreakdown>[];
     final normalizedType = item.taxType.trim().toUpperCase();
+
+    if (item.taxGroup != null && item.taxGroup!.components.isNotEmpty) {
+      final list = <TaxBreakdown>[];
+      for (final comp in item.taxGroup!.components) {
+        final compAmount = taxableAmount * comp.rate / 100;
+        list.add(
+          TaxBreakdown(
+            code: comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX',
+            label: '${comp.componentName} (${_formatTaxPercent(comp.rate)}%)',
+            taxType: comp.componentCode,
+            rate: comp.rate,
+            taxableAmount: taxableAmount,
+            taxAmount: compAmount,
+          ),
+        );
+      }
+      return list;
+    }
+
+    if (normalizedType == 'US_SALES_TAX' ||
+        normalizedType == 'COMPOSITE' ||
+        normalizedType == 'SALES_TAX') {
+      final stateRate = taxPercent > 1.0 ? double.parse((taxPercent - 1.0).toStringAsFixed(2)) : taxPercent;
+      final cityRate = taxPercent > 1.0 ? 1.0 : 0.0;
+
+      return [
+        TaxBreakdown(
+          code: 'STATE_TAX',
+          label: 'STATE SALES TAX (${_formatTaxPercent(stateRate)}%)',
+          taxType: 'STATE_TAX',
+          rate: stateRate,
+          taxableAmount: taxableAmount,
+          taxAmount: taxableAmount * stateRate / 100,
+        ),
+        if (cityRate > 0)
+          TaxBreakdown(
+            code: 'CITY_TAX',
+            label: 'CITY TAX (${_formatTaxPercent(cityRate)}%)',
+            taxType: 'CITY_TAX',
+            rate: cityRate,
+            taxableAmount: taxableAmount,
+            taxAmount: taxableAmount * cityRate / 100,
+          ),
+      ];
+    }
     if (normalizedType == 'VAT') {
       return [
         TaxBreakdown(
@@ -2410,6 +2815,23 @@ class PosInvoicePrinter {
     ];
   }
 
+  static String _taxPrefix(SaleOrder order, SaleItem item) {
+    if (item.taxGroup != null && item.taxGroup!.groupName.isNotEmpty) {
+      return item.taxGroup!.groupName;
+    }
+    final normType = item.taxType.trim().toUpperCase();
+    if (normType == 'US_SALES_TAX' || normType == 'COMPOSITE' || normType == 'SALES_TAX') {
+      return 'Sales Tax';
+    }
+    if (normType == 'VAT' || normType == 'VAT_ONLY' || normType == 'VAT_CTL' || order.billingTaxMode == 'VAT') {
+      return 'VAT';
+    }
+    if (normType == 'CESS') return 'CESS';
+    if (normType == 'CUSTOM' || normType == 'OTHER') return 'Tax';
+    if (order.billingTaxMode == 'NONE') return 'Tax';
+    return 'GST';
+  }
+
   static TaxBreakdown? _itemTaxForCode(SaleOrder order, SaleItem item, String code) {
     for (final tax in _itemTaxBreakup(order, item)) {
       if (tax.code == code) return tax;
@@ -2485,6 +2907,7 @@ class PosInvoicePrinter {
     required PropertyInfo? property,
     required pw.MemoryImage? logo,
     pw.Widget? rightWidget,
+    String? country,
   }) {
     final sellerName = property?.legalName.isNotEmpty == true
         ? property!.legalName
@@ -2546,7 +2969,7 @@ class PosInvoicePrinter {
                       result.add(
                         pw.Padding(
                           padding: const pw.EdgeInsets.symmetric(horizontal: 5),
-                          child: pw.Text('|', style: pw.TextStyle(color: PdfColors.grey400, fontSize: 7.5)),
+                          child: pw.Text('|', style: const pw.TextStyle(color: PdfColors.grey400, fontSize: 7.5)),
                         ),
                       );
                     }
@@ -2556,13 +2979,16 @@ class PosInvoicePrinter {
                 
                 pw.SizedBox(height: 1.5),
                 
-                // GSTIN / FSSAI / DL No Row
+                // Tax ID / State Tax ID / FSSAI / DL No Row
                 () {
                   final certWidgets = <pw.Widget>[];
                   if (property != null && property.gstNo.isNotEmpty) {
-                    certWidgets.add(pw.Text('GSTIN: ${property.gstNo}', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900)));
+                    certWidgets.add(pw.Text('${_taxIdLabel(country)}: ${property.gstNo}', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900)));
                   }
-                  if (property != null && property.fssaiNo.isNotEmpty) {
+                  if (property != null && property.panNo.isNotEmpty) {
+                    certWidgets.add(pw.Text('${_businessRegLabel(country)}: ${property.panNo}', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey800)));
+                  }
+                  if (property != null && property.fssaiNo.isNotEmpty && _isIndiaCountry(country)) {
                     certWidgets.add(pw.Text('FSSAI: ${property.fssaiNo}', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey800)));
                   }
                   if (property != null && property.drugLicenseNo.isNotEmpty) {
@@ -2602,45 +3028,72 @@ class PosInvoicePrinter {
     required pw.MemoryImage? logo,
     required pw.Font fontRegular,
     required pw.Font fontBold,
+    String? country,
+    Map<String, dynamic>? receiptTemplateConfig,
+    double scale = 1.0,
   }) {
-    final bodyStyle = pw.TextStyle(font: fontRegular, fontSize: 8.9, color: _thermalSecondary);
-    final storeStyle = pw.TextStyle(font: fontBold, fontSize: 12.8, color: _thermalPrimary);
-    
-    final addressText = property?.address ?? '';
-    
+    final cfg = receiptTemplateConfig ?? {};
+    final bool showLogo = cfg['show_logo'] ?? true;
+    final bool showAddress = cfg['show_address'] ?? true;
+    final bool showPhone = cfg['show_phone'] ?? (property?.printMobile ?? true);
+    final bool showEmail = cfg['show_email'] ?? (property?.printEmail ?? true);
+
+    final String headerTitle = (cfg['header_title']?.toString().trim().isNotEmpty == true)
+        ? cfg['header_title'].toString().trim()
+        : (property?.propertyName ?? '');
+    final String headerSubtext = (cfg['header_subtext']?.toString().trim().isNotEmpty == true)
+        ? cfg['header_subtext'].toString().trim()
+        : (property?.address ?? '');
+    final String taxRegNo = (cfg['tax_reg_no']?.toString().trim().isNotEmpty == true)
+        ? cfg['tax_reg_no'].toString().trim()
+        : '';
+
+    final bodyStyle = pw.TextStyle(font: fontRegular, fontSize: 8.9 * scale, color: _thermalSecondary);
+    final storeStyle = pw.TextStyle(font: fontBold, fontSize: 12.8 * scale, color: _thermalPrimary);
+
     return pw.DefaultTextStyle(
       style: bodyStyle,
       child: pw.Center(
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            if (logo != null)
+            if (showLogo && logo != null)
               pw.Container(
-                width: 44,
-                height: 44,
-                margin: const pw.EdgeInsets.only(bottom: 4),
+                width: 44 * scale,
+                height: 44 * scale,
+                margin: pw.EdgeInsets.only(bottom: 4 * scale),
                 child: pw.Image(logo, fit: pw.BoxFit.contain),
               ),
-            pw.Text(
-              property?.propertyName ?? '',
-              textAlign: pw.TextAlign.center,
-              style: storeStyle,
-            ),
-            if (addressText.isNotEmpty)
+            if (headerTitle.isNotEmpty)
+              pw.Text(
+                headerTitle,
+                textAlign: pw.TextAlign.center,
+                style: storeStyle,
+              ),
+            if (showAddress && headerSubtext.isNotEmpty)
               pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 2),
+                padding: pw.EdgeInsets.only(top: 2 * scale),
                 child: pw.Text(
-                  addressText,
+                  headerSubtext,
                   textAlign: pw.TextAlign.center,
                 ),
               ),
-            if (property != null) ...[
-              if (property.printMobile != false && property.mobile.isNotEmpty)
+            if (taxRegNo.isNotEmpty)
+              pw.Padding(
+                padding: pw.EdgeInsets.only(top: 2 * scale),
+                child: pw.Text(
+                  taxRegNo,
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(font: fontBold, fontSize: 9.0 * scale, color: _thermalPrimary),
+                ),
+              )
+            else if (property != null) ...[
+              if (showPhone && property.printMobile != false && property.mobile.isNotEmpty)
                 pw.Text(
                   'Phone: ${property.mobile}',
                   textAlign: pw.TextAlign.center,
                 ),
-              if (property.printEmail != false && property.email.isNotEmpty)
+              if (showEmail && property.printEmail != false && property.email.isNotEmpty)
                 pw.Text(
                   'Email: ${property.email}',
                   textAlign: pw.TextAlign.center,
@@ -2652,7 +3105,12 @@ class PosInvoicePrinter {
                 ),
               if (property.gstNo.isNotEmpty)
                 pw.Text(
-                  'GSTIN: ${property.gstNo}',
+                  '${_taxIdLabel(country)}: ${property.gstNo}',
+                  textAlign: pw.TextAlign.center,
+                ),
+              if (property.panNo.isNotEmpty)
+                pw.Text(
+                  '${_businessRegLabel(country)}: ${property.panNo}',
                   textAlign: pw.TextAlign.center,
                 ),
               if (property.drugLicenseNo.isNotEmpty)
@@ -2660,7 +3118,7 @@ class PosInvoicePrinter {
                   'DL No: ${property.drugLicenseNo}',
                   textAlign: pw.TextAlign.center,
                 ),
-              if (property.fssaiNo.isNotEmpty)
+              if (property.fssaiNo.isNotEmpty && _isIndiaCountry(country))
                 pw.Text(
                   'FSSAI No: ${property.fssaiNo}',
                   textAlign: pw.TextAlign.center,
@@ -2772,13 +3230,13 @@ class PosInvoicePrinter {
                       pw.Expanded(
                         child: pw.Text('[$prefix] $accName', style: pw.TextStyle(font: mono, fontSize: 8.5)),
                       ),
-                      pw.Text('Rs. ${lineAmt.toStringAsFixed(2)}', style: pw.TextStyle(font: mono, fontSize: 8.5)),
+                      pw.Text(CurrencyService.format(lineAmt), style: pw.TextStyle(font: mono, fontSize: 8.5)),
                     ],
                   );
                 }),
                 divider(),
               ],
-              kvLine('Total Amount:', 'Rs. ${amount.toStringAsFixed(2)}', boldFont: true),
+              kvLine('Total Amount:', CurrencyService.format(amount), boldFont: true),
               divider(),
               if (note.isNotEmpty) ...[
                 pw.Text('Narration / Note:', style: pw.TextStyle(font: mono, fontSize: 8, fontWeight: pw.FontWeight.bold)),
@@ -3138,7 +3596,8 @@ class PosInvoicePrinter {
                         if (property?.printMobile != false && (property?.mobile ?? '').isNotEmpty) pw.Text('Phone: ${property!.mobile}', style: const pw.TextStyle(fontSize: 8.5)),
                         if (property?.printEmail != false && (property?.email ?? '').isNotEmpty) pw.Text('Email: ${property!.email}', style: const pw.TextStyle(fontSize: 8.5)),
                         if (property?.printWebsite != false && (property?.website ?? '').isNotEmpty) pw.Text('Website: ${property!.website}', style: const pw.TextStyle(fontSize: 8.5)),
-                        if ((property?.gstNo ?? '').isNotEmpty) pw.Text('GSTIN: ${property!.gstNo}', style: const pw.TextStyle(fontSize: 8.5)),
+                        if ((property?.gstNo ?? '').isNotEmpty) pw.Text('${_taxIdLabel()}: ${property!.gstNo}', style: const pw.TextStyle(fontSize: 8.5)),
+                        if ((property?.panNo ?? '').isNotEmpty) pw.Text('${_businessRegLabel()}: ${property!.panNo}', style: const pw.TextStyle(fontSize: 8.5)),
                         if ((property?.drugLicenseNo ?? '').isNotEmpty) pw.Text('DL No: ${property!.drugLicenseNo}', style: const pw.TextStyle(fontSize: 8.5)),
                       ],
                     ),
@@ -3158,7 +3617,7 @@ class PosInvoicePrinter {
                         pw.SizedBox(height: 4),
                         pw.Text(customerName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                         pw.Text('Phone: $customerPhone', style: const pw.TextStyle(fontSize: 8.5)),
-                        pw.Text('GSTIN: $customerGstin', style: const pw.TextStyle(fontSize: 8.5)),
+                        if (customerGstin.isNotEmpty) pw.Text('${_taxIdLabel()}: $customerGstin', style: const pw.TextStyle(fontSize: 8.5)),
                       ],
                     ),
                   ),
@@ -3412,7 +3871,12 @@ class PosInvoicePrinter {
                   ),
                 if ((property?.gstNo ?? '').isNotEmpty)
                   pw.Text(
-                    'GSTIN: ${property!.gstNo}',
+                    '${_taxIdLabel()}: ${property!.gstNo}',
+                    textAlign: pw.TextAlign.center,
+                  ),
+                if ((property?.panNo ?? '').isNotEmpty)
+                  pw.Text(
+                    '${_businessRegLabel()}: ${property!.panNo}',
                     textAlign: pw.TextAlign.center,
                   ),
                 if ((property?.drugLicenseNo ?? '').isNotEmpty)
@@ -3426,7 +3890,7 @@ class PosInvoicePrinter {
                   style: emphasisStyle.copyWith(fontSize: 11),
                 ),
                 pw.Text(
-                  'GST COMPLIANT',
+                  _isIndiaCountry(null) ? 'GST COMPLIANT' : 'TAX COMPLIANT',
                   style: bodyStyle.copyWith(fontSize: 7.5),
                 ),
               ],
@@ -3445,7 +3909,7 @@ class PosInvoicePrinter {
           // Customer Details
           if (customerName.isNotEmpty) _thermalRow('Customer:', customerName),
           if (customerPhone != '--') _thermalRow('Phone:', customerPhone),
-          if (customerGstin.isNotEmpty) _thermalRow('GSTIN:', customerGstin),
+          if (customerGstin.isNotEmpty) _thermalRow('${_taxIdLabel()}:', customerGstin),
           pw.Divider(color: _thermalDivider, thickness: 0.8),
 
           // Table Header
@@ -3644,7 +4108,9 @@ class PosInvoicePrinter {
                     if (property?.printWebsite != false && property?.website != null && property!.website.isNotEmpty)
                       pw.Text('Website: ${property.website}', style: const pw.TextStyle(fontSize: 7.5)),
                     if (property?.gstNo != null && property!.gstNo.isNotEmpty)
-                      pw.Text('GSTIN: ${property.gstNo}', style: const pw.TextStyle(fontSize: 7.5)),
+                      pw.Text('${_taxIdLabel()}: ${property.gstNo}', style: const pw.TextStyle(fontSize: 7.5)),
+                    if (property?.panNo != null && property!.panNo.isNotEmpty)
+                      pw.Text('${_businessRegLabel()}: ${property.panNo}', style: const pw.TextStyle(fontSize: 7.5)),
                   ],
                 ),
               ),
@@ -3687,8 +4153,8 @@ class PosInvoicePrinter {
               _thermalDividerWidget(),
               pw.SizedBox(height: 4),
 
-              _thermalReceiptRow('Original Amount Paid:', 'Rs. ${double.tryParse(order['net_amount']?.toString() ?? '0.0')?.toStringAsFixed(2) ?? '0.00'}'),
-              _thermalReceiptRow('Refunded Amount:', 'Rs. ${refundAmt.toStringAsFixed(2)}', isBold: true),
+              _thermalReceiptRow('Original Amount Paid:', CurrencyService.format(double.tryParse(order['net_amount']?.toString() ?? '0.0') ?? 0.0)),
+              _thermalReceiptRow('Refunded Amount:', CurrencyService.format(refundAmt), isBold: true),
               
               pw.SizedBox(height: 6),
               _thermalDividerWidget(),
@@ -4002,151 +4468,294 @@ class PosInvoicePrinter {
     required PropertyInfo? property,
     required String stationLocation,
     required List<SaleItem> stationItems,
+    SystemSettings? settings,
+    Map<String, dynamic>? tokenTemplateConfig,
     int copyCount = 1,
   }) async {
     final document = pw.Document();
     final regular = pw.Font.helvetica();
     final bold = pw.Font.helveticaBold();
 
+    final config = tokenTemplateConfig ?? settings?.tokenTemplateConfig ?? {};
+    final String headerTitle = (config['header_title']?.toString() ?? 'ORDER TOKEN').trim();
+    final String subTitle = (config['sub_title']?.toString() ?? 'PLEASE WAIT FOR YOUR TURN').trim();
+    final String counterTitle = (config['counter_title']?.toString() ?? 'COUNTER #1').trim();
+    final String footerNote = (config['footer_note']?.toString() ?? 'Present this token when collecting your order').trim();
+    final String badgeStyle = (config['badge_style']?.toString() ?? 'INVERTED_BOX').trim();
+    final String fontSizeMode = (config['font_size']?.toString() ?? 'MEDIUM').trim();
+    final String paperWidthMode = (config['paper_width']?.toString() ?? '80mm').trim();
+
+    final bool showStoreName = config['show_store_name'] != false;
+    final bool showBigNumber = config['show_big_number'] != false;
+    final bool showOrderNo = config['show_order_no'] != false;
+    final bool showTimestamp = config['show_timestamp'] != false;
+    final bool showCounter = config['show_counter'] != false;
+    final bool showCustomer = config['show_customer'] != false;
+    final bool showItemsSummary = config['show_items_summary'] != false;
+    final bool showItemCount = config['show_item_count'] != false;
+    final bool showBarcode = config['show_barcode'] != false;
+    final bool showCutLine = config['show_cut_line'] != false;
+
+    final double fontScale = fontSizeMode == 'LARGE'
+        ? 1.2
+        : (fontSizeMode == 'SMALL' ? 0.85 : 1.0);
+
+    final pageFormat = paperWidthMode == '58mm'
+        ? const PdfPageFormat(58 * PdfPageFormat.mm, double.infinity, marginAll: 3 * PdfPageFormat.mm)
+        : _thermalSheetFor(order.billFormat);
+
     final tokenNoStr = (order.tokenNo ?? '').trim().isNotEmpty
         ? order.tokenNo!.trim()
         : 'TK-${(order.orderId ?? 101).toString().padLeft(3, '0')}';
 
+    pw.Widget buildTokenBadge() {
+      if (badgeStyle == 'BORDER_BOX') {
+        return pw.Container(
+          padding: pw.EdgeInsets.symmetric(vertical: 8 * fontScale, horizontal: 12),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.black, width: 2),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+          ),
+          child: pw.Column(
+            children: [
+              pw.Text(
+                'TOKEN NUMBER',
+                style: pw.TextStyle(font: bold, fontSize: 9 * fontScale, color: PdfColors.grey800, letterSpacing: 1.2),
+              ),
+              pw.SizedBox(height: 3),
+              pw.Text(
+                tokenNoStr,
+                style: pw.TextStyle(font: bold, fontSize: 28 * fontScale, color: PdfColors.black),
+              ),
+            ],
+          ),
+        );
+      } else if (badgeStyle == 'CIRCLE') {
+        return pw.Container(
+          padding: pw.EdgeInsets.symmetric(vertical: 10 * fontScale, horizontal: 16),
+          decoration: pw.BoxDecoration(
+            shape: pw.BoxShape.circle,
+            border: pw.Border.all(color: PdfColors.black, width: 2.5),
+          ),
+          child: pw.Column(
+            children: [
+              pw.Text(
+                'TOKEN',
+                style: pw.TextStyle(font: bold, fontSize: 8 * fontScale, color: PdfColors.grey800),
+              ),
+              pw.Text(
+                tokenNoStr,
+                style: pw.TextStyle(font: bold, fontSize: 26 * fontScale, color: PdfColors.black),
+              ),
+            ],
+          ),
+        );
+      } else if (badgeStyle == 'MINIMAL') {
+        return pw.Container(
+          padding: pw.EdgeInsets.symmetric(vertical: 6 * fontScale, horizontal: 10),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              top: pw.BorderSide(color: PdfColors.black, width: 1.5),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 1.5),
+            ),
+          ),
+          child: pw.Column(
+            children: [
+              pw.Text(
+                'TOKEN NO: $tokenNoStr',
+                style: pw.TextStyle(font: bold, fontSize: 22 * fontScale, color: PdfColors.black),
+              ),
+            ],
+          ),
+        );
+      } else {
+        // INVERTED_BOX
+        return pw.Container(
+          padding: pw.EdgeInsets.symmetric(vertical: 8 * fontScale, horizontal: 12),
+          decoration: const pw.BoxDecoration(
+            color: PdfColors.black,
+            borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
+          ),
+          child: pw.Column(
+            children: [
+              pw.Text(
+                'TOKEN NUMBER',
+                style: pw.TextStyle(font: bold, fontSize: 9 * fontScale, color: PdfColors.white, letterSpacing: 1.2),
+              ),
+              pw.SizedBox(height: 3),
+              pw.Text(
+                tokenNoStr,
+                style: pw.TextStyle(font: bold, fontSize: 28 * fontScale, color: PdfColors.white),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+
     for (int c = 0; c < math.max(1, copyCount); c++) {
       document.addPage(
         pw.MultiPage(
-          pageFormat: _thermalSheetFor(order.billFormat),
+          pageFormat: pageFormat,
           margin: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           build: (_) => [
             pw.DefaultTextStyle(
-              style: pw.TextStyle(font: regular, fontSize: 9, color: PdfColors.black),
+              style: pw.TextStyle(font: regular, fontSize: 9 * fontScale, color: PdfColors.black),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                 children: [
                   // 1. SHOP HEADER
-                  pw.Center(
-                    child: pw.Text(
-                      property?.propertyName.trim().isNotEmpty == true
-                          ? property!.propertyName.trim().toUpperCase()
-                          : AppBrand.productName.toUpperCase(),
-                      style: pw.TextStyle(font: bold, fontSize: 12, color: PdfColors.black),
-                      textAlign: pw.TextAlign.center,
-                    ),
-                  ),
-                  pw.SizedBox(height: 2),
-                  pw.Center(
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                      decoration: pw.BoxDecoration(
-                        color: PdfColors.grey200,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-                      ),
+                  if (showStoreName) ...[
+                    pw.Center(
                       child: pw.Text(
-                        'STATION TOKEN TICKET',
-                        style: pw.TextStyle(font: bold, fontSize: 9, color: PdfColors.black),
+                        property?.propertyName.trim().isNotEmpty == true
+                            ? property!.propertyName.trim().toUpperCase()
+                            : AppBrand.productName.toUpperCase(),
+                        style: pw.TextStyle(font: bold, fontSize: 12 * fontScale, color: PdfColors.black),
+                        textAlign: pw.TextAlign.center,
                       ),
                     ),
-                  ),
+                    pw.SizedBox(height: 2),
+                  ],
+                  if (headerTitle.isNotEmpty)
+                    pw.Center(
+                      child: pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                        decoration: const pw.BoxDecoration(
+                          color: PdfColors.grey200,
+                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
+                        ),
+                        child: pw.Text(
+                          headerTitle.toUpperCase(),
+                          style: pw.TextStyle(font: bold, fontSize: 9 * fontScale, color: PdfColors.black),
+                        ),
+                      ),
+                    ),
+                  if (subTitle.isNotEmpty) ...[
+                    pw.SizedBox(height: 2),
+                    pw.Center(
+                      child: pw.Text(
+                        subTitle,
+                        style: pw.TextStyle(font: regular, fontSize: 7.5 * fontScale, color: PdfColors.grey700),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    ),
+                  ],
                   pw.SizedBox(height: 6),
 
-                  // 2. HIGH-IMPACT TOKEN NUMBER BADGE
-                  pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                    decoration: pw.BoxDecoration(
-                      border: pw.Border.all(color: PdfColors.black, width: 2),
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  // 2. TOKEN NUMBER BADGE
+                  if (showBigNumber) buildTokenBadge(),
+                  if (showCounter && counterTitle.isNotEmpty) ...[
+                    pw.SizedBox(height: 4),
+                    pw.Center(
+                      child: pw.Text(
+                        counterTitle.toUpperCase(),
+                        style: pw.TextStyle(font: bold, fontSize: 10 * fontScale, color: PdfColors.black),
+                      ),
                     ),
-                    child: pw.Column(
+                  ],
+                  pw.SizedBox(height: 6),
+                  _dashedDivider(),
+
+                  // 3. META DETAILS (BILL NO, STATION, TIME, CUSTOMER)
+                  if (showOrderNo)
+                    _thermalMetaRow('Bill No', order.saleNo, 'Station', stationLocation),
+                  if (showTimestamp)
+                    _thermalMetaRow('Date', formatTzDate(order.saleDate), 'Time', formatTzTime(order.saleDate)),
+                  if (showCustomer && (order.customerName ?? '').trim().isNotEmpty)
+                    _thermalMetaRow('Customer', order.customerName!.trim(), '', ''),
+                  if (showItemCount)
+                    _thermalMetaRow('Total Items', '${stationItems.length}', 'Total Qty', '${stationItems.fold<double>(0, (sum, it) => sum + it.qty)}'),
+                  _dashedDivider(),
+
+                  // 4. ITEM TABLE HEADER & LIST
+                  if (showItemsSummary && stationItems.isNotEmpty) ...[
+                    pw.Table(
+                      columnWidths: const {
+                        0: pw.FlexColumnWidth(2),
+                        1: pw.FlexColumnWidth(7),
+                      },
                       children: [
-                        pw.Text(
-                          'TOKEN NO.',
-                          style: pw.TextStyle(font: bold, fontSize: 10, color: PdfColors.grey800, letterSpacing: 1.2),
-                        ),
-                        pw.SizedBox(height: 3),
-                        pw.Text(
-                          tokenNoStr,
-                          style: pw.TextStyle(font: bold, fontSize: 28, color: PdfColors.black),
+                        pw.TableRow(
+                          children: [
+                            _thermalHeaderCell('QTY', align: pw.TextAlign.left, style: pw.TextStyle(font: bold, fontSize: 8.5 * fontScale)),
+                            _thermalHeaderCell('ITEM DESCRIPTION', align: pw.TextAlign.left, style: pw.TextStyle(font: bold, fontSize: 8.5 * fontScale)),
+                          ],
                         ),
                       ],
                     ),
-                  ),
-                  pw.SizedBox(height: 6),
-                  _dashedDivider(),
-
-                  // 3. META DETAILS (BILL NO, STATION, TIME)
-                  _thermalMetaRow('Bill No', order.saleNo, 'Station', stationLocation),
-                  _thermalMetaRow('Date', formatTzDate(order.saleDate), 'Time', formatTzTime(order.saleDate)),
-                  if ((order.customerName ?? '').trim().isNotEmpty)
-                    _thermalMetaRow('Customer', order.customerName!.trim(), '', ''),
-                  _dashedDivider(),
-
-                  // 4. ITEM TABLE HEADER
-                  pw.Table(
-                    columnWidths: const {
-                      0: pw.FlexColumnWidth(2),
-                      1: pw.FlexColumnWidth(7),
-                    },
-                    children: [
-                      pw.TableRow(
-                        children: [
-                          _thermalHeaderCell('QTY', align: pw.TextAlign.left, style: pw.TextStyle(font: bold, fontSize: 8.5)),
-                          _thermalHeaderCell('ITEM DESCRIPTION', align: pw.TextAlign.left, style: pw.TextStyle(font: bold, fontSize: 8.5)),
-                        ],
-                      ),
-                    ],
-                  ),
-                  pw.SizedBox(height: 3),
-                  ...stationItems.map((item) {
-                    final qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toStringAsFixed(2);
-                    return pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
-                      child: pw.Row(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.SizedBox(
-                            width: 32,
-                            child: pw.Text('${qtyStr}x', style: pw.TextStyle(font: bold, fontSize: 10.5)),
-                          ),
-                          pw.Expanded(
-                            child: pw.Column(
-                              crossAxisAlignment: pw.CrossAxisAlignment.start,
-                              children: [
-                                pw.Text(
-                                  '${item.itemName}${(item.brand != null && item.brand!.trim().isNotEmpty) ? " (${item.brand!.trim()})" : ""}',
-                                  style: pw.TextStyle(font: bold, fontSize: 10),
-                                ),
-                                if ((item.notes ?? '').trim().isNotEmpty)
-                                  pw.Text('Note: ${item.notes!.trim()}', style: pw.TextStyle(font: regular, fontSize: 8.5, color: PdfColors.grey700)),
-                              ],
+                    pw.SizedBox(height: 3),
+                    ...stationItems.map((item) {
+                      final qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toStringAsFixed(2);
+                      return pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
+                        child: pw.Row(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.SizedBox(
+                              width: 32,
+                              child: pw.Text('${qtyStr}x', style: pw.TextStyle(font: bold, fontSize: 10 * fontScale)),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                  _dashedDivider(),
+                            pw.Expanded(
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text(
+                                    '${item.itemName}${(item.brand != null && item.brand!.trim().isNotEmpty) ? " (${item.brand!.trim()})" : ""}',
+                                    style: pw.TextStyle(font: bold, fontSize: 9.5 * fontScale),
+                                  ),
+                                  if ((item.notes ?? '').trim().isNotEmpty)
+                                    pw.Text('Note: ${item.notes!.trim()}', style: pw.TextStyle(font: regular, fontSize: 8 * fontScale, color: PdfColors.grey700)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    _dashedDivider(),
+                  ],
 
                   // 5. BARCODE & FOOTER INSTRUCTIONS
-                  pw.SizedBox(height: 2),
-                  pw.Center(
-                    child: pw.SizedBox(
-                      height: 28,
-                      width: 140,
-                      child: pw.BarcodeWidget(
-                        barcode: pw.Barcode.code128(),
-                        data: tokenNoStr,
-                        drawText: false,
+                  if (showBarcode) ...[
+                    pw.SizedBox(height: 2),
+                    pw.Center(
+                      child: pw.SizedBox(
+                        height: 26 * fontScale,
+                        width: 140,
+                        child: pw.BarcodeWidget(
+                          barcode: pw.Barcode.code128(),
+                          data: tokenNoStr,
+                          drawText: false,
+                        ),
                       ),
                     ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Center(
-                    child: pw.Text(
-                      'Please present this token at counter for pickup',
-                      style: pw.TextStyle(font: bold, fontSize: 8),
-                      textAlign: pw.TextAlign.center,
+                    pw.SizedBox(height: 4),
+                  ],
+                  if (footerNote.isNotEmpty)
+                    pw.Center(
+                      child: pw.Text(
+                        footerNote,
+                        style: pw.TextStyle(font: bold, fontSize: 8 * fontScale),
+                        textAlign: pw.TextAlign.center,
+                      ),
                     ),
-                  ),
+                  if (showCutLine) ...[
+                    pw.SizedBox(height: 6),
+                    pw.Row(
+                      children: [
+                        pw.Text('✂', style: pw.TextStyle(font: bold, fontSize: 9 * fontScale)),
+                        pw.SizedBox(width: 4),
+                        pw.Expanded(child: _dashedDivider()),
+                        pw.SizedBox(width: 4),
+                        pw.Text('CUT HERE', style: pw.TextStyle(font: bold, fontSize: 7 * fontScale)),
+                        pw.SizedBox(width: 4),
+                        pw.Expanded(child: _dashedDivider()),
+                        pw.SizedBox(width: 4),
+                        pw.Text('✂', style: pw.TextStyle(font: bold, fontSize: 9 * fontScale)),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -4233,6 +4842,8 @@ class PosInvoicePrinter {
         final pdfBytes = await buildTokenTicketPdf(
           order: order,
           property: property,
+          settings: settings,
+          tokenTemplateConfig: settings.tokenTemplateConfig,
           stationLocation: stationName,
           stationItems: items,
           copyCount: copyCount,
@@ -4281,6 +4892,8 @@ class _InvoiceContext {
   final String authorizedSignatureLabel;
   final bool showBrandName;
   final bool enableTokenSystem;
+  final Map<String, dynamic> receiptTemplateConfig;
+  final Map<String, dynamic> a4TemplateConfig;
 
   const _InvoiceContext({
     required this.order,
@@ -4301,5 +4914,7 @@ class _InvoiceContext {
     required this.authorizedSignatureLabel,
     required this.showBrandName,
     required this.enableTokenSystem,
+    this.receiptTemplateConfig = const {},
+    this.a4TemplateConfig = const {},
   });
 }

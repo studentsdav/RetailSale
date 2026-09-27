@@ -13,6 +13,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/suppliers/supplier_bill_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/inventory/supplier_bill_model.dart'
     show PaymentStatus, SupplierBill, SupplierBillDetail;
 import '../modify/receiving_modify.dart';
@@ -414,7 +415,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
               } else if (cred < 0) {
                 errorText = 'Credit adjustment cannot be negative';
               } else if (cred > availableCredit + 0.009) {
-                errorText = 'Exceeds available credit (Rs. ${availableCredit.toStringAsFixed(2)})';
+                errorText = 'Exceeds available credit (${CurrencyService.format(availableCredit)})';
               } else if (tot <= 0) {
                 errorText = 'Enter pay amount or credit to adjust';
               } else if (tot > bill.balance + 0.009) {
@@ -574,7 +575,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Rs. ${bill.balance.toStringAsFixed(2)}',
+                                      CurrencyService.format(bill.balance),
                                       style: const TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w800,
@@ -610,7 +611,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                             ),
                             const SizedBox(width: 10),
                             Text(
-                              'Available Credit: Rs. ${availableCredit.toStringAsFixed(2)}',
+                              'Available Credit: ${CurrencyService.format(availableCredit)}',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: availableCredit > 0 ? Colors.green.shade800 : Colors.blueGrey.shade800,

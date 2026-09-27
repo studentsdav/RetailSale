@@ -10,6 +10,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/restaurant/restaurant_analytics_reports_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class RestaurantAnalyticsReportsScreen extends StatefulWidget {
@@ -35,11 +36,7 @@ class _RestaurantAnalyticsReportsScreenState
   int _selectedTab = 0;
   bool _isLoading = false;
 
-  final NumberFormat _inr = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 2,
-  );
+  NumberFormat get _inr => CurrencyService.currencyFormat;
 
   final List<String> _tabs = [
     'Category Wise',
@@ -422,7 +419,7 @@ class _RestaurantAnalyticsReportsScreenState
       'Detail / Code',
       'Txn Count',
       'Quantity',
-      'Total Amount (₹)'
+      'Total Amount (${CurrencyService.symbol})'
     ].map(exc.TextCellValue.new).toList());
 
     final currentRows = _getCurrentActiveRows();
@@ -466,7 +463,7 @@ class _RestaurantAnalyticsReportsScreenState
     await OpenFile.open(file.path);
   }
 
-  String _pdfMoney(double val) => val.toStringAsFixed(2);
+  String _pdfMoney(double val) => CurrencyService.format(val);
 
   // --- Export PDF ---
   Future<void> _exportPdf() async {
@@ -718,7 +715,7 @@ class _RestaurantAnalyticsReportsScreenState
                                 dataSource: activeRows.take(10).toList(),
                                 xValueMapper: (_AggRow data, _) => data.name.length > 15 ? '${data.name.substring(0, 12)}...' : data.name,
                                 yValueMapper: (_AggRow data, _) => data.amount,
-                                name: 'Sales Revenue (₹)',
+                                name: 'Sales Revenue (${CurrencyService.symbol})',
                                 color: const Color(0xFF0F766E),
                                 borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                               )

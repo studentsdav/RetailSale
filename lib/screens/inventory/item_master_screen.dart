@@ -16,6 +16,8 @@ import '../../controllers/inventory/product_template_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../models/inventory/item_model.dart';
+import '../../models/inventory/tax_group_model.dart';
+import '../../core/api/endpoints.dart';
 import '../../models/inventory/attribute_model.dart';
 import '../../models/inventory/product_template_model.dart';
 import '../../models/inventory/settings/master_model.dart';
@@ -172,11 +174,13 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     'DAY',
     'HOUR',
   ];
-  final List<String> _taxTypes = ['GST', 'VAT', 'CESS', 'OTHER'];
+  final List<String> _taxTypes = ['GST', 'VAT', 'US_SALES_TAX', 'COMPOSITE', 'SALES_TAX', 'CESS', 'OTHER'];
 
   GroupModel? _selectedGroup;
   SubCategoryModel? _selectedSubCategory;
   BrandModel? _selectedBrand;
+  List<TaxGroup> _taxGroups = [];
+  TaxGroup? _selectedTaxGroup;
   final _taxPercent = TextEditingController(text: '0');
 
   Future<void> _loadMasters() async {
@@ -185,6 +189,14 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     final brandRes = await ApiClient.get('/api/inventory/brands');
     final locs = await masterCtrl.getLocations();
     await _attributeCtrl.load();
+
+    try {
+      final taxGroupsRes = await ApiClient.get(ApiEndpoints.taxGroups);
+      if (taxGroupsRes['success'] == true && taxGroupsRes['data'] != null) {
+        final raw = taxGroupsRes['data'] as List;
+        _taxGroups = raw.map((e) => TaxGroup.fromJson(Map<String, dynamic>.from(e))).toList();
+      }
+    } catch (_) {}
 
     _groups = List<Map<String, dynamic>>.from(groupsRes['data'] ?? [])
         .map((e) => GroupModel.fromJson(e))
@@ -355,6 +367,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _selectedSubCategory = null;
     _brand = null;
     _selectedBrand = null;
+    _selectedTaxGroup = null;
     _unit = null;
     _taxType = 'GST';
     _stockable = true;
@@ -457,6 +470,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         mrp: enteredMrp,
         taxType: _taxType,
         taxPercent: taxPercent,
+        taxGroupId: _selectedTaxGroup?.id,
         discountApplicable: _discountApplicable,
         schemeApplicable: _schemeApplicable,
         openingBalance:
@@ -643,6 +657,12 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
     _taxType = it.taxType;
     _taxPercent.text = it.taxPercent.toString();
+    if (it.taxGroupId != null && _taxGroups.isNotEmpty) {
+      final matches = _taxGroups.where((g) => g.id.toString() == it.taxGroupId.toString());
+      _selectedTaxGroup = matches.isNotEmpty ? matches.first : null;
+    } else {
+      _selectedTaxGroup = null;
+    }
     _discountApplicable = it.discountApplicable;
     _schemeApplicable = it.schemeApplicable;
     _isHappyHour = it.isHappyHour;
@@ -1892,8 +1912,39 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     width: 150,
                   ),
                 ],
+                if (_taxGroups.isNotEmpty)
+                  SizedBox(
+                    width: 220,
+                    child: DropdownButtonFormField<TaxGroup>(
+                      value: _selectedTaxGroup,
+                      isExpanded: true,
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                      decoration: _compactDecoration('Tax Group / Structure'),
+                      items: _taxGroups.map((g) {
+                        return DropdownMenuItem<TaxGroup>(
+                          value: g,
+                          child: Text('${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)', overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedTaxGroup = val;
+                          if (val != null) {
+                            final codeUpper = (val.groupCode ?? '').trim().toUpperCase();
+                            if (_taxTypes.contains(codeUpper)) {
+                              _taxType = codeUpper;
+                            } else {
+                              _taxType = 'US_SALES_TAX';
+                            }
+                            _taxPercent.text = val.totalRate.toString();
+                            _useInclusiveRates = val.isTaxInclusive;
+                          }
+                        });
+                      },
+                    ),
+                  ),
                 SizedBox(
-                  width: 130,
+                  width: 140,
                   child: Focus(
                     onKeyEvent: (node, event) {
                       if (event is KeyDownEvent &&
@@ -1903,24 +1954,36 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       }
                       return KeyEventResult.ignored;
                     },
-                    child: DropdownButtonFormField<String>(
-                      focusNode: _taxTypeFocus,
-                      initialValue: _taxType,
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-                      decoration: _compactDecoration('Tax Type'),
-                      items: _taxTypes
-                          .map(
-                            (value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _taxType = value);
+                    child: Builder(
+                      builder: (context) {
+                        final List<String> availableTaxTypes = List<String>.from(_taxTypes);
+                        if (_taxType.isNotEmpty && !availableTaxTypes.contains(_taxType)) {
+                          availableTaxTypes.add(_taxType);
                         }
-                        _taxPercentFocus.requestFocus();
+                        final String selectedTaxVal = availableTaxTypes.contains(_taxType)
+                            ? _taxType
+                            : availableTaxTypes.first;
+
+                        return DropdownButtonFormField<String>(
+                          focusNode: _taxTypeFocus,
+                          value: selectedTaxVal,
+                          style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                          decoration: _compactDecoration('Tax Type'),
+                          items: availableTaxTypes
+                              .map(
+                                (value) => DropdownMenuItem(
+                                  value: value,
+                                  child: Text(value),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _taxType = value);
+                            }
+                            _taxPercentFocus.requestFocus();
+                          },
+                        );
                       },
                     ),
                   ),

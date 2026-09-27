@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 import '../../controllers/inventory/damage_controller.dart';
 import '../../controllers/reports/damage_report_controller.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/currency/currency_service.dart';
 import '../../utils/branding_storage.dart';
 
 //
@@ -213,7 +214,7 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
                       _statusChip(header.approvalStatus),
                       const Spacer(),
                       Text(
-                        "Rs ${total.toStringAsFixed(2)}",
+                        CurrencyService.format(total),
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -321,7 +322,7 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        "Damage Total : Rs ${total.toStringAsFixed(2)}",
+                        "Damage Total : ${CurrencyService.format(total)}",
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -555,7 +556,7 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
 
   Future<void> exportToPdf() async {
     final pdf = pw.Document();
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
     final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());

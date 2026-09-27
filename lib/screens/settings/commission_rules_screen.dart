@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/currency/currency_service.dart';
 
 class CommissionRulesScreen extends StatefulWidget {
   const CommissionRulesScreen({super.key});
@@ -150,9 +151,9 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
             const SizedBox(height: 6),
-            _buildStepRow('1. Percentage Part', 'Rate (₹60) × 18% = ₹10.80', Colors.blue.shade700),
-            _buildStepRow('2. Add Fixed Fee', '₹10.80 + ₹200.00 = ₹210.80', Colors.orange.shade700),
-            _buildStepRow('3. Quantity Multiply', '₹210.80 × 2 units = ₹421.60', Colors.green.shade700),
+            _buildStepRow('1. Percentage Part', 'Rate (${CurrencyService.symbol}60) × 18% = ${CurrencyService.symbol}10.80', Colors.blue.shade700),
+            _buildStepRow('2. Add Fixed Fee', '${CurrencyService.symbol}10.80 + ${CurrencyService.symbol}200.00 = ${CurrencyService.symbol}210.80', Colors.orange.shade700),
+            _buildStepRow('3. Quantity Multiply', '${CurrencyService.symbol}210.80 × 2 units = ${CurrencyService.symbol}421.60', Colors.green.shade700),
             const SizedBox(height: 12),
             const Divider(),
             const SizedBox(height: 4),
@@ -380,7 +381,7 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                             child: TextField(
                               controller: minPriceCtrl,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Min Price (₹)', hintText: '0.00'),
+                              decoration: InputDecoration(labelText: 'Min Price (${CurrencyService.symbol})', hintText: '0.00'),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -388,7 +389,7 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                             child: TextField(
                               controller: maxPriceCtrl,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Max Price (₹)', hintText: '9999999.00'),
+                              decoration: InputDecoration(labelText: 'Max Price (${CurrencyService.symbol})', hintText: '9999999.00'),
                             ),
                           ),
                         ],
@@ -418,7 +419,7 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                               controller: fixedCtrl,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               decoration: InputDecoration(
-                                labelText: 'Fixed Flat Fee (₹)', 
+                                labelText: 'Fixed Flat Fee (${CurrencyService.symbol})', 
                                 hintText: '0.00',
                                 suffixIcon: IconButton(
                                   icon: const Icon(Icons.help_outline, size: 18),
@@ -706,9 +707,9 @@ class _CommissionRulesScreenState extends State<CommissionRulesScreen> {
                                               labelStyle: TextStyle(color: scopeColor, fontWeight: FontWeight.bold, fontSize: 12),
                                               side: BorderSide.none,
                                             )),
-                                            DataCell(Text('₹${rule['min_price']} - ₹${rule['max_price']}')),
+                                            DataCell(Text('${CurrencyService.symbol}${rule['min_price']} - ${CurrencyService.symbol}${rule['max_price']}')),
                                             DataCell(Text('${rule['percentage_fee']}%')),
-                                            DataCell(Text('₹${rule['fixed_fee']}')),
+                                            DataCell(Text('${CurrencyService.symbol}${rule['fixed_fee']}')),
                                             DataCell(Text('${rule['priority']}')),
                                             DataCell(Switch(
                                               value: rule['is_active'] == true,

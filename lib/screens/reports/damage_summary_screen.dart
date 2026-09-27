@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -70,8 +71,8 @@ class _DamageSummaryScreenState extends State<DamageSummaryScreen> {
       children: [
         _kpi('Total Qty', ctrl.totalQty.toString(), Icons.warning, Colors.red),
         const SizedBox(width: 12),
-        _kpi('Total Value', '₹${ctrl.totalValue.toStringAsFixed(0)}',
-            Icons.currency_rupee, Colors.purple),
+        _kpi('Total Value', CurrencyService.format(ctrl.totalValue),
+            Icons.payments_outlined, Colors.purple),
         const SizedBox(width: 12),
         _kpi('Today Damage', ctrl.todayQty.toString(), Icons.today,
             Colors.orange),
@@ -176,13 +177,13 @@ class _DamageSummaryScreenState extends State<DamageSummaryScreen> {
                 child: DataTable(
                   headingRowColor: WidgetStateProperty.all(
                       Theme.of(context).colorScheme.surfaceContainerHighest),
-                  columns: const [
+                  columns: [
                     DataColumn(label: Text('Date')),
                     DataColumn(label: Text('Item')),
                     DataColumn(label: Text('Category')),
                     DataColumn(label: Text('Qty')),
-                    DataColumn(label: Text('Rate')),
-                    DataColumn(label: Text('Amount')),
+                    DataColumn(label: Text('Rate (${CurrencyService.symbol})')),
+                    DataColumn(label: Text('Amount (${CurrencyService.symbol})')),
                     DataColumn(label: Text('Reason')),
                     DataColumn(label: Text('User')),
                   ],

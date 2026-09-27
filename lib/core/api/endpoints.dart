@@ -46,6 +46,7 @@ class ApiEndpoints {
   static const restoreLocalEncBackup = '/api/inventory/backup/restore-local-enc';
 
   static const String settings = '/api/inventory/settings';
+  static const String taxGroups = '/api/settings/tax-groups';
   static const String appBranding = '/api/inventory/branding';
 
   static const purchaseOrders = '/api/purchase-orders';
@@ -106,6 +107,7 @@ class ApiEndpoints {
   static const paySupplierBill = '/api/suppliers/bills/pay';
 
   // Accounting Section Endpoints
+  static const accountingCoa = '/api/accounting/coa';
   static const accountingBanks = '/api/accounting/banks';
   static const accountingVouchers = '/api/accounting/vouchers';
   static const accountingTrialBalance = '/api/accounting/reports/trial-balance';

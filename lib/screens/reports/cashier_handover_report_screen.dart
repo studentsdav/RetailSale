@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 import '../../utils/branding_storage.dart';
 
 class CashierHandoverReportScreen extends StatefulWidget {
@@ -23,7 +24,7 @@ class CashierHandoverReportScreen extends StatefulWidget {
 class _CashierHandoverReportScreenState extends State<CashierHandoverReportScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final NumberFormat _inr = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
+  NumberFormat get _inr => CurrencyService.currencyFormat;
   final DateFormat _df = DateFormat('yyyy-MM-dd');
 
   DateTime _fromDate = DateTime.now().subtract(const Duration(days: 30));
@@ -168,7 +169,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
                 ),
                 child: Column(
                   children: denoms.entries.map((e) {
-                    final keyLabel = e.key == 'coins' ? 'Coins' : '₹${e.key}';
+                    final keyLabel = e.key == 'coins' ? 'Coins' : '${CurrencyService.symbol}${e.key}';
                     final count = int.tryParse(e.value.toString()) ?? 0;
                     final multiplier = e.key == 'coins' ? 1.0 : (double.tryParse(e.key) ?? 0);
                     final subtotal = count * multiplier;
@@ -225,9 +226,9 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
       sheet.appendRow([
         exc.TextCellValue('Handover Date'),
         exc.TextCellValue('Cashier Name'),
-        exc.TextCellValue('Expected Cash (Rs.)'),
-        exc.TextCellValue('Physical Cash (Rs.)'),
-        exc.TextCellValue('Variance (Rs.)'),
+        exc.TextCellValue('Expected Cash (${CurrencyService.symbol})'),
+        exc.TextCellValue('Physical Cash (${CurrencyService.symbol})'),
+        exc.TextCellValue('Variance (${CurrencyService.symbol})'),
         exc.TextCellValue('Status'),
       ]);
 
@@ -281,7 +282,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
 
   Future<pw.Document> _buildPdfDocument() async {
     final pdf = pw.Document();
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
     final nowStr = DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');

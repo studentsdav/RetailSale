@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/accounting/accounting_voucher_model.dart';
 
 class AccountingVoucherController extends ChangeNotifier {
@@ -121,7 +122,7 @@ class AccountingVoucherController extends ChangeNotifier {
       return {
         'success': false,
         'message':
-            'Voucher is unbalanced! Total Debit (₹${totalDebit.toStringAsFixed(2)}) must equal Total Credit (₹${totalCredit.toStringAsFixed(2)}).'
+            'Voucher is unbalanced! Total Debit (${CurrencyService.format(totalDebit)}) must equal Total Credit (${CurrencyService.format(totalCredit)}).'
       };
     }
 

@@ -101,6 +101,11 @@ module.exports = (sequelize, DataTypes) => {
                 defaultValue: 0
             },
 
+            tax_group_id: {
+                type: DataTypes.UUID,
+                allowNull: true
+            },
+
             discount_applicable: {
                 type: DataTypes.BOOLEAN,
                 defaultValue: true
@@ -226,6 +231,11 @@ module.exports = (sequelize, DataTypes) => {
         ItemMaster.belongsTo(models.product_templates, {
             foreignKey: 'product_template_id',
             as: 'product_template'
+        });
+
+        ItemMaster.belongsTo(models.tax_groups, {
+            foreignKey: 'tax_group_id',
+            as: 'tax_group'
         });
 
         ItemMaster.belongsToMany(models.attribute_values, {

@@ -5,20 +5,7 @@ const fs = require("fs").promises;
 const fsSync = require("fs");
 const loadConfig = require("../utils/decryptConfig");
 const { Sequelize, QueryTypes } = require("sequelize");
-
-let pgDumpPath = "pg_dump";
-if (process.platform === "win32") {
-    const candidateWinPaths = [
-        "C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe",
-        "C:\\Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe",
-        "C:\\Program Files\\PostgreSQL\\16\\bin\\pg_dump.exe",
-        "C:\\Program Files\\PostgreSQL\\15\\bin\\pg_dump.exe"
-    ];
-    const foundWinPath = candidateWinPaths.find(p => fsSync.existsSync(p));
-    if (foundWinPath) {
-        pgDumpPath = foundWinPath;
-    }
-}
+const { findPostgresBinary } = require("../utils/pgBinaries");
 
 const isCompiled = typeof process.pkg !== "undefined";
 const baseDir = isCompiled ? path.dirname(process.execPath) : path.join(__dirname, "..");
@@ -27,8 +14,17 @@ function makeBackupStem() {
     return `backup_${new Date().toISOString().replace(/[:.]/g, "-")}_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function escapeSqlString(val) {
+    if (val === null || val === undefined) return "NULL";
+    if (typeof val === "boolean" || typeof val === "number") return val;
+    if (val instanceof Date) return `'${val.toISOString()}'`;
+    if (Buffer.isBuffer(val)) return `E'\\\\x${val.toString('hex')}'`;
+    if (typeof val === "object") return `'${JSON.stringify(val).replace(/'/g, "''")}'`;
+    return `'${String(val).replace(/'/g, "''")}'`;
+}
+
 async function createFallbackNodeBackup(dbName, backupStem) {
-    console.log("⚡ pg_dump unavailable or socket failed. Utilizing Node.js Pure Database Exporter fallback...");
+    console.log("⚡ Utilizing Node.js Pure Database Exporter fallback...");
     const backupsDir = path.join(baseDir, "backups");
     if (!fsSync.existsSync(backupsDir)) {
         await fs.mkdir(backupsDir, { recursive: true });
@@ -50,7 +46,7 @@ async function createFallbackNodeBackup(dbName, backupStem) {
             }
         });
     } else {
-        sequelize = new Sequelize(dbName || dbConfig.db_database, dbConfig.db_user, dbConfig.db_password, {
+        sequelize = new Sequelize(dbName || dbConfig.db_database, dbConfig.db_user || "postgres", dbConfig.db_password, {
             host: dbConfig.db_host || "127.0.0.1",
             port: dbConfig.db_port || 5432,
             dialect: "postgres",
@@ -60,11 +56,18 @@ async function createFallbackNodeBackup(dbName, backupStem) {
 
     try {
         const tables = await sequelize.query(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';",
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name;",
             { type: QueryTypes.SELECT }
         );
 
         let sqlOutput = `-- Pure Node.js Database Dump\n-- Generated: ${new Date().toISOString()}\n\n`;
+        sqlOutput += `SET statement_timeout = 0;\n`;
+        sqlOutput += `SET client_encoding = 'UTF8';\n`;
+        sqlOutput += `SET standard_conforming_strings = on;\n`;
+        sqlOutput += `SET check_function_bodies = false;\n`;
+        sqlOutput += `SET client_min_messages = warning;\n`;
+        sqlOutput += `SET row_security = off;\n`;
+        sqlOutput += `SET session_replication_role = replica;\n\n`; // Bypass FK constraint order issues
 
         for (const t of tables) {
             const tableName = t.table_name;
@@ -76,18 +79,28 @@ async function createFallbackNodeBackup(dbName, backupStem) {
             sqlOutput += `-- Data for table: ${tableName}\n`;
             for (const row of rows) {
                 const keys = Object.keys(row).map(k => `"${k}"`).join(", ");
-                const vals = Object.values(row).map(v => {
-                    if (v === null || v === undefined) return "NULL";
-                    if (typeof v === "boolean" || typeof v === "number") return v;
-                    if (v instanceof Date) return `'${v.toISOString()}'`;
-                    if (typeof v === "object") return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
-                    return `'${String(v).replace(/'/g, "''")}'`;
-                }).join(", ");
+                const vals = Object.values(row).map(escapeSqlString).join(", ");
 
                 sqlOutput += `INSERT INTO "${tableName}" (${keys}) VALUES (${vals}) ON CONFLICT DO NOTHING;\n`;
             }
             sqlOutput += "\n";
         }
+
+        // Sequence update block
+        sqlOutput += `-- Reset all serial sequences to max value\n`;
+        sqlOutput += `DO $$\n`;
+        sqlOutput += `DECLARE\n`;
+        sqlOutput += `    r RECORD;\n`;
+        sqlOutput += `BEGIN\n`;
+        sqlOutput += `    FOR r IN (\n`;
+        sqlOutput += `        SELECT c.table_name, c.column_name, pg_get_serial_sequence(c.table_name, c.column_name) AS seq_name\n`;
+        sqlOutput += `        FROM information_schema.columns c\n`;
+        sqlOutput += `        WHERE c.table_schema = 'public' AND pg_get_serial_sequence(c.table_name, c.column_name) IS NOT NULL\n`;
+        sqlOutput += `    ) LOOP\n`;
+        sqlOutput += `        EXECUTE format('SELECT setval(''%s'', COALESCE((SELECT MAX(%I) FROM %I), 1), true)', r.seq_name, r.column_name, r.table_name);\n`;
+        sqlOutput += `    END LOOP;\n`;
+        sqlOutput += `END $$;\n\n`;
+        sqlOutput += `SET session_replication_role = DEFAULT;\n`;
 
         await fs.writeFile(file, sqlOutput, "utf8");
         console.log("✅ Fallback Node.js dump created successfully");
@@ -103,6 +116,7 @@ async function createFallbackNodeBackup(dbName, backupStem) {
 function createBackup(dbName, backupStem) {
     const config = loadConfig();
     const dbUrl = process.env.DATABASE_URL || config.DATABASE_URL;
+    const pgDumpPath = findPostgresBinary("pg_dump");
 
     const backupsDir = path.join(baseDir, "backups");
     if (!fsSync.existsSync(backupsDir)) {
@@ -137,9 +151,15 @@ function createBackup(dbName, backupStem) {
             ];
         }
 
-        console.log(`🚀 Backup started via pg_dump...`);
+        console.log(`🚀 Backup started via pg_dump (${pgDumpPath})...`);
 
-        const dump = spawn(pgDumpPath, args, { env });
+        let dump;
+        try {
+            dump = spawn(pgDumpPath, args, { env });
+        } catch (spawnErr) {
+            console.warn(`⚠️ Failed to spawn pg_dump (${spawnErr.message}). Using Node.js exporter...`);
+            return createFallbackNodeBackup(dbName, backupStem).then(resolve).catch(reject);
+        }
 
         let stderrLogs = "";
 

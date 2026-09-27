@@ -9,13 +9,16 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/reports/sales_report_controller.dart';
 import '../../controllers/reports/stock_in_report_controller.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class SalesReportScreen extends StatefulWidget {
@@ -71,8 +74,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   final _itemSearchCtrl = TextEditingController();
   final ScrollController _gstVerticalController = ScrollController();
   final ScrollController _gstHorizontalController = ScrollController();
+  final ScrollController _billWiseVerticalController = ScrollController();
   final ScrollController _billWiseHorizontalController = ScrollController();
+  final ScrollController _dateWiseVerticalController = ScrollController();
   final ScrollController _dateWiseHorizontalController = ScrollController();
+  final ScrollController _itemWiseVerticalController = ScrollController();
+  final ScrollController _itemWiseHorizontalController = ScrollController();
+  final ScrollController _paymentWiseVerticalController = ScrollController();
+  final ScrollController _paymentWiseHorizontalController = ScrollController();
   final ScrollController _gstr2VerticalController = ScrollController();
   final ScrollController _gstr2HorizontalController = ScrollController();
 
@@ -84,6 +93,50 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   int _reportTabIndex = 0;
   final int _rowsPerPage = 20;
   final int _currentPage = 0;
+  bool _showDetailedMetrics = true;
+
+  String get _billingCountry {
+    try {
+      final systemSettings = context.read<SystemSettingsController>().settings;
+      final country = (systemSettings?.billingCountry ?? '').trim();
+      if (country.isNotEmpty) return country;
+    } catch (_) {}
+    return '';
+  }
+
+  bool get _isIndiaTax {
+    try {
+      final systemSettings = context.read<SystemSettingsController>().settings;
+      final taxMode = (systemSettings?.billingTaxMode ?? '').trim().toUpperCase();
+      if (taxMode == 'CGST_SGST' || taxMode == 'IGST') return true;
+      if (taxMode == 'US_SALES_TAX' || taxMode == 'VAT' || taxMode == 'SALES_TAX' || taxMode == 'NONE' || taxMode == 'COMPOSITE') return false;
+      final country = _billingCountry.toLowerCase();
+      if (country.isNotEmpty && country != 'india' && country != 'in') return false;
+      return country == 'india' || country == 'in';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String get _taxTerm => _isIndiaTax ? 'GST' : 'Tax';
+  String get _chargesTaxTerm => _isIndiaTax ? 'Charges GST' : 'Charges Tax';
+  String get _gstr1TabLabel => _isIndiaTax ? 'GSTR-1' : 'Sales Tax Report';
+  String get _gstr2TabLabel => _isIndiaTax ? 'GSTR-2' : 'Purchase Tax Report';
+
+  String get _gstr1ReportTitle {
+    if (_isIndiaTax) return 'GSTR-1 Portal Sales Report';
+    final c = _billingCountry.trim();
+    if (c.toLowerCase() == 'usa' || c.toLowerCase() == 'united states') {
+      return 'USA State & Local Sales Tax Report';
+    }
+    return c.isNotEmpty ? '$c Sales Tax Report' : 'Sales Tax Report';
+  }
+
+  String get _gstr2ReportTitle {
+    if (_isIndiaTax) return 'GSTR-2 Purchase Register';
+    final c = _billingCountry.trim();
+    return c.isNotEmpty ? '$c Inward Purchase Tax Register' : 'Inward Purchase Tax Register';
+  }
 
   static const List<_HeatmapZone> _heatmapZones = [
     _HeatmapZone(
@@ -126,6 +179,21 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     'CGST Amount',
     'SGST/UTGST Amount',
     'IGST Amount',
+    'Total Line Value',
+  ];
+
+  static const List<String> _salesTaxHeaders = [
+    'Invoice Date (DD-MM-YYYY)',
+    'Invoice Number',
+    'Customer Name',
+    'Customer Tax ID',
+    'Invoice Value',
+    'Place of Supply',
+    'Item Description',
+    'Item / Tax Code',
+    'Quantity & Unit',
+    'Taxable Value',
+    'Tax Amount',
     'Total Line Value',
   ];
 
@@ -217,8 +285,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     _itemSearchCtrl.dispose();
     _gstVerticalController.dispose();
     _gstHorizontalController.dispose();
+    _billWiseVerticalController.dispose();
     _billWiseHorizontalController.dispose();
+    _dateWiseVerticalController.dispose();
     _dateWiseHorizontalController.dispose();
+    _itemWiseVerticalController.dispose();
+    _itemWiseHorizontalController.dispose();
+    _paymentWiseVerticalController.dispose();
+    _paymentWiseHorizontalController.dispose();
     _gstr2VerticalController.dispose();
     _gstr2HorizontalController.dispose();
     purchaseCtrl.dispose();
@@ -292,14 +366,146 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     return _normalizeTaxRate(rate);
   }
 
+  String _formatComponentTaxName(String label, double rate) {
+    var clean = label.trim();
+    if (clean.isEmpty) clean = 'Tax';
+    final rateStr = _formatTaxPercent(rate);
+    if (clean.contains('%') || clean.contains('($rateStr%)')) {
+      return clean;
+    }
+    return rate > 0 ? '$clean ($rateStr%)' : clean;
+  }
+
+  List<_TaxColumnDescriptor> get _availableTaxColumns {
+    final Map<String, _TaxColumnDescriptor> descriptors = {};
+
+    if (_isIndiaTax) {
+      final rates = <double>{};
+      for (final sale in _billWiseSales) {
+        for (final item in sale.items) {
+          rates.add(_itemTaxRate(item));
+        }
+      }
+      final sortedRates = rates.toList()..sort();
+      for (final rate in sortedRates) {
+        final rateStr = _formatTaxPercent(rate);
+        final id = 'GST_$rateStr';
+        descriptors[id] = _TaxColumnDescriptor(
+          id: id,
+          label: '$rateStr%',
+          saleHeader: '$rateStr% Sale',
+          taxHeader: '$rateStr% GST',
+          rate: rate,
+          code: 'GST',
+        );
+      }
+    } else {
+      for (final sale in _billWiseSales) {
+        for (final item in sale.items) {
+          if (item.taxBreakup.isNotEmpty) {
+            for (final tax in item.taxBreakup) {
+              if (tax.rate > 0 || tax.taxAmount.abs() > 0.0009) {
+                final label = tax.label.isNotEmpty
+                    ? tax.label.trim()
+                    : (tax.code.isNotEmpty ? tax.code.trim() : 'Tax');
+                final name = _formatComponentTaxName(label, tax.rate);
+                final id = '${tax.code}_${tax.label}_${_formatTaxPercent(tax.rate)}'.toUpperCase();
+                if (!descriptors.containsKey(id)) {
+                  descriptors[id] = _TaxColumnDescriptor(
+                    id: id,
+                    label: name,
+                    saleHeader: '$name Sale',
+                    taxHeader: '$name Tax',
+                    rate: _normalizeTaxRate(tax.rate),
+                    code: tax.code,
+                  );
+                }
+              }
+            }
+          } else {
+            final rate = _itemTaxRate(item);
+            final rateStr = _formatTaxPercent(rate);
+            final id = 'TAX_$rateStr';
+            if (!descriptors.containsKey(id)) {
+              descriptors[id] = _TaxColumnDescriptor(
+                id: id,
+                label: '$rateStr% Tax',
+                saleHeader: '$rateStr% Sale',
+                taxHeader: '$rateStr% Tax',
+                rate: rate,
+                code: 'TAX',
+              );
+            }
+          }
+        }
+      }
+    }
+
+    return descriptors.values.toList();
+  }
+
+  _TaxBandSummary _saleColumnSummary(SalesReport sale, _TaxColumnDescriptor col) {
+    double taxableValue = 0.0;
+    double taxAmount = 0.0;
+
+    if (_isIndiaTax) {
+      for (final item in sale.items) {
+        if (_normalizeTaxRate(_itemTaxRate(item)) == col.rate) {
+          taxableValue += item.taxableAmount;
+          taxAmount += item.taxAmount;
+        }
+      }
+    } else {
+      for (final item in sale.items) {
+        if (item.taxBreakup.isNotEmpty) {
+          for (final tax in item.taxBreakup) {
+            final label = tax.label.isNotEmpty
+                ? tax.label.trim()
+                : (tax.code.isNotEmpty ? tax.code.trim() : 'Tax');
+            final id = '${tax.code}_${tax.label}_${_formatTaxPercent(tax.rate)}'.toUpperCase();
+            if (id == col.id || (col.code.isNotEmpty && tax.code.toUpperCase() == col.code.toUpperCase() && _normalizeTaxRate(tax.rate) == col.rate)) {
+              taxableValue += (tax.taxableAmount > 0 ? tax.taxableAmount : item.taxableAmount);
+              taxAmount += tax.taxAmount;
+            }
+          }
+        } else {
+          final rate = _itemTaxRate(item);
+          final id = 'TAX_${_formatTaxPercent(rate)}';
+          if (id == col.id || _normalizeTaxRate(rate) == col.rate) {
+            taxableValue += item.taxableAmount;
+            taxAmount += item.taxAmount;
+          }
+        }
+      }
+    }
+
+    return _TaxBandSummary(taxableValue: taxableValue, taxAmount: taxAmount);
+  }
+
   Map<double, _TaxBandSummary> _saleTaxBands(SalesReport sale) {
     final bands = <double, _TaxBandSummary>{};
 
     for (final item in sale.items) {
-      final rate = _itemTaxRate(item);
-      final band = bands.putIfAbsent(rate, _TaxBandSummary.new);
-      band.taxableValue += item.taxableAmount;
-      band.taxAmount += item.taxAmount;
+      if (_isIndiaTax) {
+        final rate = _itemTaxRate(item);
+        final band = bands.putIfAbsent(rate, _TaxBandSummary.new);
+        band.taxableValue += item.taxableAmount;
+        band.taxAmount += item.taxAmount;
+      } else if (item.taxBreakup.isNotEmpty) {
+        for (final tax in item.taxBreakup) {
+          if (tax.rate > 0 || tax.taxAmount.abs() > 0.0009) {
+            final rate = _normalizeTaxRate(tax.rate);
+            final band = bands.putIfAbsent(rate, _TaxBandSummary.new);
+            band.taxableValue += (tax.taxableAmount > 0 ? tax.taxableAmount : item.taxableAmount);
+            band.taxAmount += tax.taxAmount;
+          }
+        }
+      } else {
+        final rate = _itemTaxRate(item);
+        final band = bands.putIfAbsent(rate, _TaxBandSummary.new);
+        band.taxableValue += item.taxableAmount;
+        band.taxAmount += item.taxAmount;
+      }
     }
 
     return bands;
@@ -321,11 +527,58 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     final rates = <double>{};
     for (final sale in _billWiseSales) {
       for (final item in sale.items) {
-        rates.add(_itemTaxRate(item));
+        if (item.taxBreakup.isNotEmpty && !_isIndiaTax) {
+          for (final tax in item.taxBreakup) {
+            if (tax.rate > 0 || tax.taxAmount.abs() > 0.0009) {
+              rates.add(_normalizeTaxRate(tax.rate));
+            }
+          }
+        } else {
+          rates.add(_itemTaxRate(item));
+        }
       }
     }
     final list = rates.toList()..sort();
     return list;
+  }
+
+  Map<String, double> get _componentTaxTotals {
+    final totals = <String, double>{};
+    for (final sale in _billWiseSales) {
+      for (final item in sale.items) {
+        if (item.taxBreakup.isNotEmpty) {
+          for (final tax in item.taxBreakup) {
+            if (tax.taxAmount.abs() > 0.0009 || tax.rate > 0) {
+              final label = tax.label.isNotEmpty
+                  ? tax.label.trim()
+                  : (tax.code.isNotEmpty ? tax.code.trim() : 'Tax');
+              final name = _formatComponentTaxName(label, tax.rate);
+              totals[name] = (totals[name] ?? 0.0) + tax.taxAmount;
+            }
+          }
+        } else if (item.taxAmount.abs() > 0.0009) {
+          final rateStr = _formatTaxPercent(_itemTaxRate(item));
+          final name = 'Sales Tax ($rateStr%)';
+          totals[name] = (totals[name] ?? 0.0) + item.taxAmount;
+        }
+      }
+      for (final charge in sale.charges) {
+        if (charge.taxable && charge.taxAmount.abs() > 0.0009) {
+          for (final tax in charge.taxBreakup) {
+            final label = tax.label.isNotEmpty
+                ? tax.label.trim()
+                : (tax.code.isNotEmpty ? tax.code.trim() : 'Charge Tax');
+            final name = _formatComponentTaxName(label, tax.rate);
+            totals[name] = (totals[name] ?? 0.0) + tax.taxAmount;
+          }
+          if (charge.taxBreakup.isEmpty) {
+            const name = 'Charges Tax';
+            totals[name] = (totals[name] ?? 0.0) + charge.taxAmount;
+          }
+        }
+      }
+    }
+    return totals;
   }
 
   String _formatTaxPercent(double rate) {
@@ -342,20 +595,29 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       final placeOfSupply = _derivePlaceOfSupply(sale);
       for (final item in sale.items) {
         final itemTaxable = _isTaxedItem(item) ? item.taxableAmount : 0.0;
-        double cgst = _taxAmountFor(item, 'CGST');
-        double sgst = _taxAmountFor(item, 'SGST');
-        double igst = _taxAmountFor(item, 'IGST');
-        if (item.taxAmount > 0.009 && ((cgst + sgst + igst) - item.taxAmount).abs() > 0.01) {
-          if (igst > 0.009) {
-            igst = item.taxAmount;
-            cgst = 0;
-            sgst = 0;
-          } else {
-            cgst = item.taxAmount / 2;
-            sgst = item.taxAmount / 2;
-            igst = 0;
+        double cgst = 0.0;
+        double sgst = 0.0;
+        double igst = 0.0;
+        double taxAmount = item.taxAmount;
+
+        if (_isIndiaTax) {
+          cgst = _taxAmountFor(item, 'CGST');
+          sgst = _taxAmountFor(item, 'SGST');
+          igst = _taxAmountFor(item, 'IGST');
+          if (item.taxAmount > 0.009 && ((cgst + sgst + igst) - item.taxAmount).abs() > 0.01) {
+            if (igst > 0.009) {
+              igst = item.taxAmount;
+              cgst = 0;
+              sgst = 0;
+            } else {
+              cgst = item.taxAmount / 2;
+              sgst = item.taxAmount / 2;
+              igst = 0;
+            }
           }
+          taxAmount = cgst + sgst + igst;
         }
+
         final double effectiveDiscount = item.lineDiscount;
         final double grossMinusDiscount = (item.amount - effectiveDiscount).clamp(0.0, double.infinity);
         final double itemNetVal;
@@ -363,13 +625,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           itemNetVal = item.netAmount;
         } else if (effectiveDiscount > 0.009 || grossMinusDiscount <= 0.009) {
           itemNetVal = grossMinusDiscount;
-        } else if (itemTaxable + cgst + sgst + igst > 0.009) {
-          itemNetVal = itemTaxable + cgst + sgst + igst;
+        } else if (itemTaxable + taxAmount > 0.009) {
+          itemNetVal = itemTaxable + taxAmount;
         } else {
           itemNetVal = item.amount;
         }
         final lineVal = _isTaxedItem(item)
-            ? (itemTaxable + cgst + sgst + igst)
+            ? (itemTaxable + taxAmount)
             : itemNetVal;
 
         flattened.add(
@@ -401,6 +663,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             cgstAmount: cgst,
             sgstAmount: sgst,
             igstAmount: igst,
+            taxAmount: taxAmount,
             totalLineValue: lineVal,
             totalInvoiceValue: itemNetVal,
             saleDateTime: sale.saleDate,
@@ -688,6 +951,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           cgstAmount: row.cgstAmount,
           sgstAmount: row.sgstAmount,
           igstAmount: row.igstAmount,
+          taxAmount: row.taxAmount,
           totalInvoiceValue: row.totalInvoiceValue,
           lineCount: 1,
           paymentModes: {row.paymentMode},
@@ -703,6 +967,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           cgstAmount: current.cgstAmount + row.cgstAmount,
           sgstAmount: current.sgstAmount + row.sgstAmount,
           igstAmount: current.igstAmount + row.igstAmount,
+          taxAmount: current.taxAmount + row.taxAmount,
           totalInvoiceValue: current.totalInvoiceValue + row.totalInvoiceValue,
           lineCount: current.lineCount + 1,
           paymentModes: Set<String>.from(current.paymentModes)..add(row.paymentMode),
@@ -1118,6 +1383,15 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       _groupedRows.fold<double>(0, (sum, row) => sum + row.sgstAmount);
   double get _itemWiseIgstTotal =>
       _groupedRows.fold<double>(0, (sum, row) => sum + row.igstAmount);
+  double get _itemWiseTaxTotal => _groupedRows.fold<double>(
+      0,
+      (sum, row) =>
+          sum +
+          (_isIndiaTax
+              ? (row.cgstAmount + row.sgstAmount + row.igstAmount)
+              : (row.taxAmount > 0.009
+                  ? row.taxAmount
+                  : (row.cgstAmount + row.sgstAmount + row.igstAmount))));
   double get _itemWiseSalesTotal =>
       _groupedRows.fold<double>(0, (sum, row) => sum + row.totalInvoiceValue);
   double get _itemWiseTaxableSaleTotal =>
@@ -1132,12 +1406,41 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     return bands;
   }
 
+  Map<String, _TaxBandSummary> get _billWiseTaxColumnsTotal {
+    final totals = <String, _TaxBandSummary>{};
+    for (final col in _availableTaxColumns) {
+      double taxable = 0;
+      double tax = 0;
+      for (final sale in _billWiseSales) {
+        final summary = _saleColumnSummary(sale, col);
+        taxable += summary.taxableValue;
+        tax += summary.taxAmount;
+      }
+      totals[col.id] = _TaxBandSummary(taxableValue: taxable, taxAmount: tax);
+    }
+    return totals;
+  }
+
   Map<double, _TaxBandSummary> get _dateWiseTaxBandsTotal {
     final bands = <double, _TaxBandSummary>{};
     for (final row in _dateWiseSalesRows) {
       _mergeTaxBands(bands, row.taxBands);
     }
     return bands;
+  }
+
+  Map<String, _TaxBandSummary> get _dateWiseTaxColumnsTotal {
+    final totals = <String, _TaxBandSummary>{};
+    for (final col in _availableTaxColumns) {
+      double taxable = 0;
+      double tax = 0;
+      for (final row in _dateWiseSalesRows) {
+        taxable += row.columnTaxBands[col.id]?.taxableValue ?? 0;
+        tax += row.columnTaxBands[col.id]?.taxAmount ?? 0;
+      }
+      totals[col.id] = _TaxBandSummary(taxableValue: taxable, taxAmount: tax);
+    }
+    return totals;
   }
 
   double get _billWiseIgstTotal => _billWiseSales.fold<double>(
@@ -1261,6 +1564,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     return band == null ? 0 : band.taxableValue + band.taxAmount;
   }
 
+  double _bandColumnTaxable(Map<String, _TaxBandSummary> colBands, String colId) {
+    return colBands[colId]?.taxableValue ?? 0;
+  }
+
+  double _bandColumnTax(Map<String, _TaxBandSummary> colBands, String colId) {
+    return colBands[colId]?.taxAmount ?? 0;
+  }
+
   List<_DateWiseSalesRow> get _dateWiseSalesRows {
     final grouped = <String, _DateWiseSalesRow>{};
     for (final sale in _billWiseSales) {
@@ -1269,6 +1580,10 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       final key = DateFormat('yyyy-MM-dd').format(dateOnly);
       final current = grouped[key];
       final saleBands = _saleTaxBands(sale);
+      final saleColBands = <String, _TaxBandSummary>{};
+      for (final col in _availableTaxColumns) {
+        saleColBands[col.id] = _saleColumnSummary(sale, col);
+      }
 
       double c = sale.cashAmount;
       double cr = sale.cardAmount;
@@ -1301,6 +1616,20 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         }
       }
 
+      Map<String, _TaxBandSummary> mergeColBands(
+        Map<String, _TaxBandSummary> a,
+        Map<String, _TaxBandSummary> b,
+      ) {
+        final res = <String, _TaxBandSummary>{};
+        for (final k in {...a.keys, ...b.keys}) {
+          res[k] = _TaxBandSummary(
+            taxableValue: (a[k]?.taxableValue ?? 0) + (b[k]?.taxableValue ?? 0),
+            taxAmount: (a[k]?.taxAmount ?? 0) + (b[k]?.taxAmount ?? 0),
+          );
+        }
+        return res;
+      }
+
       if (current == null) {
         grouped[key] = _DateWiseSalesRow(
           date: dateOnly,
@@ -1313,6 +1642,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           advanceAmount: adv,
           advanceAdjustmentAmount: advAdj,
           taxBands: saleBands,
+          columnTaxBands: saleColBands,
           igstAmount: _saleIgstAmount(sale),
           taxAmount: _saleTotalTax(sale),
           netAmount: sale.netAmount,
@@ -1334,6 +1664,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           advanceAmount: current.advanceAmount + adv,
           advanceAdjustmentAmount: current.advanceAdjustmentAmount + advAdj,
           taxBands: _mergeTaxBands(current.taxBands, saleBands),
+          columnTaxBands: mergeColBands(current.columnTaxBands, saleColBands),
           igstAmount: current.igstAmount + _saleIgstAmount(sale),
           taxAmount: current.taxAmount + _saleTotalTax(sale),
           netAmount: current.netAmount + sale.netAmount,
@@ -1492,8 +1823,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       1 => 'Bill_Wise_Sales',
       2 => 'Item_Wise_Sales',
       3 => 'Date_Wise_Sales',
-      4 => 'GSTR_1_Sales',
-      _ => 'GSTR_2_Purchases',
+      4 => _isIndiaTax ? 'GSTR_1_Sales' : 'Sales_Tax_Report',
+      _ => _isIndiaTax ? 'GSTR_2_Purchases' : 'Purchase_Tax_Report',
     };
     final defaultSheet = workbook.getDefaultSheet();
     if (defaultSheet != null) {
@@ -1531,6 +1862,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.DoubleCellValue(_paymentReportNetTotal),
       ]);
     } else if (_reportTabIndex == 1) {
+      final taxCols = _availableTaxColumns;
       sheet.appendRow(
         [
           'Date',
@@ -1544,14 +1876,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Subtotal',
           'Discount',
           'Charges',
-          'Charges GST',
-          ...taxRates.expand(
-            (rate) => [
-              '${_formatTaxPercent(rate)}% Sale',
-              if (rate > 0.009) '${_formatTaxPercent(rate)}% GST',
+          _chargesTaxTerm,
+          ...taxCols.expand(
+            (col) => [
+              '${col.label} Sale',
+              if (col.rate > 0.009) '${col.label} ${_isIndiaTax ? 'GST' : _taxTerm}',
             ],
           ),
-          'IGST',
+          if (_isIndiaTax) 'IGST',
           'Tax',
           'Net Amount',
           'Sub Sale',
@@ -1559,7 +1891,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         ].map(exc.TextCellValue.new).toList(),
       );
       for (final sale in _billWiseSales) {
-        final bands = _saleTaxBands(sale);
         sheet.appendRow([
           exc.TextCellValue(DateFormat('dd-MM-yyyy').format(sale.saleDate)),
           exc.TextCellValue(_maskedBillNo(sale.saleNo)),
@@ -1573,13 +1904,16 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           exc.DoubleCellValue(sale.totalDiscount),
           exc.DoubleCellValue(sale.chargeTotal),
           exc.DoubleCellValue(_saleChargeTaxTotal(sale)),
-          ...taxRates.expand(
-            (rate) => [
-              exc.DoubleCellValue(_bandTaxable(bands, rate)),
-              if (rate > 0.009) exc.DoubleCellValue(_bandTax(bands, rate)),
-            ],
+          ...taxCols.expand(
+            (col) {
+              final summ = _saleColumnSummary(sale, col);
+              return [
+                exc.DoubleCellValue(summ.taxableValue),
+                if (col.rate > 0.009) exc.DoubleCellValue(summ.taxAmount),
+              ];
+            },
           ),
-          exc.DoubleCellValue(_saleIgstAmount(sale)),
+          if (_isIndiaTax) exc.DoubleCellValue(_saleIgstAmount(sale)),
           exc.DoubleCellValue(_saleTotalTax(sale)),
           exc.DoubleCellValue(sale.netAmount),
           exc.DoubleCellValue(sale.subscription),
@@ -1599,14 +1933,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.DoubleCellValue(_billWiseDiscountTotal),
         exc.DoubleCellValue(_billWiseChargeTotalTotal),
         exc.DoubleCellValue(_headerChargeTaxTotal),
-        ...taxRates.expand(
-          (rate) => [
-            exc.DoubleCellValue(_billWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
-            if (rate > 0.009)
-              exc.DoubleCellValue(_billWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+        ...taxCols.expand(
+          (col) => [
+            exc.DoubleCellValue(_billWiseTaxColumnsTotal[col.id]?.taxableValue ?? 0),
+            if (col.rate > 0.009)
+              exc.DoubleCellValue(_billWiseTaxColumnsTotal[col.id]?.taxAmount ?? 0),
           ],
         ),
-        exc.DoubleCellValue(_billWiseIgstTotal),
+        if (_isIndiaTax) exc.DoubleCellValue(_billWiseIgstTotal),
         exc.DoubleCellValue(_headerTaxTotal),
         exc.DoubleCellValue(_billWiseNetTotal),
         exc.DoubleCellValue(_billWiseSales.fold<double>(0, (sum, s) => sum + s.subscription)),
@@ -1625,9 +1959,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Taxed Sales',
           'Non-Tax Sales',
           'Taxable Value',
-          'CGST',
-          'SGST',
-          'IGST',
+          if (_isIndiaTax) ...[
+            'CGST',
+            'SGST',
+            'IGST',
+          ] else
+            _taxTerm,
           'Total Sales',
         ].map(exc.TextCellValue.new).toList(),
       );
@@ -1643,9 +1980,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           exc.DoubleCellValue(_itemWiseTaxSaleValue(row)),
           exc.DoubleCellValue(_itemWiseNonTaxSaleValue(row)),
           exc.DoubleCellValue(row.taxableValue),
-          exc.DoubleCellValue(row.cgstAmount),
-          exc.DoubleCellValue(row.sgstAmount),
-          exc.DoubleCellValue(row.igstAmount),
+          if (_isIndiaTax) ...[
+            exc.DoubleCellValue(row.cgstAmount),
+            exc.DoubleCellValue(row.sgstAmount),
+            exc.DoubleCellValue(row.igstAmount),
+          ] else
+            exc.DoubleCellValue(row.taxAmount > 0.009 ? row.taxAmount : (row.cgstAmount + row.sgstAmount + row.igstAmount)),
           exc.DoubleCellValue(row.totalInvoiceValue),
         ]);
       }
@@ -1660,12 +2000,16 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.DoubleCellValue(_itemWiseTaxableSaleTotal),
         exc.DoubleCellValue(_itemWiseNonTaxableSaleTotal),
         exc.DoubleCellValue(_itemWiseTaxableTotal),
-        exc.DoubleCellValue(_itemWiseCgstTotal),
-        exc.DoubleCellValue(_itemWiseSgstTotal),
-        exc.DoubleCellValue(_itemWiseIgstTotal),
+        if (_isIndiaTax) ...[
+          exc.DoubleCellValue(_itemWiseCgstTotal),
+          exc.DoubleCellValue(_itemWiseSgstTotal),
+          exc.DoubleCellValue(_itemWiseIgstTotal),
+        ] else
+          exc.DoubleCellValue(_itemWiseTaxTotal),
         exc.DoubleCellValue(_itemWiseSalesTotal),
       ]);
     } else if (_reportTabIndex == 3) {
+      final taxCols = _availableTaxColumns;
       sheet.appendRow(
         [
           'Date',
@@ -1680,14 +2024,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Subtotal',
           'Discount',
           'Charges',
-          'Charges GST',
-          ...taxRates.expand(
-            (rate) => [
-              '${_formatTaxPercent(rate)}% Sale',
-              if (rate > 0.009) '${_formatTaxPercent(rate)}% GST',
+          _chargesTaxTerm,
+          ...taxCols.expand(
+            (col) => [
+              '${col.label} Sale',
+              if (col.rate > 0.009) '${col.label} ${_isIndiaTax ? 'GST' : _taxTerm}',
             ],
           ),
-          'IGST',
+          if (_isIndiaTax) 'IGST',
           'Tax',
           'Net Amount',
           'Sub Sale',
@@ -1709,13 +2053,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           exc.DoubleCellValue(row.discount),
           exc.DoubleCellValue(row.chargeTotal),
           exc.DoubleCellValue(row.chargeTaxTotal),
-          ...taxRates.expand(
-            (rate) => [
-              exc.DoubleCellValue(_bandTaxable(row.taxBands, rate)),
-              if (rate > 0.009) exc.DoubleCellValue(_bandTax(row.taxBands, rate)),
+          ...taxCols.expand(
+            (col) => [
+              exc.DoubleCellValue(row.columnTaxBands[col.id]?.taxableValue ?? 0),
+              if (col.rate > 0.009)
+                exc.DoubleCellValue(row.columnTaxBands[col.id]?.taxAmount ?? 0),
             ],
           ),
-          exc.DoubleCellValue(row.igstAmount),
+          if (_isIndiaTax) exc.DoubleCellValue(row.igstAmount),
           exc.DoubleCellValue(row.taxAmount),
           exc.DoubleCellValue(row.netAmount),
           exc.DoubleCellValue(row.subscription),
@@ -1736,137 +2081,172 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.DoubleCellValue(_dateWiseDiscountTotal),
         exc.DoubleCellValue(_dateWiseChargeTotalTotal),
         exc.DoubleCellValue(_dateWiseChargeTaxTotal),
-        ...taxRates.expand(
-          (rate) => [
-            exc.DoubleCellValue(_dateWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
-            if (rate > 0.009)
-              exc.DoubleCellValue(_dateWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+        ...taxCols.expand(
+          (col) => [
+            exc.DoubleCellValue(_dateWiseTaxColumnsTotal[col.id]?.taxableValue ?? 0),
+            if (col.rate > 0.009)
+              exc.DoubleCellValue(_dateWiseTaxColumnsTotal[col.id]?.taxAmount ?? 0),
           ],
         ),
-        exc.DoubleCellValue(_dateWiseIgstTotal),
+        if (_isIndiaTax) exc.DoubleCellValue(_dateWiseIgstTotal),
         exc.DoubleCellValue(_dateWiseTaxTotal),
         exc.DoubleCellValue(_dateWiseNetTotal),
         exc.DoubleCellValue(_dateWiseSalesRows.fold<double>(0, (sum, r) => sum + r.subscription)),
         exc.DoubleCellValue(_dateWiseSalesRows.fold<double>(0, (sum, r) => sum + (r.netAmount - r.subscription))),
       ]);
     } else if (_reportTabIndex == 4) {
-      // 1. b2b Sheet (GST Portal Table 4)
-      final sheetB2b = workbook['b2b'];
-      sheetB2b.appendRow([
-        exc.TextCellValue('GSTIN/UIN of Recipient'),
-        exc.TextCellValue('Receiver Name'),
-        exc.TextCellValue('Invoice Number'),
-        exc.TextCellValue('Invoice Date'),
-        exc.TextCellValue('Invoice Value'),
-        exc.TextCellValue('Place Of Supply'),
-        exc.TextCellValue('Reverse Charge'),
-        exc.TextCellValue('Applicable % of Tax Rate'),
-        exc.TextCellValue('Invoice Type'),
-        exc.TextCellValue('E-Commerce GSTIN'),
-        exc.TextCellValue('Rate'),
-        exc.TextCellValue('Taxable Value'),
-        exc.TextCellValue('Cess Amount'),
-        exc.TextCellValue('Integrated Tax'),
-        exc.TextCellValue('Central Tax'),
-        exc.TextCellValue('State/UT Tax'),
-      ]);
-      for (final r in _gstr1B2bRows) {
+      if (_isIndiaTax) {
+        // 1. b2b Sheet (GST Portal Table 4)
+        final sheetB2b = workbook['b2b'];
         sheetB2b.appendRow([
-          exc.TextCellValue(r.customerGstin),
-          exc.TextCellValue(r.customerName),
-          exc.TextCellValue(r.invoiceNumber),
-          exc.TextCellValue(DateFormat('dd-MM-yyyy').format(r.invoiceDate)),
-          exc.DoubleCellValue(r.invoiceValue),
-          exc.TextCellValue(r.placeOfSupply),
-          exc.TextCellValue(r.reverseCharge),
-          exc.TextCellValue(''),
-          exc.TextCellValue(r.invoiceType),
-          exc.TextCellValue(''),
-          exc.DoubleCellValue(r.rate),
-          exc.DoubleCellValue(r.taxableValue),
-          exc.DoubleCellValue(0.0),
-          exc.DoubleCellValue(r.igst),
-          exc.DoubleCellValue(r.cgst),
-          exc.DoubleCellValue(r.sgst),
+          exc.TextCellValue('GSTIN/UIN of Recipient'),
+          exc.TextCellValue('Receiver Name'),
+          exc.TextCellValue('Invoice Number'),
+          exc.TextCellValue('Invoice Date'),
+          exc.TextCellValue('Invoice Value'),
+          exc.TextCellValue('Place Of Supply'),
+          exc.TextCellValue('Reverse Charge'),
+          exc.TextCellValue('Applicable % of Tax Rate'),
+          exc.TextCellValue('Invoice Type'),
+          exc.TextCellValue('E-Commerce GSTIN'),
+          exc.TextCellValue('Rate'),
+          exc.TextCellValue('Taxable Value'),
+          exc.TextCellValue('Cess Amount'),
+          exc.TextCellValue('Integrated Tax'),
+          exc.TextCellValue('Central Tax'),
+          exc.TextCellValue('State/UT Tax'),
         ]);
-      }
+        for (final r in _gstr1B2bRows) {
+          sheetB2b.appendRow([
+            exc.TextCellValue(r.customerGstin),
+            exc.TextCellValue(r.customerName),
+            exc.TextCellValue(r.invoiceNumber),
+            exc.TextCellValue(DateFormat('dd-MM-yyyy').format(r.invoiceDate)),
+            exc.DoubleCellValue(r.invoiceValue),
+            exc.TextCellValue(r.placeOfSupply),
+            exc.TextCellValue(r.reverseCharge),
+            exc.TextCellValue(''),
+            exc.TextCellValue(r.invoiceType),
+            exc.TextCellValue(''),
+            exc.DoubleCellValue(r.rate),
+            exc.DoubleCellValue(r.taxableValue),
+            exc.DoubleCellValue(0.0),
+            exc.DoubleCellValue(r.igst),
+            exc.DoubleCellValue(r.cgst),
+            exc.DoubleCellValue(r.sgst),
+          ]);
+        }
 
-      // 2. b2cs Sheet (GST Portal Table 7)
-      final sheetB2cs = workbook['b2cs'];
-      sheetB2cs.appendRow([
-        exc.TextCellValue('Type'),
-        exc.TextCellValue('Place Of Supply'),
-        exc.TextCellValue('Applicable % of Tax Rate'),
-        exc.TextCellValue('Rate'),
-        exc.TextCellValue('Taxable Value'),
-        exc.TextCellValue('Cess Amount'),
-        exc.TextCellValue('Central Tax'),
-        exc.TextCellValue('State/UT Tax'),
-        exc.TextCellValue('Integrated Tax'),
-      ]);
-      for (final r in _gstr1B2csRows) {
+        // 2. b2cs Sheet (GST Portal Table 7)
+        final sheetB2cs = workbook['b2cs'];
         sheetB2cs.appendRow([
-          exc.TextCellValue(r.type),
-          exc.TextCellValue(r.placeOfSupply),
-          exc.TextCellValue(''),
-          exc.DoubleCellValue(r.rate),
-          exc.DoubleCellValue(r.taxableValue),
-          exc.DoubleCellValue(0.0),
-          exc.DoubleCellValue(r.cgst),
-          exc.DoubleCellValue(r.sgst),
-          exc.DoubleCellValue(r.igst),
+          exc.TextCellValue('Type'),
+          exc.TextCellValue('Place Of Supply'),
+          exc.TextCellValue('Applicable % of Tax Rate'),
+          exc.TextCellValue('Rate'),
+          exc.TextCellValue('Taxable Value'),
+          exc.TextCellValue('Cess Amount'),
+          exc.TextCellValue('Central Tax'),
+          exc.TextCellValue('State/UT Tax'),
+          exc.TextCellValue('Integrated Tax'),
         ]);
-      }
+        for (final r in _gstr1B2csRows) {
+          sheetB2cs.appendRow([
+            exc.TextCellValue(r.type),
+            exc.TextCellValue(r.placeOfSupply),
+            exc.TextCellValue(''),
+            exc.DoubleCellValue(r.rate),
+            exc.DoubleCellValue(r.taxableValue),
+            exc.DoubleCellValue(0.0),
+            exc.DoubleCellValue(r.cgst),
+            exc.DoubleCellValue(r.sgst),
+            exc.DoubleCellValue(r.igst),
+          ]);
+        }
 
-      // 3. hsn Sheet (GST Portal Table 12)
-      final sheetHsn = workbook['hsn'];
-      sheetHsn.appendRow([
-        exc.TextCellValue('HSN'),
-        exc.TextCellValue('Description'),
-        exc.TextCellValue('UQC'),
-        exc.TextCellValue('Total Quantity'),
-        exc.TextCellValue('Total Value'),
-        exc.TextCellValue('Taxable Value'),
-        exc.TextCellValue('Integrated Tax Amount'),
-        exc.TextCellValue('Central Tax Amount'),
-        exc.TextCellValue('State/UT Tax Amount'),
-        exc.TextCellValue('Cess Amount'),
-      ]);
-      for (final r in _gstr1HsnRows) {
+        // 3. hsn Sheet (GST Portal Table 12)
+        final sheetHsn = workbook['hsn'];
         sheetHsn.appendRow([
-          exc.TextCellValue(r.hsnSacCode),
-          exc.TextCellValue(r.description),
-          exc.TextCellValue(r.unit),
-          exc.DoubleCellValue(r.totalQty),
-          exc.DoubleCellValue(r.totalValue),
-          exc.DoubleCellValue(r.taxableValue),
-          exc.DoubleCellValue(r.igst),
-          exc.DoubleCellValue(r.cgst),
-          exc.DoubleCellValue(r.sgst),
-          exc.DoubleCellValue(0.0),
+          exc.TextCellValue('HSN'),
+          exc.TextCellValue('Description'),
+          exc.TextCellValue('UQC'),
+          exc.TextCellValue('Total Quantity'),
+          exc.TextCellValue('Total Value'),
+          exc.TextCellValue('Taxable Value'),
+          exc.TextCellValue('Integrated Tax Amount'),
+          exc.TextCellValue('Central Tax Amount'),
+          exc.TextCellValue('State/UT Tax Amount'),
+          exc.TextCellValue('Cess Amount'),
         ]);
-      }
+        for (final r in _gstr1HsnRows) {
+          sheetHsn.appendRow([
+            exc.TextCellValue(r.hsnSacCode),
+            exc.TextCellValue(r.description),
+            exc.TextCellValue(r.unit),
+            exc.DoubleCellValue(r.totalQty),
+            exc.DoubleCellValue(r.totalValue),
+            exc.DoubleCellValue(r.taxableValue),
+            exc.DoubleCellValue(r.igst),
+            exc.DoubleCellValue(r.cgst),
+            exc.DoubleCellValue(r.sgst),
+            exc.DoubleCellValue(0.0),
+          ]);
+        }
 
-      // 4. Detailed Sales Register Sheet
-      final sheetRegister = workbook['gstr1_register'];
-      sheetRegister.appendRow(_gstHeaders.map(exc.TextCellValue.new).toList());
-      for (final row in _rows) {
+        // 4. Detailed Sales Register Sheet
+        final sheetRegister = workbook['gstr1_register'];
+        sheetRegister.appendRow(_gstHeaders.map(exc.TextCellValue.new).toList());
+        for (final row in _rows) {
+          sheetRegister.appendRow([
+            exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.invoiceDate)),
+            exc.TextCellValue(row.invoiceNumber),
+            exc.TextCellValue(row.customerName),
+            exc.TextCellValue(
+                row.customerGstin.isEmpty ? 'B2C' : row.customerGstin),
+            exc.DoubleCellValue(row.invoiceValue),
+            exc.TextCellValue(row.placeOfSupply),
+            exc.TextCellValue(row.itemDescription),
+            exc.TextCellValue(row.hsnSacCode),
+            exc.TextCellValue('${_formatQty(row.quantity)} ${row.unit}'),
+            exc.DoubleCellValue(row.taxableValue),
+            exc.DoubleCellValue(row.cgstAmount),
+            exc.DoubleCellValue(row.sgstAmount),
+            exc.DoubleCellValue(row.igstAmount),
+            exc.DoubleCellValue(row.totalLineValue),
+          ]);
+        }
+      } else {
+        final sheetRegister = workbook['Sales_Tax_Report'];
+        sheetRegister.appendRow(_salesTaxHeaders.map(exc.TextCellValue.new).toList());
+        for (final row in _rows) {
+          sheetRegister.appendRow([
+            exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.invoiceDate)),
+            exc.TextCellValue(row.invoiceNumber),
+            exc.TextCellValue(row.customerName),
+            exc.TextCellValue(row.customerGstin.isEmpty ? 'B2C' : row.customerGstin),
+            exc.DoubleCellValue(row.invoiceValue),
+            exc.TextCellValue(row.placeOfSupply),
+            exc.TextCellValue(row.itemDescription),
+            exc.TextCellValue(row.hsnSacCode),
+            exc.TextCellValue('${_formatQty(row.quantity)} ${row.unit}'),
+            exc.DoubleCellValue(row.taxableValue),
+            exc.DoubleCellValue(row.taxAmount),
+            exc.DoubleCellValue(row.totalLineValue),
+          ]);
+        }
         sheetRegister.appendRow([
-          exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.invoiceDate)),
-          exc.TextCellValue(row.invoiceNumber),
-          exc.TextCellValue(row.customerName),
-          exc.TextCellValue(
-              row.customerGstin.isEmpty ? 'B2C' : row.customerGstin),
-          exc.DoubleCellValue(row.invoiceValue),
-          exc.TextCellValue(row.placeOfSupply),
-          exc.TextCellValue(row.itemDescription),
-          exc.TextCellValue(row.hsnSacCode),
-          exc.TextCellValue('${_formatQty(row.quantity)} ${row.unit}'),
-          exc.DoubleCellValue(row.taxableValue),
-          exc.DoubleCellValue(row.cgstAmount),
-          exc.DoubleCellValue(row.sgstAmount),
-          exc.DoubleCellValue(row.igstAmount),
-          exc.DoubleCellValue(row.totalLineValue),
+          exc.TextCellValue('TOTAL'),
+          exc.TextCellValue(''),
+          exc.TextCellValue(''),
+          exc.TextCellValue(''),
+          exc.DoubleCellValue(_billWiseNetTotal),
+          exc.TextCellValue(''),
+          exc.TextCellValue(''),
+          exc.TextCellValue(''),
+          exc.TextCellValue(''),
+          exc.DoubleCellValue(_headerTaxableTotal),
+          exc.DoubleCellValue(_rows.fold<double>(0, (sum, row) => sum + row.taxAmount)),
+          exc.DoubleCellValue(_rows.fold<double>(0, (sum, row) => sum + row.totalLineValue)),
         ]);
       }
     } else if (_reportTabIndex == 5) {
@@ -1875,12 +2255,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         'GRN No',
         'Bill No',
         'Supplier',
-        'GSTIN',
-        'State',
+        _isIndiaTax ? 'GSTIN' : 'Tax ID',
+        _isIndiaTax ? 'State' : 'Region',
         'Items',
         'Qty',
         'Taxable Value',
-        'GST Amount',
+        _isIndiaTax ? 'GST Amount' : 'Tax Amount',
         'Net Amount',
         'Paid',
         'Outstanding',
@@ -1925,6 +2305,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.TextCellValue(''),
       ]);
     } else {
+      final taxCols = _availableTaxColumns;
       sheet.appendRow(
         [
           'Date',
@@ -1939,20 +2320,19 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Subtotal',
           'Discount',
           'Charges',
-          'Charges GST',
-          ...taxRates.expand(
-            (rate) => [
-              '${_formatTaxPercent(rate)}% Sale',
-              if (rate > 0.009) '${_formatTaxPercent(rate)}% GST',
+          _chargesTaxTerm,
+          ...taxCols.expand(
+            (col) => [
+              '${col.label} Sale',
+              if (col.rate > 0.009) '${col.label} ${_isIndiaTax ? 'GST' : _taxTerm}',
             ],
           ),
-          'IGST',
+          if (_isIndiaTax) 'IGST',
           'Tax',
           'Net Amount',
         ].map(exc.TextCellValue.new).toList(),
       );
       for (final row in _dateWiseSalesRows) {
-        final bands = row.taxBands;
         sheet.appendRow([
           exc.TextCellValue(DateFormat('dd-MM-yyyy').format(row.date)),
           exc.IntCellValue(row.bills),
@@ -1967,13 +2347,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           exc.DoubleCellValue(row.discount),
           exc.DoubleCellValue(row.chargeTotal),
           exc.DoubleCellValue(row.chargeTaxTotal),
-          ...taxRates.expand(
-            (rate) => [
-              exc.DoubleCellValue(_bandTaxable(bands, rate)),
-              if (rate > 0.009) exc.DoubleCellValue(_bandTax(bands, rate)),
+          ...taxCols.expand(
+            (col) => [
+              exc.DoubleCellValue(row.columnTaxBands[col.id]?.taxableValue ?? 0),
+              if (col.rate > 0.009)
+                exc.DoubleCellValue(row.columnTaxBands[col.id]?.taxAmount ?? 0),
             ],
           ),
-          exc.DoubleCellValue(row.igstAmount),
+          if (_isIndiaTax) exc.DoubleCellValue(row.igstAmount),
           exc.DoubleCellValue(row.taxAmount),
           exc.DoubleCellValue(row.netAmount),
         ]);
@@ -1992,46 +2373,64 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         exc.DoubleCellValue(_dateWiseDiscountTotal),
         exc.DoubleCellValue(_dateWiseChargeTotalTotal),
         exc.DoubleCellValue(_dateWiseChargeTaxTotal),
-        ...taxRates.expand(
-          (rate) => [
-            exc.DoubleCellValue(_dateWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
-            if (rate > 0.009)
-              exc.DoubleCellValue(_dateWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+        ...taxCols.expand(
+          (col) => [
+            exc.DoubleCellValue(_dateWiseTaxColumnsTotal[col.id]?.taxableValue ?? 0),
+            if (col.rate > 0.009)
+              exc.DoubleCellValue(_dateWiseTaxColumnsTotal[col.id]?.taxAmount ?? 0),
           ],
         ),
-        exc.DoubleCellValue(_dateWiseIgstTotal),
+        if (_isIndiaTax) exc.DoubleCellValue(_dateWiseIgstTotal),
         exc.DoubleCellValue(_dateWiseTaxTotal),
         exc.DoubleCellValue(_dateWiseNetTotal),
       ]);
     }
 
-    final bytes = workbook.encode();
-    if (bytes == null) return;
+    try {
+      final bytes = workbook.encode();
+      if (bytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to encode Excel file.'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
 
-    final directory = await getTemporaryDirectory();
-    final file = File(
-      '${directory.path}${Platform.pathSeparator}sales_report_${DateTime.now().millisecondsSinceEpoch}.xlsx',
-    );
-    await file.writeAsBytes(bytes, flush: true);
+      final directory = await getTemporaryDirectory();
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}${sheetName}_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+      );
+      await file.writeAsBytes(bytes, flush: true);
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Excel exported: ${file.path}')),
-    );
-    await OpenFile.open(file.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Excel exported successfully: ${file.path.split(Platform.pathSeparator).last}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await OpenFile.open(file.path);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export Excel: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Future<void> _exportPdf() async {
     final pdf = pw.Document();
     final summary = _summary;
-    final taxRates = _availableTaxRates;
+    final taxCols = _availableTaxColumns;
     final title = switch (_reportTabIndex) {
       0 => 'Payment Wise Sales Report',
       1 => 'Bill Wise Sales Report',
       2 => 'Item Wise Sales Report',
       3 => 'Date Wise Sales Report',
-      4 => 'GSTR-1 Sales Report',
-      _ => 'GSTR-2 Purchase Report',
+      4 => _isIndiaTax ? 'GSTR-1 Sales Report' : _gstr1ReportTitle,
+      _ => _isIndiaTax ? 'GSTR-2 Purchase Report' : _gstr2ReportTitle,
     };
     final modes = _pivotedPaymentModes;
     final headers = switch (_reportTabIndex) {
@@ -2053,14 +2452,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Subtotal',
           'Discount',
           'Charges',
-          'Charges GST',
-          ...taxRates.expand(
-            (rate) => [
-              '${_formatTaxPercent(rate)}% Sale',
-              '${_formatTaxPercent(rate)}% GST',
+          _chargesTaxTerm,
+          ...taxCols.expand(
+            (col) => [
+              '${col.label} Sale',
+              if (col.rate > 0.009) '${col.label} ${_isIndiaTax ? 'GST' : _taxTerm}',
             ],
           ),
-          'IGST',
+          if (_isIndiaTax) 'IGST',
           'Tax',
           'Net Amount',
           'Sub Sale',
@@ -2077,9 +2476,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Taxed Sales',
           'Non-Tax Sales',
           'Taxable',
-          'CGST',
-          'SGST',
-          'IGST',
+          if (_isIndiaTax) ...[
+            'CGST',
+            'SGST',
+            'IGST',
+          ] else
+            _taxTerm,
           'Sales'
         ],
       3 => [
@@ -2095,31 +2497,31 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Subtotal',
           'Discount',
           'Charges',
-          'Charges GST',
-          ...taxRates.expand(
-            (rate) => [
-              '${_formatTaxPercent(rate)}% Sale',
-              '${_formatTaxPercent(rate)}% GST',
+          _chargesTaxTerm,
+          ...taxCols.expand(
+            (col) => [
+              '${col.label} Sale',
+              if (col.rate > 0.009) '${col.label} ${_isIndiaTax ? 'GST' : _taxTerm}',
             ],
           ),
-          'IGST',
+          if (_isIndiaTax) 'IGST',
           'Tax',
           'Net Amount',
           'Sub Sale',
           'Net Revenue',
         ],
-      4 => _gstHeaders,
+      4 => _isIndiaTax ? _gstHeaders : _salesTaxHeaders,
       _ => [
           'Date',
           'GRN No',
           'Bill No',
           'Supplier',
-          'GSTIN',
-          'State',
+          _isIndiaTax ? 'GSTIN' : 'Tax ID',
+          _isIndiaTax ? 'State' : 'Region',
           'Items',
           'Qty',
           'Taxable Value',
-          'GST Amount',
+          _isIndiaTax ? 'GST Amount' : 'Tax Amount',
           'Net Amount',
           'Paid',
           'Outstanding',
@@ -2150,7 +2552,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         ],
       1 => _billWiseSales.map(
           (sale) {
-            final bands = _saleTaxBands(sale);
             return [
               DateFormat('dd-MM-yyyy').format(sale.saleDate),
               _maskedBillNo(sale.saleNo),
@@ -2164,13 +2565,16 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               _money(sale.totalDiscount),
               _money(sale.chargeTotal),
               _money(_saleChargeTaxTotal(sale)),
-              ...taxRates.expand(
-                (rate) => [
-                  _money(_bandTaxable(bands, rate)),
-                  _money(_bandTax(bands, rate)),
-                ],
+              ...taxCols.expand(
+                (col) {
+                  final summ = _saleColumnSummary(sale, col);
+                  return [
+                    _money(summ.taxableValue),
+                    if (col.rate > 0.009) _money(summ.taxAmount),
+                  ];
+                },
               ),
-              _money(_saleIgstAmount(sale)),
+              if (_isIndiaTax) _money(_saleIgstAmount(sale)),
               _money(_saleTotalTax(sale)),
               _money(sale.netAmount),
               _money(sale.subscription),
@@ -2191,13 +2595,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             _money(_billWiseDiscountTotal),
             _money(_billWiseChargeTotalTotal),
             _money(_headerChargeTaxTotal),
-            ...taxRates.expand(
-              (rate) => [
-                _money(_billWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
-                _money(_billWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+            ...taxCols.expand(
+              (col) => [
+                _money(_billWiseTaxColumnsTotal[col.id]?.taxableValue ?? 0),
+                if (col.rate > 0.009)
+                  _money(_billWiseTaxColumnsTotal[col.id]?.taxAmount ?? 0),
               ],
             ),
-            _money(_billWiseIgstTotal),
+            if (_isIndiaTax) _money(_billWiseIgstTotal),
             _money(_headerTaxTotal),
             _money(_billWiseNetTotal),
             _money(_billWiseSales.fold<double>(0, (sum, s) => sum + s.subscription)),
@@ -2216,9 +2621,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               _money(_itemWiseTaxSaleValue(row)),
               _money(_itemWiseNonTaxSaleValue(row)),
               _money(row.taxableValue),
-              _money(row.cgstAmount),
-              _money(row.sgstAmount),
-              _money(row.igstAmount),
+              if (_isIndiaTax) ...[
+                _money(row.cgstAmount),
+                _money(row.sgstAmount),
+                _money(row.igstAmount),
+              ] else
+                _money(row.taxAmount > 0.009 ? row.taxAmount : (row.cgstAmount + row.sgstAmount + row.igstAmount)),
               _money(row.totalInvoiceValue),
             ],
           )
@@ -2234,9 +2642,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           _money(_itemWiseTaxableSaleTotal),
           _money(_itemWiseNonTaxableSaleTotal),
           _money(_itemWiseTaxableTotal),
-          _money(_itemWiseCgstTotal),
-          _money(_itemWiseSgstTotal),
-          _money(_itemWiseIgstTotal),
+          if (_isIndiaTax) ...[
+            _money(_itemWiseCgstTotal),
+            _money(_itemWiseSgstTotal),
+            _money(_itemWiseIgstTotal),
+          ] else
+            _money(_itemWiseTaxTotal),
           _money(_itemWiseSalesTotal),
         ]),
       3 => _dateWiseSalesRows
@@ -2255,13 +2666,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               _money(row.discount),
               _money(row.chargeTotal),
               _money(row.chargeTaxTotal),
-              ...taxRates.expand(
-                (rate) => [
-                  _money(_bandTaxable(row.taxBands, rate)),
-                  _money(_bandTax(row.taxBands, rate)),
+              ...taxCols.expand(
+                (col) => [
+                  _money(row.columnTaxBands[col.id]?.taxableValue ?? 0),
+                  if (col.rate > 0.009)
+                    _money(row.columnTaxBands[col.id]?.taxAmount ?? 0),
                 ],
               ),
-              _money(row.igstAmount),
+              if (_isIndiaTax) _money(row.igstAmount),
               _money(row.taxAmount),
               _money(row.netAmount),
               _money(row.subscription),
@@ -2283,55 +2695,90 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           _money(_dateWiseDiscountTotal),
           _money(_dateWiseChargeTotalTotal),
           _money(_dateWiseChargeTaxTotal),
-          ...taxRates.expand(
-            (rate) => [
-              _money(_dateWiseTaxBandsTotal[rate]?.taxableValue ?? 0),
-              _money(_dateWiseTaxBandsTotal[rate]?.taxAmount ?? 0),
+          ...taxCols.expand(
+            (col) => [
+              _money(_dateWiseTaxColumnsTotal[col.id]?.taxableValue ?? 0),
+              if (col.rate > 0.009)
+                _money(_dateWiseTaxColumnsTotal[col.id]?.taxAmount ?? 0),
             ],
           ),
-          _money(_dateWiseIgstTotal),
+          if (_isIndiaTax) _money(_dateWiseIgstTotal),
           _money(_dateWiseTaxTotal),
           _money(_dateWiseNetTotal),
           _money(_dateWiseSalesRows.fold<double>(0, (sum, r) => sum + r.subscription)),
           _money(_dateWiseSalesRows.fold<double>(0, (sum, r) => sum + (r.netAmount - r.subscription))),
         ]),
-      4 => _rows
-          .map(
-            (row) => [
-              DateFormat('dd-MM-yyyy').format(row.invoiceDate),
-              row.invoiceNumber,
-              row.customerName,
-              row.customerGstin.isEmpty ? 'B2C' : row.customerGstin,
-              _money(row.invoiceValue),
-              row.placeOfSupply,
-              row.itemDescription,
-              row.hsnSacCode,
-              '${_formatQty(row.quantity)} ${row.unit}',
-              _money(row.taxableValue),
-              _money(row.cgstAmount),
-              _money(row.sgstAmount),
-              _money(row.igstAmount),
-              _money(row.totalLineValue),
-            ],
-          )
-          .toList()
-        ..add([
-          'TOTAL',
-          '',
-          '',
-          '',
-          _money(_billWiseNetTotal),
-          '',
-          '',
-          '',
-          '',
-          _money(_headerTaxableTotal),
-          _money(_headerCgstTotal),
-          _money(_headerSgstTotal),
-          _money(_rows.fold<double>(0, (sum, row) => sum + row.igstAmount)),
-          _money(
-              _rows.fold<double>(0, (sum, row) => sum + row.totalLineValue)),
-        ]),
+      4 => _isIndiaTax
+          ? (_rows
+              .map(
+                (row) => [
+                  DateFormat('dd-MM-yyyy').format(row.invoiceDate),
+                  row.invoiceNumber,
+                  row.customerName,
+                  row.customerGstin.isEmpty ? 'B2C' : row.customerGstin,
+                  _money(row.invoiceValue),
+                  row.placeOfSupply,
+                  row.itemDescription,
+                  row.hsnSacCode,
+                  '${_formatQty(row.quantity)} ${row.unit}',
+                  _money(row.taxableValue),
+                  _money(row.cgstAmount),
+                  _money(row.sgstAmount),
+                  _money(row.igstAmount),
+                  _money(row.totalLineValue),
+                ],
+              )
+              .toList()
+            ..add([
+              'TOTAL',
+              '',
+              '',
+              '',
+              _money(_billWiseNetTotal),
+              '',
+              '',
+              '',
+              '',
+              _money(_headerTaxableTotal),
+              _money(_headerCgstTotal),
+              _money(_headerSgstTotal),
+              _money(_rows.fold<double>(0, (sum, row) => sum + row.igstAmount)),
+              _money(
+                  _rows.fold<double>(0, (sum, row) => sum + row.totalLineValue)),
+            ]))
+          : (_rows
+              .map(
+                (row) => [
+                  DateFormat('dd-MM-yyyy').format(row.invoiceDate),
+                  row.invoiceNumber,
+                  row.customerName,
+                  row.customerGstin.isEmpty ? 'B2C' : row.customerGstin,
+                  _money(row.invoiceValue),
+                  row.placeOfSupply,
+                  row.itemDescription,
+                  row.hsnSacCode,
+                  '${_formatQty(row.quantity)} ${row.unit}',
+                  _money(row.taxableValue),
+                  _money(row.taxAmount),
+                  _money(row.totalLineValue),
+                ],
+              )
+              .toList()
+            ..add([
+              'TOTAL',
+              '',
+              '',
+              '',
+              _money(_billWiseNetTotal),
+              '',
+              '',
+              '',
+              '',
+              _money(_headerTaxableTotal),
+              _money(_rows.fold<double>(0, (sum, row) => sum + row.taxAmount)),
+              _money(
+                  _rows.fold<double>(0, (sum, row) => sum + row.totalLineValue)),
+            ])),
       _ => _gstr2Rows
           .map(
             (row) => [
@@ -2371,98 +2818,91 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         ]),
     };
 
-    final rowsPerPage = _reportTabIndex == 1
-        ? 24
-        : _reportTabIndex == 4 || _reportTabIndex == 5
-            ? 18
-            : 22;
-    final chunks = <List<List<String>>>[];
-    for (int i = 0; i < data.length; i += rowsPerPage) {
-      chunks.add(
-        data.sublist(
-          i,
-          i + rowsPerPage > data.length ? data.length : i + rowsPerPage,
-        ),
-      );
-    }
-    if (chunks.isEmpty) {
-      chunks.add(<List<String>>[]);
-    }
-
-    for (int pageIndex = 0; pageIndex < chunks.length; pageIndex++) {
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4.landscape,
-          margin: const pw.EdgeInsets.all(14),
-          build: (_) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              pw.Text(
-                title,
-                style:
-                    pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(
-                'Period: ${DateFormat('dd-MM-yyyy').format(ctrl.fromDate)} to ${DateFormat('dd-MM-yyyy').format(ctrl.toDate)}',
-                style: const pw.TextStyle(fontSize: 10),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(
-                'Page ${pageIndex + 1} of ${chunks.length}',
-                style: const pw.TextStyle(fontSize: 9),
-                textAlign: pw.TextAlign.right,
-              ),
-              if (pageIndex == 0) ...[
-                pw.SizedBox(height: 12),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey600),
-                  ),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-                    children: (_reportTabIndex == 0 && _uniquePaymentModeSummaries.isNotEmpty)
-                        ? _uniquePaymentModeSummaries
-                            .map((item) => _pdfSummaryBlock(
-                                  item['label'] as String,
-                                  item['amount'] as double,
-                                ))
-                            .toList()
-                        : [
-                            _pdfSummaryBlock('Taxable Value', summary.taxableValue),
-                            _pdfSummaryBlock('Total CGST', summary.cgstAmount),
-                            _pdfSummaryBlock('Total SGST/UTGST', summary.sgstAmount),
-                            _pdfSummaryBlock('Non-Tax Sales', _nonTaxSaleTotal),
-                            _pdfSummaryBlock('Sub Sale (Adv.)', ctrl.summary.subscriptionRealized),
-                            _pdfSummaryBlock('Charges', summary.chargeTotal),
-                            _pdfSummaryBlock('Net', summary.totalRevenue - ctrl.summary.subscriptionRealized),
-                          ],
-                  ),
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(12),
+        header: (pw.Context pageCtx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  title,
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.Text(
+                  'Page ${pageCtx.pageNumber} of ${pageCtx.pagesCount}',
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
                 ),
               ],
-              pw.SizedBox(height: 12),
-              pw.TableHelper.fromTextArray(
-                headers: headers,
-                data: chunks[pageIndex],
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.blueGrey100),
-                headerStyle:
-                    pw.TextStyle(fontSize: 7.2, fontWeight: pw.FontWeight.bold),
-                cellStyle: const pw.TextStyle(fontSize: 6.6),
-                border:
-                    pw.TableBorder.all(color: PdfColors.grey500, width: 0.5),
-                cellPadding:
-                    const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
-              ),
-            ],
-          ),
+            ),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              'Period: ${DateFormat('dd-MM-yyyy').format(ctrl.fromDate)} to ${DateFormat('dd-MM-yyyy').format(ctrl.toDate)} | Country/Tax: ${_isIndiaTax ? 'India (GST)' : (_billingCountry.isNotEmpty ? _billingCountry : 'Sales Tax')}',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+            ),
+            pw.SizedBox(height: 6),
+          ],
         ),
-      );
-    }
+        build: (pw.Context pageCtx) => [
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            margin: const pw.EdgeInsets.only(bottom: 8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey500, width: 0.5),
+              color: PdfColors.grey100,
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: (_reportTabIndex == 0 && _uniquePaymentModeSummaries.isNotEmpty)
+                  ? _uniquePaymentModeSummaries
+                      .map((item) => _pdfSummaryBlock(
+                            item['label'] as String,
+                            item['amount'] as double,
+                          ))
+                      .toList()
+                  : [
+                      _pdfSummaryBlock('Taxable Value', summary.taxableValue),
+                      if (_isIndiaTax) ...[
+                        _pdfSummaryBlock('Total CGST', summary.cgstAmount),
+                        _pdfSummaryBlock('Total SGST', summary.sgstAmount),
+                        if (summary.igstAmount > 0.009) _pdfSummaryBlock('Total IGST', summary.igstAmount),
+                      ] else ...[
+                        _pdfSummaryBlock('Total $_taxTerm', summary.taxAmount),
+                      ],
+                      _pdfSummaryBlock('Non-Tax Sales', _nonTaxSaleTotal),
+                      _pdfSummaryBlock('Charges', summary.chargeTotal),
+                      _pdfSummaryBlock('Net Total', summary.totalRevenue - ctrl.summary.subscriptionRealized),
+                    ],
+            ),
+          ),
+          pw.TableHelper.fromTextArray(
+            headers: headers,
+            data: data,
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey100),
+            headerStyle: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold),
+            cellStyle: const pw.TextStyle(fontSize: 5.8),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.3),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2.5),
+            headerAlignment: pw.Alignment.centerLeft,
+            cellAlignment: pw.Alignment.centerLeft,
+          ),
+        ],
+      ),
+    );
 
-    final bytes = await pdf.save();
-    await Printing.layoutPdf(name: title, onLayout: (_) async => bytes);
+    try {
+      final bytes = await pdf.save();
+      await Printing.layoutPdf(name: title, onLayout: (_) async => bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to generate PDF report: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -2506,11 +2946,11 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               const SizedBox(height: 16),
               _buildSummaryRow(),
               const SizedBox(height: 10),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  'Net Sales = Sub-Total − Discount + GST (Includes Subscription)  •  Subscription = Advance-Paid Sale  •  Net = Net Sales − Subscription',
-                  style: TextStyle(
+                  'Net Sales = Sub-Total − Discount + $_taxTerm (Includes Subscription)  •  Subscription = Advance-Paid Sale  •  Net = Net Sales − Subscription',
+                  style: const TextStyle(
                     color: Color(0xFF64748B),
                     fontSize: 12,
                   ),
@@ -2528,13 +2968,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   Widget _buildReportTabs() {
-    const tabs = [
+    final tabs = [
       'Payment Wise',
       'Bill Wise',
       'Item Wise',
       'Date Wise',
-      'GSTR-1',
-      'GSTR-2',
+      _gstr1TabLabel,
+      _gstr2TabLabel,
     ];
     return Container(
       padding: const EdgeInsets.all(8),
@@ -2582,21 +3022,21 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   Widget _buildCurrentReportSection() {
     if (_reportTabIndex == 0) {
-      return _buildPaymentBreakdownSection();
+      return SizedBox(height: 580, child: _buildPaymentBreakdownSection());
     }
     if (_reportTabIndex == 1) {
-      return SizedBox(height: 560, child: _buildBillWiseDataTableSection());
+      return SizedBox(height: 580, child: _buildBillWiseDataTableSection());
     }
     if (_reportTabIndex == 2) {
-      return SizedBox(height: 560, child: _buildItemWiseDataTableSection());
+      return SizedBox(height: 580, child: _buildItemWiseDataTableSection());
     }
     if (_reportTabIndex == 3) {
-      return SizedBox(height: 560, child: _buildDateWiseDataTableSection());
+      return SizedBox(height: 580, child: _buildDateWiseDataTableSection());
     }
     if (_reportTabIndex == 4) {
-      return SizedBox(height: 560, child: _buildGstr1Section());
+      return SizedBox(height: 580, child: _buildGstr1Section());
     }
-    return SizedBox(height: 560, child: _buildGstr2Section());
+    return SizedBox(height: 580, child: _buildGstr2Section());
   }
 
   Widget _buildTopFilters() {
@@ -2787,14 +3227,45 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Bill Breakdown',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF334155),
-                  letterSpacing: 0.3,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Bill Breakdown',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF334155),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => setState(() => _showDetailedMetrics = !_showDetailedMetrics),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _showDetailedMetrics ? 'Hide Detailed Metrics' : 'Show Detailed Metrics',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2563EB),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            _showDetailedMetrics ? Icons.expand_less : Icons.expand_more,
+                            size: 18,
+                            color: const Color(0xFF2563EB),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               // Equation row
@@ -2818,7 +3289,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     ),
                     _breakdownOp('+', const Color(0xFF2563EB)),
                     _breakdownChip(
-                      label: 'GST',
+                      label: _taxTerm,
                       value: gst,
                       accent: const Color(0xFF2563EB),
                       icon: Icons.account_balance_outlined,
@@ -2837,67 +3308,85 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 14),
-
-        // ── Metric Cards ─────────────────────────────────────────────────
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            SizedBox(width: 220, child: _metricCard('Taxable Value', _headerTaxableTotal, const Color(0xFF0F766E))),
-            SizedBox(width: 220, child: _metricCard('Total CGST', _headerCgstTotal, const Color(0xFF2563EB))),
-            SizedBox(width: 220, child: _metricCard('Total SGST/UTGST', _headerSgstTotal, const Color(0xFF7C3AED))),
-            SizedBox(width: 220, child: _metricCard('Total IGST', _headerIgstTotal, const Color(0xFF0EA5E9))),
-            SizedBox(width: 220, child: _metricCard('GST Total', _headerTaxTotal, const Color(0xFFEA580C))),
-            SizedBox(
-              width: 220,
-              child: _metricCard('Total Discount', _headerDiscountTotal, const Color(0xFFDC2626),
-                  subtitle: 'applied across all bills'),
-            ),
-            SizedBox(
-              width: 220,
-              child: _metricCard(
-                _headerChargeTotal >= 0 ? 'Total Charges' : 'Charge Adj. (Net Refund)',
-                _headerChargeTotal.abs(),
-                _headerChargeTotal >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
-                subtitle: _headerChargeTotal >= 0
-                    ? 'packing, delivery & other'
-                    : 'charges reversed due to returns',
+        if (_showDetailedMetrics) ...[
+          const SizedBox(height: 14),
+          // ── Metric Cards ─────────────────────────────────────────────────
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SizedBox(width: 220, child: _metricCard('Taxable Value', _headerTaxableTotal, const Color(0xFF0F766E))),
+              if (_isIndiaTax) ...[
+                SizedBox(width: 220, child: _metricCard('Total CGST', _headerCgstTotal, const Color(0xFF2563EB))),
+                SizedBox(width: 220, child: _metricCard('Total SGST/UTGST', _headerSgstTotal, const Color(0xFF7C3AED))),
+                SizedBox(width: 220, child: _metricCard('Total IGST', _headerIgstTotal, const Color(0xFF0EA5E9))),
+              ] else ...[
+                ..._componentTaxTotals.entries.toList().asMap().entries.map((e) {
+                  const colors = [
+                    Color(0xFF2563EB),
+                    Color(0xFF7C3AED),
+                    Color(0xFF0EA5E9),
+                    Color(0xFF059669),
+                    Color(0xFFD97706),
+                  ];
+                  final color = colors[e.key % colors.length];
+                  return SizedBox(
+                    width: 220,
+                    child: _metricCard(e.value.key, e.value.value, color),
+                  );
+                }),
+              ],
+              SizedBox(width: 220, child: _metricCard(_isIndiaTax ? 'GST Total' : 'Tax Total', _headerTaxTotal, const Color(0xFFEA580C))),
+              SizedBox(
+                width: 220,
+                child: _metricCard('Total Discount', _headerDiscountTotal, const Color(0xFFDC2626),
+                    subtitle: 'applied across all bills'),
               ),
-            ),
-            SizedBox(width: 220, child: _metricCard('Charges GST', _headerChargeTaxTotal, const Color(0xFF7C3AED))),
-            SizedBox(width: 220, child: _metricCard('Net Sales (Standard)', _headerItemNetAmount, const Color(0xFFEA580C))),
-            SizedBox(width: 220, child: _metricCard('Taxed Sales After GST', _taxSaleTotal, const Color(0xFF16A34A))),
-            SizedBox(width: 220, child: _metricCard('Non-Tax Sales', _nonTaxSaleTotal, const Color(0xFF64748B))),
-            SizedBox(
-              width: 220,
-              child: _metricCard(
-                'Subscription Sale (Advance Paid)',
-                ctrl.summary.subscriptionRealized,
-                const Color(0xFF0EA5E9),
-                subtitle: 'Actual sale — advance collected, GST applicable',
+              SizedBox(
+                width: 220,
+                child: _metricCard(
+                  _headerChargeTotal >= 0 ? 'Total Charges' : 'Charge Adj. (Net Refund)',
+                  _headerChargeTotal.abs(),
+                  _headerChargeTotal >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                  subtitle: _headerChargeTotal >= 0
+                      ? 'packing, delivery & other'
+                      : 'charges reversed due to returns',
+                ),
               ),
-            ),
-            SizedBox(
-              width: 220,
-              child: _metricCard(
-                'Total Revenue',
-                _headerRevenueTotal,
-                const Color(0xFF16A34A),
-                subtitle: 'Net Sales + Charges',
+              SizedBox(width: 220, child: _metricCard(_chargesTaxTerm, _headerChargeTaxTotal, const Color(0xFF7C3AED))),
+              SizedBox(width: 220, child: _metricCard('Net Sales (Standard)', _headerItemNetAmount, const Color(0xFFEA580C))),
+              SizedBox(width: 220, child: _metricCard(_isIndiaTax ? 'Taxed Sales After GST' : 'Taxed Sales After Tax', _taxSaleTotal, const Color(0xFF16A34A))),
+              SizedBox(width: 220, child: _metricCard('Non-Tax Sales', _nonTaxSaleTotal, const Color(0xFF64748B))),
+              SizedBox(
+                width: 220,
+                child: _metricCard(
+                  'Subscription Sale (Advance Paid)',
+                  ctrl.summary.subscriptionRealized,
+                  const Color(0xFF0EA5E9),
+                  subtitle: _isIndiaTax ? 'Actual sale — advance collected, GST applicable' : 'Actual sale — advance collected, tax applicable',
+                ),
               ),
-            ),
-            SizedBox(
-              width: 220,
-              child: _metricCard(
-                'Net Revenue',
-                _headerRevenueTotal - ctrl.summary.subscriptionRealized,
-                const Color(0xFF0D9488),
-                subtitle: 'Total Revenue - Subscription (all payment methods)',
+              SizedBox(
+                width: 220,
+                child: _metricCard(
+                  'Total Revenue',
+                  _headerRevenueTotal,
+                  const Color(0xFF16A34A),
+                  subtitle: 'Net Sales + Charges',
+                ),
               ),
-            ),
-          ],
-        ),
+              SizedBox(
+                width: 220,
+                child: _metricCard(
+                  'Net Revenue',
+                  _headerRevenueTotal - ctrl.summary.subscriptionRealized,
+                  const Color(0xFF0D9488),
+                  subtitle: 'Total Revenue - Subscription (all payment methods)',
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -3081,88 +3570,110 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 .toList(),
           ),
           const SizedBox(height: 16),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(
-                const Color(0xFFF1F5F9),
-              ),
-              columns: [
-                const DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                const DataColumn(label: Text('Bill No', style: TextStyle(fontWeight: FontWeight.bold))),
-                ..._pivotedPaymentModes.map(
-                  (mode) => DataColumn(
-                    label: Text(
-                      _formatPaymentModeHeader(mode),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-                const DataColumn(label: Text('Net Amount', style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              rows: [
-                ..._pivotedBillPaymentRows.map(
-                  (row) => DataRow(
-                    cells: [
-                      DataCell(
-                        Text(DateFormat('dd-MM-yyyy').format(row.saleDate)),
-                      ),
-                      DataCell(Text(_maskedBillNo(row.saleNo))),
-                      ..._pivotedPaymentModes.map(
-                        (mode) {
-                          final amt = row.modeAmounts[mode] ?? 0.0;
-                          return DataCell(
-                            Text(
-                              _money(amt),
-                              style: TextStyle(
-                                color: amt > 0 ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                fontWeight: amt > 0 ? FontWeight.w600 : FontWeight.normal,
+          Expanded(
+            child: Scrollbar(
+              controller: _paymentWiseVerticalController,
+              thumbVisibility: true,
+              notificationPredicate: (notification) =>
+                  notification.metrics.axis == Axis.vertical,
+              child: Scrollbar(
+                controller: _paymentWiseHorizontalController,
+                thumbVisibility: true,
+                notificationPredicate: (notification) =>
+                    notification.metrics.axis == Axis.horizontal,
+                child: SingleChildScrollView(
+                  controller: _paymentWiseHorizontalController,
+                  scrollDirection: Axis.horizontal,
+                  child: SingleChildScrollView(
+                    controller: _paymentWiseVerticalController,
+                    scrollDirection: Axis.vertical,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 1000),
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(
+                          const Color(0xFFF1F5F9),
+                        ),
+                        columns: [
+                          const DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const DataColumn(label: Text('Bill No', style: TextStyle(fontWeight: FontWeight.bold))),
+                          ..._pivotedPaymentModes.map(
+                            (mode) => DataColumn(
+                              label: Text(
+                                _formatPaymentModeHeader(mode),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
                             ),
-                          );
-                        },
+                          ),
+                          const DataColumn(label: Text('Net Amount', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: [
+                          ..._pivotedBillPaymentRows.map(
+                            (row) => DataRow(
+                              cells: [
+                                DataCell(
+                                  Text(DateFormat('dd-MM-yyyy').format(row.saleDate)),
+                                ),
+                                DataCell(Text(_maskedBillNo(row.saleNo))),
+                                ..._pivotedPaymentModes.map(
+                                  (mode) {
+                                    final amt = row.modeAmounts[mode] ?? 0.0;
+                                    return DataCell(
+                                      Text(
+                                        _money(amt),
+                                        style: TextStyle(
+                                          color: amt > 0 ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                                          fontWeight: amt > 0 ? FontWeight.w600 : FontWeight.normal,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                DataCell(
+                                  Text(
+                                    _money(row.netAmount),
+                                    style: const TextStyle(fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          DataRow(
+                            color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                            cells: [
+                              const DataCell(
+                                Text(
+                                  'TOTAL',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              const DataCell(Text('')),
+                              ..._pivotedPaymentModes.map(
+                                (mode) {
+                                  final modeTotal = _pivotedBillPaymentRows.fold<double>(
+                                    0, (sum, row) => sum + (row.modeAmounts[mode] ?? 0.0),
+                                  );
+                                  return DataCell(
+                                    Text(
+                                      _money(modeTotal),
+                                      style: const TextStyle(fontWeight: FontWeight.w800),
+                                    ),
+                                  );
+                                },
+                              ),
+                              DataCell(
+                                Text(
+                                  _money(_paymentReportNetTotal),
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      DataCell(
-                        Text(
-                          _money(row.netAmount),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-                DataRow(
-                  color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                  cells: [
-                    const DataCell(
-                      Text(
-                        'TOTAL',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const DataCell(Text('')),
-                    ..._pivotedPaymentModes.map(
-                      (mode) {
-                        final modeTotal = _pivotedBillPaymentRows.fold<double>(
-                          0, (sum, row) => sum + (row.modeAmounts[mode] ?? 0.0),
-                        );
-                        return DataCell(
-                          Text(
-                            _money(modeTotal),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        );
-                      },
-                    ),
-                    DataCell(
-                      Text(
-                        _money(_paymentReportNetTotal),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -3396,7 +3907,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   Widget _buildBillWiseDataTableSection() {
     final rows = _billWiseSales;
-    final taxRates = _availableTaxRates;
+    final taxCols = _availableTaxColumns;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -3418,28 +3929,36 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           ),
           const SizedBox(height: 12),
           Expanded(
-              child: rows.isEmpty
-                  ? const Center(
-                      child: Text('No bill rows found for the selected range.'),
-                    )
-                  : SingleChildScrollView(
-                      scrollDirection: Axis.vertical,
-                      child: Scrollbar(
-                          controller: _billWiseHorizontalController,
-                          thumbVisibility: true,
-                          notificationPredicate: (notification) =>
-                              notification.metrics.axis == Axis.horizontal,
-                          child: SingleChildScrollView(
-                            controller: _billWiseHorizontalController,
-                            scrollDirection: Axis.horizontal,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(minWidth: 1800),
-                              child: DataTable(
-                                headingRowColor: WidgetStateProperty.all(
-                                  const Color(0xFFF8FAFC),
-                                ),
-                                dataRowMinHeight: 52,
-                                dataRowMaxHeight: 68,
+            child: rows.isEmpty
+                ? const Center(
+                    child: Text('No bill rows found for the selected range.'),
+                  )
+                : Scrollbar(
+                    controller: _billWiseVerticalController,
+                    thumbVisibility: true,
+                    notificationPredicate: (notification) =>
+                        notification.metrics.axis == Axis.vertical,
+                    child: Scrollbar(
+                      controller: _billWiseHorizontalController,
+                      thumbVisibility: true,
+                      notificationPredicate: (notification) =>
+                          notification.metrics.axis == Axis.horizontal,
+                      child: SingleChildScrollView(
+                        controller: _billWiseHorizontalController,
+                        scrollDirection: Axis.horizontal,
+                        child: SingleChildScrollView(
+                          controller: _billWiseVerticalController,
+                          scrollDirection: Axis.vertical,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minWidth: 2200),
+                            child: DataTable(
+                              columnSpacing: 24,
+                              horizontalMargin: 16,
+                              headingRowColor: WidgetStateProperty.all(
+                                const Color(0xFFF8FAFC),
+                              ),
+                              dataRowMinHeight: 52,
+                              dataRowMaxHeight: 68,
                                 columns: [
                                   const DataColumn(label: Text('Date')),
                                   const DataColumn(label: Text('Bill No')),
@@ -3452,31 +3971,39 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                   const DataColumn(label: Text('Subtotal')),
                                   const DataColumn(label: Text('Discount')),
                                   const DataColumn(label: Text('Charges')),
-                                  const DataColumn(label: Text('Charges GST')),
-                                  ...taxRates.expand(
-                                    (rate) => [
-                                      DataColumn(
-                                          label: Text(
-                                              '${_formatTaxPercent(rate)}% Sale')),
-                                      if (rate > 0.009)
-                                        DataColumn(
-                                            label: Text(
-                                                '${_formatTaxPercent(rate)}% GST')),
+                                  DataColumn(label: Text(_chargesTaxTerm)),
+                                  ...taxCols.expand(
+                                    (col) => [
+                                      DataColumn(label: Text(col.saleHeader)),
+                                      if (col.rate > 0.009)
+                                        DataColumn(label: Text(col.taxHeader)),
                                     ],
                                   ),
-                                  const DataColumn(label: Text('IGST')),
+                                  if (_isIndiaTax)
+                                    const DataColumn(label: Text('IGST')),
                                   const DataColumn(label: Text('Tax')),
                                   const DataColumn(label: Text('Net Amount')),
-                                  const DataColumn(
+                                  DataColumn(
                                     label: Tooltip(
-                                      message: 'Subscription = advance-paid sale. Customer GST applicable. Counted in total sales.',
-                                      child: Text('Sub Sale', style: TextStyle(color: Color(0xFF0EA5E9))),
+                                      message:
+                                          'Subscription = advance-paid sale. Customer $_taxTerm applicable. Counted in total sales.',
+                                      child: const Text(
+                                        'Sub Sale',
+                                        style:
+                                            TextStyle(color: Color(0xFF0EA5E9)),
+                                      ),
                                     ),
                                   ),
                                   const DataColumn(
                                     label: Tooltip(
-                                      message: 'Net Amount - Subscription Sale (Total revenue collected for this bill across all payment methods)',
-                                      child: Text('Net Revenue', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.w700)),
+                                      message:
+                                          'Net Amount - Subscription Sale (Total revenue collected for this bill across all payment methods)',
+                                      child: Text(
+                                        'Net Revenue',
+                                        style: TextStyle(
+                                            color: Color(0xFF0D9488),
+                                            fontWeight: FontWeight.w700),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -3506,19 +4033,19 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                         DataCell(Text(_money(sale.totalDiscount))),
                                         DataCell(Text(_money(sale.chargeTotal))),
                                         DataCell(Text(_money(_saleChargeTaxTotal(sale)))),
-                                        ...taxRates.expand(
-                                          (rate) => [
-                                            DataCell(Text(_money(
-                                                _saleTaxBandValue(
-                                                    sale, rate)))),
-                                            if (rate > 0.009)
-                                              DataCell(Text(_money(
-                                                  _saleTaxBandTax(
-                                                      sale, rate)))),
-                                          ],
+                                        ...taxCols.expand(
+                                          (col) {
+                                            final summary = _saleColumnSummary(sale, col);
+                                            return [
+                                              DataCell(Text(_money(summary.taxableValue))),
+                                              if (col.rate > 0.009)
+                                                DataCell(Text(_money(summary.taxAmount))),
+                                            ];
+                                          },
                                         ),
-                                        DataCell(Text(
-                                            _money(_saleIgstAmount(sale)))),
+                                        if (_isIndiaTax)
+                                          DataCell(Text(
+                                              _money(_saleIgstAmount(sale)))),
                                         DataCell(Text(_money(_saleTotalTax(sale)))),
                                         DataCell(
                                           Text(
@@ -3628,38 +4155,37 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                           ),
                                         ),
                                       ),
-                                      ...taxRates.expand(
-                                        (rate) => [
-                                          DataCell(
-                                            Text(
-                                              _money(_billWiseTaxBandsTotal[rate]
-                                                      ?.taxableValue ??
-                                                  0),
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w800),
-                                            ),
-                                          ),
-                                          if (rate > 0.009)
+                                      ...taxCols.expand(
+                                        (col) {
+                                          final colTotal = _billWiseTaxColumnsTotal[col.id];
+                                          return [
                                             DataCell(
                                               Text(
-                                                _money(
-                                                    _billWiseTaxBandsTotal[rate]
-                                                            ?.taxAmount ??
-                                                        0),
+                                                _money(colTotal?.taxableValue ?? 0),
                                                 style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w800),
+                                                    fontWeight: FontWeight.w800),
                                               ),
                                             ),
-                                        ],
+                                            if (col.rate > 0.009)
+                                              DataCell(
+                                                Text(
+                                                  _money(colTotal?.taxAmount ?? 0),
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w800),
+                                                ),
+                                              ),
+                                          ];
+                                        },
                                       ),
-                                      DataCell(
-                                        Text(
-                                          _money(_billWiseIgstTotal),
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w800),
+                                      if (_isIndiaTax)
+                                        DataCell(
+                                          Text(
+                                            _money(_billWiseIgstTotal),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w800),
+                                          ),
                                         ),
-                                      ),
                                       DataCell(
                                         Text(
                                           _money(_billWiseTaxTotal),
@@ -3700,8 +4226,11 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                 ],
                               ),
                             ),
-                          )),
-                    ))
+                          ),
+                        ),
+                      ),
+                    ),
+          ),
         ],
       ),
     );
@@ -3736,21 +4265,21 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                         'No item sales rows found for the selected range.'),
                   )
                 : Scrollbar(
-                    controller: _gstVerticalController,
+                    controller: _itemWiseVerticalController,
                     thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      controller: _gstVerticalController,
-                      primary: false,
-                      scrollDirection: Axis.vertical,
-                      child: Scrollbar(
-                        controller: _gstHorizontalController,
-                        thumbVisibility: true,
-                        notificationPredicate: (notification) =>
-                            notification.metrics.axis == Axis.horizontal,
+                    notificationPredicate: (notification) =>
+                        notification.metrics.axis == Axis.vertical,
+                    child: Scrollbar(
+                      controller: _itemWiseHorizontalController,
+                      thumbVisibility: true,
+                      notificationPredicate: (notification) =>
+                          notification.metrics.axis == Axis.horizontal,
+                      child: SingleChildScrollView(
+                        controller: _itemWiseHorizontalController,
+                        scrollDirection: Axis.horizontal,
                         child: SingleChildScrollView(
-                          controller: _gstHorizontalController,
-                          primary: false,
-                          scrollDirection: Axis.horizontal,
+                          controller: _itemWiseVerticalController,
+                          scrollDirection: Axis.vertical,
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(minWidth: 2000),
                             child: DataTable(
@@ -3772,9 +4301,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                 const DataColumn(label: Text('Taxed Sales')),
                                 const DataColumn(label: Text('Non-Tax Sales')),
                                 const DataColumn(label: Text('Taxable Value')),
-                                const DataColumn(label: Text('CGST')),
-                                const DataColumn(label: Text('SGST/UTGST')),
-                                const DataColumn(label: Text('IGST')),
+                                if (_isIndiaTax) ...[
+                                  const DataColumn(label: Text('CGST')),
+                                  const DataColumn(label: Text('SGST/UTGST')),
+                                  const DataColumn(label: Text('IGST')),
+                                ] else
+                                  const DataColumn(label: Text('Tax')),
                                 const DataColumn(label: Text('Total Sales')),
                               ],
                               rows: [
@@ -3807,10 +4339,15 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                         Text(_money(
                                             _itemWiseNonTaxSaleValue(row))),
                                       ),
-                                      DataCell(Text(_money(row.taxableValue))),
-                                      DataCell(Text(_money(row.cgstAmount))),
-                                      DataCell(Text(_money(row.sgstAmount))),
-                                      DataCell(Text(_money(row.igstAmount))),
+                                      DataCell(
+                                        Text(_money(row.taxableValue)),
+                                      ),
+                                       if (_isIndiaTax) ...[
+                                         DataCell(Text(_money(row.cgstAmount))),
+                                         DataCell(Text(_money(row.sgstAmount))),
+                                         DataCell(Text(_money(row.igstAmount))),
+                                        ] else
+                                          DataCell(Text(_money(row.taxAmount > 0.009 ? row.taxAmount : (row.cgstAmount + row.sgstAmount + row.igstAmount)))),
                                       DataCell(
                                         Text(_money(row.totalInvoiceValue)),
                                       ),
@@ -3890,30 +4427,40 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                         ),
                                       ),
                                     ),
-                                    DataCell(
-                                      Text(
-                                        _money(_itemWiseCgstTotal),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
+                                    if (_isIndiaTax) ...[
+                                      DataCell(
+                                        Text(
+                                          _money(_itemWiseCgstTotal),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        _money(_itemWiseSgstTotal),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
+                                      DataCell(
+                                        Text(
+                                          _money(_itemWiseSgstTotal),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        _money(_itemWiseIgstTotal),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
+                                      DataCell(
+                                        Text(
+                                          _money(_itemWiseIgstTotal),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
                                         ),
                                       ),
-                                    ),
+                                    ] else
+                                      DataCell(
+                                        Text(
+                                          _money(_itemWiseTaxTotal),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
                                     DataCell(
                                       Text(
                                         _money(_itemWiseSalesTotal),
@@ -3939,7 +4486,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   Widget _buildDateWiseDataTableSection() {
     final rows = _dateWiseSalesRows;
-    final taxRates = _availableTaxRates;
+    final taxCols = _availableTaxColumns;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -3966,8 +4513,11 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     child:
                         Text('No date-wise rows found for the selected range.'),
                   )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
+                : Scrollbar(
+                    controller: _dateWiseVerticalController,
+                    thumbVisibility: true,
+                    notificationPredicate: (notification) =>
+                        notification.metrics.axis == Axis.vertical,
                     child: Scrollbar(
                       controller: _dateWiseHorizontalController,
                       thumbVisibility: true,
@@ -3976,9 +4526,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       child: SingleChildScrollView(
                         controller: _dateWiseHorizontalController,
                         scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 2000),
-                          child: DataTable(
+                        child: SingleChildScrollView(
+                          controller: _dateWiseVerticalController,
+                          scrollDirection: Axis.vertical,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minWidth: 2000),
+                            child: DataTable(
                             headingRowColor: WidgetStateProperty.all(
                               const Color(0xFFF8FAFC),
                             ),
@@ -3995,25 +4548,22 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                               const DataColumn(label: Text('Subtotal')),
                               const DataColumn(label: Text('Discount')),
                               const DataColumn(label: Text('Charges')),
-                              const DataColumn(label: Text('Charges GST')),
-                              ...taxRates.expand(
-                                (rate) => [
-                                  DataColumn(
-                                      label: Text(
-                                          '${_formatTaxPercent(rate)}% Sale')),
-                                  if (rate > 0.009)
-                                    DataColumn(
-                                        label: Text(
-                                            '${_formatTaxPercent(rate)}% GST')),
+                              DataColumn(label: Text(_chargesTaxTerm)),
+                              ...taxCols.expand(
+                                (col) => [
+                                  DataColumn(label: Text(col.saleHeader)),
+                                  if (col.rate > 0.009)
+                                    DataColumn(label: Text(col.taxHeader)),
                                 ],
                               ),
-                              const DataColumn(label: Text('IGST')),
+                              if (_isIndiaTax)
+                                const DataColumn(label: Text('IGST')),
                               const DataColumn(label: Text('Tax')),
                               const DataColumn(label: Text('Net Amount')),
-                              const DataColumn(
+                              DataColumn(
                                 label: Tooltip(
-                                  message: 'Subscription = advance-paid sale. Customer GST applicable. Counted in total sales.',
-                                  child: Text('Sub Sale', style: TextStyle(color: Color(0xFF0EA5E9))),
+                                  message: 'Subscription = advance-paid sale. Customer $_taxTerm applicable. Counted in total sales.',
+                                  child: const Text('Sub Sale', style: TextStyle(color: Color(0xFF0EA5E9))),
                                 ),
                               ),
                               const DataColumn(
@@ -4043,16 +4593,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                     DataCell(Text(_money(row.discount))),
                                     DataCell(Text(_money(row.chargeTotal))),
                                     DataCell(Text(_money(row.chargeTaxTotal))),
-                                    ...taxRates.expand(
-                                      (rate) => [
+                                    ...taxCols.expand(
+                                      (col) => [
                                         DataCell(Text(_money(
-                                            _bandTaxable(row.taxBands, rate)))),
-                                        if (rate > 0.009)
+                                            _bandColumnTaxable(row.columnTaxBands, col.id)))),
+                                        if (col.rate > 0.009)
                                           DataCell(Text(_money(
-                                              _bandTax(row.taxBands, rate)))),
+                                              _bandColumnTax(row.columnTaxBands, col.id)))),
                                       ],
                                     ),
-                                    DataCell(Text(_money(row.igstAmount))),
+                                    if (_isIndiaTax)
+                                      DataCell(Text(_money(row.igstAmount))),
                                     DataCell(Text(_money(row.taxAmount))),
                                     DataCell(
                                       Text(
@@ -4153,36 +4704,36 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                                           fontWeight: FontWeight.w800),
                                     ),
                                   ),
-                                  ...taxRates.expand(
-                                    (rate) => [
-                                      DataCell(
-                                        Text(
-                                          _money(_dateWiseTaxBandsTotal[rate]
-                                                  ?.taxableValue ??
-                                              0),
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w800),
-                                        ),
-                                      ),
-                                      if (rate > 0.009)
+                                  ...taxCols.expand(
+                                    (col) {
+                                      final colTotal = _dateWiseTaxColumnsTotal[col.id];
+                                      return [
                                         DataCell(
                                           Text(
-                                            _money(_dateWiseTaxBandsTotal[rate]
-                                                    ?.taxAmount ??
-                                                0),
+                                            _money(colTotal?.taxableValue ?? 0),
                                             style: const TextStyle(
                                                 fontWeight: FontWeight.w800),
                                           ),
                                         ),
-                                    ],
+                                        if (col.rate > 0.009)
+                                          DataCell(
+                                            Text(
+                                              _money(colTotal?.taxAmount ?? 0),
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w800),
+                                            ),
+                                          ),
+                                      ];
+                                    },
                                   ),
-                                  DataCell(
-                                    Text(
-                                      _money(_dateWiseIgstTotal),
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w800),
+                                  if (_isIndiaTax)
+                                    DataCell(
+                                      Text(
+                                        _money(_dateWiseIgstTotal),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800),
+                                      ),
                                     ),
-                                  ),
                                   DataCell(
                                     Text(_money(_dateWiseTaxTotal),
                                         style: const TextStyle(
@@ -4220,6 +4771,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       ),
                     ),
                   ),
+                ),
           ),
         ],
       ),
@@ -4263,24 +4815,24 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'GSTR-1 Portal Sales Report',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              Text(
+                _gstr1ReportTitle,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
               Wrap(
                 spacing: 8,
                 children: [
-                  _buildGstr1SubTabButton('REGISTER', 'Sales Register'),
-                  _buildGstr1SubTabButton('B2B', 'B2B (Table 4)'),
-                  _buildGstr1SubTabButton('B2CS', 'B2C Small (Table 7)'),
-                  _buildGstr1SubTabButton('HSN', 'HSN Summary (Table 12)'),
+                  _buildGstr1SubTabButton('REGISTER', _isIndiaTax ? 'Sales Register' : 'All Sales'),
+                  _buildGstr1SubTabButton('B2B', _isIndiaTax ? 'B2B (Table 4)' : 'Taxable B2B'),
+                  _buildGstr1SubTabButton('B2CS', _isIndiaTax ? 'B2C Small (Table 7)' : 'Taxable B2C'),
+                  _buildGstr1SubTabButton('HSN', _isIndiaTax ? 'HSN Summary (Table 12)' : 'Category Summary'),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            'Section: ${_gstr1SubTab == 'B2B' ? 'B2B Taxable Supplies (Table 4)' : _gstr1SubTab == 'B2CS' ? 'B2C Small Supplies (Table 7)' : _gstr1SubTab == 'HSN' ? 'HSN/SAC Summary (Table 12)' : 'All Sales Register'} | Exporting Excel creates standard GST Portal sheets (b2b, b2cs, hsn, register).',
+            'Section: ${_gstr1SubTab == 'B2B' ? (_isIndiaTax ? 'B2B Taxable Supplies (Table 4)' : 'B2B Taxable Sales') : _gstr1SubTab == 'B2CS' ? (_isIndiaTax ? 'B2C Small Supplies (Table 7)' : 'B2C Retail Sales') : _gstr1SubTab == 'HSN' ? (_isIndiaTax ? 'HSN/SAC Summary (Table 12)' : 'Category / Item Tax Summary') : (_isIndiaTax ? 'All Sales Register' : 'Detailed Sales Register')} | ${_isIndiaTax ? 'Exporting Excel creates standard GST Portal sheets (b2b, b2cs, hsn, register).' : 'Exporting Excel creates Sales Tax sheets.'}',
             style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -4299,37 +4851,43 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         return const Center(child: Text('No B2B sales found for selected range.'));
       }
       return _buildScrollableTable(
-        minWidth: 1600,
-        columns: const [
-          DataColumn(label: Text('GSTIN/UIN of Recipient')),
-          DataColumn(label: Text('Receiver Name')),
-          DataColumn(label: Text('Invoice Number')),
-          DataColumn(label: Text('Invoice Date')),
-          DataColumn(label: Text('Invoice Value')),
-          DataColumn(label: Text('Place Of Supply')),
-          DataColumn(label: Text('Reverse Charge')),
-          DataColumn(label: Text('Invoice Type')),
-          DataColumn(label: Text('Rate')),
-          DataColumn(label: Text('Taxable Value')),
-          DataColumn(label: Text('CGST Amount')),
-          DataColumn(label: Text('SGST Amount')),
-          DataColumn(label: Text('IGST Amount')),
+        minWidth: _isIndiaTax ? 1600 : 1300,
+        columns: [
+          DataColumn(label: Text(_isIndiaTax ? 'GSTIN/UIN of Recipient' : 'Customer Tax ID')),
+          const DataColumn(label: Text('Receiver Name')),
+          const DataColumn(label: Text('Invoice Number')),
+          const DataColumn(label: Text('Invoice Date')),
+          const DataColumn(label: Text('Invoice Value')),
+          const DataColumn(label: Text('Place Of Supply')),
+          if (_isIndiaTax) const DataColumn(label: Text('Reverse Charge')),
+          const DataColumn(label: Text('Invoice Type')),
+          const DataColumn(label: Text('Rate')),
+          const DataColumn(label: Text('Taxable Value')),
+          if (_isIndiaTax) ...[
+            const DataColumn(label: Text('CGST Amount')),
+            const DataColumn(label: Text('SGST Amount')),
+            const DataColumn(label: Text('IGST Amount')),
+          ] else
+            const DataColumn(label: Text('Tax Amount')),
         ],
         rows: [
           ...b2bRows.map((r) => DataRow(cells: [
-                DataCell(Text(r.customerGstin)),
+                DataCell(Text(r.customerGstin.isEmpty ? 'General' : r.customerGstin)),
                 DataCell(Text(r.customerName)),
                 DataCell(Text(r.invoiceNumber)),
                 DataCell(Text(DateFormat('dd-MM-yyyy').format(r.invoiceDate))),
                 DataCell(Text(_money(r.invoiceValue), style: const TextStyle(fontWeight: FontWeight.w600))),
                 DataCell(Text(r.placeOfSupply)),
-                DataCell(Text(r.reverseCharge)),
+                if (_isIndiaTax) DataCell(Text(r.reverseCharge)),
                 DataCell(Text(r.invoiceType)),
                 DataCell(Text('${_formatTaxPercent(r.rate)}%')),
                 DataCell(Text(_money(r.taxableValue))),
-                DataCell(Text(_money(r.cgst))),
-                DataCell(Text(_money(r.sgst))),
-                DataCell(Text(_money(r.igst))),
+                if (_isIndiaTax) ...[
+                  DataCell(Text(_money(r.cgst))),
+                  DataCell(Text(_money(r.sgst))),
+                  DataCell(Text(_money(r.igst))),
+                ] else
+                  DataCell(Text(_money(r.taxAmount))),
               ])),
           DataRow(
             color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
@@ -4340,13 +4898,16 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               const DataCell(Text('')),
               const DataCell(Text('')),
               const DataCell(Text('')),
-              const DataCell(Text('')),
+              if (_isIndiaTax) const DataCell(Text('')),
               const DataCell(Text('')),
               const DataCell(Text('')),
               DataCell(Text(_money(b2bRows.fold<double>(0, (sum, r) => sum + r.taxableValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(b2bRows.fold<double>(0, (sum, r) => sum + r.cgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(b2bRows.fold<double>(0, (sum, r) => sum + r.sgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(b2bRows.fold<double>(0, (sum, r) => sum + r.igst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+              if (_isIndiaTax) ...[
+                DataCell(Text(_money(b2bRows.fold<double>(0, (sum, r) => sum + r.cgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataCell(Text(_money(b2bRows.fold<double>(0, (sum, r) => sum + r.sgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataCell(Text(_money(b2bRows.fold<double>(0, (sum, r) => sum + r.igst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+              ] else
+                DataCell(Text(_money(b2bRows.fold<double>(0, (sum, r) => sum + r.taxAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
           )
         ],
@@ -4357,15 +4918,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         return const Center(child: Text('No B2C sales found for selected range.'));
       }
       return _buildScrollableTable(
-        minWidth: 1000,
-        columns: const [
-          DataColumn(label: Text('Type')),
-          DataColumn(label: Text('Place Of Supply')),
-          DataColumn(label: Text('Rate')),
-          DataColumn(label: Text('Taxable Value')),
-          DataColumn(label: Text('CGST Amount')),
-          DataColumn(label: Text('SGST Amount')),
-          DataColumn(label: Text('IGST Amount')),
+        minWidth: _isIndiaTax ? 1000 : 800,
+        columns: [
+          const DataColumn(label: Text('Type')),
+          const DataColumn(label: Text('Place Of Supply')),
+          const DataColumn(label: Text('Rate')),
+          const DataColumn(label: Text('Taxable Value')),
+          if (_isIndiaTax) ...[
+            const DataColumn(label: Text('CGST Amount')),
+            const DataColumn(label: Text('SGST Amount')),
+            const DataColumn(label: Text('IGST Amount')),
+          ] else
+            const DataColumn(label: Text('Tax Amount')),
         ],
         rows: [
           ...b2csRows.map((r) => DataRow(cells: [
@@ -4373,9 +4937,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 DataCell(Text(r.placeOfSupply)),
                 DataCell(Text('${_formatTaxPercent(r.rate)}%')),
                 DataCell(Text(_money(r.taxableValue))),
-                DataCell(Text(_money(r.cgst))),
-                DataCell(Text(_money(r.sgst))),
-                DataCell(Text(_money(r.igst))),
+                if (_isIndiaTax) ...[
+                  DataCell(Text(_money(r.cgst))),
+                  DataCell(Text(_money(r.sgst))),
+                  DataCell(Text(_money(r.igst))),
+                ] else
+                  DataCell(Text(_money(r.taxAmount))),
               ])),
           DataRow(
             color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
@@ -4384,9 +4951,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               const DataCell(Text('')),
               const DataCell(Text('')),
               DataCell(Text(_money(b2csRows.fold<double>(0, (sum, r) => sum + r.taxableValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(b2csRows.fold<double>(0, (sum, r) => sum + r.cgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(b2csRows.fold<double>(0, (sum, r) => sum + r.sgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(b2csRows.fold<double>(0, (sum, r) => sum + r.igst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+              if (_isIndiaTax) ...[
+                DataCell(Text(_money(b2csRows.fold<double>(0, (sum, r) => sum + r.cgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataCell(Text(_money(b2csRows.fold<double>(0, (sum, r) => sum + r.sgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataCell(Text(_money(b2csRows.fold<double>(0, (sum, r) => sum + r.igst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+              ] else
+                DataCell(Text(_money(b2csRows.fold<double>(0, (sum, r) => sum + r.taxAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
           )
         ],
@@ -4394,20 +4964,23 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     } else if (_gstr1SubTab == 'HSN') {
       final hsnRows = _gstr1HsnRows;
       if (hsnRows.isEmpty) {
-        return const Center(child: Text('No HSN/SAC records found for selected range.'));
+        return const Center(child: Text('No item / category tax records found for selected range.'));
       }
       return _buildScrollableTable(
-        minWidth: 1200,
-        columns: const [
-          DataColumn(label: Text('HSN/SAC Code')),
-          DataColumn(label: Text('Description')),
-          DataColumn(label: Text('UQC (Unit)')),
-          DataColumn(label: Text('Total Quantity')),
-          DataColumn(label: Text('Total Value')),
-          DataColumn(label: Text('Taxable Value')),
-          DataColumn(label: Text('CGST Amount')),
-          DataColumn(label: Text('SGST Amount')),
-          DataColumn(label: Text('IGST Amount')),
+        minWidth: _isIndiaTax ? 1200 : 1000,
+        columns: [
+          DataColumn(label: Text(_isIndiaTax ? 'HSN/SAC Code' : 'Item / Tax Code')),
+          const DataColumn(label: Text('Description')),
+          DataColumn(label: Text(_isIndiaTax ? 'UQC (Unit)' : 'Unit')),
+          const DataColumn(label: Text('Total Quantity')),
+          const DataColumn(label: Text('Total Value')),
+          const DataColumn(label: Text('Taxable Value')),
+          if (_isIndiaTax) ...[
+            const DataColumn(label: Text('CGST Amount')),
+            const DataColumn(label: Text('SGST Amount')),
+            const DataColumn(label: Text('IGST Amount')),
+          ] else
+            const DataColumn(label: Text('Tax Amount')),
         ],
         rows: [
           ...hsnRows.map((r) => DataRow(cells: [
@@ -4417,9 +4990,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 DataCell(Text(_formatQty(r.totalQty))),
                 DataCell(Text(_money(r.totalValue), style: const TextStyle(fontWeight: FontWeight.w600))),
                 DataCell(Text(_money(r.taxableValue))),
-                DataCell(Text(_money(r.cgst))),
-                DataCell(Text(_money(r.sgst))),
-                DataCell(Text(_money(r.igst))),
+                if (_isIndiaTax) ...[
+                  DataCell(Text(_money(r.cgst))),
+                  DataCell(Text(_money(r.sgst))),
+                  DataCell(Text(_money(r.igst))),
+                ] else
+                  DataCell(Text(_money(r.taxAmount))),
               ])),
           DataRow(
             color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
@@ -4430,35 +5006,46 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               DataCell(Text(_formatQty(hsnRows.fold<double>(0, (sum, r) => sum + r.totalQty)), style: const TextStyle(fontWeight: FontWeight.bold))),
               DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.totalValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
               DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.taxableValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.cgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.sgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.igst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+              if (_isIndiaTax) ...[
+                DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.cgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.sgst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.igst)), style: const TextStyle(fontWeight: FontWeight.bold))),
+              ] else
+                DataCell(Text(_money(hsnRows.fold<double>(0, (sum, r) => sum + r.taxAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
           )
         ],
       );
     } else {
       if (_rows.isEmpty) {
-        return const Center(child: Text('No GSTR-1 rows found for the selected range.'));
+        return Center(
+          child: Text(
+            'No ${_isIndiaTax ? "GSTR-1" : "Sales Tax"} rows found for the selected range.',
+          ),
+        );
       }
+      final headers = _isIndiaTax ? _gstHeaders : _salesTaxHeaders;
       return _buildScrollableTable(
-        minWidth: 1500,
-        columns: _gstHeaders.map((header) => DataColumn(label: Text(header))).toList(),
+        minWidth: _isIndiaTax ? 1500 : 1350,
+        columns: headers.map((header) => DataColumn(label: Text(header))).toList(),
         rows: [
           ..._rows.map((row) => DataRow(cells: [
                 DataCell(Text(DateFormat('dd-MM-yyyy').format(row.invoiceDate))),
                 DataCell(Text(row.invoiceNumber)),
                 DataCell(SizedBox(width: 150, child: Text(row.customerName, maxLines: 2, overflow: TextOverflow.ellipsis))),
-                DataCell(Text(row.customerGstin.isEmpty ? 'B2C' : row.customerGstin)),
+                DataCell(Text(row.customerGstin.isEmpty ? (_isIndiaTax ? 'B2C' : 'General') : row.customerGstin)),
                 DataCell(Text(_money(row.invoiceValue), style: const TextStyle(fontWeight: FontWeight.w600))),
                 DataCell(SizedBox(width: 160, child: Text(row.placeOfSupply, maxLines: 2, overflow: TextOverflow.ellipsis))),
                 DataCell(SizedBox(width: 170, child: Text(row.itemDescription, maxLines: 2, overflow: TextOverflow.ellipsis))),
                 DataCell(Text(row.hsnSacCode)),
                 DataCell(Text('${_formatQty(row.quantity)} ${row.unit}')),
                 DataCell(Text(_money(row.taxableValue))),
-                DataCell(Text(_money(row.cgstAmount))),
-                DataCell(Text(_money(row.sgstAmount))),
-                DataCell(Text(_money(row.igstAmount))),
+                if (_isIndiaTax) ...[
+                  DataCell(Text(_money(row.cgstAmount))),
+                  DataCell(Text(_money(row.sgstAmount))),
+                  DataCell(Text(_money(row.igstAmount))),
+                ] else
+                  DataCell(Text(_money(row.taxAmount))),
                 DataCell(Text(_money(row.totalLineValue))),
               ])),
           if (_rows.isNotEmpty)
@@ -4475,9 +5062,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 const DataCell(Text('')),
                 DataCell(Text(_formatQty(_rows.fold<double>(0, (sum, row) => sum + row.quantity)), style: const TextStyle(fontWeight: FontWeight.bold))),
                 DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.taxableValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
-                DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.cgstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
-                DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.sgstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
-                DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.igstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                if (_isIndiaTax) ...[
+                  DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.cgstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.sgstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.igstAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
+                ] else
+                  DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.taxAmount)), style: const TextStyle(fontWeight: FontWeight.bold))),
                 DataCell(Text(_money(_rows.fold<double>(0, (sum, row) => sum + row.totalLineValue)), style: const TextStyle(fontWeight: FontWeight.bold))),
               ],
             ),
@@ -4494,30 +5084,29 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     return Scrollbar(
       controller: _gstVerticalController,
       thumbVisibility: true,
-      child: SingleChildScrollView(
-        controller: _gstVerticalController,
-        primary: false,
-        scrollDirection: Axis.vertical,
-        child: Scrollbar(
+      notificationPredicate: (notification) =>
+          notification.metrics.axis == Axis.vertical,
+      child: Scrollbar(
+        controller: _gstHorizontalController,
+        thumbVisibility: true,
+        notificationPredicate: (notification) =>
+            notification.metrics.axis == Axis.horizontal,
+        child: SingleChildScrollView(
           controller: _gstHorizontalController,
-          thumbVisibility: true,
-          notificationPredicate: (notification) =>
-              notification.metrics.axis == Axis.horizontal,
+          primary: false,
+          scrollDirection: Axis.horizontal,
           child: SingleChildScrollView(
-            controller: _gstHorizontalController,
+            controller: _gstVerticalController,
             primary: false,
-            scrollDirection: Axis.horizontal,
+            scrollDirection: Axis.vertical,
             child: ConstrainedBox(
               constraints: BoxConstraints(minWidth: minWidth),
-              child: SingleChildScrollView(
-                primary: false,
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                  dataRowMinHeight: 52,
-                  dataRowMaxHeight: 68,
-                  columns: columns,
-                  rows: rows,
-                ),
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                dataRowMinHeight: 52,
+                dataRowMaxHeight: 68,
+                columns: columns,
+                rows: rows,
               ),
             ),
           ),
@@ -4538,9 +5127,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'GSTR-2 Purchase Register',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          Text(
+            _gstr2ReportTitle,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),
           Text(
@@ -4558,43 +5147,43 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 : Scrollbar(
                     controller: _gstr2VerticalController,
                     thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      controller: _gstr2VerticalController,
-                      primary: false,
-                      scrollDirection: Axis.vertical,
-                      child: Scrollbar(
+                    notificationPredicate: (notification) =>
+                        notification.metrics.axis == Axis.vertical,
+                    child: Scrollbar(
+                      controller: _gstr2HorizontalController,
+                      thumbVisibility: true,
+                      notificationPredicate: (notification) =>
+                          notification.metrics.axis == Axis.horizontal,
+                      child: SingleChildScrollView(
                         controller: _gstr2HorizontalController,
-                        thumbVisibility: true,
-                        notificationPredicate: (notification) =>
-                            notification.metrics.axis == Axis.horizontal,
+                        primary: false,
+                        scrollDirection: Axis.horizontal,
                         child: SingleChildScrollView(
-                          controller: _gstr2HorizontalController,
+                          controller: _gstr2VerticalController,
                           primary: false,
-                          scrollDirection: Axis.horizontal,
+                          scrollDirection: Axis.vertical,
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(minWidth: 1600),
-                            child: SingleChildScrollView(
-                              primary: false,
-                              child: DataTable(
+                            child: DataTable(
                                 headingRowColor: WidgetStateProperty.all(
                                     const Color(0xFFF8FAFC)),
                                 dataRowMinHeight: 52,
                                 dataRowMaxHeight: 68,
-                                columns: const [
-                                  DataColumn(label: Text('Date')),
-                                  DataColumn(label: Text('GRN No')),
-                                  DataColumn(label: Text('Bill No')),
-                                  DataColumn(label: Text('Supplier')),
-                                  DataColumn(label: Text('GSTIN')),
-                                  DataColumn(label: Text('State')),
-                                  DataColumn(label: Text('Items')),
-                                  DataColumn(label: Text('Qty')),
-                                  DataColumn(label: Text('Taxable Value')),
-                                  DataColumn(label: Text('GST Amount')),
-                                  DataColumn(label: Text('Net Amount')),
-                                  DataColumn(label: Text('Paid')),
-                                  DataColumn(label: Text('Outstanding')),
-                                  DataColumn(label: Text('Status')),
+                                columns: [
+                                  const DataColumn(label: Text('Date')),
+                                  const DataColumn(label: Text('GRN No')),
+                                  const DataColumn(label: Text('Bill No')),
+                                  const DataColumn(label: Text('Supplier')),
+                                  DataColumn(label: Text(_isIndiaTax ? 'GSTIN' : 'Tax ID / PIN')),
+                                  DataColumn(label: Text(_isIndiaTax ? 'State' : 'Region / State')),
+                                  const DataColumn(label: Text('Items')),
+                                  const DataColumn(label: Text('Qty')),
+                                  const DataColumn(label: Text('Taxable Value')),
+                                  DataColumn(label: Text(_isIndiaTax ? 'GST Amount' : 'Tax Amount')),
+                                  const DataColumn(label: Text('Net Amount')),
+                                  const DataColumn(label: Text('Paid')),
+                                  const DataColumn(label: Text('Outstanding')),
+                                  const DataColumn(label: Text('Status')),
                                 ],
                                 rows: [
                                   ...rows.map(
@@ -4666,7 +5255,6 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                         ),
                       ),
                     ),
-                  ),
           ),
         ],
       ),
@@ -4734,7 +5322,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     return value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
   }
 
-  String _money(double value) => value.toStringAsFixed(2);
+  String _money(double value) => CurrencyService.format(value);
 
   Color _paymentColor(String paymentMode) {
     switch (paymentMode.toUpperCase()) {
@@ -4769,6 +5357,32 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 }
 
+class _TaxColumnDescriptor {
+  final String id;
+  final String label;
+  final String saleHeader;
+  final String taxHeader;
+  final double rate;
+  final String code;
+
+  const _TaxColumnDescriptor({
+    required this.id,
+    required this.label,
+    required this.saleHeader,
+    required this.taxHeader,
+    required this.rate,
+    this.code = '',
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _TaxColumnDescriptor && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
 class _GstSalesRow {
   final DateTime invoiceDate;
   final String invoiceNumber;
@@ -4789,6 +5403,7 @@ class _GstSalesRow {
   final double cgstAmount;
   final double sgstAmount;
   final double igstAmount;
+  final double taxAmount;
   final double totalLineValue;
   final double totalInvoiceValue;
   final DateTime saleDateTime;
@@ -4816,6 +5431,7 @@ class _GstSalesRow {
     required this.cgstAmount,
     required this.sgstAmount,
     required this.igstAmount,
+    this.taxAmount = 0.0,
     required this.totalLineValue,
     required this.totalInvoiceValue,
     required this.saleDateTime,
@@ -4839,6 +5455,8 @@ class _Gstr1B2bRow {
   final double cgst;
   final double sgst;
   final double igst;
+
+  double get taxAmount => cgst + sgst + igst;
 
   const _Gstr1B2bRow({
     required this.customerGstin,
@@ -4865,6 +5483,8 @@ class _Gstr1B2csRow {
   final double cgst;
   final double sgst;
   final double igst;
+
+  double get taxAmount => cgst + sgst + igst;
 
   const _Gstr1B2csRow({
     required this.type,
@@ -4904,6 +5524,8 @@ class _Gstr1HsnRow {
   final double cgst;
   final double sgst;
   final double igst;
+
+  double get taxAmount => cgst + sgst + igst;
 
   const _Gstr1HsnRow({
     required this.hsnSacCode,
@@ -4954,6 +5576,7 @@ class _GroupedSalesRow {
   final double cgstAmount;
   final double sgstAmount;
   final double igstAmount;
+  final double taxAmount;
   final double totalInvoiceValue;
   final Set<String> paymentModes;
   final double discount;
@@ -4974,6 +5597,7 @@ class _GroupedSalesRow {
     required this.cgstAmount,
     required this.sgstAmount,
     required this.igstAmount,
+    this.taxAmount = 0,
     required this.totalInvoiceValue,
     required this.paymentModes,
     required this.discount,
@@ -4989,6 +5613,7 @@ class _GroupedSalesRow {
     double? cgstAmount,
     double? sgstAmount,
     double? igstAmount,
+    double? taxAmount,
     double? totalInvoiceValue,
     Set<String>? paymentModes,
     double? discount,
@@ -5009,6 +5634,7 @@ class _GroupedSalesRow {
       cgstAmount: cgstAmount ?? this.cgstAmount,
       sgstAmount: sgstAmount ?? this.sgstAmount,
       igstAmount: igstAmount ?? this.igstAmount,
+      taxAmount: taxAmount ?? this.taxAmount,
       totalInvoiceValue: totalInvoiceValue ?? this.totalInvoiceValue,
       paymentModes: paymentModes ?? this.paymentModes,
       discount: discount ?? this.discount,
@@ -5038,6 +5664,7 @@ class _DateWiseSalesRow {
   final double advanceAmount;
   final double advanceAdjustmentAmount;
   final Map<double, _TaxBandSummary> taxBands;
+  final Map<String, _TaxBandSummary> columnTaxBands;
   final double igstAmount;
   final double taxAmount;
   final double netAmount;
@@ -5059,6 +5686,7 @@ class _DateWiseSalesRow {
     this.advanceAmount = 0,
     this.advanceAdjustmentAmount = 0,
     required this.taxBands,
+    this.columnTaxBands = const {},
     required this.igstAmount,
     required this.taxAmount,
     required this.netAmount,
@@ -5080,6 +5708,7 @@ class _DateWiseSalesRow {
     double? advanceAmount,
     double? advanceAdjustmentAmount,
     Map<double, _TaxBandSummary>? taxBands,
+    Map<String, _TaxBandSummary>? columnTaxBands,
     double? igstAmount,
     double? taxAmount,
     double? netAmount,
@@ -5101,6 +5730,7 @@ class _DateWiseSalesRow {
       advanceAmount: advanceAmount ?? this.advanceAmount,
       advanceAdjustmentAmount: advanceAdjustmentAmount ?? this.advanceAdjustmentAmount,
       taxBands: taxBands ?? this.taxBands,
+      columnTaxBands: columnTaxBands ?? this.columnTaxBands,
       igstAmount: igstAmount ?? this.igstAmount,
       taxAmount: taxAmount ?? this.taxAmount,
       netAmount: netAmount ?? this.netAmount,
@@ -5194,6 +5824,8 @@ class _GstSummary {
   final double totalRevenue;
   final double billDiscount;
   final double chargeTotal;
+
+  double get taxAmount => cgstAmount + sgstAmount + igstAmount;
 
   const _GstSummary({
     this.taxableValue = 0,

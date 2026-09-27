@@ -2,6 +2,7 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/inventory/item_model.dart';
 
 class StockDispatchScreen extends StatefulWidget {
@@ -312,7 +313,7 @@ class _StockDispatchScreenState extends State<StockDispatchScreen> {
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                         leading: const Icon(Icons.inventory),
                                         title: Text('${item['item_name']} (${item['item_code']})'),
-                                        subtitle: Text('Transfer Qty: ${item['transfer_qty']} | Unit Rate: ₹${item['unit_cost']}'),
+                                        subtitle: Text('Transfer Qty: ${item['transfer_qty']} | Unit Rate: ${CurrencyService.format(double.tryParse(item['unit_cost']?.toString() ?? '0') ?? 0)}'),
                                         trailing: IconButton(
                                           icon: const Icon(Icons.delete, color: Colors.red),
                                           onPressed: () => _removeItem(index),

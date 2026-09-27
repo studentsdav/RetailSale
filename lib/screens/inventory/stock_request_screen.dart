@@ -16,6 +16,8 @@ import '../../models/inventory/stock_location_model.dart';
 import '../../utils/branding_storage.dart';
 import '../../utils/date_picker_helper.dart' show pickSingleDate;
 import '../../widgets/entry_shortcuts.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 class StockRequestScreen extends StatefulWidget {
   const StockRequestScreen({super.key});
@@ -948,6 +950,7 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
   }
 
   Future<void> _printRequest() async {
+    final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
     final pdf = pw.Document();
 
     final property = propertyCtrl.data;
@@ -963,6 +966,7 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
+            country: sysCountry,
             rightWidget: pw.Container(
               padding: const pw.EdgeInsets.all(8),
               decoration: pw.BoxDecoration(border: pw.Border.all()),

@@ -25,6 +25,9 @@ import '../../core/api/api_client.dart';
 import '../../utils/branding_storage.dart';
 import '../../utils/inclusive_rate_helper.dart';
 import '../../utils/date_picker_helper.dart';
+import '../../core/utils/country_tax_helper.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 class PurchaseOrderScreen extends StatefulWidget {
   final List<dynamic>? draftItems;
@@ -646,6 +649,10 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
 
   // ================= ITEM ENTRY =================
   Widget _itemEntryCard() {
+    final settings = context.watch<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+
     return _card(
       title: 'Item Entry',
       child: Wrap(
@@ -810,7 +817,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
             onSubmit: () => _taxFocus.requestFocus(),
           ),
 
-          _number(_tax, 'Tax %',
+          _number(_tax, CountryTaxHelper.taxPercentLabel(country, taxMode),
               focusNode: _taxFocus,
               prevNode: _rateFocus,
               onSubmit: () => _inclusiveFocus.requestFocus()),
@@ -986,19 +993,24 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
 
   // ================= FOOTER =================
   Widget _footerCard() {
+    final settings = context.watch<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+    final taxLabel = CountryTaxHelper.taxName(country, taxMode);
+
     return _card(
       child: Row(
         children: [
           Chip(
             label: Text(
-              'Before GST : ${totalAmount.toStringAsFixed(2)}',
+              'Before $taxLabel : ${totalAmount.toStringAsFixed(2)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
           const SizedBox(width: 12),
           Chip(
             label: Text(
-              'GST : ${totalGST.toStringAsFixed(2)}',
+              '$taxLabel : ${totalGST.toStringAsFixed(2)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -1277,6 +1289,14 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
       orElse: () => null,
     );
 
+    final settings = context.read<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+    final taxName = CountryTaxHelper.taxName(country, taxMode);
+    final taxPercentLabel = CountryTaxHelper.taxPercentLabel(country, taxMode);
+    final taxAmtLabel = CountryTaxHelper.taxAmountLabel(country, taxMode);
+    final taxIdLabel = CountryTaxHelper.taxIdLabel(country);
+
     final totalGST = _items.fold<double>(
         0, (sum, item) => sum + ((item.qty * item.rate) * (item.tax / 100)));
 
@@ -1294,6 +1314,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
+            country: country,
             rightWidget: pw.Text(
               "PURCHASE ORDER",
               style: pw.TextStyle(
@@ -1347,7 +1368,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(top: 2),
                           child: pw.Text(
-                            "GSTIN: ${supplier.gstin!.trim()}",
+                            "$taxIdLabel: ${supplier.gstin!.trim()}",
                             style: pw.TextStyle(
                               fontSize: 8,
                               fontWeight: pw.FontWeight.bold,
@@ -1412,8 +1433,8 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                   _tableCell("Unit", bold: true, alignment: pw.Alignment.center),
                   _tableCell("Qty", bold: true, alignment: pw.Alignment.centerRight),
                   _tableCell("Rate", bold: true, alignment: pw.Alignment.centerRight),
-                  _tableCell("GST %", bold: true, alignment: pw.Alignment.centerRight),
-                  _tableCell("GST Amt", bold: true, alignment: pw.Alignment.centerRight),
+                  _tableCell(taxPercentLabel, bold: true, alignment: pw.Alignment.centerRight),
+                  _tableCell(taxAmtLabel, bold: true, alignment: pw.Alignment.centerRight),
                   _tableCell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
@@ -1447,7 +1468,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
               child: pw.Column(
                 children: [
                   _totalRow("Sub Total", totalAmount),
-                  _totalRow("GST", totalGST),
+                  _totalRow(taxName, totalGST),
                   pw.Divider(color: PdfColors.grey400, thickness: 0.5),
                   _totalRow("Grand Total", grandTotal, bold: true),
                 ],

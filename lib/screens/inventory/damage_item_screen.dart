@@ -9,9 +9,11 @@ import 'package:printing/printing.dart';
 import '../../utils/branding_storage.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 
+import 'package:provider/provider.dart';
 import '../../controllers/inventory/damage_controller.dart';
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 import '../../models/inventory/item_model.dart';
 import '../../utils/date_picker_helper.dart';
 import '../../widgets/entry_shortcuts.dart';
@@ -934,6 +936,7 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
   }
 
   Future<void> _printDamage() async {
+    final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
     final pdf = pw.Document();
 
     final property = propertyCtrl.data;
@@ -946,6 +949,7 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
           /// ================= HEADER =================
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
+            country: sysCountry,
             logo: logo,
             rightWidget: pw.Container(
               padding: const pw.EdgeInsets.all(8),

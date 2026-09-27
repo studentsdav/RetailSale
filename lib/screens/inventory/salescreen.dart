@@ -1,3 +1,5 @@
+import '../../core/currency/currency_service.dart';
+import '../../core/utils/country_tax_helper.dart';
 import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:io';
@@ -40,6 +42,8 @@ import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../../models/inventory/sale_scheme_model.dart';
 import '../../models/inventory/tax_breakdown_model.dart';
+import '../../models/inventory/tax_group_model.dart';
+import '../../models/inventory/settings/system_settings_model.dart';
 import 'customer_list_screen.dart';
 import '../reports/sales_report_screen.dart';
 import '../settings/settings_screen.dart';
@@ -142,6 +146,7 @@ class _SaleScreenState extends State<SaleScreen> {
   SaleScheme? _selectedItemScheme;
   String? _selectedIgstState;
   String? _selectedIgstStateCode;
+  List<TaxGroup> _loadedTaxGroups = [];
   _VoucherDefinition? _appliedVoucher;
   TimeOfDay? _schemeStartTime;
   TimeOfDay? _schemeEndTime;
@@ -193,6 +198,7 @@ class _SaleScreenState extends State<SaleScreen> {
   // Subscription delivery counters for sidebar badges
   int _subscriptionDraftCount = 0;
   int _totalDraftCount = 0;
+  int _pendingSettlementCount = 0;
   List<Map<String, dynamic>> _subscriptionDraftOrders = [];
   final Map<int?, Set<int>> _manuallyRemovedSchemeIdsByCustomerId = {};
   final Map<int?, Set<int>> _completedOneTimeSchemeIdsByCustomerId = {};
@@ -268,6 +274,7 @@ class _SaleScreenState extends State<SaleScreen> {
         settingsCtrl.load().catchError((_) => null),
         _loadCashierName().catchError((_) => null),
         _loadSaleSettings().catchError((_) => null),
+        _loadTaxGroups().catchError((_) => null),
         _fetchSalespersons().catchError((_) => null),
         _fetchHappyHours().catchError((_) => null),
         _fetchBillValuePromos().catchError((_) => null),
@@ -485,8 +492,8 @@ class _SaleScreenState extends State<SaleScreen> {
     _cashierName = resolved.isEmpty ? 'System' : resolved;
   }
 
-  /// Fetches today's subscription auto-draft count and total draft count
-  /// for the sidebar badge indicators.
+  /// Fetches today's subscription auto-draft count, total draft count,
+  /// and running unsettled bills count for sidebar badges.
   Future<void> _loadSubscriptionDraftCounts() async {
     try {
       // Today's subscription delivery drafts
@@ -494,6 +501,8 @@ class _SaleScreenState extends State<SaleScreen> {
       final subList = (subRes['data'] as List? ?? []);
       // Total drafts
       final allDrafts = await ctrl.listSales(status: 'DRAFT');
+      // Running / unsettled bills awaiting settlement
+      final runningSales = await ctrl.listSales(status: 'RUNNING');
       if (!mounted) return;
       setState(() {
         _subscriptionDraftOrders = subList
@@ -501,6 +510,7 @@ class _SaleScreenState extends State<SaleScreen> {
             .toList();
         _subscriptionDraftCount = subList.length;
         _totalDraftCount = allDrafts.length;
+        _pendingSettlementCount = runningSales.length;
       });
     } catch (_) {}
   }
@@ -605,18 +615,48 @@ class _SaleScreenState extends State<SaleScreen> {
     _voucherCatalog = vouchers.map(_VoucherDefinition.fromJson).toList();
   }
 
+  Future<void> _loadTaxGroups() async {
+    try {
+      final taxGroupsRes = await ApiClient.get(ApiEndpoints.taxGroups);
+      if (taxGroupsRes['success'] == true && taxGroupsRes['data'] != null) {
+        final raw = taxGroupsRes['data'] as List;
+        if (mounted) {
+          setState(() {
+            _loadedTaxGroups = raw.map((e) => TaxGroup.fromJson(Map<String, dynamic>.from(e))).toList();
+            _applyBillingDefaults();
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
   void _applyBillingDefaults() {
-    final settings = settingsCtrl.settings;
+    SystemSettings? settings = settingsCtrl.settings;
+    if (settings == null && mounted) {
+      try {
+        settings = context.read<SystemSettingsController>().settings;
+      } catch (_) {}
+    }
     if (settings == null) return;
     _billingCountry = settings.billingCountry;
     _taxMode = settings.billingTaxMode;
     _billFormat = settings.billFormat;
     _charges = settings.defaultCharges
-        .map(
-          (charge) => charge.copyWith(
+        .map((charge) {
+          TaxGroup? matchGroup = charge.taxGroup;
+          if (matchGroup == null && _loadedTaxGroups.isNotEmpty) {
+            matchGroup = _loadedTaxGroups.where((g) =>
+                g.id == charge.taxGroupId ||
+                (g.groupCode != null && g.groupCode!.trim().toLowerCase() == charge.taxType.trim().toLowerCase()) ||
+                g.groupName.trim().toLowerCase() == charge.taxType.trim().toLowerCase()
+            ).firstOrNull;
+          }
+          return charge.copyWith(
             isEnabled: charge.autoApply || charge.isEnabled,
-          ),
-        )
+            taxGroup: matchGroup,
+            taxGroupId: matchGroup?.id ?? charge.taxGroupId,
+          );
+        })
         .toList();
   }
 
@@ -848,9 +888,9 @@ class _SaleScreenState extends State<SaleScreen> {
     if (voucher == null || _voucherUsageMode != 'NEXT_PURCHASE') return null;
     final discountText = voucher.discountType == 'PERCENT'
         ? '${voucher.discountValue.toStringAsFixed(voucher.discountValue % 1 == 0 ? 0 : 2)}% discount'
-        : 'Rs. ${voucher.discountValue.toStringAsFixed(2)} discount';
+        : '${CurrencyService.format(voucher.discountValue)} discount';
     final minPurchase = voucher.minimumPurchaseAmount > 0
-        ? ' on purchase above Rs. ${voucher.minimumPurchaseAmount.toStringAsFixed(2)}'
+        ? ' on purchase above ${CurrencyService.format(voucher.minimumPurchaseAmount)}'
         : '';
     final validTo = voucher.validTo.trim().isEmpty
         ? ''
@@ -865,7 +905,7 @@ class _SaleScreenState extends State<SaleScreen> {
     if (scheme.discountType.toUpperCase() == 'PERCENT') {
       return 'get ${scheme.discountValue.toStringAsFixed(scheme.discountValue % 1 == 0 ? 0 : 2)}% discount';
     }
-    return 'get Rs. ${scheme.discountValue.toStringAsFixed(2)} discount';
+    return 'get ${CurrencyService.format(scheme.discountValue)} discount';
   }
 
   String _formatSchemeConditionText(SaleScheme scheme) {
@@ -876,7 +916,7 @@ class _SaleScreenState extends State<SaleScreen> {
       );
     }
     if (scheme.minAmount > 0) {
-      parts.add('purchase >= Rs. ${scheme.minAmount.toStringAsFixed(2)}');
+      parts.add('purchase >= ${CurrencyService.format(scheme.minAmount)}');
     }
     if (scheme.requiredDailyQty > 0) {
       parts.add(
@@ -911,6 +951,7 @@ class _SaleScreenState extends State<SaleScreen> {
             _loyaltyDiscountAmount,
         charges: _charges,
         schemeItemId: _selectedScheme?.itemId,
+        taxGroups: _loadedTaxGroups,
       );
   double get _payableInvoiceTotal {
     double rawTotal = math.max(_invoice.netAmount, 0);
@@ -1926,6 +1967,8 @@ class _SaleScreenState extends State<SaleScreen> {
       rate: seed?.rate ?? defaultRate,
       taxType: seed?.taxType ?? item.taxType,
       taxPercent: seed?.taxPercent ?? item.taxPercent,
+      taxGroupId: seed?.taxGroupId ?? item.taxGroupId,
+      taxGroup: seed?.taxGroup ?? item.taxGroup,
       discountApplicable: seed?.discountApplicable ?? item.discountApplicable,
       schemeApplicable: seed?.schemeApplicable ?? item.schemeApplicable,
       brand: seed?.brand ?? item.brand,
@@ -2393,7 +2436,7 @@ class _SaleScreenState extends State<SaleScreen> {
                             ],
                           ),
                           Text(
-                            'Rs. ${price.toStringAsFixed(2)}',
+                            CurrencyService.format(price),
                             style: const TextStyle(
                               color: Color(0xFFD67D25),
                               fontWeight: FontWeight.w900,
@@ -4397,7 +4440,7 @@ class _SaleScreenState extends State<SaleScreen> {
             Text('Available Points: $_availableLoyaltyPoints'),
             Text('Max redeem this bill: $maxAllowed'),
             Text(
-                'Value per point: Rs. ${_loyaltyRedemptionValue.toStringAsFixed(2)}'),
+                'Value per point: ${CurrencyService.format(_loyaltyRedemptionValue)}'),
             const SizedBox(height: 10),
             TextField(
               controller: ctrlInput,
@@ -4590,7 +4633,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   if (calculatedPercent > effectiveMaxAllowed) {
                     finalVal = (_discountBaseAmount * effectiveMaxAllowed) / 100;
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Discount amount capped to max ${effectiveMaxAllowed.toStringAsFixed(0)}% (Rs. ${finalVal.toStringAsFixed(2)})'),
+                      content: Text('Discount amount capped to max ${effectiveMaxAllowed.toStringAsFixed(0)}% (${CurrencyService.format(finalVal)})'),
                       backgroundColor: Colors.orange,
                     ));
                   }
@@ -4617,6 +4660,50 @@ class _SaleScreenState extends State<SaleScreen> {
     String selectedMode = _taxMode;
     String? tempIgstState = _selectedIgstState;
 
+    final knownModes = <String>{};
+    final items = <DropdownMenuItem<String>>[];
+
+    void addOption(String value, String label) {
+      if (!knownModes.contains(value)) {
+        knownModes.add(value);
+        items.add(DropdownMenuItem(
+          value: value,
+          child: Text(label, overflow: TextOverflow.ellipsis),
+        ));
+      }
+    }
+
+    addOption('CGST_SGST', 'CGST + SGST (India)');
+    addOption('IGST', 'IGST (Interstate India)');
+    addOption('VAT', 'VAT');
+    addOption('SALES_TAX', 'US Sales Tax (State + City)');
+    addOption('US_SALES_TAX', 'US Sales Tax');
+    addOption('CESS', 'CESS');
+    addOption('CUSTOM', 'Custom Tax');
+    addOption('NONE', 'No Tax');
+
+    for (final g in _loadedTaxGroups) {
+      final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+          ? g.groupCode!.trim().toUpperCase()
+          : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+      addOption(key, 'Tax Group: ${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)');
+    }
+
+    if (!knownModes.contains(selectedMode)) {
+      final match = _loadedTaxGroups.where((g) =>
+          g.groupName.trim().toLowerCase() == selectedMode.trim().toLowerCase() ||
+          g.id == selectedMode).firstOrNull;
+      if (match != null) {
+        selectedMode = match.groupCode != null && match.groupCode!.trim().isNotEmpty
+            ? match.groupCode!.trim().toUpperCase()
+            : match.groupName;
+      } else if (selectedMode.trim().isNotEmpty) {
+        addOption(selectedMode, selectedMode.replaceAll('_', ' '));
+      } else {
+        selectedMode = 'CGST_SGST';
+      }
+    }
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -4624,22 +4711,15 @@ class _SaleScreenState extends State<SaleScreen> {
           return AlertDialog(
             title: const Text('Select Tax Mode'),
             content: SizedBox(
-              width: 360,
+              width: 380,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: selectedMode,
-                    decoration: const InputDecoration(labelText: 'Tax Mode'),
-                    items: const [
-                      DropdownMenuItem(value: 'CGST_SGST', child: Text('CGST + SGST')),
-                      DropdownMenuItem(value: 'IGST', child: Text('IGST')),
-                      DropdownMenuItem(value: 'VAT', child: Text('VAT')),
-                      DropdownMenuItem(value: 'CESS', child: Text('CESS')),
-                      DropdownMenuItem(value: 'CUSTOM', child: Text('Custom Tax')),
-                      DropdownMenuItem(value: 'NONE', child: Text('No Tax')),
-                    ],
+                    decoration: const InputDecoration(labelText: 'Tax Mode / Tax Group'),
+                    items: items,
                     onChanged: (value) {
                       if (value != null) {
                         setDialogState(() {
@@ -5062,7 +5142,7 @@ class _SaleScreenState extends State<SaleScreen> {
                           return ListTile(
                             title: Text('${voucher.code} • ${voucher.label}'),
                             subtitle: Text(
-                              '${voucher.discountType == 'PERCENT' ? '${voucher.discountValue.toStringAsFixed(0)}%' : 'Rs. ${voucher.discountValue.toStringAsFixed(2)}'} • Min Rs. ${voucher.minimumPurchaseAmount.toStringAsFixed(2)} • ${voucher.validFrom} to ${voucher.validTo}',
+                              '${voucher.discountType == 'PERCENT' ? '${voucher.discountValue.toStringAsFixed(0)}%' : CurrencyService.format(voucher.discountValue)} • Min ${CurrencyService.format(voucher.minimumPurchaseAmount)} • ${voucher.validFrom} to ${voucher.validTo}',
                             ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -5323,13 +5403,13 @@ class _SaleScreenState extends State<SaleScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Total bill Rs. ${_payableInvoiceTotal.toStringAsFixed(2)}',
+                        'Total bill ${CurrencyService.format(_payableInvoiceTotal)}',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       if (_subscriptionItemAdvanceDiscount > 0) ...[
                         const SizedBox(height: 4),
                         Text(
-                          'Subscription item discount Rs. ${_subscriptionItemAdvanceDiscount.toStringAsFixed(2)} already applied.',
+                          'Subscription item discount ${CurrencyService.format(_subscriptionItemAdvanceDiscount)} already applied.',
                           style: const TextStyle(
                             color: Color(0xFF15803D),
                             fontWeight: FontWeight.w700,
@@ -5339,7 +5419,7 @@ class _SaleScreenState extends State<SaleScreen> {
                           availableAdvance > 0) ...[
                         const SizedBox(height: 4),
                         Text(
-                          'Customer advance Rs. ${availableAdvance.toStringAsFixed(2)} is available, but it is not auto-applied in checkout.',
+                          'Customer advance ${CurrencyService.format(availableAdvance)} is available, but it is not auto-applied in checkout.',
                           style: const TextStyle(
                             color: Color(0xFF15803D),
                             fontWeight: FontWeight.w700,
@@ -5607,7 +5687,7 @@ class _SaleScreenState extends State<SaleScreen> {
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                           title: Text(
-                            'Apply available advance Rs. ${availableAdvance.toStringAsFixed(2)}',
+                            'Apply available advance ${CurrencyService.format(availableAdvance)}',
                           ),
                           value: adjustAdvance,
                           onChanged: (value) => setDialogState(() {
@@ -5619,7 +5699,7 @@ class _SaleScreenState extends State<SaleScreen> {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         title: Text(
-                          'Adjust previous credit Rs. ${previousOutstanding.toStringAsFixed(2)}',
+                          'Adjust previous credit ${CurrencyService.format(previousOutstanding)}',
                         ),
                         value: adjustPreviousCredit && previousOutstanding > 0,
                         onChanged:
@@ -5654,18 +5734,18 @@ class _SaleScreenState extends State<SaleScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                                'Collected Rs. ${paymentState.summary.collectedAmount.toStringAsFixed(2)}'),
+                                'Collected ${CurrencyService.format(paymentState.summary.collectedAmount)}'),
                             Text(
-                                'Advance Used Rs. ${paymentState.summary.advanceAppliedAmount.toStringAsFixed(2)}'),
+                                'Advance Used ${CurrencyService.format(paymentState.summary.advanceAppliedAmount)}'),
                             Text(
-                                'Outstanding Rs. ${paymentState.summary.balanceDue.toStringAsFixed(2)}'),
+                                'Outstanding ${CurrencyService.format(paymentState.summary.balanceDue)}'),
                             Text(
-                                'Previous Adjust Rs. ${paymentState.summary.previousAdjustmentAmount.toStringAsFixed(2)}'),
+                                'Previous Adjust ${CurrencyService.format(paymentState.summary.previousAdjustmentAmount)}'),
                             Text(
-                                'New Advance Rs. ${paymentState.summary.advanceCreatedAmount.toStringAsFixed(2)}'),
+                                'New Advance ${CurrencyService.format(paymentState.summary.advanceCreatedAmount)}'),
                             if (paymentState.summary.refundAmount > 0)
                               Text(
-                                'Refund Rs. ${paymentState.summary.refundAmount.toStringAsFixed(2)} in CASH',
+                                'Refund ${CurrencyService.format(paymentState.summary.refundAmount)} in CASH',
                                 style: const TextStyle(
                                   color: Color(0xFF15803D),
                                   fontWeight: FontWeight.w700,
@@ -5673,7 +5753,7 @@ class _SaleScreenState extends State<SaleScreen> {
                               )
                             else
                               Text(
-                                'Refund Rs. ${paymentState.summary.refundAmount.toStringAsFixed(2)}',
+                                'Refund ${CurrencyService.format(paymentState.summary.refundAmount)}',
                               ),
                             Text(_paymentSummaryText(paymentState.entries)),
                           ],
@@ -5899,7 +5979,7 @@ class _SaleScreenState extends State<SaleScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Generates $guestCount separate tax invoices in database (Rs. ${perPersonAmount.toStringAsFixed(2)} each) with custom Company Name, GSTIN, and Payment Receipt.',
+                                'Generates $guestCount separate tax invoices in database (${CurrencyService.format(perPersonAmount)} each) with custom Company Name, GSTIN, and Payment Receipt.',
                                 style: const TextStyle(fontSize: 11, color: Color(0xFF3B82F6)),
                               ),
                             ],
@@ -5925,7 +6005,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           Text('Bill #$gNum Share:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
-                                          Text('Rs. ${perPersonAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF16A34A))),
+                                          Text(CurrencyService.format(perPersonAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF16A34A))),
                                         ],
                                       ),
                                       const SizedBox(height: 8),
@@ -6004,7 +6084,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text('Total Bill Amount:', style: TextStyle(fontWeight: FontWeight.w600)),
-                                  Text('Rs. ${totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFFD67D25))),
+                                  Text(CurrencyService.format(totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFFD67D25))),
                                 ],
                               ),
                               const SizedBox(height: 6),
@@ -6012,7 +6092,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text('Split Per Person ($guestCount Guests):', style: const TextStyle(color: Colors.grey)),
-                                  Text('Rs. ${perPersonAmount.toStringAsFixed(2)} each', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                                  Text('${CurrencyService.format(perPersonAmount)} each', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                                 ],
                               ),
                             ],
@@ -6028,7 +6108,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                 Text('Guest $gNum:', style: const TextStyle(fontWeight: FontWeight.bold)),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: Text('Rs. ${perPersonAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  child: Text(CurrencyService.format(perPersonAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                 ),
                                 const SizedBox(width: 12),
                                 SizedBox(
@@ -6079,7 +6159,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    Text('Rs. ${item.lineTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    Text(CurrencyService.format(item.lineTotal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                     const SizedBox(width: 10),
                                     DropdownButton<int>(
                                       value: currentGuest > guestCount ? 1 : currentGuest,
@@ -6120,7 +6200,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text('Guest $gNum:', style: const TextStyle(fontSize: 12)),
-                                    Text('Rs. ${amt.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFD67D25))),
+                                    Text(CurrencyService.format(amt), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFD67D25))),
                                   ],
                                 );
                               }),
@@ -6390,9 +6470,9 @@ class _SaleScreenState extends State<SaleScreen> {
   }) async {
     final cartSnapshot =
         _items.where((line) => line.qty > 0).toList(growable: false);
-    if (printAfterSave && status != 'COMPLETED') {
+    if (printAfterSave && status == 'DRAFT') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Only completed sales can be printed.')),
+        const SnackBar(content: Text('Draft sales cannot be printed directly.')),
       );
       return;
     }
@@ -6474,8 +6554,27 @@ class _SaleScreenState extends State<SaleScreen> {
     final isEditing = _editingSaleId != null;
     final isWorkingDraft = _activeDraftId != null;
     final roundedInvoiceTotal = _payableInvoiceTotal;
+    final isUnsettledSale = status == 'PRINTED' || status == 'RUNNING' || status == 'DRAFT';
     final _NormalizedPaymentEntries normalizedPayments;
-    if (_checkoutSummary != null) {
+    if (isUnsettledSale && _checkoutSummary == null) {
+      normalizedPayments = _NormalizedPaymentEntries(
+        entries: const [],
+        summary: _PaymentSummary(
+          primaryMode: 'UNSETTLED',
+          collectedAmount: 0.0,
+          rawCollectedAmount: 0.0,
+          cashAmount: 0.0,
+          creditAmount: 0.0,
+          refundAmount: 0.0,
+          balanceDue: roundedInvoiceTotal,
+          hasInvalidRefund: false,
+          previousAdjustmentAmount: 0.0,
+          advanceAppliedAmount: 0.0,
+          advanceCreatedAmount: 0.0,
+          refundEnabled: false,
+        ),
+      );
+    } else if (_checkoutSummary != null) {
       normalizedPayments = _NormalizedPaymentEntries(
         entries: _paymentEntries,
         summary: _checkoutSummary!,
@@ -6498,14 +6597,16 @@ class _SaleScreenState extends State<SaleScreen> {
       );
       return;
     }
-    final paymentReference =
-        _encodePaymentReference(normalizedPayments.entries);
+    final paymentReference = (isUnsettledSale && _checkoutSummary == null)
+        ? null
+        : _encodePaymentReference(normalizedPayments.entries);
     final noteParts = <String>[];
     if (_notes.text.trim().isNotEmpty) {
       noteParts.add(_notes.text.trim());
     }
-    noteParts
-        .add('Payment: ${_paymentSummaryText(normalizedPayments.entries)}');
+    if (!isUnsettledSale || _checkoutSummary != null) {
+      noteParts.add('Payment: ${_paymentSummaryText(normalizedPayments.entries)}');
+    }
     final retailRoundOff = _billRoundOffAmount;
     if (retailRoundOff.abs() > 0.009) {
       noteParts.add(
@@ -6625,7 +6726,7 @@ class _SaleScreenState extends State<SaleScreen> {
     // This eliminates the 3–5 second PDF generation delay that previously
     // occurred *after* the save completed, making the print dialog open instantly.
     final printMode = settingsCtrl.settings?.printMode ?? 'PRINT_DIALOG';
-    final willNeedPdf = status == 'COMPLETED' &&
+    final willNeedPdf = (status == 'COMPLETED' || status == 'PRINTED' || status == 'RUNNING') &&
         (printAfterSave || (settingsCtrl.settings?.autoPrintOnSave ?? false)) &&
         printMode != 'ASK_BEFORE_PRINT'; // for ASK mode we don't know yet
     Future<Uint8List>? preBuildPdfFuture;
@@ -6784,10 +6885,20 @@ class _SaleScreenState extends State<SaleScreen> {
           }
         }
       }
+    } else if (status == 'PRINTED' || status == 'RUNNING' || status == 'DRAFT') {
+      if (_preloadedTableId != null) {
+        try {
+          ApiClient.put('${ApiEndpoints.restaurantTables}/$_preloadedTableId/status', {
+            'status': (status == 'PRINTED' || status == 'RUNNING') ? 'Billed' : 'Occupied',
+          });
+        } catch (e) {
+          debugPrint('Error updating table status to Billed/Occupied: $e');
+        }
+      }
     }
 
     final bool isRestaurantTableSale = _preloadedTableId != null || order.tableId != null;
-    if (isEditing || (status == 'COMPLETED' && isRestaurantTableSale)) {
+    if (isEditing || (status == 'COMPLETED' && isRestaurantTableSale) || ((status == 'PRINTED' || status == 'RUNNING') && isRestaurantTableSale)) {
       if (Navigator.canPop(context)) {
         Navigator.pop(context, true);
       }
@@ -6799,7 +6910,7 @@ class _SaleScreenState extends State<SaleScreen> {
     // Now trigger printing using the snapshot `order`. Because the overlay is
     // already hidden and the cart is reset, the retailer can immediately start
     // the next bill while printing happens smoothly.
-    final shouldPrint = status == 'COMPLETED' &&
+    final shouldPrint = (status == 'COMPLETED' || status == 'PRINTED' || status == 'RUNNING') &&
         (printAfterSave || (settingsCtrl.settings?.autoPrintOnSave ?? false));
     if (shouldPrint) {
       final int primarySaleId = int.tryParse((saveResponse?['data']?['primary_sale_id'] ?? saveResponse?['sale_id'] ?? 0).toString()) ?? 0;
@@ -7120,7 +7231,7 @@ class _SaleScreenState extends State<SaleScreen> {
                         spacing: 10,
                         runSpacing: 10,
                         children: denoms.keys.map((k) {
-                          final label = k == 'coins' ? 'Coins' : '₹$k';
+                          final label = k == 'coins' ? 'Coins' : '${CurrencyService.symbol}$k';
                           return SizedBox(
                             width: 105,
                             child: TextFormField(
@@ -7152,7 +7263,7 @@ class _SaleScreenState extends State<SaleScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('Physical Cash Total:', style: TextStyle(fontWeight: FontWeight.bold)),
-                            Text('₹${totalCash.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFFF7A1A))),
+                            Text(CurrencyService.format(totalCash), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFFF7A1A))),
                           ],
                         ),
                       ),
@@ -7238,7 +7349,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     return ListTile(
                       title: Text(draft['sale_no']?.toString() ?? 'Draft'),
                       subtitle: Text(
-                        '${draft['customer_name']?.toString().trim().isNotEmpty == true ? draft['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateTimeService.instance.format(saleDate, 'dd-MMM-yyyy hh:mm a')} • Rs. ${_jsonDouble(draft['net_amount']).toStringAsFixed(2)}',
+                        '${draft['customer_name']?.toString().trim().isNotEmpty == true ? draft['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateTimeService.instance.format(saleDate, 'dd-MMM-yyyy hh:mm a')} • ${CurrencyService.format(_jsonDouble(draft['net_amount']))}',
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -7470,7 +7581,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     return ListTile(
                       title: Text(sale['sale_no']?.toString() ?? 'Bill'),
                       subtitle: Text(
-                        '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateTimeService.instance.format(saleDate, 'dd-MMM-yyyy hh:mm a')} • Rs. ${_jsonDouble(sale['net_amount']).toStringAsFixed(2)}',
+                        '${sale['customer_name']?.toString().trim().isNotEmpty == true ? sale['customer_name'] : 'Walk-in Customer'} • ${saleDate == null ? '--' : DateTimeService.instance.format(saleDate, 'dd-MMM-yyyy hh:mm a')} • ${CurrencyService.format(_jsonDouble(sale['net_amount']))}',
                       ),
                       trailing: const Icon(Icons.print_outlined),
                       onTap: () async {
@@ -8449,10 +8560,10 @@ class _SaleScreenState extends State<SaleScreen> {
                           ? '${scheme.startTime ?? '--:--'} to ${scheme.endTime ?? '--:--'}'
                           : scheme.schemeType == 'QTY'
                               ? 'Min Qty ${scheme.minQty.toStringAsFixed(0)}'
-                              : 'Min Amount Rs. ${scheme.minAmount.toStringAsFixed(2)}';
+                              : 'Min Amount ${CurrencyService.format(scheme.minAmount)}';
                       return ListTile(
                         title: Text(
-                            '${scheme.schemeName} • ${scheme.discountType == 'PERCENT' ? '${scheme.discountValue.toStringAsFixed(0)}%' : 'Rs. ${scheme.discountValue.toStringAsFixed(2)}'}'),
+                            '${scheme.schemeName} • ${scheme.discountType == 'PERCENT' ? '${scheme.discountValue.toStringAsFixed(0)}%' : CurrencyService.format(scheme.discountValue)}'),
                         subtitle: Text(
                           '${scheme.schemeType} • $condition • ${scheme.isActive ? 'Active' : 'Inactive'}',
                         ),
@@ -8983,12 +9094,21 @@ class _SaleScreenState extends State<SaleScreen> {
                     selected: true,
                     tooltip: 'Current bill',
                   ),
-                  if (PermissionService.can('ADD_CUSTOMER') || PermissionService.can('CUSTOMER_LIST'))
-                    _sidebarButton(Icons.person_add_alt_1_rounded,
-                        onTap: _showCustomerDialog, tooltip: 'Add customer'),
-                  if (PermissionService.can('CUSTOMER_LIST'))
-                    _sidebarButton(Icons.groups_2_outlined,
-                        onTap: _openCustomerListScreen, tooltip: 'Customer list'),
+                  // Bill Reprint & Pending Settlements (Highlighted on Top)
+                  if (PermissionService.can('REPRINT_SALES_BILL'))
+                    _pendingSettlementCount > 0
+                        ? _sidebarBadgeButton(
+                            icon: Icons.receipt_long_outlined,
+                            onTap: _openBillReprint,
+                            tooltip: 'Bill Reprint & Settlement ($_pendingSettlementCount Pending)',
+                            count: _pendingSettlementCount,
+                            color: Colors.deepOrange,
+                          )
+                        : _sidebarButton(
+                            Icons.receipt_long_outlined,
+                            onTap: _openBillReprint,
+                            tooltip: 'Bill Reprint / Settle',
+                          ),
                   // Draft button with count badge
                   if (PermissionService.can('DRAFT_BILLS') || PermissionService.can('RETAIL_SALES'))
                     _sidebarBadgeButton(
@@ -9000,6 +9120,12 @@ class _SaleScreenState extends State<SaleScreen> {
                       tooltip: 'Draft bills',
                       count: _totalDraftCount,
                     ),
+                  if (PermissionService.can('ADD_CUSTOMER') || PermissionService.can('CUSTOMER_LIST'))
+                    _sidebarButton(Icons.person_add_alt_1_rounded,
+                        onTap: _showCustomerDialog, tooltip: 'Add customer'),
+                  if (PermissionService.can('CUSTOMER_LIST'))
+                    _sidebarButton(Icons.groups_2_outlined,
+                        onTap: _openCustomerListScreen, tooltip: 'Customer list'),
                   if (PermissionService.can('CASHIER_HANDOVER') || PermissionService.can('CLOSING_REPORT'))
                     _sidebarButton(
                       Icons.point_of_sale_outlined,
@@ -9020,12 +9146,6 @@ class _SaleScreenState extends State<SaleScreen> {
                         onTap: _goback, tooltip: 'Receiving'),
                   if (PermissionService.can('POS_SUBSCRIPTIONS') || PermissionService.can('SUBSCRIPTION_REPORT'))
                     _sidebarButton(Icons.payment, onTap: getSub, tooltip: 'Subscription'),
-                  if (PermissionService.can('REPRINT_SALES_BILL'))
-                    _sidebarButton(
-                      Icons.receipt_long_outlined,
-                      onTap: _openBillReprint,
-                      tooltip: 'Bill Reprint',
-                    ),
                   if (_subscriptionDraftCount > 0 && (PermissionService.can('POS_SUBSCRIPTIONS') || PermissionService.can('SUBSCRIPTION_REPORT')))
                     _sidebarBadgeButton(
                       icon: Icons.delivery_dining,
@@ -9333,8 +9453,7 @@ class _SaleScreenState extends State<SaleScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(
-                        order['sale_no']?.toString() ?? '' +
-                            '  •  Rs. ${amt.toStringAsFixed(0)}',
+                        '${order['sale_no']?.toString() ?? ''}  •  ${CurrencyService.format(amt)}',
                       ),
                       trailing: FilledButton.icon(
                         style: FilledButton.styleFrom(
@@ -9372,12 +9491,13 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
-  void _openBillReprint() {
-    Navigator.of(context).push(
+  Future<void> _openBillReprint() async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const SalesReprintModifyScreen(),
       ),
     );
+    _loadSubscriptionDraftCounts();
   }
 
   void _goback() {
@@ -9949,7 +10069,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                             children: [
                                               if (crossedPrice != null) ...[
                                                 Text(
-                                                  'Rs. ${crossedPrice.toStringAsFixed(2)}',
+                                                  CurrencyService.format(crossedPrice),
                                                   maxLines: 1,
                                                   style: const TextStyle(
                                                     color: Colors.grey,
@@ -9961,8 +10081,8 @@ class _SaleScreenState extends State<SaleScreen> {
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   item.productTemplateId != null
-                                                      ? 'Rs. ${activePrice.toStringAsFixed(2)}+'
-                                                      : 'Rs. ${activePrice.toStringAsFixed(2)}',
+                                                      ? '${CurrencyService.format(activePrice)}+'
+                                                      : CurrencyService.format(activePrice),
                                                   maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
                                                   style: const TextStyle(
@@ -9974,8 +10094,8 @@ class _SaleScreenState extends State<SaleScreen> {
                                               ] else ...[
                                                 Text(
                                                   item.productTemplateId != null
-                                                      ? 'Rs. ${displayPrice.toStringAsFixed(2)}+'
-                                                      : 'Rs. ${displayPrice.toStringAsFixed(2)}',
+                                                      ? '${CurrencyService.format(displayPrice)}+'
+                                                      : CurrencyService.format(displayPrice),
                                                   maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
                                                   style: const TextStyle(
@@ -10233,11 +10353,11 @@ class _SaleScreenState extends State<SaleScreen> {
                 .fold<double>(0, (sum, item) => sum + item.amount);
 
             final bool allInclusive = _invoice.items.isNotEmpty && _invoice.items.every((item) => item.isTaxInclusive);
-            final String subTotalLabel = allInclusive ? 'Sub Total (Incl. GST)' : 'Sub Total';
+            final String subTotalLabel = allInclusive ? 'Sub Total (Incl. ${CountryTaxHelper.taxName()})' : 'Sub Total';
 
             String? subTotalNote;
             if (preTaxSum > 0 && postTaxSum > 0) {
-              subTotalNote = '(Pre-tax: ₹${preTaxSum.toStringAsFixed(2)}, Post-tax: ₹${postTaxSum.toStringAsFixed(2)})';
+              subTotalNote = '(Pre-tax: ${CurrencyService.format(preTaxSum)}, Post-tax: ${CurrencyService.format(postTaxSum)})';
             }
 
             final double cgst = _invoice.totalTax / 2;
@@ -10256,16 +10376,19 @@ class _SaleScreenState extends State<SaleScreen> {
                       displayDiscount,
                     ),
                     if (allInclusive)
-                      _miniInfoCard('Net Amount (Incl. GST)', (_invoice.subTotal - displayDiscount).clamp(0.0, double.infinity)),
+                      _miniInfoCard('Net Amount (Tax Incl.)', (_invoice.subTotal - displayDiscount).clamp(0.0, double.infinity)),
                   ];
                 })(),
                 _miniInfoCard('Taxable Value', _invoice.taxableAmount),
                 if (_invoice.chargeTotal > 0)
                   _miniInfoCard('Charges', _invoice.chargeTotal),
                 if (_invoice.chargeTaxTotal > 0)
-                  _miniInfoCard('Charges GST', _invoice.chargeTaxTotal),
-                if (cgst > 0) _miniInfoCard('CGST', cgst),
-                if (sgst > 0) _miniInfoCard('SGST', sgst),
+                  _miniInfoCard('Charges Tax', _invoice.chargeTaxTotal),
+                if (_invoice.taxSummary.isNotEmpty)
+                  for (final tax in _invoice.taxSummary)
+                    _miniInfoCard(tax.label, tax.taxAmount)
+                else if (_invoice.totalTax > 0)
+                  _miniInfoCard('Total Tax', _invoice.totalTax),
                 _miniInfoCard('Total', _invoice.netAmount, highlight: true),
               ],
             );
@@ -10413,7 +10536,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     _customerPhone.text.trim().isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Previous Credit Rs. ${_previousOutstandingAmount.toStringAsFixed(2)}',
+                    'Previous Credit ${CurrencyService.format(_previousOutstandingAmount)}',
                     style: const TextStyle(
                       color: Color(0xFFDC2626),
                       fontWeight: FontWeight.w700,
@@ -10424,7 +10547,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     _customerPhone.text.trim().isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Available Advance Rs. ${_availableAdvanceAmount.toStringAsFixed(2)}',
+                    'Available Advance ${CurrencyService.format(_availableAdvanceAmount)}',
                     style: const TextStyle(
                       color: Color(0xFF15803D),
                       fontWeight: FontWeight.w700,
@@ -10457,7 +10580,7 @@ class _SaleScreenState extends State<SaleScreen> {
                 if (_redeemPointsInput > 0 && _hasCustomerContext) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Savings by points redeemed: $_redeemPointsInput points (- Rs. ${_loyaltyDiscountAmount.toStringAsFixed(2)})',
+                    'Savings by points redeemed: $_redeemPointsInput points (- ${CurrencyService.format(_loyaltyDiscountAmount)})',
                     style: const TextStyle(
                       color: Color(0xFF15803D),
                       fontWeight: FontWeight.w700,
@@ -10621,11 +10744,11 @@ class _SaleScreenState extends State<SaleScreen> {
                       .fold<double>(0, (sum, item) => sum + item.amount);
 
                   final bool allInclusive = invoice.items.isNotEmpty && invoice.items.every((item) => item.isTaxInclusive);
-                  final String subTotalLabel = allInclusive ? 'Sub Total (Incl. GST)' : 'Sub Total';
+                  final String subTotalLabel = allInclusive ? 'Sub Total (Incl. ${CountryTaxHelper.taxName()})' : 'Sub Total';
 
                   String? subTotalNote;
                   if (preTaxSum > 0 && postTaxSum > 0) {
-                    subTotalNote = '(Pre-tax: ₹${preTaxSum.toStringAsFixed(2)}, Post-tax: ₹${postTaxSum.toStringAsFixed(2)})';
+                    subTotalNote = '(Pre-tax: ${CurrencyService.format(preTaxSum)}, Post-tax: ${CurrencyService.format(postTaxSum)})';
                   }
 
                   final double cgst = invoice.totalTax / 2;
@@ -10637,12 +10760,15 @@ class _SaleScreenState extends State<SaleScreen> {
                       invoice.totalDiscount.clamp(0.0, invoice.subTotal),
                     ),
                     if (allInclusive)
-                      _summaryRow('Net Amount (Incl. GST)', (invoice.subTotal - invoice.totalDiscount).clamp(0.0, double.infinity)),
+                      _summaryRow('Net Amount (Tax Incl.)', (invoice.subTotal - invoice.totalDiscount).clamp(0.0, double.infinity)),
                     _summaryRow('Taxable Value', invoice.taxableAmount),
                     if (invoice.chargeTotal > 0)
                       _summaryRow('Charges', invoice.chargeTotal),
-                    if (cgst > 0) _summaryRow('CGST', cgst),
-                    if (sgst > 0) _summaryRow('SGST', sgst),
+                    if (invoice.taxSummary.isNotEmpty)
+                      for (final tax in invoice.taxSummary)
+                        _summaryRow(tax.label, tax.taxAmount)
+                    else if (invoice.totalTax > 0)
+                      _summaryRow('Total Tax', invoice.totalTax),
                   ];
                 })(),
                 const Divider(height: 18),
@@ -10676,10 +10802,12 @@ class _SaleScreenState extends State<SaleScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _isBillProcessing ? null : () => _persistSale(
-                    status: _editingSaleId != null ? 'COMPLETED' : 'DRAFT',
-                    printAfterSave: false,
-                  ),
+                  onPressed: _isBillProcessing
+                      ? null
+                      : () => _persistSale(
+                            status: _editingSaleId != null ? 'COMPLETED' : 'DRAFT',
+                            printAfterSave: false,
+                          ),
                   child: Text(
                     _editingSaleId != null ? 'Update' : 'Save Draft',
                   ),
@@ -10687,9 +10815,25 @@ class _SaleScreenState extends State<SaleScreen> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: OutlinedButton(
-                  onPressed: _isBillProcessing ? null : () => _openPaymentSheet(printAfterSave: true),
-                  child: const Text('Print'),
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0B5CAD),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _isBillProcessing
+                      ? null
+                      : () {
+                          final bool isAfterBillPrint = (settingsCtrl.settings?.restaurantSettlementMode ?? 'DIRECT') == 'AFTER_BILL_PRINT';
+                          if (isAfterBillPrint && _editingSaleId == null) {
+                            // Settle Later (Direct Print) without opening checkout sheet
+                            _persistSale(status: 'PRINTED', printAfterSave: true);
+                          } else {
+                            // Direct Settlement -> opens payment checkout sheet
+                            _openPaymentSheet(printAfterSave: true);
+                          }
+                        },
+                  icon: const Icon(Icons.print_outlined, size: 16),
+                  label: const Text('Print'),
                 ),
               ),
             ],
@@ -10810,15 +10954,15 @@ class _SaleScreenState extends State<SaleScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                      'Collected Rs. ${paymentState.collectedAmount.toStringAsFixed(2)}'),
+                      'Collected ${CurrencyService.format(paymentState.collectedAmount)}'),
                   if (paymentState.advanceAppliedAmount > 0)
                     Text(
-                        'Advance Used Rs. ${paymentState.advanceAppliedAmount.toStringAsFixed(2)}'),
+                        'Advance Used ${CurrencyService.format(paymentState.advanceAppliedAmount)}'),
                   Text(
-                      'Outstanding Rs. ${paymentState.balanceDue.toStringAsFixed(2)}'),
+                      'Outstanding ${CurrencyService.format(paymentState.balanceDue)}'),
                   if (paymentState.refundAmount > 0)
                     Text(
-                      'Refund Rs. ${paymentState.refundAmount.toStringAsFixed(2)} in CASH',
+                      'Refund ${CurrencyService.format(paymentState.refundAmount)} in CASH',
                       style: const TextStyle(
                         color: Color(0xFF15803D),
                         fontWeight: FontWeight.w700,
@@ -10826,7 +10970,7 @@ class _SaleScreenState extends State<SaleScreen> {
                     )
                   else
                     Text(
-                      'Refund Rs. ${paymentState.refundAmount.toStringAsFixed(2)}',
+                      'Refund ${CurrencyService.format(paymentState.refundAmount)}',
                     ),
                   const SizedBox(height: 10),
                   Row(
@@ -11250,7 +11394,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   if (_availableAdvanceAmount > 0) ...[
                     const SizedBox(height: 6),
                     Text(
-                      'Available Advance: Rs. ${_availableAdvanceAmount.toStringAsFixed(2)}',
+                      'Available Advance: ${CurrencyService.format(_availableAdvanceAmount)}',
                       style: const TextStyle(
                         color: Color(0xFF15803D),
                         fontWeight: FontWeight.w700,
@@ -11281,7 +11425,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   if (_redeemPointsInput > 0) ...[
                     const SizedBox(height: 4),
                     Text(
-                      'Savings by points redeemed: $_redeemPointsInput points (- Rs. ${_loyaltyDiscountAmount.toStringAsFixed(2)})',
+                      'Savings by points redeemed: $_redeemPointsInput points (- ${CurrencyService.format(_loyaltyDiscountAmount)})',
                       style: const TextStyle(
                         color: Color(0xFF15803D),
                         fontWeight: FontWeight.w700,
@@ -11292,7 +11436,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   if (_previousOutstandingAmount > 0) ...[
                     const SizedBox(height: 4),
                     Text(
-                      'Outstanding: Rs. ${_previousOutstandingAmount.toStringAsFixed(2)}',
+                      'Outstanding: ${CurrencyService.format(_previousOutstandingAmount)}',
                       style: const TextStyle(
                         color: Color(0xFFDC2626),
                         fontWeight: FontWeight.w700,
@@ -11825,7 +11969,7 @@ class _SaleScreenState extends State<SaleScreen> {
             ),
           ),
           Text(
-            'Rs. ${value.toStringAsFixed(2)}',
+            CurrencyService.format(value),
             style: style.copyWith(color: valueColor),
           ),
         ],
@@ -12225,24 +12369,65 @@ class _SaleScreenState extends State<SaleScreen> {
               if (_orderType == 'B2B')
                 _compactField(_customerGstin, 'Customer GSTIN', width: 180),
               SizedBox(
-                width: 160,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey('taxMode-$_taxMode'),
-                  initialValue: _taxMode,
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'CGST_SGST', child: Text('CGST + SGST')),
-                    DropdownMenuItem(value: 'IGST', child: Text('IGST')),
-                    DropdownMenuItem(value: 'VAT', child: Text('VAT')),
-                    DropdownMenuItem(value: 'CESS', child: Text('CESS')),
-                    DropdownMenuItem(
-                        value: 'CUSTOM', child: Text('Custom Tax')),
-                    DropdownMenuItem(value: 'NONE', child: Text('No Tax')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _taxMode = value ?? 'NONE');
+                width: 180,
+                child: Builder(
+                  builder: (context) {
+                    final items = <DropdownMenuItem<String>>[];
+                    final knownModes = <String>{};
+
+                    void addOption(String value, String label) {
+                      if (!knownModes.contains(value)) {
+                        knownModes.add(value);
+                        items.add(DropdownMenuItem(
+                          value: value,
+                          child: Text(label, overflow: TextOverflow.ellipsis),
+                        ));
+                      }
+                    }
+
+                    addOption('CGST_SGST', 'CGST + SGST');
+                    addOption('IGST', 'IGST');
+                    addOption('VAT', 'VAT');
+                    addOption('SALES_TAX', 'Sales Tax');
+                    addOption('US_SALES_TAX', 'US Sales Tax');
+                    addOption('CESS', 'CESS');
+                    addOption('CUSTOM', 'Custom Tax');
+                    addOption('NONE', 'No Tax');
+
+                    for (final g in _loadedTaxGroups) {
+                      final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+                          ? g.groupCode!.trim().toUpperCase()
+                          : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+                      addOption(key, '${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)');
+                    }
+
+                    String currentVal = _taxMode.trim();
+                    if (!knownModes.contains(currentVal)) {
+                      final match = _loadedTaxGroups.where((g) =>
+                          g.groupName.trim().toLowerCase() == currentVal.toLowerCase() ||
+                          g.id == currentVal).firstOrNull;
+                      if (match != null) {
+                        currentVal = match.groupCode != null && match.groupCode!.trim().isNotEmpty
+                            ? match.groupCode!.trim().toUpperCase()
+                            : match.groupName;
+                      } else if (currentVal.isNotEmpty) {
+                        addOption(currentVal, currentVal.replaceAll('_', ' '));
+                      } else {
+                        currentVal = 'CGST_SGST';
+                      }
+                    }
+
+                    return DropdownButtonFormField<String>(
+                      key: ValueKey('taxMode-$currentVal'),
+                      value: currentVal,
+                      isExpanded: true,
+                      items: items,
+                      onChanged: (value) {
+                        setState(() => _taxMode = value ?? 'NONE');
+                      },
+                      decoration: const InputDecoration(labelText: 'Tax Mode'),
+                    );
                   },
-                  decoration: const InputDecoration(labelText: 'Tax Mode'),
                 ),
               ),
               SizedBox(
@@ -13274,18 +13459,66 @@ class _SaleScreenState extends State<SaleScreen> {
                     },
                   ),
                   if (taxable) ...[
-                    DropdownButtonFormField<String>(
-                      initialValue: taxType,
-                      items: const [
-                        DropdownMenuItem(value: 'GST', child: Text('GST')),
-                        DropdownMenuItem(value: 'VAT', child: Text('VAT')),
-                        DropdownMenuItem(value: 'CESS', child: Text('CESS')),
-                        DropdownMenuItem(value: 'OTHER', child: Text('Other')),
-                      ],
-                      onChanged: (value) {
-                        setDialogState(() => taxType = value ?? 'GST');
+                    Builder(
+                      builder: (context) {
+                        final chargeTaxItems = <DropdownMenuItem<String>>[];
+                        final knownTaxTypes = <String>{};
+
+                        void addTaxOption(String value, String label) {
+                          if (!knownTaxTypes.contains(value)) {
+                            knownTaxTypes.add(value);
+                            chargeTaxItems.add(DropdownMenuItem(
+                              value: value,
+                              child: Text(label, overflow: TextOverflow.ellipsis),
+                            ));
+                          }
+                        }
+
+                        for (final g in _loadedTaxGroups) {
+                          final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+                              ? g.groupCode!.trim().toUpperCase()
+                              : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+                          addTaxOption(key, 'Tax Group: ${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)');
+                        }
+
+                        addTaxOption('GST', 'GST');
+                        addTaxOption('VAT', 'VAT');
+                        addTaxOption('SALES_TAX', 'Sales Tax');
+                        addTaxOption('US_SALES_TAX', 'US Sales Tax');
+                        addTaxOption('CESS', 'CESS');
+                        addTaxOption('OTHER', 'Other');
+
+                        if (!knownTaxTypes.contains(taxType)) {
+                          addTaxOption(taxType, taxType.replaceAll('_', ' '));
+                        }
+
+                        return DropdownButtonFormField<String>(
+                          key: ValueKey('customChargeTax-$taxType'),
+                          isExpanded: true,
+                          value: taxType,
+                          items: chargeTaxItems,
+                          onChanged: (value) {
+                            if (value != null) {
+                              setDialogState(() {
+                                taxType = value;
+                                final matchGroup = _loadedTaxGroups.where((g) {
+                                  final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+                                      ? g.groupCode!.trim().toUpperCase()
+                                      : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+                                  return key == value;
+                                }).firstOrNull;
+
+                                if (matchGroup != null) {
+                                  taxCtrl.text = matchGroup.totalRate.toStringAsFixed(
+                                    matchGroup.totalRate % 1 == 0 ? 0 : 2,
+                                  );
+                                }
+                              });
+                            }
+                          },
+                          decoration: const InputDecoration(labelText: 'Tax Selection / Group'),
+                        );
                       },
-                      decoration: const InputDecoration(labelText: 'Tax Type'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -13307,6 +13540,13 @@ class _SaleScreenState extends State<SaleScreen> {
                 onPressed: () {
                   final name = nameCtrl.text.trim();
                   if (name.isEmpty) return;
+                  final matchGroup = _loadedTaxGroups.where((g) {
+                    final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+                        ? g.groupCode!.trim().toUpperCase()
+                        : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+                    return key == taxType;
+                  }).firstOrNull;
+
                   setState(() {
                     _charges = [
                       ..._charges,
@@ -13324,6 +13564,8 @@ class _SaleScreenState extends State<SaleScreen> {
                         isEnabled: true,
                         taxType: taxType,
                         taxPercent: double.tryParse(taxCtrl.text.trim()) ?? 0,
+                        taxGroupId: matchGroup?.id,
+                        taxGroup: matchGroup,
                       ),
                     ];
                   });
@@ -13341,7 +13583,7 @@ class _SaleScreenState extends State<SaleScreen> {
   String _chargeDescriptor(BillingCharge charge) {
     final base = charge.calculationType == 'PERCENT'
         ? '${charge.calculationValue.toStringAsFixed(charge.calculationValue % 1 == 0 ? 0 : 2)}%'
-        : 'Rs. ${charge.amount.toStringAsFixed(2)}';
+        : CurrencyService.format(charge.amount);
     if (!charge.taxable) return base;
     return '$base + ${charge.taxType} ${charge.taxPercent.toStringAsFixed(charge.taxPercent % 1 == 0 ? 0 : 2)}%';
   }
@@ -13471,12 +13713,9 @@ class _SaleScreenState extends State<SaleScreen> {
               ),
               _metric('Taxable Amount', invoice.taxableAmount),
               _metric('Total Tax', invoice.totalTax),
-              if (invoice.amountForCode('CGST') > 0)
-                _metric('CGST', invoice.amountForCode('CGST')),
-              if (invoice.amountForCode('SGST') > 0)
-                _metric('SGST', invoice.amountForCode('SGST')),
-              if (invoice.amountForCode('IGST') > 0)
-                _metric('IGST', invoice.amountForCode('IGST')),
+              if (invoice.taxSummary.isNotEmpty)
+                for (final tax in invoice.taxSummary)
+                  _metric(tax.label, tax.taxAmount),
               _metric('Final Amount', _payableInvoiceTotal, highlight: true),
             ],
           ),
@@ -13555,52 +13794,120 @@ class _SaleScreenState extends State<SaleScreen> {
           ],
           Row(
             children: [
-              OutlinedButton.icon(
-                onPressed: _isBillProcessing ? null : () => _persistSale(
-                  status: _editingSaleId != null ? 'COMPLETED' : 'DRAFT',
-                  printAfterSave: false,
-                ),
-                icon: const Icon(Icons.save_as_outlined),
-                label: Text(
-                  _editingSaleId != null ? 'Update Bill' : 'Save Order',
-                ),
-              ),
+              Builder(builder: (context) {
+                final bool isRestaurantTable = _preloadedTableId != null;
+                final String settleMode = settingsCtrl.settings?.restaurantSettlementMode ?? 'DIRECT';
+                final bool isAfterBillPrint = isRestaurantTable && settleMode == 'AFTER_BILL_PRINT';
+
+                if (isAfterBillPrint && _editingSaleId == null) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _isBillProcessing ? null : () => _persistSale(
+                          status: 'DRAFT',
+                          printAfterSave: false,
+                        ),
+                        icon: const Icon(Icons.save_as_outlined),
+                        label: const Text('Save Draft Order'),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF7A1A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        onPressed: _isBillProcessing ? null : () =>
+                            _persistSale(status: 'PRINTED', printAfterSave: true),
+                        icon: _isBillProcessing
+                            ? const SizedBox(
+                                width: 18, height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.print_outlined),
+                        label: Text(
+                          _isBillProcessing
+                              ? 'Printing… ${_processingStopwatch.elapsed.inSeconds}s'
+                              : '🖨️ Print Bill (Settle Later)',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        onPressed: _isBillProcessing ? null : () =>
+                            _persistSale(status: 'COMPLETED', printAfterSave: true),
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text('⚡ Direct Settle & Pay', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 10),
+                      OutlinedButton.icon(
+                        onPressed: _showDraftsDialog,
+                        icon: const Icon(Icons.drafts_outlined),
+                        label: const Text('Delivery Order'),
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _isBillProcessing ? null : () => _persistSale(
+                        status: _editingSaleId != null ? 'COMPLETED' : 'DRAFT',
+                        printAfterSave: false,
+                      ),
+                      icon: const Icon(Icons.save_as_outlined),
+                      label: Text(
+                        _editingSaleId != null ? 'Update Bill' : 'Save Order',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: _isBillProcessing ? null : () =>
+                          _persistSale(status: 'COMPLETED', printAfterSave: false),
+                      icon: const Icon(Icons.save),
+                      label: Text(
+                        _editingSaleId != null ? 'Update Bill' : 'Save Sale',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: _isBillProcessing ? null : () =>
+                          _persistSale(status: 'COMPLETED', printAfterSave: true),
+                      icon: _isBillProcessing
+                          ? const SizedBox(
+                              width: 18, height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.print_outlined),
+                      label: Text(
+                        _isBillProcessing
+                            ? 'Processing… ${_processingStopwatch.elapsed.inSeconds}s'
+                        : _editingSaleId != null
+                            ? 'Update & Print'
+                            : _isThermalBillFormat
+                                ? 'Save & Print $_billFormatLabel'
+                                : 'Save & Print A4 Bill',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: _showDraftsDialog,
+                      icon: const Icon(Icons.drafts_outlined),
+                      label: const Text('Delivery Order'),
+                    ),
+                  ],
+                );
+              }),
               const SizedBox(width: 10),
-              FilledButton.icon(
-                onPressed: _isBillProcessing ? null : () =>
-                    _persistSale(status: 'COMPLETED', printAfterSave: false),
-                icon: const Icon(Icons.save),
-                label: Text(
-                  _editingSaleId != null ? 'Update Bill' : 'Save Sale',
-                ),
-              ),
-              const SizedBox(width: 10),
-              FilledButton.icon(
-                onPressed: _isBillProcessing ? null : () =>
-                    _persistSale(status: 'COMPLETED', printAfterSave: true),
-                icon: _isBillProcessing
-                    ? const SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.print_outlined),
-                label: Text(
-                  _isBillProcessing
-                      ? 'Processing… ${_processingStopwatch.elapsed.inSeconds}s'
-                      : _editingSaleId != null
-                          ? 'Update & Print'
-                          : _isThermalBillFormat
-                              ? 'Save & Print $_billFormatLabel'
-                              : 'Save & Print A4 Bill',
-                ),
-              ),
-              const SizedBox(width: 10),
-              OutlinedButton.icon(
-                onPressed: _showDraftsDialog,
-                icon: const Icon(Icons.drafts_outlined),
-                label: const Text('Delivery Order'),
-              ),
               TextButton.icon(
                 onPressed: () {
                   Navigator.push(
@@ -13897,7 +14204,7 @@ class _SaleScreenState extends State<SaleScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Rs. ${value.toStringAsFixed(2)}',
+            CurrencyService.format(value),
             style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 16,

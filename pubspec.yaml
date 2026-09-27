@@ -46,6 +46,7 @@ dependencies:
   path_provider: ^2.1.5
   dropdown_search: ^6.0.2
   printing: ^5.14.2
+  pdf: ^3.11.3
   open_file: ^3.5.11
   flutter_local_notifications: ^21.0.0
   package_info_plus: ^9.0.0

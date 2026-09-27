@@ -15,6 +15,7 @@ import '../../models/inventory/supplier_model.dart';
 import '../../models/security/app_user_model.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/currency/currency_service.dart';
 import 'credit_analysis_screen.dart';
 import 'expense_analytics_screen.dart';
 import '../../controllers/settings/property_info_controller.dart';
@@ -188,7 +189,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     }
     return DateFormat('dd-MMM-yyyy hh:mm a').format(local);
   }
-  String _money(double value) => 'Rs. ${value.toStringAsFixed(2)}';
+  String _money(double value) => CurrencyService.format(value);
   String _plainAmount(double value) => value.toStringAsFixed(2);
   List<LedgerDayGroup> get _ledgerDaysAsc {
     final days = [...ctrl.ledgerDays];
@@ -454,7 +455,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         style: TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 13)),
                     Text(
-                      '₹${amount.toStringAsFixed(2)}',
+                      CurrencyService.format(amount),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -935,7 +936,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       builder: (ctx) => AlertDialog(
                         title: const Text('Adjust Excess Payment?'),
                         content: Text(
-                            'The entered amount Rs. ${amount.toStringAsFixed(2)} exceeds this bill\'s outstanding balance of Rs. ${bill.outstanding.toStringAsFixed(2)}.\n\nWould you like to automatically adjust the extra Rs. ${(amount - bill.outstanding).toStringAsFixed(2)} towards other outstanding credit bills or customer advance?'),
+                            'The entered amount ${CurrencyService.format(amount)} exceeds this bill\'s outstanding balance of ${CurrencyService.format(bill.outstanding)}.\n\nWould you like to automatically adjust the extra ${CurrencyService.format(amount - bill.outstanding)} towards other outstanding credit bills or customer advance?'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, false), // Cancel
@@ -1326,9 +1327,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   TextField(
                     controller: amountCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Refund Amount',
-                      prefixText: 'Rs. ',
+                      prefixText: '${CurrencyService.symbol} ',
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -2129,7 +2130,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       }
     }
 
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     List<PdfKpiItem>? kpis;
     if (_tabController.index == 0) {
       kpis = [
@@ -4101,9 +4102,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                           child: TextField(
                             controller: openingAmountCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(
-                              labelText: 'Opening Deposit (₹)',
-                              prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                            decoration: InputDecoration(
+                              labelText: 'Opening Deposit (${CurrencyService.symbol})',
+                              prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
                             ),
                           ),
                         ),
@@ -4226,7 +4227,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     _buildKpiCard(
                       title: 'Amount',
                       value: _money(ctrl.deliveryTotal),
-                      icon: Icons.currency_rupee_rounded,
+                      icon: Icons.payments_outlined,
                       color: const Color(0xFF16A34A),
                     ),
                     _buildKpiCard(
@@ -4792,19 +4793,19 @@ class ExpenseEntryDialog extends StatefulWidget {
                 pw.Text('Notes: $displayNote', style: pw.TextStyle(font: mono, fontSize: 8.5)),
               ],
               divider(),
-              kvLine('Base Amount:', 'Rs. ${expense.baseAmount.toStringAsFixed(2)}'),
+              kvLine('Base Amount:', CurrencyService.format(expense.baseAmount)),
               if (expense.taxes.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
                 pw.Text('TAX DETAILS:', style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
-                ...expense.taxes.map((t) => kvLine('  ${t.taxName} (${t.taxPercentage}%):', 'Rs. ${t.taxAmount.toStringAsFixed(2)}')),
+                ...expense.taxes.map((t) => kvLine('  ${t.taxName} (${t.taxPercentage}%):', CurrencyService.format(t.taxAmount))),
               ],
               if (expense.deductions.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
                 pw.Text('DEDUCTION DETAILS:', style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
-                ...expense.deductions.map((d) => kvLine('  ${d.deductionType} (${d.deductionPercentage}%):', '-Rs. ${d.deductionAmount.toStringAsFixed(2)}')),
+                ...expense.deductions.map((d) => kvLine('  ${d.deductionType} (${d.deductionPercentage}%):', '-${CurrencyService.format(d.deductionAmount)}')),
               ],
               divider(),
-              kvLine('Net Payable:', 'Rs. ${expense.amount.toStringAsFixed(2)}', boldFont: true),
+              kvLine('Net Payable:', CurrencyService.format(expense.amount), boldFont: true),
               divider(),
               pw.SizedBox(height: 10),
               pw.Center(
@@ -5459,10 +5460,10 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                           child: TextField(
                                             controller: amountCtrl,
                                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                            decoration: const InputDecoration(
-                                              labelText: 'Amount (₹)',
+                                            decoration: InputDecoration(
+                                              labelText: 'Amount (${CurrencyService.symbol})',
                                               hintText: 'Enter amount',
-                                              prefixIcon: Icon(Icons.currency_rupee),
+                                              prefixIcon: const Icon(Icons.payments_outlined),
                                             ),
                                           ),
                                         ),
@@ -5570,7 +5571,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                               ),
                                               const SizedBox(width: 8),
                                               Text(
-                                                '₹${((isTaxInclusive ? baseAmount : baseAmount) * (double.tryParse(row.percentCtrl.text) ?? 0) / 100).toStringAsFixed(2)}',
+                                                CurrencyService.format((isTaxInclusive ? baseAmount : baseAmount) * (double.tryParse(row.percentCtrl.text) ?? 0) / 100),
                                                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                                               ),
                                               IconButton(
@@ -5642,7 +5643,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                               ),
                                               const SizedBox(width: 8),
                                               Text(
-                                                '-₹${(baseAmount * (double.tryParse(row.percentCtrl.text) ?? 0) / 100).toStringAsFixed(2)}',
+                                                '-${CurrencyService.format(baseAmount * (double.tryParse(row.percentCtrl.text) ?? 0) / 100)}',
                                                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.red),
                                               ),
                                               IconButton(
@@ -5770,9 +5771,9 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 16),
-                            _summaryRow('Base Amount', '₹${baseAmount.toStringAsFixed(2)}'),
+                            _summaryRow('Base Amount', CurrencyService.format(baseAmount)),
                             const SizedBox(height: 8),
-                            _summaryRow('Total Taxes (+)', '₹${totalTaxAmount.toStringAsFixed(2)}', isBold: true),
+                            _summaryRow('Total Taxes (+)', CurrencyService.format(totalTaxAmount), isBold: true),
                             const SizedBox(height: 4),
                             ...taxRows.map((tr) {
                               final percent = double.tryParse(tr.percentCtrl.text) ?? 0.0;
@@ -5783,13 +5784,13 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text('${tr.isCustom ? tr.nameCtrl.text : tr.taxName} ($percent%)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                    Text('₹${rowAmt.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    Text(CurrencyService.format(rowAmt), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                   ],
                                 ),
                               );
                             }),
                             const Divider(),
-                            _summaryRow('Total Deductions (-)', '₹${totalDeductionAmount.toStringAsFixed(2)}', isBold: true, color: Colors.red),
+                            _summaryRow('Total Deductions (-)', '-${CurrencyService.format(totalDeductionAmount)}', isBold: true, color: Colors.red),
                             const SizedBox(height: 4),
                             ...deductionRows.map((dr) {
                               final percent = double.tryParse(dr.percentCtrl.text) ?? 0.0;
@@ -5800,7 +5801,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text('${dr.deductionType} ($percent%)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                    Text('-₹${rowAmt.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    Text('-${CurrencyService.format(rowAmt)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                   ],
                                 ),
                               );
@@ -5811,7 +5812,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                               child: _summaryRow(
                                 'Net Payable',
-                                '₹${netPayableAmount.toStringAsFixed(2)}',
+                                CurrencyService.format(netPayableAmount),
                                 isBold: true,
                                 fontSize: 16,
                                 color: Theme.of(context).colorScheme.onPrimaryContainer,

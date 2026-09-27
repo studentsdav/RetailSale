@@ -17,6 +17,10 @@ import '../../models/inventory/purchase_order_model.dart';
 import '../../models/inventory/supplier_model.dart';
 import '../../utils/branding_storage.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../core/utils/country_tax_helper.dart';
+import '../../core/currency/currency_service.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 class PurchaseOrderModifyScreen extends StatefulWidget {
   const PurchaseOrderModifyScreen({super.key});
@@ -184,6 +188,14 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
 
     final supplier = supplierCtrl.list.firstWhere((e) => e.id == po.supplierId);
 
+    final settings = context.read<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+    final taxName = CountryTaxHelper.taxName(country, taxMode);
+    final taxPercentLabel = CountryTaxHelper.taxPercentLabel(country, taxMode);
+    final taxAmtLabel = CountryTaxHelper.taxAmountLabel(country, taxMode);
+    final taxIdLabel = CountryTaxHelper.taxIdLabel(country);
+
     final subTotal =
         po.items.fold<double>(0, (sum, item) => sum + (item.qty * item.rate));
     final totalGST = po.items.fold<double>(
@@ -204,6 +216,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
+            country: country,
             rightWidget: pw.Text(
               "PURCHASE ORDER",
               style: pw.TextStyle(
@@ -250,7 +263,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                       if ((supplier.gstin ?? '').trim().isNotEmpty)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(top: 2),
-                          child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                          child: pw.Text("$taxIdLabel: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
                         ),
                     ],
                   ),
@@ -299,8 +312,8 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                   _tableCell("Unit", bold: true, alignment: pw.Alignment.center),
                   _tableCell("Qty", bold: true, alignment: pw.Alignment.centerRight),
                   _tableCell("Rate", bold: true, alignment: pw.Alignment.centerRight),
-                  _tableCell("GST %", bold: true, alignment: pw.Alignment.centerRight),
-                  _tableCell("GST Amt", bold: true, alignment: pw.Alignment.centerRight),
+                  _tableCell(taxPercentLabel, bold: true, alignment: pw.Alignment.centerRight),
+                  _tableCell(taxAmtLabel, bold: true, alignment: pw.Alignment.centerRight),
                   _tableCell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
@@ -334,7 +347,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
               child: pw.Column(
                 children: [
                   _totalRow("Sub Total", subTotal),
-                  _totalRow("GST", totalGST),
+                  _totalRow(taxName, totalGST),
                   pw.Divider(color: PdfColors.grey400, thickness: 0.5),
                   _totalRow("Grand Total", grandTotal, bold: true),
                 ],
@@ -725,7 +738,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                       ),
                       const Spacer(),
                       Text(
-                        "₹ ${total.toStringAsFixed(2)}",
+                        CurrencyService.format(total),
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../controllers/accounting/financial_reports_controller.dart';
+import '../../core/currency/currency_service.dart';
 
 class BalanceSheetScreen extends StatefulWidget {
   final String? outletId;
@@ -68,7 +69,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                                 final a = assets[i];
                                 return ListTile(
                                   title: Text(a['name'] ?? ''),
-                                  trailing: Text('₹${(a['amount'] ?? 0).toString()}', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+                                  trailing: Text(CurrencyService.format(double.tryParse((a['amount'] ?? 0).toString()) ?? 0), style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
                                 );
                               },
                             ),
@@ -78,7 +79,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('TOTAL ASSETS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              Text('₹${totalAssets.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: primaryColor, fontFamily: 'monospace')),
+                              Text(CurrencyService.format(totalAssets), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: primaryColor, fontFamily: 'monospace')),
                             ],
                           ),
                         ],
@@ -105,13 +106,13 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                                 const Text('Capital & Reserves', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
                                 ...equity.map((e) => ListTile(
                                   title: Text(e['name'] ?? ''),
-                                  trailing: Text('₹${(e['amount'] ?? 0).toString()}', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+                                  trailing: Text(CurrencyService.format(double.tryParse((e['amount'] ?? 0).toString()) ?? 0), style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
                                 )),
                                 const SizedBox(height: 12),
                                 const Text('Liabilities', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
                                 ...liabilities.map((l) => ListTile(
                                   title: Text(l['name'] ?? ''),
-                                  trailing: Text('₹${(l['amount'] ?? 0).toString()}', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+                                  trailing: Text(CurrencyService.format(double.tryParse((l['amount'] ?? 0).toString()) ?? 0), style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
                                 )),
                               ],
                             ),
@@ -121,7 +122,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('TOTAL LIABILITIES & EQUITY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              Text('₹${(totalLiab + totalEq).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: primaryColor, fontFamily: 'monospace')),
+                              Text(CurrencyService.format(totalLiab + totalEq), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: primaryColor, fontFamily: 'monospace')),
                             ],
                           ),
                         ],

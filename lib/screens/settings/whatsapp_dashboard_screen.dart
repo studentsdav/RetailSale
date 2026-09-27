@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../controllers/settings/whatsapp_controller.dart';
-import '../../models/auth/permission_service.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/currency/currency_service.dart';
+import '../../models/auth/permission_service.dart';
 
 class WhatsAppDashboardScreen extends StatefulWidget {
   const WhatsAppDashboardScreen({super.key});
@@ -599,10 +600,10 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
             children: [
               _analyticsCard(
                 'Estimated Meta Bill (Month)',
-                '₹ ${NumberFormat('#,##0.00').format(estBill)}',
+                CurrencyService.format(estBill),
                 Colors.orange.shade700,
                 Icons.account_balance_wallet_outlined,
-                'Based on marketing (₹0.86) and utility (₹0.12) rates',
+                'Based on marketing (${CurrencyService.symbol}0.86) and utility (${CurrencyService.symbol}0.12) rates',
               ),
               _analyticsCard(
                 'Total Messages Sent',
@@ -616,7 +617,7 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                 '${roi >= 0 ? '+' : ''}${roi.toStringAsFixed(1)}%',
                 Colors.green.shade700,
                 Icons.trending_up,
-                'Generated ₹${NumberFormat('#,##0.00').format(revenue)} from campaigns',
+                'Generated ${CurrencyService.format(revenue)} from campaigns',
               ),
             ],
           ),
@@ -642,7 +643,7 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                       final item = logs[idx];
                       final date = DateTime.tryParse(item['updated_at'] ?? '') ?? DateTime.now();
                       final formattedDate = DateFormat('dd MMM yyyy HH:mm').format(date);
-                      final costText = item['cost'] != null ? ' | ₹${item['cost']}' : '';
+                      final costText = item['cost'] != null ? ' | ${CurrencyService.symbol}${item['cost']}' : '';
                       return ListTile(
                         leading: _statusBadge(item['delivery_status']),
                         title: Text(item['recipient_phone'] ?? 'N/A'),
@@ -1521,11 +1522,11 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                               min: 0,
                               max: 50000,
                               divisions: 50,
-                              label: '₹ ${_minSpentFilter.round()}',
+                              label: '${CurrencyService.symbol} ${_minSpentFilter.round()}',
                               onChanged: (val) => setState(() => _minSpentFilter = val),
                             ),
                           ),
-                          Text('₹ ${_minSpentFilter.round()}+', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          Text('${CurrencyService.symbol} ${_minSpentFilter.round()}+', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -1608,7 +1609,7 @@ class _WhatsAppDashboardScreenState extends State<WhatsAppDashboardScreen>
                                                 const SizedBox(width: 8),
                                                 Expanded(flex: 3, child: Text(name, style: const TextStyle(fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
                                                 Expanded(flex: 3, child: Text(phone, style: const TextStyle(fontSize: 11))),
-                                                Expanded(flex: 2, child: Text('₹${spent.toStringAsFixed(1)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                                                Expanded(flex: 2, child: Text('${CurrencyService.symbol}${spent.toStringAsFixed(1)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
                                               ],
                                             ),
                                           ),

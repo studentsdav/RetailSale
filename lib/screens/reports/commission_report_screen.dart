@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/sales/sales_controller.dart';
+import '../../core/currency/currency_service.dart';
+import '../../core/utils/country_tax_helper.dart';
 
 class CommissionReportScreen extends StatefulWidget {
   const CommissionReportScreen({super.key});
@@ -26,11 +28,7 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
   Map<String, dynamic> _reportSummary = {};
   List<Map<String, dynamic>> _reportData = [];
 
-  final NumberFormat _inr = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 2,
-  );
+  NumberFormat get _inr => CurrencyService.currencyFormat;
 
   @override
   void initState() {
@@ -215,7 +213,7 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
     return [
       _ChartData('Net Realized', payout, const Color(0xFF10B981)),
       _ChartData('Platform Commission', comm, const Color(0xFF3B82F6)),
-      _ChartData('GST on Commission', gst, const Color(0xFFF59E0B)),
+      _ChartData('${CountryTaxHelper.taxName()} on Commission', gst, const Color(0xFFF59E0B)),
       _ChartData('TCS Collected', tcs, const Color(0xFFEF4444)),
       _ChartData('TDS Deducted', tds, const Color(0xFF8B5CF6)),
     ];
@@ -336,7 +334,7 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
                             color: const Color(0xFFEF4444),
                           ),
                           _kpiCard(
-                            title: 'GST on Commission',
+                            title: '${CountryTaxHelper.taxName()} on Commission',
                             value: _inr.format(totalCommTax),
                             icon: Icons.receipt_outlined,
                             color: const Color(0xFFF59E0B),
@@ -438,7 +436,7 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
                                 const Divider(height: 24),
                                 _summaryRow('(-) Commission Charges', totalComm, color: const Color(0xFFEF4444)),
                                 const SizedBox(height: 12),
-                                _summaryRow('(-) GST on Commission (18%)', totalCommTax, color: const Color(0xFFEF4444)),
+                                _summaryRow('(-) ${CountryTaxHelper.taxName()} on Commission', totalCommTax, color: const Color(0xFFEF4444)),
                                 const SizedBox(height: 12),
                                 _summaryRow('(-) Tax Collected at Source (TCS)', double.tryParse('${_reportSummary['total_tcs'] ?? 0}') ?? 0.0, color: const Color(0xFFEF4444)),
                                 const SizedBox(height: 12),
@@ -471,7 +469,7 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
-                        const Text('Itemized sales with breakdown of all channel commission, GST, TCS and TDS deductions', style: TextStyle(color: Color(0xFF64748B))),
+                        Text('Itemized sales with breakdown of all channel commission, ${CountryTaxHelper.taxName()}, TCS and TDS deductions', style: const TextStyle(color: Color(0xFF64748B))),
                         const SizedBox(height: 16),
                         _reportData.isEmpty
                             ? const Center(
@@ -490,23 +488,23 @@ class _CommissionReportScreenState extends State<CommissionReportScreen> {
                                     scrollDirection: Axis.horizontal,
                                     child: DataTable(
                                       headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                                      columns: const [
-                                        DataColumn(label: Text('Sale No')),
-                                        DataColumn(label: Text('Date')),
-                                        DataColumn(label: Text('Source')),
-                                        DataColumn(label: Text('Applied Rule')),
-                                        DataColumn(label: Text('Customer')),
-                                        DataColumn(label: Text('Taxable Value')),
-                                        DataColumn(label: Text('Net Amount')),
-                                        DataColumn(label: Text('Comm (%)')),
-                                        DataColumn(label: Text('Pct Comm (₹)')),
-                                        DataColumn(label: Text('Fixed Comm (₹)')),
-                                        DataColumn(label: Text('Total Comm (₹)')),
-                                        DataColumn(label: Text('Comm GST')),
-                                        DataColumn(label: Text('TCS')),
-                                        DataColumn(label: Text('TDS')),
-                                        DataColumn(label: Text('Total Ded.')),
-                                        DataColumn(label: Text('Net Payout')),
+                                      columns: [
+                                        const DataColumn(label: Text('Sale No')),
+                                        const DataColumn(label: Text('Date')),
+                                        const DataColumn(label: Text('Source')),
+                                        const DataColumn(label: Text('Applied Rule')),
+                                        const DataColumn(label: Text('Customer')),
+                                        const DataColumn(label: Text('Taxable Value')),
+                                        const DataColumn(label: Text('Net Amount')),
+                                        const DataColumn(label: Text('Comm (%)')),
+                                        DataColumn(label: Text('Pct Comm (${CurrencyService.symbol})')),
+                                        DataColumn(label: Text('Fixed Comm (${CurrencyService.symbol})')),
+                                        DataColumn(label: Text('Total Comm (${CurrencyService.symbol})')),
+                                        DataColumn(label: Text('Comm ${CountryTaxHelper.taxName()}')),
+                                        const DataColumn(label: Text('TCS')),
+                                        const DataColumn(label: Text('TDS')),
+                                        const DataColumn(label: Text('Total Ded.')),
+                                        const DataColumn(label: Text('Net Payout')),
                                       ],
                                       rows: [
                                         ..._reportData.map((row) {

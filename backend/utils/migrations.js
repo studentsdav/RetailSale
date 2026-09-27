@@ -3985,6 +3985,30 @@ COMMIT;
         ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS time_zone VARCHAR(100) DEFAULT 'Asia/Kolkata';
       `);
     }
+  },
+  {
+    version: 106,
+    description: "Add multi-currency, payment modes, template configs, and device printer mappings to system_settings",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE system_settings 
+          ADD COLUMN IF NOT EXISTS enable_salesperson_tagging BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS bill_copies_count INTEGER DEFAULT 1,
+          ADD COLUMN IF NOT EXISTS show_brand_name BOOLEAN DEFAULT TRUE,
+          ADD COLUMN IF NOT EXISTS enable_token_system BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS token_copies_count INTEGER DEFAULT 1,
+          ADD COLUMN IF NOT EXISTS device_printer_mappings JSONB DEFAULT '{}',
+          ADD COLUMN IF NOT EXISTS base_currency_code VARCHAR(20) DEFAULT 'KES',
+          ADD COLUMN IF NOT EXISTS base_currency_symbol VARCHAR(20) DEFAULT 'KSh',
+          ADD COLUMN IF NOT EXISTS currency_symbol_position VARCHAR(20) DEFAULT 'BEFORE',
+          ADD COLUMN IF NOT EXISTS currency_decimals INTEGER DEFAULT 2,
+          ADD COLUMN IF NOT EXISTS payment_modes JSONB DEFAULT '[{"id":"CASH","name":"Cash","enabled":true},{"id":"CARD","name":"Card","enabled":true},{"id":"MPESA_TILL","name":"M-Pesa Till","enabled":true},{"id":"MPESA_PAYBILL","name":"M-Pesa Paybill","enabled":true},{"id":"BANK_TRANSFER","name":"Bank Transfer","enabled":true}]',
+          ADD COLUMN IF NOT EXISTS receipt_template_config JSONB DEFAULT '{}',
+          ADD COLUMN IF NOT EXISTS kot_template_config JSONB DEFAULT '{}';
+        COMMIT;
+      `);
+    }
   }
 ];
 

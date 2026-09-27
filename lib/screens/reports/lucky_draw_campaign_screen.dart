@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 import '../../core/utils/timezone_utils.dart';
 
 class LuckyDrawCampaignScreen extends StatefulWidget {
@@ -52,11 +53,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
   Timer? _drawAnimationTimer;
   Map<String, dynamic>? _winnerResult;
 
-  final NumberFormat _inr = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 2,
-  );
+  NumberFormat get _inr => CurrencyService.currencyFormat;
 
   @override
   void initState() {
@@ -415,10 +412,10 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                       TextField(
                         controller: nextThresholdCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Ticket Purchase Threshold (INR)',
-                          border: OutlineInputBorder(),
-                          prefixText: '₹',
+                        decoration: InputDecoration(
+                          labelText: 'Ticket Purchase Threshold (${CurrencyService.symbol})',
+                          border: const OutlineInputBorder(),
+                          prefixText: '${CurrencyService.symbol} ',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -614,10 +611,10 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                       TextField(
                         controller: nextThresholdCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Ticket Purchase Threshold (INR)',
-                          border: OutlineInputBorder(),
-                          prefixText: '₹',
+                        decoration: InputDecoration(
+                          labelText: 'Ticket Purchase Threshold (${CurrencyService.symbol})',
+                          border: const OutlineInputBorder(),
+                          prefixText: '${CurrencyService.symbol} ',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -755,10 +752,10 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                     TextField(
                       controller: thresholdCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Ticket Purchase Threshold (INR)',
-                        border: OutlineInputBorder(),
-                        prefixText: '₹',
+                      decoration: InputDecoration(
+                        labelText: 'Ticket Purchase Threshold (${CurrencyService.symbol})',
+                        border: const OutlineInputBorder(),
+                        prefixText: '${CurrencyService.symbol} ',
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1174,7 +1171,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
           _detailRow('Start Date', _formatTz(campaign['start_date'])),
           _detailRow('Draw Date', _formatTz(campaign['draw_date'])),
           if (_completedStats != null && campaign['id'] == _selectedCompletedCampaign?['id']) ...[
-            _detailRow('Total Campaign Sales', '₹${_inr.format(double.tryParse((_completedStats!['total_campaign_sales'] ?? _completedStats!['total_revenue'] ?? 0).toString()) ?? 0.0)}'),
+            _detailRow('Total Campaign Sales', _inr.format(double.tryParse((_completedStats!['total_campaign_sales'] ?? _completedStats!['total_revenue'] ?? 0).toString()) ?? 0.0)),
           ],
           
           if (campaign['id'] == _activeCampaign?['id'] && (campaign['status'] == 'ACTIVE' || campaign['status'] == 'PAUSED')) ...[

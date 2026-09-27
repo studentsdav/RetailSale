@@ -12,6 +12,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/purchase_report_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../utils/branding_storage.dart';
 import '../../utils/pdf_report_builder.dart';
 
@@ -622,11 +623,11 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     await PdfReportBuilder.generateAndPrintReport(
       title: 'Purchase Order Report',
       subtitle: 'From: ${DateFormat('dd-MMM-yyyy').format(ctrl.fromDate)}  To: ${DateFormat('dd-MMM-yyyy').format(ctrl.toDate)}',
-      headers: ['PO No', 'Date', 'Supplier', 'Status', 'Total (Rs)'],
+      headers: ['PO No', 'Date', 'Supplier', 'Status', 'Total (${CurrencyService.symbol})'],
       data: ctrl.list.map((po) {
         return [
           po.poNo,

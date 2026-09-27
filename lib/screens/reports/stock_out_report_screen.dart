@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/reports/stock_out_report_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../utils/pdf_report_builder.dart';
 
 class StockOutReportScreen extends StatefulWidget {
@@ -529,11 +530,11 @@ class _StockOutReportScreenState extends State<StockOutReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final isSummary = ctrl.reportType == 'summary';
     final headers = isSummary
-        ? ["Item", "Brand", "Unit", "Total Qty", "Avg Rate", "Net Amount (Rs)"]
-        : ["Item", "Brand", "Unit", "Qty", "Rate", "Net Amount (Rs)", "Department"];
+        ? ["Item", "Brand", "Unit", "Total Qty", "Avg Rate", "Net Amount (${CurrencyService.symbol})"]
+        : ["Item", "Brand", "Unit", "Qty", "Rate", "Net Amount (${CurrencyService.symbol})", "Department"];
 
     await PdfReportBuilder.generateAndPrintReport(
       title: 'Stock Dispatch / Out Report',

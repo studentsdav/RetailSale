@@ -866,8 +866,18 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                icon: const Icon(Icons.point_of_sale, size: 16),
-                label: const Text('Generate Bill / Checkout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                icon: Icon(
+                  (settingsCtrl.settings?.restaurantSettlementMode ?? 'DIRECT') == 'AFTER_BILL_PRINT'
+                      ? Icons.print_outlined
+                      : Icons.point_of_sale,
+                  size: 16,
+                ),
+                label: Text(
+                  (settingsCtrl.settings?.restaurantSettlementMode ?? 'DIRECT') == 'AFTER_BILL_PRINT'
+                      ? 'Print Bill (Hold for Settle)'
+                      : 'Generate Bill / Settle',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
                 onPressed: () {
                   final List<int> kotIds = [];
                   final Map<dynamic, Map<String, dynamic>> grouped = {};

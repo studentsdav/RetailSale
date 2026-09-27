@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
@@ -23,6 +24,9 @@ import '../../controllers/settings/notification_services.dart';
 import '../../utils/order_status_display.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/utils/timezone_utils.dart';
+import '../../core/utils/country_tax_helper.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 
 class RetailerConsoleScreen extends StatefulWidget {
@@ -440,9 +444,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.onSurface,
                       ),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         border: InputBorder.none,
-                        prefixText: 'Rs. ',
+                        prefixText: '${CurrencyService.symbol} ',
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
@@ -477,7 +481,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                               final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
                               if (amt <= 0 || amt > refundAmount + 0.01) {
                                 ScaffoldMessenger.of(dialogCtx).showSnackBar(
-                                  SnackBar(content: Text('Invalid refund amount. Max: Rs. ${refundAmount.toStringAsFixed(2)}')),
+                                  SnackBar(content: Text('Invalid refund amount. Max: ${CurrencyService.symbol} ${refundAmount.toStringAsFixed(2)}')),
                                 );
                                 return;
                               }
@@ -681,10 +685,10 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                       _buildReceiptRow('Customer Phone:', '${txn['customer_phone'] ?? 'N/A'}'),
                       _buildReceiptRow('Address:', '${txn['customer_address'] ?? 'Dehradun'}'),
                       const Divider(),
-                      _buildReceiptRow('Original Amount Paid:', 'Rs. ${netAmt.toStringAsFixed(2)}'),
+                      _buildReceiptRow('Original Amount Paid:', '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}'),
                       _buildReceiptRow(
                         'Refunded Amount:',
-                        'Rs. ${refundAmt.toStringAsFixed(2)}',
+                        '${CurrencyService.symbol} ${refundAmt.toStringAsFixed(2)}',
                         isBold: true,
                         valueColor: Colors.blue.shade900,
                       ),
@@ -940,7 +944,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      'Rs. ${refundVal.toStringAsFixed(2)}',
+                                      '${CurrencyService.symbol} ${refundVal.toStringAsFixed(2)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: theme.colorScheme.primary,
@@ -992,7 +996,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Confirm Gateway Refund'),
         content: Text(
-          'Are you sure you want to process a gateway refund of Rs. ${finalRefundAmt.toStringAsFixed(2)} for Credit Note $cnNo?\n\nThis will transfer the amount to the customer\'s source account.',
+          'Are you sure you want to process a gateway refund of ${CurrencyService.symbol} ${finalRefundAmt.toStringAsFixed(2)} for Credit Note $cnNo?\n\nThis will transfer the amount to the customer\'s source account.',
         ),
         actions: [
           TextButton(
@@ -1123,7 +1127,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           });
       if (res['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('B2B rate updated to Rs. ${rate.toStringAsFixed(2)}')),
+          SnackBar(content: Text('B2B rate updated to ${CurrencyService.symbol} ${rate.toStringAsFixed(2)}')),
         );
         _fetchB2bItems();
       } else {
@@ -1152,15 +1156,15 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Standard Rate: Rs. ${stdRate.toStringAsFixed(2)}',
+            Text('Standard Rate: ${CurrencyService.symbol} ${stdRate.toStringAsFixed(2)}',
                 style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'B2B Price (Rs.)',
-                prefixIcon: Icon(Icons.currency_rupee),
+              decoration: InputDecoration(
+                labelText: 'B2B Price (${CurrencyService.symbol})',
+                prefixIcon: const Icon(Icons.payments_outlined),
                 border: OutlineInputBorder(),
               ),
               autofocus: true,
@@ -1337,7 +1341,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
         builder: (ctx) => AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.currency_rupee, color: Colors.green.shade700),
+              Icon(Icons.payments_outlined, color: Colors.green.shade700),
               const SizedBox(width: 8),
               const Text('Refund to Customer?'),
             ],
@@ -1347,7 +1351,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'This is a prepaid order. The customer paid Rs. ${netAmt.toStringAsFixed(2)} online.',
+                'This is a prepaid order. The customer paid ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} online.',
                 style: const TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 12),
@@ -1708,7 +1712,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Refund Amount: Rs. ${refundAmount.toStringAsFixed(2)}',
+                'Refund Amount: ${CurrencyService.symbol} ${refundAmount.toStringAsFixed(2)}',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green.shade700),
               ),
               const SizedBox(height: 16),
@@ -1891,6 +1895,14 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       record['refund_paid_at']?.toString() ?? record['updated_at']?.toString() ?? '',
     );
 
+    final settings = context.read<SystemSettingsController>().settings;
+    final country = record['billing_country']?.toString() ?? settings?.billingCountry ?? 'India';
+    final taxMode = record['billing_tax_mode']?.toString() ?? settings?.billingTaxMode ?? (CountryTaxHelper.isIndiaCountry(country) ? 'CGST_SGST' : 'VAT');
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(country);
+    final double cgstAmt = isIndia && taxMode == 'CGST_SGST' ? taxAmt / 2 : 0.0;
+    final double sgstAmt = isIndia && taxMode == 'CGST_SGST' ? taxAmt / 2 : 0.0;
+    final double igstAmt = isIndia && taxMode == 'IGST' ? taxAmt : 0.0;
+
     return SaleOrder(
       saleNo: saleNo,
       hasBillNo: hasBillNo,
@@ -1898,8 +1910,8 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
       status: record['status']?.toString() ?? 'COMPLETED',
       orderType: 'B2C',
-      billingCountry: 'India',
-      billingTaxMode: 'CGST_SGST',
+      billingCountry: country,
+      billingTaxMode: taxMode,
       billFormat: _billFormat,
       customerName: record['customer_name']?.toString(),
       customerPhone: record['customer_phone']?.toString(),
@@ -1916,9 +1928,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       manualDiscountValue: 0.0,
       manualDiscountAmount: 0.0,
       taxableAmount: parseNum(record['sub_total'] ?? calculatedSubTotal) - taxAmt,
-      cgstAmount: taxAmt / 2,
-      sgstAmount: taxAmt / 2,
-      igstAmount: 0.0,
+      cgstAmount: cgstAmt,
+      sgstAmount: sgstAmt,
+      igstAmount: igstAmt,
       totalTax: taxAmt,
       taxBreakup: [],
       charges: billingCharges,
@@ -2150,7 +2162,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                           runSpacing: 8,
                           children: [
                             ChoiceChip(
-                              label: Text('Full (Rs. ${maxRefundAmount.toStringAsFixed(2)})'),
+                              label: Text('Full (${CurrencyService.symbol} ${maxRefundAmount.toStringAsFixed(2)})'),
                               selected: refundAmountType == 'FULL',
                               onSelected: (selected) {
                                 if (selected) {
@@ -2162,7 +2174,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                               },
                             ),
                             ChoiceChip(
-                              label: Text('Half (Rs. ${(maxRefundAmount / 2).toStringAsFixed(2)})'),
+                              label: Text('Half (${CurrencyService.symbol} ${(maxRefundAmount / 2).toStringAsFixed(2)})'),
                               selected: refundAmountType == 'HALF',
                               onSelected: (selected) {
                                 if (selected) {
@@ -2195,7 +2207,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                           decoration: InputDecoration(
                             hintText: 'Enter refund amount',
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            prefixText: 'Rs. ',
+                            prefixText: '${CurrencyService.symbol} ',
                             suffixText: refundAmountType != 'CUSTOM' ? '(Selected Option)' : null,
                           ),
                           onChanged: (val) {
@@ -2940,9 +2952,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
 
     final card1 = _buildKpiCard(
       title: 'Total Earnings',
-      value: '₹${totalEarnings.toStringAsFixed(2)}',
+      value: CurrencyService.format(totalEarnings),
       subtitle: '$deliveredCount delivered orders',
-      icon: Icons.currency_rupee,
+      icon: Icons.payments_outlined,
       color: Colors.green,
       theme: theme,
     );
@@ -3142,7 +3154,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            '₹${totalAmount.toStringAsFixed(2)}',
+            CurrencyService.format(totalAmount),
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
           ),
           const SizedBox(height: 20),
@@ -3150,7 +3162,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Cash on Delivery ($cashCount sales)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              Text('₹${cashAmount.toStringAsFixed(2)} (${(cashPercent * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.orange)),
+              Text('${CurrencyService.format(cashAmount)} (${(cashPercent * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.orange)),
             ],
           ),
           const SizedBox(height: 8),
@@ -3168,7 +3180,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Online Payments ($onlineCount sales)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              Text('₹${onlineAmount.toStringAsFixed(2)} (${(onlinePercent * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)),
+              Text('${CurrencyService.format(onlineAmount)} (${(onlinePercent * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)),
             ],
           ),
           const SizedBox(height: 8),
@@ -3482,7 +3494,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                         onSelected: (selected) {
                           if (selected) setState(() => _statusFilter = 'REFUND_PENDING');
                         },
-                        avatar: Icon(Icons.currency_rupee, size: 14,
+                        avatar: Icon(Icons.payments_outlined, size: 14,
                           color: _statusFilter == 'REFUND_PENDING' ? Colors.green.shade800 : Colors.grey.shade600),
                       ),
                     );
@@ -3621,7 +3633,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                                 ),
                                                 Text(
-                                                  'Order #${order['id']} • Rs. ${netAmt.toStringAsFixed(2)} • ${isPrepaid ? "Prepaid" : (isCredit ? "Credit" : "CoD")}',
+                                                  'Order #${order['id']} • ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} • ${isPrepaid ? "Prepaid" : (isCredit ? "Credit" : "CoD")}',
                                                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                                                 ),
                                               ],
@@ -3754,7 +3766,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                               ),
                                               const SizedBox(width: 16),
                                               Text(
-                                                'Rs. ${total.toStringAsFixed(2)}',
+                                                '${CurrencyService.symbol} ${total.toStringAsFixed(2)}',
                                                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
                                               ),
                                             ],
@@ -3903,7 +3915,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                           ),
                           subtitle: Text(
-                            'Order #${order['id']} • Rs. ${netAmt.toStringAsFixed(2)} • ${isCredit ? "Credit" : (paymentMode.toUpperCase() == "EXCHANGE" ? "Exchange" : (isCod ? "CoD" : "Prepaid"))}',
+                            'Order #${order['id']} • ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} • ${isCredit ? "Credit" : (paymentMode.toUpperCase() == "EXCHANGE" ? "Exchange" : (isCod ? "CoD" : "Prepaid"))}',
                             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                           ),
                           trailing: Container(
@@ -4173,7 +4185,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             ),
                                             const SizedBox(width: 16),
                                             Text(
-                                              'Rs. ${total.toStringAsFixed(2)}',
+                                              '${CurrencyService.symbol} ${total.toStringAsFixed(2)}',
                                               style: TextStyle(fontSize: 13, color: Colors.grey.shade500, decoration: TextDecoration.lineThrough),
                                             ),
                                           ],
@@ -4217,7 +4229,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             ),
                                             const SizedBox(width: 16),
                                             Text(
-                                              'Rs. ${total.toStringAsFixed(2)}',
+                                              '${CurrencyService.symbol} ${total.toStringAsFixed(2)}',
                                               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
                                             ),
                                           ],
@@ -4260,7 +4272,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             ),
                                             const SizedBox(width: 16),
                                             Text(
-                                              'Rs. ${total.toStringAsFixed(2)}',
+                                              '${CurrencyService.symbol} ${total.toStringAsFixed(2)}',
                                               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
                                             ),
                                           ],
@@ -4368,7 +4380,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                   ),
                                                 ),
                                                 Text(
-                                                  'Rs. ${diff.abs().toStringAsFixed(2)}',
+                                                  '${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)}',
                                                   style: TextStyle(
                                                     fontSize: 13,
                                                     color: textColor,
@@ -4421,7 +4433,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                 ),
                                               ),
                                               Text(
-                                                'Rs. ${netAmt.toStringAsFixed(2)}',
+                                                '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: isRefunded ? Colors.blue.shade800 : Colors.amber.shade900,
@@ -4611,7 +4623,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                           children: [
                             Text('Phone: ${rider['phone']}'),
                             Text(
-                              'Unpaid Comm: Rs. ${unpaidCommission.toStringAsFixed(2)}',
+                              'Unpaid Comm: ${CurrencyService.symbol} ${unpaidCommission.toStringAsFixed(2)}',
                               style: TextStyle(
                                 fontWeight: unpaidCommission > 0 ? FontWeight.bold : FontWeight.normal,
                                 color: unpaidCommission > 0 ? Colors.red.shade700 : Colors.grey.shade700,
@@ -4955,28 +4967,28 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('SUB TOTAL', style: TextStyle(fontFamily: 'Courier')),
-            Text('Rs. ${subTotal.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
+            Text('${CurrencyService.symbol} ${subTotal.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
           ],
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('GST (18%)', style: TextStyle(fontFamily: 'Courier')),
-            Text('Rs. ${tax.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
+            Text('${CurrencyService.symbol} ${tax.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
           ],
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('DELIVERY', style: TextStyle(fontFamily: 'Courier')),
-            Text('Rs. ${delivery.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
+            Text('${CurrencyService.symbol} ${delivery.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
           ],
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('NET TOTAL', style: TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold)),
-            Text('Rs. ${netTotal.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold)),
+            Text('${CurrencyService.symbol} ${netTotal.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 4),
@@ -5115,7 +5127,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                               ),
                                               Text(
-                                                'Order #${order['id']} • Rs. ${netAmt.toStringAsFixed(2)} • ${order['customer_phone']}',
+                                                'Order #${order['id']} • ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} • ${order['customer_phone']}',
                                                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                                               ),
                                             ],
@@ -5180,7 +5192,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                               ),
                                               const SizedBox(width: 16),
                                               Text(
-                                                'Rs. ${itMap['amount'] ?? ''}',
+                                                '${CurrencyService.symbol} ${itMap['amount'] ?? ''}',
                                                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
                                               ),
                                             ],
@@ -5367,7 +5379,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                 runSpacing: 4,
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  Text('Retail: Rs. ${stdRate.toStringAsFixed(2)}',
+                                  Text('Retail: ${CurrencyService.symbol} ${stdRate.toStringAsFixed(2)}',
                                       style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey.shade600)),
@@ -5382,7 +5394,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             color: Colors.indigo.shade200),
                                       ),
                                       child: Text(
-                                        'B2B: Rs. ${b2bRate.toStringAsFixed(2)}',
+                                        'B2B: ${CurrencyService.symbol} ${b2bRate.toStringAsFixed(2)}',
                                         style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
@@ -5856,8 +5868,8 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                   child: TextField(
                                     controller: _minDeliveryOrderValueCtrl,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    decoration: const InputDecoration(
-                                      prefixText: 'Rs. ',
+                                    decoration: InputDecoration(
+                                      prefixText: '${CurrencyService.symbol} ',
                                       border: OutlineInputBorder(),
                                       isDense: true,
                                     ),
@@ -5868,8 +5880,8 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                   child: TextField(
                                     controller: _deliveryChargeCtrl,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    decoration: const InputDecoration(
-                                      prefixText: 'Rs. ',
+                                    decoration: InputDecoration(
+                                      prefixText: '${CurrencyService.symbol} ',
                                       border: OutlineInputBorder(),
                                       isDense: true,
                                     ),
@@ -5957,9 +5969,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                           Expanded(
                                                             flex: 3,
                                                             child: TextField(
-                                                              decoration: const InputDecoration(
+                                                              decoration: InputDecoration(
                                                                 labelText: 'Charge',
-                                                                prefixText: 'Rs. ',
+                                                                prefixText: '${CurrencyService.symbol} ',
                                                                 isDense: true,
                                                                 border: OutlineInputBorder(),
                                                               ),
@@ -6024,9 +6036,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                   SizedBox(
                                                     width: 130,
                                                     child: TextField(
-                                                      decoration: const InputDecoration(
+                                                      decoration: InputDecoration(
                                                         labelText: 'Charge',
-                                                        prefixText: 'Rs. ',
+                                                        prefixText: '${CurrencyService.symbol} ',
                                                         isDense: true,
                                                         border: OutlineInputBorder(),
                                                       ),
@@ -6187,8 +6199,8 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                                 isDense: true,
                                                                 border: OutlineInputBorder(),
                                                               ),
-                                                              items: const [
-                                                                DropdownMenuItem(value: 'FLAT', child: Text('Flat Rs. Off')),
+                                                              items: [
+                                                                DropdownMenuItem(value: 'FLAT', child: Text('Flat ${CurrencyService.symbol} Off')),
                                                                 DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage % Off')),
                                                               ],
                                                               onChanged: (val) {
@@ -6224,9 +6236,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                         children: [
                                                           Expanded(
                                                             child: TextField(
-                                                              decoration: const InputDecoration(
+                                                              decoration: InputDecoration(
                                                                 labelText: 'Min Purchase',
-                                                                prefixText: 'Rs. ',
+                                                                prefixText: '${CurrencyService.symbol} ',
                                                                 isDense: true,
                                                                 border: OutlineInputBorder(),
                                                               ),
@@ -6240,9 +6252,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                           const SizedBox(width: 12),
                                                           Expanded(
                                                             child: TextField(
-                                                              decoration: const InputDecoration(
+                                                              decoration: InputDecoration(
                                                                 labelText: 'Max Discount',
-                                                                prefixText: 'Rs. ',
+                                                                prefixText: '${CurrencyService.symbol} ',
                                                                 isDense: true,
                                                                 border: OutlineInputBorder(),
                                                               ),
@@ -6335,8 +6347,8 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                               isDense: true,
                                                               border: OutlineInputBorder(),
                                                             ),
-                                                            items: const [
-                                                              DropdownMenuItem(value: 'FLAT', child: Text('Flat Rs. Off')),
+                                                            items: [
+                                                              DropdownMenuItem(value: 'FLAT', child: Text('Flat ${CurrencyService.symbol} Off')),
                                                               DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage % Off')),
                                                             ],
                                                             onChanged: (val) {
@@ -6383,9 +6395,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                         SizedBox(
                                                           width: 140,
                                                           child: TextField(
-                                                            decoration: const InputDecoration(
+                                                            decoration: InputDecoration(
                                                               labelText: 'Min Purchase',
-                                                              prefixText: 'Rs. ',
+                                                              prefixText: '${CurrencyService.symbol} ',
                                                               isDense: true,
                                                               border: OutlineInputBorder(),
                                                             ),
@@ -6400,9 +6412,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                         SizedBox(
                                                           width: 140,
                                                           child: TextField(
-                                                            decoration: const InputDecoration(
+                                                            decoration: InputDecoration(
                                                               labelText: 'Max Discount',
-                                                              prefixText: 'Rs. ',
+                                                              prefixText: '${CurrencyService.symbol} ',
                                                               isDense: true,
                                                               border: OutlineInputBorder(),
                                                             ),
@@ -6536,14 +6548,14 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                   ),
                                 ),
                                 _buildFormRow(
-                                  _commissionType == 'PERCENTAGE' ? 'Commission %' : 'Commission Flat (Rs.)',
+                                  _commissionType == 'PERCENTAGE' ? 'Commission %' : 'Commission Flat (${CurrencyService.symbol})',
                                   SizedBox(
                                     width: 250,
                                     child: TextField(
                                       controller: _commissionValueCtrl,
                                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                       decoration: InputDecoration(
-                                        prefixText: _commissionType == 'PERCENTAGE' ? null : 'Rs. ',
+                                        prefixText: _commissionType == 'PERCENTAGE' ? null : '${CurrencyService.symbol} ',
                                         suffixText: _commissionType == 'PERCENTAGE' ? '%' : null,
                                         border: const OutlineInputBorder(),
                                         isDense: true,
@@ -6806,7 +6818,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                         ),
                                       ),
                                       Text(
-                                        'Rs. ${netAmt.toStringAsFixed(2)}',
+                                        '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
@@ -6897,7 +6909,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                           Text('Refund Method: $refundMethodFormatted', style: const TextStyle(fontSize: 12, color: Colors.black87)),
                                           const SizedBox(height: 2),
                                           Text(
-                                            'Refund Amount: Rs. ${refundAmt.toStringAsFixed(2)}',
+                                            'Refund Amount: ${CurrencyService.symbol} ${refundAmt.toStringAsFixed(2)}',
                                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
                                           ),
                                           const SizedBox(height: 12),

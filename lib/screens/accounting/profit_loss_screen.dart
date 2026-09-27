@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/accounting/financial_reports_controller.dart';
+import '../../core/currency/currency_service.dart';
+import '../../core/utils/country_tax_helper.dart';
 
 class ProfitLossScreen extends StatefulWidget {
   final String? outletId;
@@ -198,7 +200,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('• Gross Sale (Excl. Tax):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
-                    Text('₹${grossSales.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    Text(CurrencyService.format(grossSales), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -206,7 +208,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('• Less Discount Given:', style: TextStyle(fontSize: 12.5, color: Color(0xFFDC2626))),
-                    Text('- ₹${discounts.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                    Text('- ${CurrencyService.format(discounts)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -215,7 +217,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('• Net Revenue (Excl. Tax):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
-                  Text('₹${netRevenue.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                  Text(CurrencyService.format(netRevenue), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -223,7 +225,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('• COGS (Cost of Goods):', style: TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
-                  Text('₹${cogs.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFC2410C))),
+                  Text(CurrencyService.format(cogs), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFC2410C))),
                 ],
               ),
               const SizedBox(height: 4),
@@ -231,7 +233,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('• Less Operating Expenses:', style: TextStyle(fontSize: 12.5, color: Color(0xFF8B5CF6))),
-                  Text('- ₹${expenses.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
+                  Text('- ${CurrencyService.format(expenses)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
                 ],
               ),
               const Divider(height: 16),
@@ -243,7 +245,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                     style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
                   Text(
-                    '₹${displayGrossAmount.toStringAsFixed(2)}',
+                    CurrencyService.format(displayGrossAmount),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -261,7 +263,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                     style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    '₹${displayNetAmount.toStringAsFixed(2)}',
+                    CurrencyService.format(displayNetAmount),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
@@ -278,7 +280,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '📌 Formula Breakdown: Net Profit = Net Revenue (₹${netRevenue.toStringAsFixed(2)}) - COGS (₹${cogs.toStringAsFixed(2)}) - Operating Expenses (₹${expenses.toStringAsFixed(2)})',
+                  '📌 Formula Breakdown: Net Profit = Net Revenue (${CurrencyService.format(netRevenue)}) - COGS (${CurrencyService.format(cogs)}) - Operating Expenses (${CurrencyService.format(expenses)})',
                   style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B), fontStyle: FontStyle.italic),
                 ),
               ),
@@ -400,10 +402,10 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                         ],
                       ),
                       const Divider(height: 20),
-                      _row('Gross Sales Revenue (Excl. GST)', '₹${grossSales.toStringAsFixed(2)}', Colors.black87),
-                      _row('Less: Sales Returns / Discounts', '(₹${salesDiscounts.toStringAsFixed(2)})', Colors.red.shade700),
+                      _row('Gross Sales Revenue (Excl. ${CountryTaxHelper.taxName()})', CurrencyService.format(grossSales), Colors.black87),
+                      _row('Less: Sales Returns / Discounts', '(${CurrencyService.format(salesDiscounts)})', Colors.red.shade700),
                       const Divider(height: 12),
-                      _row('NET SALES REVENUE (A)', '₹${netSalesRevenue.toStringAsFixed(2)}', primaryColor, isBold: true),
+                      _row('NET SALES REVENUE (A)', CurrencyService.format(netSalesRevenue), primaryColor, isBold: true),
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -412,15 +414,15 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                           Text('(COGS = Sold Qty × Purchase Cost Rate)', style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
                         ],
                       ),
-                      _row('  Opening Stock', '₹${openingStock.toStringAsFixed(2)}', Colors.black54),
-                      _row('  Add: Purchases (Net of GST)', '₹${purchases.toStringAsFixed(2)}', Colors.black54),
-                      _row('  Add: Direct Freight & Freight Charges', '₹${directFreight.toStringAsFixed(2)}', Colors.black54),
-                      _row('  Less: Closing Stock (Unsold Inventory)', '(₹${closingStock.toStringAsFixed(2)})', Colors.green.shade700),
-                      _row('TOTAL COST OF GOODS SOLD (B)', '₹${cogs.toStringAsFixed(2)}', Colors.red.shade700, isBold: true),
+                      _row('  Opening Stock', CurrencyService.format(openingStock), Colors.black54),
+                      _row('  Add: Purchases (Net of ${CountryTaxHelper.taxName()})', CurrencyService.format(purchases), Colors.black54),
+                      _row('  Add: Direct Freight & Freight Charges', CurrencyService.format(directFreight), Colors.black54),
+                      _row('  Less: Closing Stock (Unsold Inventory)', '(${CurrencyService.format(closingStock)})', Colors.green.shade700),
+                      _row('TOTAL COST OF GOODS SOLD (B)', CurrencyService.format(cogs), Colors.red.shade700, isBold: true),
                       const Divider(),
                       _row(
                         isGrossProfit ? 'GROSS PROFIT [ A - B ]' : 'GROSS LOSS [ B - A ]',
-                        '₹${displayGross.toStringAsFixed(2)}',
+                        CurrencyService.format(displayGross),
                         isGrossProfit ? Colors.green.shade800 : Colors.red.shade800,
                         isBold: true,
                       ),
@@ -446,27 +448,27 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                       const Divider(height: 20),
                       _row(
                         isGrossProfit ? 'GROSS PROFIT B/F' : 'GROSS LOSS B/F',
-                        isGrossProfit ? '₹${displayGross.toStringAsFixed(2)}' : '(₹${displayGross.toStringAsFixed(2)})',
+                        isGrossProfit ? CurrencyService.format(displayGross) : '(${CurrencyService.format(displayGross)})',
                         isGrossProfit ? Colors.black87 : Colors.red.shade700,
                       ),
-                      _row('Add: Indirect Income (Interest / Discounts Received)', '₹${indirectIncome.toStringAsFixed(2)}', Colors.green.shade700),
-                      _row('TOTAL OPERATING INCOME (C)', '₹${totalOperatingIncome.toStringAsFixed(2)}', primaryColor, isBold: true),
+                      _row('Add: Indirect Income (Interest / Discounts Received)', CurrencyService.format(indirectIncome), Colors.green.shade700),
+                      _row('TOTAL OPERATING INCOME (C)', CurrencyService.format(totalOperatingIncome), primaryColor, isBold: true),
                       const SizedBox(height: 12),
                       const Text('Less: Indirect & Operating Expenses', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.grey)),
                       if (expenseBreakdown.isEmpty)
-                        _row('  General Operating Expenses', '₹${expenses.toStringAsFixed(2)}', Colors.red.shade700)
+                        _row('  General Operating Expenses', CurrencyService.format(expenses), Colors.red.shade700)
                       else
                         ...expenseBreakdown.map((e) => _row(
                               '  ${e['category'] ?? 'Expense'}',
-                              '₹${(double.tryParse((e['amount'] ?? 0).toString()) ?? 0.0).toStringAsFixed(2)}',
+                              CurrencyService.format(double.tryParse((e['amount'] ?? 0).toString()) ?? 0.0),
                               Colors.red.shade700,
                             )),
                       const Divider(height: 12),
-                      _row('TOTAL INDIRECT EXPENSES (D)', '₹${expenses.toStringAsFixed(2)}', Colors.red.shade700, isBold: true),
+                      _row('TOTAL INDIRECT EXPENSES (D)', CurrencyService.format(expenses), Colors.red.shade700, isBold: true),
                       const Divider(),
                       _row(
                         isNetProfit ? 'NET PROFIT BEFORE TAX [ C - D ]' : 'NET LOSS BEFORE TAX [ D - C ]',
-                        '₹${displayNet.toStringAsFixed(2)}',
+                        CurrencyService.format(displayNet),
                         isNetProfit ? Colors.green.shade800 : Colors.red.shade800,
                         isBold: true,
                       ),
@@ -590,7 +592,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                 ],
               ),
               Text(
-                '₹${displayNet.toStringAsFixed(2)}',
+                CurrencyService.format(displayNet),
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: textColor),
               ),
             ],
@@ -600,7 +602,7 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Net Revenue: ₹${netRevenue.toStringAsFixed(0)}  |  COGS: ₹${cogs.toStringAsFixed(0)}  |  Expenses: ₹${expenses.toStringAsFixed(0)}',
+                'Net Revenue: ${CurrencyService.format(netRevenue)}  |  COGS: ${CurrencyService.format(cogs)}  |  Expenses: ${CurrencyService.format(expenses)}',
                 style: TextStyle(fontSize: 11, color: textColor.withAlpha(217), fontWeight: FontWeight.w500),
               ),
               InkWell(

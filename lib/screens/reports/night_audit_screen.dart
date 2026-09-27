@@ -5,6 +5,7 @@ import '../../controllers/settings/property_info_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/currency/currency_service.dart';
 import '../../core/permissions/module_capability.dart';
 
 class NightAuditScreen extends StatefulWidget {
@@ -563,13 +564,13 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                   spacing: 12,
                   runSpacing: 12,
                   children: [
-                    _buildPosDenomField(controller, '2000', '₹2000'),
-                    _buildPosDenomField(controller, '500', '₹500'),
-                    _buildPosDenomField(controller, '200', '₹200'),
-                    _buildPosDenomField(controller, '100', '₹100'),
-                    _buildPosDenomField(controller, '50', '₹50'),
-                    _buildPosDenomField(controller, '20', '₹20'),
-                    _buildPosDenomField(controller, '10', '₹10'),
+                    _buildPosDenomField(controller, '2000', '${CurrencyService.symbol}2000'),
+                    _buildPosDenomField(controller, '500', '${CurrencyService.symbol}500'),
+                    _buildPosDenomField(controller, '200', '${CurrencyService.symbol}200'),
+                    _buildPosDenomField(controller, '100', '${CurrencyService.symbol}100'),
+                    _buildPosDenomField(controller, '50', '${CurrencyService.symbol}50'),
+                    _buildPosDenomField(controller, '20', '${CurrencyService.symbol}20'),
+                    _buildPosDenomField(controller, '10', '${CurrencyService.symbol}10'),
                     _buildPosDenomField(controller, 'coins', 'Coins Total'),
                   ],
                 ),
@@ -593,7 +594,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                         ),
                       ),
                       Text(
-                        '₹${controller.physicalCashTotal.toStringAsFixed(2)}',
+                        CurrencyService.format(controller.physicalCashTotal),
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 19,
@@ -850,7 +851,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                         spacing: 10,
                         runSpacing: 10,
                         children: denoms.keys.map((k) {
-                          final label = k == 'coins' ? 'Coins' : '₹$k';
+                          final label = k == 'coins' ? 'Coins' : '${CurrencyService.symbol}$k';
                           return SizedBox(
                             width: 105,
                             child: TextFormField(
@@ -882,7 +883,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('Physical Cash Total:', style: TextStyle(fontWeight: FontWeight.bold)),
-                            Text('₹${totalCash.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: posOrange)),
+                            Text(CurrencyService.format(totalCash), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: posOrange)),
                           ],
                         ),
                       ),
@@ -1095,7 +1096,7 @@ class _NightAuditScreenState extends State<NightAuditScreen>
               'Audit Date: $auditDate',
               style: const TextStyle(fontWeight: FontWeight.bold, color: posTextDark),
             ),
-            subtitle: Text('Net Sales: ₹${netSales.toStringAsFixed(2)} | By: $userName', style: const TextStyle(fontSize: 13, color: posTextMuted)),
+            subtitle: Text('Net Sales: ${CurrencyService.format(netSales)} | By: $userName', style: const TextStyle(fontSize: 13, color: posTextMuted)),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -1116,12 +1117,12 @@ class _NightAuditScreenState extends State<NightAuditScreen>
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
-                    _buildRowDetail('Gross Sales', '₹${run['gross_sales'] ?? '0.00'}'),
-                    _buildRowDetail('Total Discounts', '₹${run['total_discounts'] ?? '0.00'}'),
-                    _buildRowDetail('Total Taxes', '₹${run['total_taxes'] ?? '0.00'}'),
-                    _buildRowDetail('Expected Cash', '₹${run['cash_expected'] ?? '0.00'}'),
-                    _buildRowDetail('Physical Cash', '₹${run['cash_physical'] ?? '0.00'}'),
-                    _buildRowDetail('Cash Variance', '₹${cashVariance.toStringAsFixed(2)}'),
+                    _buildRowDetail('Gross Sales', CurrencyService.format(double.tryParse('${run['gross_sales'] ?? 0}') ?? 0.0)),
+                    _buildRowDetail('Total Discounts', CurrencyService.format(double.tryParse('${run['total_discounts'] ?? 0}') ?? 0.0)),
+                    _buildRowDetail('Total Taxes', CurrencyService.format(double.tryParse('${run['total_taxes'] ?? 0}') ?? 0.0)),
+                    _buildRowDetail('Expected Cash', CurrencyService.format(double.tryParse('${run['cash_expected'] ?? 0}') ?? 0.0)),
+                    _buildRowDetail('Physical Cash', CurrencyService.format(double.tryParse('${run['cash_physical'] ?? 0}') ?? 0.0)),
+                    _buildRowDetail('Cash Variance', CurrencyService.format(cashVariance)),
                     if (_isRestaurantModule)
                       _buildRowDetail('Open KOT Count', '${run['open_kot_count'] ?? 0}'),
                     _buildRowDetail('Execution Time', '${run['completed_at'] ?? 'N/A'}'),

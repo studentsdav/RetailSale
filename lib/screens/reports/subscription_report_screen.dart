@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/sales/sales_controller.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 import '../../utils/branding_storage.dart';
 import '../../widgets/sale_bill_preview_dialog.dart';
 
@@ -174,8 +175,8 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
       runSpacing: 12,
       children: [
         card('Active Subscriptions', activeCount.toString(), const Color(0xFF15803D), Icons.subscriptions),
-        card('Total Prepaid', 'Rs. ${prepaidSum.toStringAsFixed(2)}', const Color(0xFF2563EB), Icons.payments),
-        card('Remaining Balance', 'Rs. ${remainingSum.toStringAsFixed(2)}', const Color(0xFFD97706), Icons.account_balance_wallet),
+        card('Total Prepaid', CurrencyService.format(prepaidSum), const Color(0xFF2563EB), Icons.payments),
+        card('Remaining Balance', CurrencyService.format(remainingSum), const Color(0xFFD97706), Icons.account_balance_wallet),
         card('Delivered Qty', consumedQtySum.toStringAsFixed(consumedQtySum % 1 == 0 ? 0 : 2), const Color(0xFF7C3AED), Icons.local_shipping),
       ],
     );
@@ -528,7 +529,7 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
 
   Future<void> _exportToPdf() async {
     final pdf = pw.Document();
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final nowStr = DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');
 
     final branding = await BrandingStorage.getCurrentBrandingContext();

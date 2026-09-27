@@ -409,4 +409,84 @@ class LocalPreferences {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_outletMaxDiscountKey, value);
   }
+
+  // --- REGIONAL & CURRENCY PERSISTENCE ---
+  static const _billingCountryKey = 'billing_country_pref';
+  static const _baseCurrencySymbolKey = 'base_currency_symbol_pref';
+  static const _baseCurrencyCodeKey = 'base_currency_code_pref';
+  static const _currencySymbolPositionKey = 'currency_symbol_position_pref';
+  static const _currencyDecimalsKey = 'currency_decimals_pref';
+  static const _billingTaxModeKey = 'billing_tax_mode_pref';
+
+  static Future<String?> getBillingCountry() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_billingCountryKey);
+  }
+
+  static Future<void> setBillingCountry(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_billingCountryKey, value);
+  }
+
+  static Future<String?> getBaseCurrencySymbol() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_baseCurrencySymbolKey);
+  }
+
+  static Future<void> setBaseCurrencySymbol(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_baseCurrencySymbolKey, value);
+  }
+
+  static Future<String?> getBaseCurrencyCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_baseCurrencyCodeKey);
+  }
+
+  static Future<void> setBaseCurrencyCode(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_baseCurrencyCodeKey, value);
+  }
+
+  static Future<String?> getCurrencySymbolPosition() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_currencySymbolPositionKey);
+  }
+
+  static Future<void> setCurrencySymbolPosition(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_currencySymbolPositionKey, value);
+  }
+
+  static Future<int?> getCurrencyDecimals() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_currencyDecimalsKey);
+  }
+
+  static Future<void> setCurrencyDecimals(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_currencyDecimalsKey, value);
+  }
+
+  static const _restaurantSettlementModeKey = 'restaurant_settlement_mode';
+
+  static Future<String> getRestaurantSettlementMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_restaurantSettlementModeKey) ?? 'DIRECT';
+  }
+
+  static Future<void> setRestaurantSettlementMode(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_restaurantSettlementModeKey, value);
+  }
+
+  static Future<String?> getBillingTaxMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_billingTaxModeKey);
+  }
+
+  static Future<void> setBillingTaxMode(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_billingTaxModeKey, value);
+  }
 }

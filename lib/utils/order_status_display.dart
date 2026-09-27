@@ -80,7 +80,7 @@ class OrderStatusDisplay {
       return const OrderStatusDisplay(
         label: 'REFUNDED',
         color: Colors.blue,
-        icon: Icons.currency_rupee,
+        icon: Icons.paid_outlined,
       );
     }
     if (isExchangeReplacement && status == 'DELIVERED') {

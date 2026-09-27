@@ -173,6 +173,7 @@ exports.createItem = async (req, res) => {
             mrp,
             tax_type,
             tax_percent,
+            tax_group_id,
             discount_applicable,
             scheme_applicable,
             opening_balance,
@@ -227,6 +228,7 @@ exports.createItem = async (req, res) => {
             mrp: mrp || 0,
             tax_type: tax_type || 'GST',
             tax_percent: tax_percent || 0,
+            tax_group_id: tax_group_id || null,
             discount_applicable: discount_applicable ?? true,
             scheme_applicable: scheme_applicable ?? true,
             opening_balance,
@@ -463,6 +465,18 @@ exports.getItems = async (req, res) => {
                         {
                             model: req.propertyDb.models.attributes,
                             as: 'attribute',
+                            required: false
+                        }
+                    ]
+                },
+                {
+                    model: req.propertyDb.models.tax_groups,
+                    as: 'tax_group',
+                    required: false,
+                    include: [
+                        {
+                            model: req.propertyDb.models.tax_group_components,
+                            as: 'components',
                             required: false
                         }
                     ]

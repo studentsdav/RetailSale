@@ -19,6 +19,7 @@ import '../../controllers/restaurant/restaurant_controller.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/config/app_brand.dart';
+import '../../core/currency/currency_service.dart';
 import '../../core/printing/device_printer_routing.dart';
 import '../../core/settings/local_preferences.dart';
 
@@ -1638,7 +1639,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                                                 children: [
                                                                   if (hasPromo) ...[
                                                                     Text(
-                                                                      'Rs. ${rate.toStringAsFixed(2)}',
+                                                                      CurrencyService.format(rate),
                                                                       style: const TextStyle(
                                                                         color: Colors.grey,
                                                                         decoration: TextDecoration.lineThrough,
@@ -1647,7 +1648,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                                                     ),
                                                                     const SizedBox(width: 3),
                                                                     Text(
-                                                                      'Rs. ${promoPrice.toStringAsFixed(2)}',
+                                                                      CurrencyService.format(promoPrice),
                                                                       style: const TextStyle(
                                                                         color: Color(0xFFD67D25),
                                                                         fontWeight: FontWeight.w900,
@@ -1656,7 +1657,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                                                     ),
                                                                   ] else ...[
                                                                     Text(
-                                                                      'Rs. ${rate.toStringAsFixed(2)}',
+                                                                      CurrencyService.format(rate),
                                                                       style: const TextStyle(
                                                                         color: Color(0xFFD67D25),
                                                                         fontWeight: FontWeight.w900,
@@ -1839,7 +1840,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                     style: const TextStyle(color: Colors.white70, fontSize: 11),
                                   ),
                                   Text(
-                                    widget.isNcOrder ? 'Rs. 0.00 (NC)' : 'Rs. ${cartTotal.toStringAsFixed(2)}',
+                                    widget.isNcOrder ? '${CurrencyService.format(0)} (NC)' : CurrencyService.format(cartTotal),
                                     style: const TextStyle(color: Color(0xFFFF7A1A), fontSize: 15, fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -2045,12 +2046,12 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                             Row(
                               children: [
                                 Text(
-                                  'Rs. ${rate.toStringAsFixed(2)} x ${qty % 1 == 0 ? qty.toInt() : qty.toStringAsFixed(1)}',
+                                  '${CurrencyService.format(rate)} x ${qty % 1 == 0 ? qty.toInt() : qty.toStringAsFixed(1)}',
                                   style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w500),
                                 ),
                                 const Spacer(),
                                 Text(
-                                  'Rs. ${total.toStringAsFixed(2)}',
+                                  CurrencyService.format(total),
                                   style: const TextStyle(color: Color(0xFFD67D25), fontSize: 13, fontWeight: FontWeight.w800),
                                 ),
                               ],
@@ -2226,7 +2227,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                 fit: BoxFit.scaleDown,
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  widget.isNcOrder ? 'Rs. 0.00 (NC Complimentary)' : 'Rs. ${totalAmount.toStringAsFixed(2)}',
+                                  widget.isNcOrder ? '${CurrencyService.format(0)} (NC Complimentary)' : CurrencyService.format(totalAmount),
                                   style: TextStyle(
                                     color: widget.isNcOrder ? Colors.purple.shade700 : const Color(0xFFD67D25),
                                     fontSize: 16,
@@ -2642,6 +2643,24 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     final pdf = pw.Document();
     final String brandName = AppBrand.companyName.trim();
     
+    final config = settingsCtrl.settings?.kotTemplateConfig ?? {};
+    final String headerTitle = (config['header_title']?.toString() ?? 'KITCHEN ORDER TICKET').trim();
+    final String footerNote = (config['footer_note']?.toString() ?? '').trim();
+    final String fontSizeMode = (config['font_size']?.toString() ?? 'MEDIUM').trim();
+
+    final bool showBrand = config['show_brand'] != false;
+    final bool showStation = config['show_station'] != false;
+    final bool showTable = config['show_table'] != false;
+    final bool showGuests = config['show_guests'] != false;
+    final bool showWaiter = config['show_waiter'] != false;
+    final bool showTimestamp = config['show_timestamp'] != false;
+    final bool showNotes = config['show_notes'] != false;
+    final bool showCutLine = config['show_cut_line'] != false;
+
+    final double fontScale = fontSizeMode == 'LARGE'
+        ? 1.2
+        : (fontSizeMode == 'SMALL' ? 0.85 : 1.0);
+
     final String rawTableName = widget.isTakeaway ? 'Takeaway' : _displayTableName;
     final String tableName = (rawTableName.startsWith('T-') || rawTableName == 'Takeaway') ? rawTableName : 'T-$rawTableName';
     final String floorName = widget.isTakeaway ? '' : (widget.table['floor_name']?.toString() ?? 'Main Floor');
@@ -2666,42 +2685,45 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              if (_isValidBrand(brandName))
+              if (showBrand && _isValidBrand(brandName))
                 pw.Center(
                   child: pw.Text(
                     brandName.toUpperCase(),
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13 * fontScale),
                   ),
                 ),
               pw.SizedBox(height: 2),
-              pw.Center(
-                child: pw.Text(
-                  'KITCHEN ORDER TICKET',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+              if (headerTitle.isNotEmpty)
+                pw.Center(
+                  child: pw.Text(
+                    headerTitle.toUpperCase(),
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11 * fontScale),
+                  ),
                 ),
-              ),
               pw.SizedBox(height: 3),
 
               // Station Location Box Header
-              pw.Center(
-                child: pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.black, width: 1.5),
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                  ),
-                  child: pw.Text(
-                    'STATION LOCATION: ${stationLabel.toUpperCase()}',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+              if (showStation) ...[
+                pw.Center(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.black, width: 1.5),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                    ),
+                    child: pw.Text(
+                      'STATION LOCATION: ${stationLabel.toUpperCase()}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11 * fontScale),
+                    ),
                   ),
                 ),
-              ),
-              pw.SizedBox(height: 3),
+                pw.SizedBox(height: 3),
+              ],
 
               pw.Center(
                 child: pw.Text(
                   widget.isNcOrder ? '*** NON-CHARGEABLE (NC) KOT ***' : '*** K O T ***',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11 * fontScale),
                 ),
               ),
               pw.SizedBox(height: 6),
@@ -2711,26 +2733,33 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('TABLE: $tableName', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
-                  pw.Text('GUESTS: $guestCount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  if (showTable)
+                    pw.Text('TABLE: $tableName', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12 * fontScale))
+                  else
+                    pw.SizedBox(),
+                  if (showGuests)
+                    pw.Text('GUESTS: $guestCount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11 * fontScale)),
                 ],
               ),
               // Floor & KOT No Row
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  if (floorName.isNotEmpty) pw.Text('Floor: $floorName', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('KOT: $kotNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                  if (floorName.isNotEmpty) pw.Text('Floor: $floorName', style: pw.TextStyle(fontSize: 10 * fontScale)),
+                  pw.Text('KOT: $kotNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10 * fontScale)),
                 ],
               ),
-              pw.Text('Time: $nowStr', style: const pw.TextStyle(fontSize: 10)),
+              if (showWaiter && _selectedCaptain != 'N/A' && _selectedCaptain.isNotEmpty)
+                pw.Text('Waiter / Captain: $_selectedCaptain', style: pw.TextStyle(fontSize: 10 * fontScale, fontWeight: pw.FontWeight.bold)),
+              if (showTimestamp)
+                pw.Text('Time: $nowStr', style: pw.TextStyle(fontSize: 10 * fontScale)),
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
 
               // QTY ITEM DESCRIPTION Header
               pw.Row(
                 children: [
-                  pw.SizedBox(width: 36, child: pw.Text('QTY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-                  pw.Expanded(child: pw.Text('ITEM DESCRIPTION', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                  pw.SizedBox(width: 36, child: pw.Text('QTY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10 * fontScale))),
+                  pw.Expanded(child: pw.Text('ITEM DESCRIPTION', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10 * fontScale))),
                 ],
               ),
               pw.Divider(thickness: 0.8),
@@ -2758,13 +2787,13 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                             width: 36,
                             child: pw.Text(
                               '[ $qtyStr ]',
-                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12 * fontScale),
                             ),
                           ),
                           pw.Expanded(
                             child: pw.Text(
                               displayName,
-                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11 * fontScale),
                             ),
                           ),
                         ],
@@ -2772,17 +2801,17 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                       if (showBrandSubline)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(left: 36, top: 1),
-                          child: pw.Text('Brand: $itemBrand', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                          child: pw.Text('Brand: $itemBrand', style: pw.TextStyle(fontSize: 9 * fontScale, fontWeight: pw.FontWeight.bold)),
                         ),
-                      if (remark.isNotEmpty)
+                      if (showNotes && remark.isNotEmpty)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(left: 36, top: 1),
-                          child: pw.Text('* Note: $remark', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic)),
+                          child: pw.Text('* Note: $remark', style: pw.TextStyle(fontSize: 9 * fontScale, fontStyle: pw.FontStyle.italic)),
                         ),
                       if (mods.isNotEmpty)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(left: 36, top: 1),
-                          child: pw.Text('* Mods: ${mods.join(", ")}', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic)),
+                          child: pw.Text('* Mods: ${mods.join(", ")}', style: pw.TextStyle(fontSize: 9 * fontScale, fontStyle: pw.FontStyle.italic)),
                         ),
                     ],
                   ),
@@ -2794,32 +2823,40 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Total Qty:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  pw.Text('Total Qty:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11 * fontScale)),
                   pw.Text((totalQty % 1 == 0) ? totalQty.toInt().toString() : totalQty.toStringAsFixed(1),
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12 * fontScale)),
                 ],
               ),
+              if (footerNote.isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Center(
+                  child: pw.Text(footerNote, style: pw.TextStyle(fontSize: 8.5 * fontScale, fontStyle: pw.FontStyle.italic)),
+                ),
+              ],
               pw.SizedBox(height: 8),
 
               // Cut Here Indicator Line
-              pw.Row(
-                children: [
-                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                  pw.SizedBox(width: 4),
-                  pw.Expanded(
-                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-                  ),
-                  pw.SizedBox(width: 4),
-                  pw.Text('CUT HERE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                  pw.SizedBox(width: 4),
-                  pw.Expanded(
-                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-                  ),
-                  pw.SizedBox(width: 4),
-                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                ],
-              ),
-              pw.SizedBox(height: 6),
+              if (showCutLine) ...[
+                pw.Row(
+                  children: [
+                    pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11 * fontScale)),
+                    pw.SizedBox(width: 4),
+                    pw.Expanded(
+                      child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                    ),
+                    pw.SizedBox(width: 4),
+                    pw.Text('CUT HERE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8 * fontScale)),
+                    pw.SizedBox(width: 4),
+                    pw.Expanded(
+                      child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                    ),
+                    pw.SizedBox(width: 4),
+                    pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11 * fontScale)),
+                  ],
+                ),
+                pw.SizedBox(height: 6),
+              ],
             ],
           );
         },

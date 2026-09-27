@@ -1,4 +1,5 @@
 import 'attribute_model.dart';
+import 'tax_group_model.dart';
 
 class Item {
   final int id;
@@ -16,6 +17,8 @@ class Item {
   final double retailSalePrice;
   final String taxType;
   final double taxPercent;
+  final String? taxGroupId;
+  final TaxGroup? taxGroup;
   final bool discountApplicable;
   final bool schemeApplicable;
   final double openingBalance;
@@ -47,6 +50,8 @@ class Item {
     required this.retailSalePrice,
     required this.taxType,
     required this.taxPercent,
+    this.taxGroupId,
+    this.taxGroup,
     required this.discountApplicable,
     required this.schemeApplicable,
     required this.openingBalance,
@@ -88,6 +93,10 @@ class Item {
           double.tryParse(json['retail_sale_price'].toString()) ?? 0.0,
       taxType: json['tax_type'] ?? 'GST',
       taxPercent: double.tryParse(json['tax_percent'].toString()) ?? 0.0,
+      taxGroupId: json['tax_group_id']?.toString(),
+      taxGroup: json['tax_group'] != null
+          ? TaxGroup.fromJson(Map<String, dynamic>.from(json['tax_group']))
+          : null,
       discountApplicable: json['discount_applicable'] ?? true,
       schemeApplicable: json['scheme_applicable'] ?? true,
       openingBalance: double.tryParse(json['opening_balance'].toString()) ?? 0,
@@ -122,6 +131,7 @@ class Item {
       'retail_sale_price': retailSalePrice,
       'tax_type': taxType,
       'tax_percent': taxPercent,
+      'tax_group_id': taxGroupId,
       'discount_applicable': discountApplicable,
       'scheme_applicable': schemeApplicable,
       'opening_balance': openingBalance,

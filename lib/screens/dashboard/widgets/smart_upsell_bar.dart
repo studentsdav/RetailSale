@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/endpoints.dart';
+import '../../../../core/currency/currency_service.dart';
 
 class SmartUpsellBar extends StatefulWidget {
   final List<dynamic> cartItems;
@@ -145,7 +146,7 @@ class _SmartUpsellBarState extends State<SmartUpsellBar> {
               itemBuilder: (context, index) {
                 final rec = _recommendations[index];
                 final name = rec['item_name'] ?? 'Item';
-                final rate = (rec['rate'] ?? 0).toString();
+                final rate = double.tryParse((rec['rate'] ?? 0).toString()) ?? 0.0;
                 final reason = rec['reason'] ?? 'Suggested';
 
                 return Container(
@@ -169,7 +170,7 @@ class _SmartUpsellBarState extends State<SmartUpsellBar> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            "₹$rate • $reason",
+                            "${CurrencyService.format(rate)} • $reason",
                             style: const TextStyle(color: Colors.grey, fontSize: 10),
                           ),
                         ],

@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/common/property_info_model.dart';
 import '../../utils/branding_storage.dart';
+import 'package:provider/provider.dart';
 
 class PropertyInfoScreen extends StatefulWidget {
   final int outletid;
@@ -19,6 +22,44 @@ class PropertyInfoScreen extends StatefulWidget {
 
 class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
   final _formKey = GlobalKey<FormState>();
+
+  String get _billingCountry {
+    try {
+      final s = context.read<SystemSettingsController>().settings;
+      if (s != null && s.billingCountry.trim().isNotEmpty) {
+        return s.billingCountry.trim();
+      }
+    } catch (_) {}
+    return 'India';
+  }
+
+  bool get _isIndia {
+    final c = _billingCountry.toLowerCase();
+    if (c == 'usa' || c == 'united states' || c == 'kenya' || c == 'uk' || c == 'united kingdom' || c == 'uae') {
+      return false;
+    }
+    if (c == 'india') return true;
+    return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR';
+  }
+
+  String get _taxIdLabel {
+    final c = _billingCountry.toLowerCase();
+    if (c == 'usa' || c == 'united states') return 'Tax ID / EIN (Employer ID)';
+    if (c == 'kenya') return 'KRA PIN / VAT Number';
+    if (c == 'uk' || c == 'united kingdom') return 'VAT Registration Number (VRN)';
+    if (c == 'uae') return 'Tax Registration Number (TRN)';
+    if (c == 'india' || _isIndia) return 'GST Identification Number (GSTIN)';
+    return 'Tax Identification Number';
+  }
+
+  String get _businessRegLabel {
+    final c = _billingCountry.toLowerCase();
+    if (c == 'usa' || c == 'united states') return 'State Tax ID / License No';
+    if (c == 'kenya') return 'Business Registration No';
+    if (c == 'uk' || c == 'united kingdom') return 'Company Registration No (CRN)';
+    if (c == 'uae') return 'Trade License Number';
+    return 'PAN Number';
+  }
 
   late final PropertyInfoController ctrl;
   final _propertyName = TextEditingController();
@@ -267,15 +308,16 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                     title: 'Compliance & Tax',
                     icon: Icons.receipt_long_rounded,
                     children: [
-                      _field(_gstNo, 'GST Identification Number',
+                      _field(_gstNo, _taxIdLabel,
                           required: false,
                           prefixIcon: Icons.account_balance),
-                      _field(_panNo, 'PAN Number',
+                      _field(_panNo, _businessRegLabel,
                           required: false,
                           prefixIcon: Icons.credit_card),
-                      _field(_fssaiNo, 'FSSAI License (Optional)',
-                          required: false, prefixIcon: Icons.verified_user),
-                      _field(_drugLicenseNo, 'Drug License Number (Optional)',
+                      if (_isIndia)
+                        _field(_fssaiNo, 'FSSAI License (Optional)',
+                            required: false, prefixIcon: Icons.verified_user),
+                      _field(_drugLicenseNo, 'Drug / Trade License (Optional)',
                           required: false, prefixIcon: Icons.medical_services_outlined),
                     ],
                   ),

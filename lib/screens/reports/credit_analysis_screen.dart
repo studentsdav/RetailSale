@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../controllers/reports/finance_hub_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/reports/finance_models.dart';
 
 class CreditAnalysisScreen extends StatefulWidget {
@@ -23,11 +24,7 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
   bool _isLoading = false;
   bool _showMonthlyCollection = true;
 
-  final NumberFormat _inr = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: 'Rs. ',
-    decimalDigits: 2,
-  );
+  NumberFormat get _inr => CurrencyService.currencyFormat;
 
   @override
   void initState() {
@@ -391,7 +388,7 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
                                               majorGridLines: MajorGridLines(width: 0),
                                             ),
                                             primaryYAxis: NumericAxis(
-                                              numberFormat: NumberFormat.compactSimpleCurrency(locale: 'en_IN'),
+                                              numberFormat: CurrencyService.compactCurrencyFormat,
                                               majorGridLines: const MajorGridLines(width: 0.5, dashArray: [4, 4]),
                                             ),
                                             tooltipBehavior: TooltipBehavior(enable: true),
@@ -533,7 +530,7 @@ class _CreditAnalysisScreenState extends State<CreditAnalysisScreen> {
                                     majorGridLines: MajorGridLines(width: 0),
                                   ),
                                   primaryYAxis: NumericAxis(
-                                    numberFormat: NumberFormat.compactSimpleCurrency(locale: 'en_IN'),
+                                    numberFormat: CurrencyService.compactCurrencyFormat,
                                     majorGridLines: const MajorGridLines(width: 0.5, dashArray: [4, 4]),
                                   ),
                                   tooltipBehavior: TooltipBehavior(enable: true),

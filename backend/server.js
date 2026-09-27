@@ -206,9 +206,23 @@ if (!fs.existsSync(licensePath)) {
                 ADD COLUMN IF NOT EXISTS sub_delivery_charge_amount NUMERIC(12,2) DEFAULT 0.0,
                 ADD COLUMN IF NOT EXISTS sub_delivery_charge_type VARCHAR(50) DEFAULT 'FLAT',
                 ADD COLUMN IF NOT EXISTS sub_delivery_charge_gst_percent NUMERIC(12,2) DEFAULT 0.0,
-                ADD COLUMN IF NOT EXISTS sub_delivery_free_above NUMERIC(12,2) DEFAULT 0.0;
+                ADD COLUMN IF NOT EXISTS sub_delivery_free_above NUMERIC(12,2) DEFAULT 0.0,
+                ADD COLUMN IF NOT EXISTS enable_salesperson_tagging BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS bill_copies_count INTEGER DEFAULT 1,
+                ADD COLUMN IF NOT EXISTS show_brand_name BOOLEAN DEFAULT TRUE,
+                ADD COLUMN IF NOT EXISTS enable_token_system BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS token_copies_count INTEGER DEFAULT 1,
+                ADD COLUMN IF NOT EXISTS device_printer_mappings JSONB DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS base_currency_code VARCHAR(20) DEFAULT 'KES',
+                ADD COLUMN IF NOT EXISTS base_currency_symbol VARCHAR(20) DEFAULT 'KSh',
+                ADD COLUMN IF NOT EXISTS currency_symbol_position VARCHAR(20) DEFAULT 'BEFORE',
+                ADD COLUMN IF NOT EXISTS currency_decimals INTEGER DEFAULT 2,
+                ADD COLUMN IF NOT EXISTS receipt_template_config JSONB DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS a4_template_config JSONB DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS kot_template_config JSONB DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS token_template_config JSONB DEFAULT '{}';
             `);
-            console.log('✅ Verified/added merchant_upi_id and subscription delivery charge columns in system_settings table');
+            console.log('✅ Verified/added currency, payment_modes, template configs, merchant_upi_id and subscription delivery charge columns in system_settings table');
         } catch (colErr) {
             console.warn('⚠️ Failed to dynamically alter table system_settings:', colErr.message);
         }
@@ -463,6 +477,8 @@ app.use('/api/whatsapp', require('./routes/whatsapp.routes'));
 app.use('/api/hrms', require('./routes/hrms.routes'));
 app.use('/api/restaurant', require('./routes/restaurant.routes'));
 app.use('/api/settings/smtp', require('./routes/restaurant.routes'));
+app.use('/api/settings/tax-groups', require('./routes/taxGroup.routes'));
+app.use('/api/inventory/tax-groups', require('./routes/taxGroup.routes'));
 app.use('/api/v1/ai', require('./routes/ai_assist.routes'));
 app.use('/api/v1/intelligence', require('./routes/intelligence.routes'));
 app.use('/api/v1/operations', require('./routes/operations.routes'));

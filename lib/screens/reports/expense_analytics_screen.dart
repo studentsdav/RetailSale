@@ -1,3 +1,4 @@
+import '../../core/utils/country_tax_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -5,6 +6,7 @@ import '../../controllers/reports/finance_hub_controller.dart';
 import '../../models/reports/finance_models.dart';
 import '../../models/inventory/supplier_model.dart';
 import '../../core/api/api_client.dart';
+import '../../core/currency/currency_service.dart';
 
 class ExpenseAnalyticsScreen extends StatefulWidget {
   final FinanceHubController ctrl;
@@ -70,7 +72,7 @@ class _ExpenseAnalyticsScreenState extends State<ExpenseAnalyticsScreen> {
   }
 
   String _fmt(double val) {
-    return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2).format(val);
+    return CurrencyService.format(val);
   }
 
   String _dateStr(DateTime date) {
@@ -248,7 +250,7 @@ class _ExpenseAnalyticsScreenState extends State<ExpenseAnalyticsScreen> {
             color: Colors.indigo,
           ),
           _buildMetricCard(
-            title: 'Input Tax Credit (GST)',
+            title: 'Input Tax Credit (${CountryTaxHelper.taxName()})',
             value: _fmt(data.totalInputTaxPaid),
             icon: Icons.receipt_long_outlined,
             color: Colors.teal,
@@ -262,7 +264,7 @@ class _ExpenseAnalyticsScreenState extends State<ExpenseAnalyticsScreen> {
           _buildMetricCard(
             title: 'TCS Collected',
             value: _fmt(data.totalTcsCollected),
-            icon: Icons.currency_rupee_outlined,
+            icon: Icons.account_balance_outlined,
             color: Colors.deepOrange,
           ),
         ],
@@ -546,9 +548,9 @@ class _ExpenseAnalyticsScreenState extends State<ExpenseAnalyticsScreen> {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                      columns: const [
+                      columns: [
                         DataColumn(label: Text('Vendor Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Total Spend (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('Total Spend (${CurrencyService.symbol})', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
                       rows: list.map((item) {
                         final name = item['vendor']?.toString() ?? 'Direct Cash / Unknown';
@@ -603,16 +605,16 @@ class _ExpenseAnalyticsScreenState extends State<ExpenseAnalyticsScreen> {
                     controller: _tableScrollController,
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                      columns: const [
+                      columns: [
                         DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Vendor', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Method', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Ref No', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Base Amount (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('Tax (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('Deduction (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('Net Total (₹)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('Base Amount (${CurrencyService.symbol})', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('${CountryTaxHelper.taxName()} (${CurrencyService.symbol})', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('Deduction (${CurrencyService.symbol})', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('Net Total (${CurrencyService.symbol})', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                         DataColumn(label: Text('Remarks / Notes', style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
                       rows: list.map((item) {

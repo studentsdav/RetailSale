@@ -1,27 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:retailpos/controllers/security/recovery_controller.dart';
 import 'package:provider/provider.dart';
 
 import 'controllers/security/user_controller.dart';
+import 'controllers/security/recovery_controller.dart';
 import 'controllers/settings/notification_services.dart';
 import 'controllers/settings/app_branding_controller.dart';
 import 'controllers/settings/system_settings_controller.dart';
 import 'controllers/settings/theme_controller.dart';
 import 'controllers/settings/ui_preferences_controller.dart';
-import 'controllers/settings/theme_controller.dart';
-import 'controllers/settings/ui_preferences_controller.dart';
-import 'controllers/settings/app_branding_controller.dart';
-import 'controllers/settings/system_settings_controller.dart';
-import 'controllers/settings/theme_controller.dart';
-import 'controllers/settings/ui_preferences_controller.dart';
-import 'controllers/settings/app_branding_controller.dart';
-import 'controllers/security/user_controller.dart';
-import 'controllers/security/recovery_controller.dart';
 import 'controllers/inventory/bom_controller.dart';
 import 'controllers/restaurant/restaurant_controller.dart';
 import 'controllers/reports/night_audit_controller.dart';
+import 'controllers/settings/property_info_controller.dart';
 import 'core/config/app_config.dart';
-import 'core/config/app_brand.dart';
 import 'core/config/date_time_service.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/splash_screen.dart';
@@ -73,6 +64,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => BOMController()),
         ChangeNotifierProvider(create: (_) => RestaurantController()),
         ChangeNotifierProvider(create: (_) => NightAuditController()),
+        ChangeNotifierProvider(create: (_) => PropertyInfoController()..load()),
       ],
       child: const MyApp(),
     ),
@@ -360,10 +352,10 @@ class MyApp extends StatelessWidget {
             const SingleActivator(LogicalKeyboardKey.keyA, alt: true): () {
               globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const BrandAnalysisScreen()));
             },
-            const SingleActivator(LogicalKeyboardKey.keyS, alt: true): () {
+            const SingleActivator(LogicalKeyboardKey.keyU, alt: true): () {
               globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const SourceAnalysisScreen()));
             },
-            const SingleActivator(LogicalKeyboardKey.keyP, alt: true): () {
+            const SingleActivator(LogicalKeyboardKey.keyM, alt: true): () {
               globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const PaymentAnalysisScreen()));
             },
             const SingleActivator(LogicalKeyboardKey.keyK, alt: true): () {

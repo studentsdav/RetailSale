@@ -18,6 +18,7 @@ import '../../core/config/date_time_service.dart';
 import '../../core/utils/timezone_utils.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/settings/local_preferences.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/auth/permission_service.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../models/inventory/settings/system_settings_model.dart';
@@ -31,6 +32,9 @@ import 'bill_value_promo_config_screen.dart';
 import 'property_info_screen.dart';
 import 'outlet_detail_modification_screen.dart';
 import 'outlet_hierarchy_linking_screen.dart';
+import 'receipt_template_designer_screen.dart';
+import 'tax_group_setup_screen.dart';
+import '../../models/inventory/tax_group_model.dart';
 import '../../controllers/public/outlet_controller.dart';
 import '../../core/auth/token_storage.dart';
 import 'package:file_picker/file_picker.dart';
@@ -47,7 +51,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const _taxModes = [
     'CGST_SGST',
     'IGST',
+    'US_SALES_TAX',
+    'COMPOSITE',
     'VAT',
+    'VAT_CTL',
+    'VAT_ONLY',
     'CESS',
     'CUSTOM',
     'NONE',
@@ -59,7 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'THERMAL_76',
     'THERMAL_80',
   ];
-  static const _taxTypes = ['GST', 'VAT', 'CESS', 'OTHER'];
+  static const _taxTypes = ['GST', 'VAT', 'SALES_TAX', 'US_SALES_TAX', 'CESS', 'OTHER'];
   static const _printModes = [
     'PRINT_DIALOG',
     'ASK_BEFORE_PRINT',
@@ -676,6 +684,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 setState(() {
                                   s.timeZone = val;
                                 });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Base Currency Symbol',
+                        description: 'Currency symbol displayed on POS checkout, invoices, thermal receipts, and financial reports (e.g. \$, KSh, ₹, £, AED)',
+                        control: SizedBox(
+                          width: 340,
+                          child: TextFormField(
+                            initialValue: s.baseCurrencySymbol,
+                            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                            onChanged: (v) {
+                              s.baseCurrencySymbol = v.trim();
+                              CurrencyService.updateFromSettings(s);
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Base Currency Code',
+                        description: 'ISO Currency Code for multi-currency compatibility (e.g. USD, KES, INR, GBP, EUR, AED)',
+                        control: SizedBox(
+                          width: 340,
+                          child: TextFormField(
+                            initialValue: s.baseCurrencyCode,
+                            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                            onChanged: (v) {
+                              s.baseCurrencyCode = v.trim().toUpperCase();
+                              CurrencyService.updateFromSettings(s);
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Currency Symbol Position',
+                        description: 'Position of currency symbol relative to transaction amounts',
+                        control: SizedBox(
+                          width: 340,
+                          child: DropdownButtonFormField<String>(
+                            value: (s.currencySymbolPosition == 'AFTER') ? 'AFTER' : 'BEFORE',
+                            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'BEFORE',
+                                child: Text('Before Amount (Prefix, e.g. \$100.00 / KSh 100.00)'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'AFTER',
+                                child: Text('After Amount (Suffix, e.g. 100.00\$ / 100.00 KSh)'),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => s.currencySymbolPosition = val);
+                                CurrencyService.updateFromSettings(s);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Currency Decimals',
+                        description: 'Number of decimal places displayed for amounts (e.g. 2 for 100.00, 0 for 100)',
+                        control: SizedBox(
+                          width: 340,
+                          child: DropdownButtonFormField<int>(
+                            value: s.currencyDecimals,
+                            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                            items: const [
+                              DropdownMenuItem(value: 2, child: Text('2 Decimals (e.g. 100.00)')),
+                              DropdownMenuItem(value: 0, child: Text('0 Decimals (e.g. 100)')),
+                              DropdownMenuItem(value: 3, child: Text('3 Decimals (e.g. 100.000)')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => s.currencyDecimals = val);
+                                CurrencyService.updateFromSettings(s);
                               }
                             },
                           ),
@@ -1338,6 +1425,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       _settingRow(
+                        title: 'A4 Invoice, 80mm Bill & KOT Template Designer',
+                        description: 'Customize full A4 tax invoices, 80mm/58mm thermal receipts, and kitchen KOT tickets with live interactive previews',
+                        control: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0B5CAD),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ReceiptTemplateDesignerScreen()),
+                          ),
+                          icon: const Icon(Icons.palette_rounded, size: 18),
+                          label: const Text('Template Designer', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      _settingRow(
                         title: 'Invoicing Print Mode',
                         description: 'Select printing dialog workflow trigger style',
                         control: SizedBox(
@@ -1582,17 +1686,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   _customSection(
+                    'Restaurant Billing & Settlement Workflow',
+                    'Choose how restaurant dine-in tables and food orders are settled: direct immediate payment (like Retail) or print bill first and settle later.',
+                    [
+                      _settingRow(
+                        title: 'Restaurant Settlement Mode',
+                        description: s.restaurantSettlementMode == 'DIRECT'
+                            ? '⚡ Direct Settlement (Retailer Style): When cashier checks out a restaurant order or table, payment is tendered directly, bill is marked COMPLETED immediately, and table is freed.'
+                            : '🖨️ Settlement After Bill Print (Dine-in Flow): Clicking Print Bill generates customer provisional bill (RUNNING/PRINTED status). Final payment is settled later from the Reprint / Modify Sales Bill screen.',
+                        isLast: true,
+                        control: SizedBox(
+                          width: 320,
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: s.restaurantSettlementMode == 'AFTER_BILL_PRINT' ? 'AFTER_BILL_PRINT' : 'DIRECT',
+                            decoration: const InputDecoration(
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'DIRECT',
+                                child: Text('⚡ Direct Settlement (Retail Style)', style: TextStyle(fontWeight: FontWeight.w600)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'AFTER_BILL_PRINT',
+                                child: Text('🖨️ Settlement After Bill Print (Dine-in)', style: TextStyle(fontWeight: FontWeight.w600)),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => s.restaurantSettlementMode = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _customSection(
                     'Global Invoicing Details',
                     'Configure standard tax regimes, invoice formats, and country rules.',
                     [
                       _settingRow(
                         title: 'Billing Country',
-                        description: 'Preselect default tax configurations and regional specifications',
+                        description: 'Preselect default tax configurations and regional specifications (e.g. USA, Kenya, UK, UAE, India)',
                         control: SizedBox(
                           width: 280,
                           child: TextFormField(
                             initialValue: s.billingCountry,
-                            onChanged: (value) => s.billingCountry = value.trim().isEmpty ? 'India' : value.trim(),
+                            onChanged: (value) {
+                              final country = value.trim().isEmpty ? 'India' : value.trim();
+                              s.billingCountry = country;
+                              CurrencyService.updateFromSettings(s);
+                            },
                           ),
                         ),
                       ),
@@ -1601,20 +1747,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         description: 'Configure active regional tax compliance formats',
                         control: SizedBox(
                           width: 280,
-                          child: DropdownButtonFormField<String>(
-                            value: s.billingTaxMode,
-                            items: _taxModes
-                                .map((mode) => DropdownMenuItem(
-                                      value: mode,
-                                      child: Text(mode.replaceAll('_', ' ')),
-                                    ))
-                                .toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => s.billingTaxMode = value);
+                          child: Builder(builder: (_) {
+                            final items = <DropdownMenuItem<String>>[];
+                            final knownValues = <String>{};
+
+                            for (final mode in _taxModes) {
+                              knownValues.add(mode);
+                              items.add(DropdownMenuItem(
+                                value: mode,
+                                child: Text(mode.replaceAll('_', ' ')),
+                              ));
+                            }
+
+                            for (final g in _loadedTaxGroups) {
+                              final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+                                  ? g.groupCode!.trim().toUpperCase()
+                                  : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+                              if (!knownValues.contains(key)) {
+                                knownValues.add(key);
+                                items.add(DropdownMenuItem(
+                                  value: key,
+                                  child: Text('Tax Group: ${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)', overflow: TextOverflow.ellipsis),
+                                ));
                               }
-                            },
+                            }
+
+                            String selectedVal = s.billingTaxMode;
+                            if (!knownValues.contains(selectedVal)) {
+                              final match = _loadedTaxGroups.where((g) =>
+                                  g.groupName.trim().toLowerCase() == selectedVal.trim().toLowerCase() ||
+                                  g.id == selectedVal).firstOrNull;
+                              if (match != null) {
+                                selectedVal = match.groupCode != null && match.groupCode!.trim().isNotEmpty
+                                    ? match.groupCode!.trim().toUpperCase()
+                                    : match.groupName;
+                              } else {
+                                items.add(DropdownMenuItem(
+                                  value: selectedVal,
+                                  child: Text(selectedVal.replaceAll('_', ' ')),
+                                ));
+                              }
+                            }
+
+                            return DropdownButtonFormField<String>(
+                              value: selectedVal,
+                              isExpanded: true,
+                              items: items,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => s.billingTaxMode = value);
+                                }
+                              },
+                            );
+                          }),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Tax Groups & Sub-Tax Components',
+                        description: 'Build custom Tax Groups and add stacked sub-tax components (State Tax, City Tax, Transit Tax, GST, PST, CTL)',
+                        control: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const TaxGroupSetupScreen()),
+                          ).then((_) => _loadSettingsData()),
+                          icon: const Icon(Icons.account_balance_wallet, size: 16),
+                          label: const Text('Manage Tax Groups & Components'),
                         ),
                       ),
                       _settingRow(
@@ -1724,28 +1926,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       _settingRow(
-                        title: 'Powered By Tagline (Locked)',
-                        description: 'Mandatory brand attribution tag (Non-editable as per License terms)',
+                        title: 'Powered By Tagline',
+                        description: 'Brand attribution tagline printed at the bottom of bills and title bars',
                         control: SizedBox(
                           width: 280,
                           child: TextFormField(
-                            readOnly: true,
-                            enabled: false,
-                            initialValue: AppBrand.permanentWatermark,
+                            key: ValueKey('branding-powered-${_branding.poweredByLabel}'),
+                            initialValue: _branding.poweredByLabel,
                             decoration: InputDecoration(
-                              filled: true,
-                              fillColor: const Color(0xFFF1F5F9),
-                              suffixIcon: const Icon(Icons.lock_outline, size: 18, color: Colors.blue),
+                              hintText: 'e.g. Powered by ${_branding.companyName}',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: Colors.blue.withOpacity(0.3)),
                               ),
                             ),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              color: Color(0xFF1E293B),
-                            ),
+                            onChanged: (value) => _branding = _branding.copyWith(poweredByLabel: value),
                           ),
                         ),
                       ),
@@ -2121,15 +2315,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  List<TaxGroup> _loadedTaxGroups = [];
+
   Future<void> _loadSettingsData() async {
     setState(() => _loadingSettingsData = true);
     try {
       final salesCtrl = SalesController();
       final sources = await salesCtrl.listSaleSources();
       final methods = await salesCtrl.listPaymentMethods();
+      List<TaxGroup> groups = [];
+      try {
+        final taxGroupsRes = await ApiClient.get(ApiEndpoints.taxGroups);
+        if (taxGroupsRes['success'] == true && taxGroupsRes['data'] != null) {
+          final raw = taxGroupsRes['data'] as List;
+          groups = raw.map((e) => TaxGroup.fromJson(Map<String, dynamic>.from(e))).toList();
+        }
+      } catch (_) {}
       setState(() {
         _settingsSaleSources = sources;
         _settingsPaymentMethods = methods;
+        _loadedTaxGroups = groups;
       });
     } catch (_) {}
     setState(() => _loadingSettingsData = false);
@@ -2746,24 +2951,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: charge.taxType,
-                    decoration: const InputDecoration(labelText: 'Charge Tax Type'),
-                    items: _taxTypes
-                        .map(
-                          (type) => DropdownMenuItem(
-                            value: type,
-                            child: Text(type),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: charge.taxable
-                        ? (value) {
-                            if (value != null) {
-                              onChanged(charge.copyWith(taxType: value));
-                            }
-                          }
-                        : null,
+                  child: Builder(
+                    builder: (context) {
+                      final items = <DropdownMenuItem<String>>[];
+                      final knownValues = <String>{};
+
+                      for (final g in _loadedTaxGroups) {
+                        final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+                            ? g.groupCode!.trim().toUpperCase()
+                            : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+                        if (!knownValues.contains(key)) {
+                          knownValues.add(key);
+                          items.add(
+                            DropdownMenuItem(
+                              value: key,
+                              child: Text(
+                                'Tax Group: ${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          );
+                        }
+                      }
+
+                      for (final type in _taxTypes) {
+                        if (!knownValues.contains(type)) {
+                          knownValues.add(type);
+                          items.add(
+                            DropdownMenuItem(
+                              value: type,
+                              child: Text(type.replaceAll('_', ' ')),
+                            ),
+                          );
+                        }
+                      }
+
+                      String selectedVal = charge.taxType.trim();
+                      if (!knownValues.contains(selectedVal)) {
+                        final match = _loadedTaxGroups.where((g) =>
+                            g.groupName.trim().toLowerCase() == selectedVal.toLowerCase() ||
+                            g.id == selectedVal).firstOrNull;
+                        if (match != null) {
+                          selectedVal = match.groupCode != null && match.groupCode!.trim().isNotEmpty
+                              ? match.groupCode!.trim().toUpperCase()
+                              : match.groupName;
+                        } else if (selectedVal.isNotEmpty) {
+                          knownValues.add(selectedVal);
+                          items.add(
+                            DropdownMenuItem(
+                              value: selectedVal,
+                              child: Text(selectedVal.replaceAll('_', ' ')),
+                            ),
+                          );
+                        } else {
+                          selectedVal = knownValues.isNotEmpty ? knownValues.first : 'GST';
+                        }
+                      }
+
+                      return DropdownButtonFormField<String>(
+                        key: ValueKey('chargeTax-${charge.code}-$selectedVal'),
+                        value: selectedVal,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Charge Tax Selection / Group'),
+                        items: items,
+                        onChanged: charge.taxable
+                            ? (value) {
+                                if (value != null) {
+                                  final matchGroup = _loadedTaxGroups.where((g) {
+                                    final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+                                        ? g.groupCode!.trim().toUpperCase()
+                                        : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+                                    return key == value;
+                                  }).firstOrNull;
+
+                                  if (matchGroup != null) {
+                                    onChanged(charge.copyWith(
+                                      taxType: value,
+                                      taxGroupId: matchGroup.id,
+                                      taxGroup: matchGroup,
+                                      taxPercent: matchGroup.totalRate,
+                                    ));
+                                  } else {
+                                    onChanged(charge.copyWith(
+                                      taxType: value,
+                                      taxGroupId: null,
+                                      taxGroup: null,
+                                    ));
+                                  }
+                                }
+                              }
+                            : null,
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2876,128 +3155,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shortcutRow('Delete', 'Remove the currently selected/highlighted cart line item (or last item if none selected)'),
         shortcutRow('Escape', 'Close checkout popup / Clear barcode scanner input'),
       ],
-    );
-  }
-
-  void _showTokenStationPrinterMappingDialog(BuildContext context, SystemSettings s) {
-    final stations = [
-      'Sweets Counter',
-      'Chaat Counter',
-      'Bakery & Cakes',
-      'Beverages & Juice Bar',
-      'Snacks & Fast Food',
-      'General Counter',
-    ];
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dialogCtx, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Row(
-                children: [
-                  const Icon(Icons.print_rounded, color: Color(0xFF0B5CAD)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Station Token Printer Routing ($_currentMachineId)',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 520,
-                height: 400,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Assign physical printers to item station locations (Item Master Location) when printing token slips from machine $_currentMachineId:',
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: stations.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                        itemBuilder: (context, index) {
-                          final station = stations[index];
-                          final currentPrinter = getMachineTokenPrinter(s, _currentMachineId, station);
-                          final selectedVal = _printers.any((p) => p.name == currentPrinter) ? currentPrinter : '';
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        station,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                      const Text(
-                                        'Item Master Location',
-                                        style: TextStyle(fontSize: 10, color: Colors.grey),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  flex: 3,
-                                  child: DropdownButtonFormField<String>(
-                                    isExpanded: true,
-                                    value: selectedVal.isNotEmpty ? selectedVal : null,
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      hintText: 'Default Printer',
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    items: [
-                                      const DropdownMenuItem(value: '', child: Text('Default Printer')),
-                                      ..._printers
-                                          .where((p) => p.name.trim().isNotEmpty)
-                                          .map(
-                                            (printer) => DropdownMenuItem(
-                                              value: printer.name,
-                                              child: Text(printer.name, overflow: TextOverflow.ellipsis),
-                                            ),
-                                          ),
-                                    ],
-                                    onChanged: (val) {
-                                      setDialogState(() {
-                                        setMachineTokenPrinter(s, _currentMachineId, station, val ?? '');
-                                      });
-                                      setState(() {});
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Done & Close', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            );
-          },
-        );
-      },
     );
   }
 

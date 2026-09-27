@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
+import '../../core/currency/currency_service.dart';
 
 class LoanEmiScreen extends StatefulWidget {
   final String? outletId;
@@ -138,7 +139,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                     TextField(
                       controller: _principalCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Sanctioned Principal Amount (₹)', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: 'Sanctioned Principal Amount (${CurrencyService.symbol})', border: const OutlineInputBorder()),
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -164,7 +165,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                     TextField(
                       controller: _emiAmountCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Monthly EMI Amount (₹)', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: 'Monthly EMI Amount (${CurrencyService.symbol})', border: const OutlineInputBorder()),
                     ),
                   ],
                 ),
@@ -247,7 +248,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                 TextField(
                   controller: _purchaseCostCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Purchase Cost / Valuation (₹)', border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: 'Purchase Cost / Valuation (${CurrencyService.symbol})', border: const OutlineInputBorder()),
                 ),
               ],
             ),
@@ -353,7 +354,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                   TextField(
                     controller: _emiAmountCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Total EMI Amount (₹)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: 'Total EMI Amount (${CurrencyService.symbol})', border: const OutlineInputBorder()),
                     onChanged: (val) {
                       final double total = double.tryParse(val) ?? 0.0;
                       setDlgState(() {
@@ -369,7 +370,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                         child: TextField(
                           controller: _payPrincipalCtrl,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Principal (₹) [Liability]', border: OutlineInputBorder()),
+                          decoration: InputDecoration(labelText: 'Principal (${CurrencyService.symbol}) [Liability]', border: const OutlineInputBorder()),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -377,7 +378,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                         child: TextField(
                           controller: _payInterestCtrl,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Interest (₹) [Expense]', border: OutlineInputBorder()),
+                          decoration: InputDecoration(labelText: 'Interest (${CurrencyService.symbol}) [Expense]', border: const OutlineInputBorder()),
                         ),
                       ),
                     ],
@@ -625,15 +626,15 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text('Sanctioned Amount: ₹${l['principal_amount']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                        Text('Monthly EMI: ₹${l['monthly_emi']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryColor)),
+                                        Text('Sanctioned Amount: ${CurrencyService.format(double.tryParse(l['principal_amount']?.toString() ?? '0') ?? 0)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                        Text('Monthly EMI: ${CurrencyService.format(double.tryParse(l['monthly_emi']?.toString() ?? '0') ?? 0)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryColor)),
                                       ],
                                     ),
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         Text('Interest Rate: ${l['interest_rate']}% p.a.', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                        Text('Outstanding: ₹${l['remaining_principal']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
+                                        Text('Outstanding: ${CurrencyService.format(double.tryParse(l['remaining_principal']?.toString() ?? '0') ?? 0)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
                                       ],
                                     ),
                                   ],
@@ -693,7 +694,7 @@ class _LoanEmiScreenState extends State<LoanEmiScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '₹${a['purchase_cost']}',
+                                CurrencyService.format(double.tryParse(a['purchase_cost']?.toString() ?? '0') ?? 0),
                                 style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                               IconButton(

@@ -52,4 +52,11 @@ router.post('/trigger-reinstall', triggerAutoReinstall);
 const publicSalesCtrl = require('../controllers/public/publicSales.controller');
 router.get('/sales/:id/pdf', publicSalesCtrl.getInvoicePdfPublic);
 
+// Tax Groups & Component Master API Endpoints
+const taxGroupCtrl = require('../controllers/settings/taxGroup.controller');
+router.get('/settings/tax-groups', taxGroupCtrl.getTaxGroups);
+router.post('/settings/tax-groups', taxGroupCtrl.createTaxGroup);
+router.put('/settings/tax-groups/:id', taxGroupCtrl.updateTaxGroup);
+router.delete('/settings/tax-groups/:id', taxGroupCtrl.deleteTaxGroup);
+
 module.exports = router;

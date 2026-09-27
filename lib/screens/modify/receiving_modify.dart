@@ -1,3 +1,4 @@
+import '../../core/printing/pos_invoice_printer.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -12,7 +13,10 @@ import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart';
 import '../../models/inventory/supplier_model.dart';
 import '../../utils/branding_storage.dart';
-import '../../core/printing/pos_invoice_printer.dart';
+import '../../core/currency/currency_service.dart';
+import '../../core/utils/country_tax_helper.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 class ModifyReceivingScreen extends StatefulWidget {
   final int? initialGrnId;
@@ -174,6 +178,13 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
 
     final receiptDate = DateTime.parse(grn['receipt_date']);
 
+    final settings = context.read<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+    final taxName = CountryTaxHelper.taxName(country, taxMode);
+    final taxPercentLabel = CountryTaxHelper.taxPercentLabel(country, taxMode);
+    final taxIdLabel = CountryTaxHelper.taxIdLabel(country);
+
     /// TOTAL CALCULATIONS
     double subTotal = 0;
     double gstTotal = 0;
@@ -198,6 +209,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
+            country: country,
             rightWidget: pw.Container(
               padding: const pw.EdgeInsets.symmetric(
                 horizontal: 12,
@@ -240,7 +252,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                       if ((supplier.gstin ?? '').trim().isNotEmpty)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(top: 2),
-                          child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                          child: pw.Text("$taxIdLabel: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
                         ),
                       if ((grn['supplier_bill_no'] ?? '').toString().trim().isNotEmpty)
                         pw.Padding(
@@ -290,7 +302,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                   _cell("Unit", bold: true, alignment: pw.Alignment.center),
                   _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
                   _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
-                  _cell("GST", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell(taxPercentLabel, bold: true, alignment: pw.Alignment.centerRight),
                   _cell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
@@ -330,7 +342,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
               child: pw.Column(
                 children: [
                   _total("Sub Total", subTotal),
-                  _total("GST", gstTotal),
+                  _total(taxName, gstTotal),
                   pw.Divider(color: PdfColors.grey400, thickness: 0.5),
                   _total("Net Amount", netAmount, bold: true),
                 ],
@@ -612,15 +624,22 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                       child: DataTable(
                         headingRowColor: WidgetStateProperty.all(scheme.surfaceContainerHighest),
                         columnSpacing: 40,
-                        columns: const [
-                          DataColumn(label: Text("S.No")),
-                          DataColumn(label: Text("Item")),
-                          DataColumn(label: Text("Unit")),
-                          DataColumn(label: Text("Qty")),
-                          DataColumn(label: Text("Rate")),
-                          DataColumn(label: Text("GST (%)")),
-                          DataColumn(label: Text("Remarks")),
-                          DataColumn(label: Text("Amount")),
+                        columns: [
+                          const DataColumn(label: Text("S.No")),
+                          const DataColumn(label: Text("Item")),
+                          const DataColumn(label: Text("Unit")),
+                          const DataColumn(label: Text("Qty")),
+                          const DataColumn(label: Text("Rate")),
+                          DataColumn(
+                            label: Text(
+                              CountryTaxHelper.taxPercentLabel(
+                                context.watch<SystemSettingsController>().settings?.billingCountry,
+                                context.watch<SystemSettingsController>().settings?.billingTaxMode,
+                              ),
+                            ),
+                          ),
+                          const DataColumn(label: Text("Remarks")),
+                          const DataColumn(label: Text("Amount")),
                         ],
                         rows: List.generate(items.length, (i) {
                           final item = items[i];
@@ -747,7 +766,11 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                     alignment: WrapAlignment.center,
                     children: [
                       _totalSummaryChip(scheme, 'Sub Total', subTotal),
-                      _totalSummaryChip(scheme, 'Total GST', totalGST),
+                      _totalSummaryChip(
+                        scheme,
+                        'Total ${CountryTaxHelper.taxName(context.watch<SystemSettingsController>().settings?.billingCountry, context.watch<SystemSettingsController>().settings?.billingTaxMode)}',
+                        totalGST,
+                      ),
                       _totalSummaryChip(scheme, 'Net Amount', netAmount, highlight: true),
                     ],
                   ),
@@ -823,7 +846,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
           ),
         ),
         Text(
-          "₹ ${value.toStringAsFixed(2)}",
+          CurrencyService.format(value),
           style: TextStyle(
             fontSize: highlight ? 17 : 14,
             fontWeight: FontWeight.bold,

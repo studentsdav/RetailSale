@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/currency/currency_service.dart';
 
 class EmployeeScreen extends StatefulWidget {
   const EmployeeScreen({Key? key}) : super(key: key);
@@ -1288,7 +1289,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionLabel('Salary & Compensation'),
-        _field(_baseSalaryCtrl, 'Base Salary (₹) *', Icons.currency_rupee,
+        _field(_baseSalaryCtrl, 'Base Salary (${CurrencyService.symbol}) *', Icons.attach_money,
             keyboardType: TextInputType.number, required: true),
         _field(_commissionCtrl, 'Commission % (0 if not sales rep)',
             Icons.percent_outlined, keyboardType: TextInputType.number),
@@ -1316,8 +1317,8 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
             const SizedBox(height: 12),
             _field(
               _commissionTargetAmountCtrl,
-              'Commission Target Amount (₹)',
-              Icons.currency_rupee_outlined,
+              'Commission Target Amount (${CurrencyService.symbol})',
+              Icons.attach_money,
               keyboardType: TextInputType.number,
             ),
           ],
@@ -1419,7 +1420,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
                           style: const TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
                         ),
                         Text(
-                          '+ ₹${val.toStringAsFixed(2)}',
+                          '+ ${CurrencyService.format(val)}',
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -1439,7 +1440,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
                     ),
                     Text(
-                      '₹${(breakdown['totalEarnings'] as double).toStringAsFixed(2)}',
+                      CurrencyService.format(breakdown['totalEarnings'] as double),
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
                     ),
                   ],
@@ -1479,7 +1480,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
                             style: const TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
                           ),
                           Text(
-                            '- ₹${val.toStringAsFixed(2)}',
+                            '- ${CurrencyService.format(val)}',
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -1499,7 +1500,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
                     ),
                     Text(
-                      '₹${(breakdown['totalDeductions'] as double).toStringAsFixed(2)}',
+                      CurrencyService.format(breakdown['totalDeductions'] as double),
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
                     ),
                   ],
@@ -1541,7 +1542,7 @@ class _AddEmployeeFormState extends State<_AddEmployeeForm> {
                         ],
                       ),
                       Text(
-                        '₹ ${(breakdown['netSalary'] as double).toStringAsFixed(2)}',
+                        CurrencyService.format(breakdown['netSalary'] as double),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -2188,22 +2189,22 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(
             children: [
-              _statBox('Base Salary', '₹${base.toStringAsFixed(0)}', const Color(0xFF059669)),
+              _statBox('Base Salary', CurrencyService.format(base), const Color(0xFF059669)),
               const SizedBox(width: 10),
               _statBox('Commission', '${commission.toStringAsFixed(1)}%', const Color(0xFFD97706)),
               if (commission > 0) ...[
                 const SizedBox(width: 10),
-                _statBox('Comm. Earned (Month)', '₹${_currentCycleCommission.toStringAsFixed(2)}', const Color(0xFFE03E2D)),
+                _statBox('Comm. Earned (Month)', CurrencyService.format(_currentCycleCommission), const Color(0xFFE03E2D)),
               ],
             ],
           ),
         ),
         _infoCard('SALARY STRUCTURE', [
-          _infoRow('Base Salary', '₹ ${emp['base_salary'] ?? '—'}'),
+          _infoRow('Base Salary', emp['base_salary'] != null ? CurrencyService.format(double.tryParse(emp['base_salary'].toString()) ?? 0) : '—'),
           _infoRow('Commission %', '${emp['commission_percent'] ?? 0}%'),
           if (commission > 0) ...[
             _infoRow('Commission Target', _getCommissionTargetRuleText(emp)),
-            _infoRow('Commission Earned (Month)', '₹ ${_currentCycleCommission.toStringAsFixed(2)}', textColor: const Color(0xFFD97706), isBold: true),
+            _infoRow('Commission Earned (Month)', CurrencyService.format(_currentCycleCommission), textColor: const Color(0xFFD97706), isBold: true),
           ],
           _infoRow('Pay Structure',
               _lookup(widget.payStructures, emp['pay_structure_id'], 'name')),
@@ -2214,17 +2215,17 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
               padding: EdgeInsets.symmetric(vertical: 4),
               child: Text('EARNINGS & ALLOWANCES', style: TextStyle(color: Color(0xFF059669), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
             ),
-            ...List<Widget>.from(breakdown['earnings'].map((e) => _infoRow(e['name'].toString(), '+ ₹${(e['value'] as double).toStringAsFixed(2)}'))),
-            _infoRow('Total Additions', '₹${(breakdown['totalEarnings'] as double).toStringAsFixed(2)}', isBold: true),
+            ...List<Widget>.from(breakdown['earnings'].map((e) => _infoRow(e['name'].toString(), '+ ${CurrencyService.format(e['value'] as double)}'))),
+            _infoRow('Total Additions', CurrencyService.format(breakdown['totalEarnings'] as double), isBold: true),
             const Divider(),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 4),
               child: Text('DEDUCTIONS', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
             ),
-            ...List<Widget>.from(breakdown['deductions'].map((d) => _infoRow(d['name'].toString(), '- ₹${(d['value'] as double).toStringAsFixed(2)}'))),
-            _infoRow('Total Deductions', '₹${(breakdown['totalDeductions'] as double).toStringAsFixed(2)}', isBold: true),
+            ...List<Widget>.from(breakdown['deductions'].map((d) => _infoRow(d['name'].toString(), '- ${CurrencyService.format(d['value'] as double)}'))),
+            _infoRow('Total Deductions', CurrencyService.format(breakdown['totalDeductions'] as double), isBold: true),
             const Divider(),
-            _infoRow('Estimated In-Hand Salary', '₹${(breakdown['netSalary'] as double).toStringAsFixed(2)}', isBold: true, textColor: const Color(0xFF059669)),
+            _infoRow('Estimated In-Hand Salary', CurrencyService.format(breakdown['netSalary'] as double), isBold: true, textColor: const Color(0xFF059669)),
           ]),
         ],
 
@@ -2248,9 +2249,9 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                       Text(date, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
                       Row(
                         children: [
-                          Text('₹${prev.toStringAsFixed(0)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          Text(CurrencyService.format(prev), style: const TextStyle(color: Colors.grey, fontSize: 13)),
                           const Icon(Icons.arrow_right_alt, size: 16, color: Colors.grey),
-                          Text('₹${next.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669), fontSize: 13)),
+                          Text(CurrencyService.format(next), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669), fontSize: 13)),
                         ],
                       ),
                     ],
@@ -2287,7 +2288,7 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                       ),
                       Row(
                         children: [
-                          Text('₹${amt.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669), fontSize: 13)),
+                          Text(CurrencyService.format(amt), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF059669), fontSize: 13)),
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -2323,7 +2324,7 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
     if (type == null || type == 'None' || type.isEmpty) {
       return 'None (On full sales)';
     }
-    return '$type (Above ₹${amount.toStringAsFixed(2)})';
+    return '$type (Above ${CurrencyService.format(amount)})';
   }
 
   Widget _buildAttendanceSummaryTab() {
@@ -2556,9 +2557,9 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
           const SizedBox(height: 16),
           Row(
             children: [
-              _loanStat('Loan Amount', '₹${amount.toStringAsFixed(2)}'),
-              _loanStat('Monthly EMI', '₹${emi.toStringAsFixed(2)}'),
-              _loanStat('Remaining Balance', '₹${remaining.toStringAsFixed(2)}'),
+              _loanStat('Loan Amount', CurrencyService.format(amount)),
+              _loanStat('Monthly EMI', CurrencyService.format(emi)),
+              _loanStat('Remaining Balance', CurrencyService.format(remaining)),
             ],
           ),
           const SizedBox(height: 16),
@@ -2569,7 +2570,7 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Repayment Progress', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                  Text('$progressPct% Repaid (₹${repaid.toStringAsFixed(2)} paid)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
+                  Text('$progressPct% Repaid (${CurrencyService.format(repaid)} paid)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
                 ],
               ),
               const SizedBox(height: 6),
@@ -2701,9 +2702,9 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _slipStat('Gross Pay', '₹${gross.toStringAsFixed(2)}'),
-                    _slipStat('Deductions', '₹${deduct.toStringAsFixed(2)}', color: const Color(0xFFDC2626)),
-                    _slipStat('Net Paid', '₹${net.toStringAsFixed(2)}', color: const Color(0xFF059669), isBold: true),
+                    _slipStat('Gross Pay', CurrencyService.format(gross)),
+                    _slipStat('Deductions', CurrencyService.format(deduct), color: const Color(0xFFDC2626)),
+                    _slipStat('Net Paid', CurrencyService.format(net), color: const Color(0xFF059669), isBold: true),
                   ],
                 ),
                 const Divider(height: 24),
@@ -2765,17 +2766,17 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Current: ₹${emp['base_salary'] ?? 0}',
+              Text('Current: ${emp['base_salary'] != null ? CurrencyService.format(double.tryParse(emp['base_salary'].toString()) ?? 0) : CurrencyService.format(0)}',
                   style: const TextStyle(color: Color(0xFF6B7280))),
               const SizedBox(height: 12),
               TextField(
                 controller: newSalaryCtrl,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: 'New Base Salary (₹)',
+                  labelText: 'New Base Salary (${CurrencyService.symbol})',
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.currency_rupee),
+                  prefixIcon: const Icon(Icons.payments_outlined),
                 ),
               ),
               const SizedBox(height: 12),
@@ -2883,9 +2884,9 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                 controller: amountCtrl,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: 'Bonus Amount (₹)',
+                  labelText: 'Bonus Amount (${CurrencyService.symbol})',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.currency_rupee),
+                  prefixIcon: const Icon(Icons.payments_outlined),
                 ),
               ),
               const SizedBox(height: 12),
@@ -2986,9 +2987,9 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                 controller: amountCtrl,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: 'Loan Amount (₹)',
+                  labelText: 'Loan Amount (${CurrencyService.symbol})',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.currency_rupee),
+                  prefixIcon: const Icon(Icons.payments_outlined),
                 ),
               ),
               const SizedBox(height: 12),
@@ -2996,7 +2997,7 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                 controller: emiCtrl,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: 'Monthly EMI (₹)',
+                  labelText: 'Monthly EMI (${CurrencyService.symbol})',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   prefixIcon: const Icon(Icons.payments_outlined),
                 ),
@@ -3124,8 +3125,8 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                 controller: salaryCtrl,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: 'New Base Salary (₹) *',
-                  prefixIcon: const Icon(Icons.currency_rupee, size: 18),
+                  labelText: 'New Base Salary (${CurrencyService.symbol}) *',
+                  prefixIcon: const Icon(Icons.attach_money, size: 18),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
@@ -3636,7 +3637,7 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('NET IN-HAND PAID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF065F46))),
-                      Text('₹${net.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF065F46))),
+                      Text(CurrencyService.format(net), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF065F46))),
                     ],
                   ),
                 ),
@@ -3910,7 +3911,7 @@ Future<pw.Document> _buildPayslipPdf(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text('NET IN-HAND PAID', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: PdfColor.fromHex('#065F46'))),
-                      pw.Text('Rs. ${net.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: PdfColor.fromHex('#065F46'))),
+                      pw.Text(CurrencyService.format(net), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: PdfColor.fromHex('#065F46'))),
                     ],
                   ),
                 ),
@@ -3966,7 +3967,7 @@ Future<pw.Document> _buildPayslipPdf(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
           pw.Text(label, style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-          pw.Text('Rs. ${amount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+          pw.Text(CurrencyService.format(amount), style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
         ],
       ),
     );
@@ -3993,7 +3994,7 @@ Future<pw.Document> _buildPayslipPdf(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(fontSize: 11, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-          Text('₹${amount.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(CurrencyService.format(amount), style: TextStyle(fontSize: 11, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
     );

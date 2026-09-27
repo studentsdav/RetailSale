@@ -6,8 +6,17 @@ const bankCtrl = require('../controllers/finance/bankAccount.controller');
 const voucherCtrl = require('../controllers/finance/accountingVoucher.controller');
 const reportsCtrl = require('../controllers/finance/financialReports.controller');
 const loanCtrl = require('../controllers/finance/loanEmi.controller');
+const coaCtrl = require('../controllers/finance/chartOfAccounts.controller');
 
 router.use(auth, license('REPORTS'));
+
+// Chart of Accounts (COA) Direct Master Endpoints
+router.get('/coa', coaCtrl.getAccounts);
+router.post('/coa', coaCtrl.createAccount);
+router.put('/coa/:id', coaCtrl.updateAccount);
+router.delete('/coa/:id', coaCtrl.deleteAccount);
+router.post('/coa/:id/toggle', coaCtrl.toggleActiveAccount);
+router.post('/coa/seed', coaCtrl.seedDefaultAccounts);
 
 // Bank Accounts Master Endpoints
 router.get('/banks', bankCtrl.getBankAccounts);

@@ -4670,7 +4670,7 @@ exports.updateSalePaymentMode = async (req, res) => {
             transaction: t
         });
         const allowedModes = new Set([
-            'CASH', 'CARD', 'UPI', 'BANK', 'CREDIT',
+            'CASH', 'CARD', 'UPI', 'BANK', 'CREDIT', 'SPLIT', 'SPLIT PAYMENT',
             ...dbMethods.map(m => String(m.name).trim().toUpperCase())
         ]);
         if (!allowedModes.has(paymentModeInput) && paymentLinesRaw.length === 0) {
@@ -4739,7 +4739,10 @@ exports.updateSalePaymentMode = async (req, res) => {
         const balanceDue = Math.max(netAmount - amountPaid, 0);
 
         let resolvedMode = paymentModeInput;
-        if (!allowedModes.has(resolvedMode)) {
+        const totalLinesCount = nonCreditLines.length + (creditDue > 0 ? 1 : 0);
+        if (totalLinesCount > 1 || resolvedMode === 'SPLIT' || resolvedMode === 'SPLIT PAYMENT') {
+            resolvedMode = 'SPLIT';
+        } else if (!allowedModes.has(resolvedMode) || resolvedMode === 'SPLIT') {
             if (nonCreditLines.length > 0) {
                 const primary = [...nonCreditLines].sort((a, b) => b.amount - a.amount)[0];
                 resolvedMode = primary?.method || 'CASH';
@@ -4891,22 +4894,176 @@ exports.updateSalePaymentMode = async (req, res) => {
         });
     }
 };
+
+exports.settleRunningBill = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const saleId = Number(req.params.id);
+        const paymentModeInput = String(req.body.payment_mode || req.body.paymentMode || 'CASH').trim().toUpperCase();
+        const paymentLinesRaw = Array.isArray(req.body.payment_lines || req.body.paymentLines)
+            ? (req.body.payment_lines || req.body.paymentLines)
+            : [];
+        const customAmountPaid = req.body.amount_paid != null ? Number(req.body.amount_paid) : null;
+
+        if (!Number.isFinite(saleId) || saleId <= 0) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'Invalid sale id' });
+        }
+
+        const sale = await req.propertyDb.models.sales_headers.findOne({
+            where: {
+                id: saleId,
+                outlet_id: req.user.outlet_id
+            },
+            transaction: t
+        });
+
+        if (!sale) {
+            await t.rollback();
+            return res.status(404).json({ success: false, message: 'Sale order not found' });
+        }
+
+        const netAmount = Number(sale.net_amount || 0);
+        let amountPaid = customAmountPaid != null ? customAmountPaid : (paymentModeInput === 'CREDIT' ? 0 : netAmount);
+        let balanceDue = Math.max(0, netAmount - amountPaid);
+        let changeAmount = paymentModeInput === 'CASH' && amountPaid > netAmount ? amountPaid - netAmount : 0;
+
+        let nextPaymentReference = sale.payment_reference;
+        if (paymentLinesRaw.length > 0) {
+            const cleanLines = paymentLinesRaw.map(row => ({
+                method: String(row.method || row.payment_method || 'CASH').trim().toUpperCase(),
+                amount: Number(row.amount || 0)
+            })).filter(row => row.amount > 0);
+            if (cleanLines.length > 0) {
+                nextPaymentReference = `POSPAY:${JSON.stringify(cleanLines)}`;
+                amountPaid = cleanLines.filter(l => l.method !== 'CREDIT').reduce((s, l) => s + l.amount, 0);
+                const creditLine = cleanLines.find(l => l.method === 'CREDIT');
+                balanceDue = creditLine ? creditLine.amount : Math.max(0, netAmount - amountPaid);
+            }
+        }
+
+        await sale.update({
+            status: 'COMPLETED',
+            payment_mode: paymentModeInput,
+            amount_paid: amountPaid,
+            balance_due: balanceDue,
+            change_amount: changeAmount,
+            payment_reference: nextPaymentReference,
+            is_latest: true,
+            is_deleted: false
+        }, { transaction: t });
+
+        // Ledger creation
+        const nonCreditLines = paymentLinesRaw.length > 0
+            ? paymentLinesRaw.map(row => ({
+                method: String(row.method || row.payment_method || 'CASH').trim().toUpperCase(),
+                amount: Number(row.amount || 0)
+            })).filter(row => row.amount > 0 && row.method !== 'CREDIT')
+            : (paymentModeInput !== 'CREDIT' && amountPaid > 0 ? [{ method: paymentModeInput, amount: amountPaid }] : []);
+
+        const entryType = balanceDue > 0 ? 'SALE_CREDIT' : 'SALE_CASH';
+        for (const row of nonCreditLines) {
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                txn_date: sale.sale_date || new Date(),
+                transaction_type: entryType,
+                reference_type: 'SALE',
+                reference_id: sale.id,
+                reference_no: sale.sale_no,
+                party_name: sale.customer_name || sale.customer_phone || 'Walk-in Customer',
+                payment_method: row.method,
+                amount_in: row.amount,
+                notes: `Direct Settlement for Sale ${sale.sale_no}`,
+                created_by: req.user.id,
+                transaction: t
+            });
+        }
+
+        await recalculateLedgerBalances({
+            db: req.propertyDb,
+            outlet_id: req.user.outlet_id,
+            fromDate: sale.sale_date || new Date(),
+            transaction: t
+        });
+
+        // If restaurant table is attached, free the table and close active KOTs
+        if (sale.table_id && req.propertyDb.models.tables) {
+            try {
+                await req.propertyDb.models.tables.update({
+                    status: 'Available',
+                    guest_count: 0
+                }, {
+                    where: { id: sale.table_id },
+                    transaction: t
+                });
+            } catch (_) {}
+        }
+        if (req.propertyDb.models.kots) {
+            try {
+                await req.propertyDb.models.kots.update({
+                    status: 'BILLED'
+                }, {
+                    where: {
+                        [Op.or]: [
+                            { sales_header_id: sale.id },
+                            ...(sale.table_id ? [{ table_id: sale.table_id }] : [])
+                        ]
+                    },
+                    transaction: t
+                });
+            } catch (_) {}
+        }
+
+        await t.commit();
+
+        return res.json({
+            success: true,
+            message: `Sale ${sale.sale_no} settled successfully!`,
+            data: sale
+        });
+    } catch (error) {
+        await t.rollback();
+        console.error('settleRunningBill error:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
 exports.listSales = async (req, res) => {
     try {
         const status = String(req.query.status || '').trim().toUpperCase();
         const search = String(req.query.search || '').trim();
+        const source = String(req.query.source || req.query.sale_source || '').trim().toUpperCase();
+        const userId = req.query.user_id || req.query.waiter_id;
         const latestOnly = String(req.query.latest_only || 'true').trim().toLowerCase() !== 'false';
         const fromDate = parseDateOnly(req.query.from_date);
         const toDate = parseDateOnly(req.query.to_date);
         const where = { outlet_id: req.user.outlet_id };
+
         if (status) {
             if (status === 'COMPLETED') {
                 where.status = { [Op.in]: ['COMPLETED', 'RETURNED'] };
-            } else {
+            } else if (status === 'RUNNING' || status === 'UNSETTLED' || status === 'PENDING') {
+                where.status = { [Op.in]: ['DRAFT', 'RUNNING', 'BILLED', 'PRINTED', 'PENDING'] };
+            } else if (status !== 'ALL') {
                 where.status = status;
             }
         }
-        if (status === 'DRAFT') {
+
+        if (source && source !== 'ALL') {
+            where[Op.or] = [
+                { sale_source: { [Op.iLike]: `%${source}%` } },
+                { order_type: { [Op.iLike]: `%${source}%` } }
+            ];
+        }
+
+        if (userId && String(userId).trim() !== '' && String(userId).trim() !== '0' && String(userId).toUpperCase() !== 'ALL') {
+            const uid = parseInt(userId, 10);
+            if (Number.isFinite(uid)) {
+                where.created_by = uid;
+            }
+        }
+
+        if (status === 'DRAFT' || status === 'RUNNING' || status === 'UNSETTLED') {
             where.is_deleted = false;
         } else if (latestOnly) {
             where.is_latest = true;
@@ -4932,11 +5089,16 @@ exports.listSales = async (req, res) => {
         }
 
         if (search) {
-            where[Op.or] = [
+            const searchClauses = [
                 { sale_no: { [Op.iLike]: `%${search}%` } },
                 { customer_name: { [Op.iLike]: `%${search}%` } },
                 { customer_phone: { [Op.iLike]: `%${search}%` } }
             ];
+            if (req.propertyDb.models.sales_headers.rawAttributes.token_no) {
+                searchClauses.push({ token_no: { [Op.iLike]: `%${search}%` } });
+            }
+            where[Op.and] = where[Op.and] || [];
+            where[Op.and].push({ [Op.or]: searchClauses });
         }
         const sales = await req.propertyDb.models.sales_headers.findAll({
             where,
@@ -5361,6 +5523,7 @@ exports.getSaleDetails = async (req, res) => {
             };
         });
         saleJson.credit_notes = creditNotes;
+        saleJson.payment_lines = decodePaymentReferenceLines(saleJson.payment_reference);
 
         // Load all refunds for this sale
         const refunds = await req.propertyDb.models.sales_refunds.findAll({

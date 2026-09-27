@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/reports/closing_report_controller.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/closing_item_model.dart';
 import '../../utils/branding_storage.dart';
 
@@ -446,7 +447,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
 
   Future<void> exportToPdf() async {
     final pdf = pw.Document();
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
     final nowStr = DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');

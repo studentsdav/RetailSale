@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../controllers/sales/sales_controller.dart';
+import '../../core/currency/currency_service.dart';
 
 class LoyaltyMasterConfigScreen extends StatefulWidget {
   const LoyaltyMasterConfigScreen({super.key});
@@ -199,7 +200,7 @@ class _LoyaltyMasterConfigScreenState extends State<LoyaltyMasterConfigScreen> {
                 const SizedBox(height: 12),
                 _numField(
                   _redemptionValueCtrl,
-                  'Redemption Value (₹ per point)',
+                  'Redemption Value (${CurrencyService.symbol} per point)',
                   'Example: 1',
                 ),
                 const SizedBox(height: 12),

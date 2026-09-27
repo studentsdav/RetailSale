@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
 
@@ -249,7 +250,7 @@ class _TransferProgressDashboardScreenState extends State<TransferProgressDashbo
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text('₹${t['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text(CurrencyService.format(double.tryParse(t['total_amount']?.toString() ?? '0') ?? 0), style: const TextStyle(fontWeight: FontWeight.bold)),
                               if (!isCompleted) ...[
                                 const SizedBox(width: 12),
                                 FilledButton.icon(
@@ -421,7 +422,7 @@ class _TransferProgressDashboardScreenState extends State<TransferProgressDashbo
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('₹${t['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(CurrencyService.format(double.tryParse(t['total_amount']?.toString() ?? '0') ?? 0), style: const TextStyle(fontWeight: FontWeight.bold)),
                 if (!isCompleted) ...[
                   const SizedBox(width: 12),
                   FilledButton.icon(

@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/request_controller.dart';
 import '../../controllers/reports/request_report_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../utils/branding_storage.dart';
 
 class RequestReportScreen extends StatefulWidget {
@@ -414,7 +415,7 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          "₹ ${header.totalAmount.toStringAsFixed(2)}",
+                          CurrencyService.format(header.totalAmount),
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -779,7 +780,7 @@ class _RequestReportScreenState extends State<RequestReportScreen> {
 
   Future<void> exportToPdf() async {
     final pdf = pw.Document();
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
     final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());

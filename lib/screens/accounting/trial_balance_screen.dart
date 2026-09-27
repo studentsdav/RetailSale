@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../controllers/accounting/financial_reports_controller.dart';
+import '../../core/currency/currency_service.dart';
 
 class TrialBalanceScreen extends StatefulWidget {
   final String? outletId;
@@ -68,11 +69,11 @@ class _TrialBalanceScreenState extends State<TrialBalanceScreen> {
                     Expanded(
                       child: SingleChildScrollView(
                         child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('Ledger Account', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Group', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(numeric: true, label: Text('Debit (₹)', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(numeric: true, label: Text('Credit (₹)', style: TextStyle(fontWeight: FontWeight.bold))),
+                          columns: [
+                            const DataColumn(label: Text('Ledger Account', style: TextStyle(fontWeight: FontWeight.bold))),
+                            const DataColumn(label: Text('Group', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(numeric: true, label: Text('Debit (${CurrencyService.symbol})', style: const TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(numeric: true, label: Text('Credit (${CurrencyService.symbol})', style: const TextStyle(fontWeight: FontWeight.bold))),
                           ],
                           rows: rows.map<DataRow>((r) {
                             return DataRow(
@@ -94,9 +95,9 @@ class _TrialBalanceScreenState extends State<TrialBalanceScreen> {
                         const Text('TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                         Row(
                           children: [
-                            Text('Debit: ₹${(summary['totalDebit'] ?? 0).toString()}', style: const TextStyle(fontWeight: FontWeight.bold, color: primaryColor, fontFamily: 'monospace')),
+                            Text('Debit: ${CurrencyService.format(double.tryParse(summary['totalDebit']?.toString() ?? '0') ?? 0)}', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor, fontFamily: 'monospace')),
                             const SizedBox(width: 24),
-                            Text('Credit: ₹${(summary['totalCredit'] ?? 0).toString()}', style: const TextStyle(fontWeight: FontWeight.bold, color: primaryColor, fontFamily: 'monospace')),
+                            Text('Credit: ${CurrencyService.format(double.tryParse(summary['totalCredit']?.toString() ?? '0') ?? 0)}', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor, fontFamily: 'monospace')),
                           ],
                         ),
                       ],

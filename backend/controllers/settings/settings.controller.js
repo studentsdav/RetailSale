@@ -178,7 +178,8 @@ exports.getSettings = async (req, res) => {
                     show_brand_name: true,
                     enable_token_system: false,
                     token_copies_count: 1,
-                    device_printer_mappings: {}
+                    device_printer_mappings: {},
+                    restaurant_settlement_mode: 'DIRECT'
                 }
             });
         }
@@ -262,6 +263,24 @@ exports.saveSettings = async (req, res) => {
             show_brand_name: req.body.show_brand_name ?? true,
             enable_token_system: req.body.enable_token_system ?? false,
             token_copies_count: req.body.token_copies_count ?? 1,
+            kot_print_mode: req.body.kot_print_mode || 'DIRECT',
+            enable_kot_print: req.body.enable_kot_print ?? true,
+            base_currency_code: req.body.base_currency_code || 'KES',
+            base_currency_symbol: req.body.base_currency_symbol || 'KSh',
+            currency_symbol_position: req.body.currency_symbol_position || 'BEFORE',
+            currency_decimals: req.body.currency_decimals ?? 2,
+            payment_modes: req.body.payment_modes || existing?.payment_modes || [
+                { id: 'CASH', name: 'Cash', enabled: true },
+                { id: 'CARD', name: 'Card', enabled: true },
+                { id: 'MPESA_TILL', name: 'M-Pesa Till', enabled: true },
+                { id: 'MPESA_PAYBILL', name: 'M-Pesa Paybill', enabled: true },
+                { id: 'BANK_TRANSFER', name: 'Bank Transfer', enabled: true }
+            ],
+            receipt_template_config: req.body.receipt_template_config || existing?.receipt_template_config || {},
+            a4_template_config: req.body.a4_template_config || existing?.a4_template_config || {},
+            kot_template_config: req.body.kot_template_config || existing?.kot_template_config || {},
+            token_template_config: req.body.token_template_config || existing?.token_template_config || {},
+            restaurant_settlement_mode: req.body.restaurant_settlement_mode || existing?.restaurant_settlement_mode || 'DIRECT',
             device_printer_mappings: (rawMappings && typeof rawMappings === 'object' && Object.keys(rawMappings).length > 0)
                 ? rawMappings
                 : (existing?.device_printer_mappings || {})

@@ -12,6 +12,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/reports/stock_balance_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/reports/stock_item_model.dart';
 import '../../utils/pdf_report_builder.dart';
 
@@ -182,7 +183,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
   double get _shortfall =>
       _filteredItems.fold(0, (sum, item) => sum + item.shortfall);
 
-  String _money(double value) => 'Rs. ${value.toStringAsFixed(2)}';
+  String _money(double value) => CurrencyService.format(value);
 
   String _qty(double value) => value == value.roundToDouble()
       ? value.toStringAsFixed(0)
@@ -322,7 +323,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
   }
 
   Future<void> _exportPdf() async {
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     double totalValue = 0;
     int lowStockCount = 0;
     for (final item in _filteredItems) {
@@ -335,7 +336,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
     await PdfReportBuilder.generateAndPrintReport(
       title: 'Stock Balance & Reorder Report',
       subtitle: 'Status: $statusFilter   Category: $categoryFilter   Search: ${searchCtrl.text.trim().isEmpty ? 'ALL' : searchCtrl.text.trim()}',
-      headers: ['Item', 'Category', 'Unit', 'Minimum', 'Balance', 'Shortfall', 'Rate', 'Value (Rs)', 'Status'],
+      headers: ['Item', 'Category', 'Unit', 'Minimum', 'Balance', 'Shortfall', 'Rate', 'Value (${CurrencyService.symbol})', 'Status'],
       data: _filteredItems.map((item) {
         return [
           '${item.name}${item.brand.isNotEmpty ? ' (${item.brand})' : ''}',
@@ -542,7 +543,7 @@ class _StockBalanceScreenState extends State<StockBalanceScreen> {
             Colors.red),
         _kpiCard(
             'Shortfall', _qty(_shortfall), Icons.trending_down, Colors.orange),
-        _kpiCard('Stock Value', _money(_visibleValue), Icons.currency_rupee,
+        _kpiCard('Stock Value', _money(_visibleValue), Icons.monetization_on_outlined,
             Colors.indigo),
       ],
     );

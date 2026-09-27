@@ -13,6 +13,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/reports/supplier_payments_report_controller.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 import '../../core/utils/timezone_utils.dart';
 import '../../utils/pdf_report_builder.dart';
 
@@ -155,7 +156,7 @@ class _SupplierPaymentsReportScreenState extends State<SupplierPaymentsReportScr
   }
 
   Future<void> exportToPdf() async {
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final rows = ctrl.transactions;
     final totalCashPaid = ctrl.totalPaid;
     final totalCreditAdjusted = ctrl.totalCreditAdjusted;
@@ -270,11 +271,11 @@ class _SupplierPaymentsReportScreenState extends State<SupplierPaymentsReportScr
                     children: [
                       _summaryChip('Count', ctrl.transactionCount.toString()),
                       const SizedBox(width: 8),
-                      _summaryChip('Cash Paid', 'Rs. ${_fmt(totalCashPaid)}'),
+                      _summaryChip('Cash Paid', CurrencyService.format(totalCashPaid)),
                       const SizedBox(width: 8),
-                      _summaryChip('Credit Adjusted', 'Rs. ${_fmt(totalCreditAdjusted)}'),
+                      _summaryChip('Credit Adjusted', CurrencyService.format(totalCreditAdjusted)),
                       const SizedBox(width: 8),
-                      _summaryChip('Total Applied', 'Rs. ${_fmt(totalApplied)}'),
+                      _summaryChip('Total Applied', CurrencyService.format(totalApplied)),
                     ],
                   ),
                 ),
@@ -334,10 +335,10 @@ class _SupplierPaymentsReportScreenState extends State<SupplierPaymentsReportScr
                                       DataCell(Text('${row['bill']?['bill_no'] ?? ''}')),
                                       DataCell(Text('${row['payment_mode'] ?? ''}')),
                                       DataCell(Text('${row['reference_no'] ?? ''}')),
-                                      DataCell(Text('Rs. ${_fmt(cashPaid)}')),
-                                      DataCell(Text('Rs. ${_fmt(creditAdjusted)}')),
+                                      DataCell(Text(CurrencyService.format(cashPaid))),
+                                      DataCell(Text(CurrencyService.format(creditAdjusted))),
                                       DataCell(Text(
-                                        'Rs. ${_fmt(totalAppliedRow)}',
+                                        CurrencyService.format(totalAppliedRow),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w700,
                                         ),

@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/reports/return_report_controller.dart'
     show ReturnReportController;
+import '../../core/currency/currency_service.dart';
 import '../../utils/branding_storage.dart';
 
 class ReturnReportScreen extends StatefulWidget {
@@ -323,7 +324,7 @@ class _ReturnReportScreenState extends State<ReturnReportScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          "₹ ${header.totalAmount.toStringAsFixed(2)}",
+                          CurrencyService.format(header.totalAmount),
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -393,7 +394,7 @@ class _ReturnReportScreenState extends State<ReturnReportScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      "Return Total : ₹ ${header.totalAmount.toStringAsFixed(2)}",
+                      "Return Total : ${CurrencyService.format(header.totalAmount)}",
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                       ),
@@ -558,7 +559,7 @@ class _ReturnReportScreenState extends State<ReturnReportScreen> {
 
   Future<void> exportToPdf() async {
     final pdf = pw.Document();
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
     final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());

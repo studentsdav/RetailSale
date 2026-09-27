@@ -27,6 +27,8 @@ import '../../controllers/settings/notification_services.dart';
 import '../../utils/order_status_display.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/settings/system_settings_controller.dart';
+import '../../core/currency/currency_service.dart';
+import '../../core/utils/country_tax_helper.dart';
 
 class CustomerAppScreen extends StatefulWidget {
   const CustomerAppScreen({super.key});
@@ -748,7 +750,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Rs. ${amount.toStringAsFixed(2)}',
+                      '${CurrencyService.symbol} ${amount.toStringAsFixed(2)}',
                       style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.onSurface,
@@ -981,7 +983,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Rs. ${amount.toStringAsFixed(2)}',
+                      '${CurrencyService.symbol} ${amount.toStringAsFixed(2)}',
                       style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.onSurface,
@@ -1871,7 +1873,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(
-                              'Rate: Rs. ${itemMap['rate']} • Total: Rs. ${itemMap['amount']}'),
+                              'Rate: ${CurrencyService.symbol} ${itemMap['rate']} • Total: ${CurrencyService.symbol} ${itemMap['amount']}'),
                           value: isChecked,
                           onChanged: (val) {
                             setDialogState(() {
@@ -2144,6 +2146,14 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       ];
     }
 
+    final settings = context.read<SystemSettingsController>().settings;
+    final country = record['billing_country']?.toString() ?? settings?.billingCountry ?? 'India';
+    final taxMode = record['billing_tax_mode']?.toString() ?? settings?.billingTaxMode ?? (CountryTaxHelper.isIndiaCountry(country) ? 'CGST_SGST' : 'VAT');
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(country);
+    final double cgstAmt = isIndia && taxMode == 'CGST_SGST' ? taxAmt / 2 : 0.0;
+    final double sgstAmt = isIndia && taxMode == 'CGST_SGST' ? taxAmt / 2 : 0.0;
+    final double igstAmt = isIndia && taxMode == 'IGST' ? taxAmt : 0.0;
+
     return SaleOrder(
       saleNo: saleNo,
       returnStatus: returnStatus,
@@ -2157,8 +2167,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
       status: status,
       orderType: 'B2C',
-      billingCountry: 'India',
-      billingTaxMode: 'CGST_SGST',
+      billingCountry: country,
+      billingTaxMode: taxMode,
       billFormat: _billFormat,
       customerName: record['customer_name']?.toString(),
       customerPhone: record['customer_phone']?.toString(),
@@ -2175,9 +2185,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       manualDiscountValue: 0.0,
       manualDiscountAmount: 0.0,
       taxableAmount: parseNum(record['sub_total'] ?? calculatedSubTotal) - taxAmt,
-      cgstAmount: taxAmt / 2,
-      sgstAmount: taxAmt / 2,
-      igstAmount: 0.0,
+      cgstAmount: cgstAmt,
+      sgstAmount: sgstAmt,
+      igstAmount: igstAmt,
       totalTax: taxAmt,
       taxBreakup: [],
       charges: billingCharges,
@@ -2339,13 +2349,13 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     const SizedBox(height: 3),
                     if (isStillValid)
                       Text(
-                        'You save Rs. ${disc.toStringAsFixed(2)}',
+                        'You save ${CurrencyService.symbol} ${disc.toStringAsFixed(2)}',
                         style: TextStyle(
                             color: Colors.green.shade700, fontSize: 12),
                       )
                     else
                       Text(
-                        'Add Rs. ${(minPurchase - subTotal).toStringAsFixed(2)} more to unlock this offer',
+                        'Add ${CurrencyService.symbol} ${(minPurchase - subTotal).toStringAsFixed(2)} more to unlock this offer',
                         style:
                             const TextStyle(color: Colors.orange, fontSize: 12),
                       ),
@@ -2419,18 +2429,18 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             // Build human-readable offer description
             String offerText;
             if (discountType == 'FLAT') {
-              offerText = 'Rs. ${discountVal.toStringAsFixed(0)} OFF';
+              offerText = '${CurrencyService.symbol} ${discountVal.toStringAsFixed(0)} OFF';
             } else {
               offerText = '${discountVal.toStringAsFixed(0)}% OFF';
               if (maxDiscount > 0) {
-                offerText += ' (max Rs. ${maxDiscount.toStringAsFixed(0)})';
+                offerText += ' (max ${CurrencyService.symbol} ${maxDiscount.toStringAsFixed(0)})';
               }
             }
 
             String conditionText = '';
             if (minPurchase > 0) {
               conditionText =
-                  'on orders above Rs. ${minPurchase.toStringAsFixed(0)}';
+                  'on orders above ${CurrencyService.symbol} ${minPurchase.toStringAsFixed(0)}';
             }
 
             return Padding(
@@ -2441,7 +2451,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Add Rs. ${(minPurchase - subTotal).toStringAsFixed(2)} more to use this coupon.',
+                          'Add ${CurrencyService.symbol} ${(minPurchase - subTotal).toStringAsFixed(2)} more to use this coupon.',
                         ),
                         backgroundColor: Colors.orange.shade700,
                       ),
@@ -2539,7 +2549,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               ),
                             if (!meetsMinPurchase && minPurchase > 0)
                               Text(
-                                'Add Rs. ${(minPurchase - subTotal).toStringAsFixed(0)} more',
+                                'Add ${CurrencyService.symbol} ${(minPurchase - subTotal).toStringAsFixed(0)} more',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.orange,
@@ -2771,7 +2781,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Sub-total (Incl. GST)'),
-              Text('Rs. ${displaySubTotal.toStringAsFixed(2)}'),
+              Text('${CurrencyService.symbol} ${displaySubTotal.toStringAsFixed(2)}'),
             ],
           ),
           if (displayCouponDiscount > 0)
@@ -2781,7 +2791,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 Text('Coupon Discount (${_appliedCoupon!['code']})',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-Rs. ${displayCouponDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.symbol}${displayCouponDiscount.toStringAsFixed(2)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2793,7 +2803,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 const Text('Subscription Discount',
                     style: TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-Rs. ${displaySubscriptionDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.symbol}${displaySubscriptionDiscount.toStringAsFixed(2)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2804,7 +2814,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               const Text('Net Amount (Incl. GST)',
                   style: TextStyle(fontWeight: FontWeight.w600)),
               Text(
-                'Rs. ${(displaySubTotal - displayCouponDiscount - displaySubscriptionDiscount).toStringAsFixed(2)}',
+                '${CurrencyService.symbol} ${(displaySubTotal - displayCouponDiscount - displaySubscriptionDiscount).toStringAsFixed(2)}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
@@ -2814,7 +2824,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Delivery Charge'),
-                Text('Rs. ${delivery.toStringAsFixed(2)}'),
+                Text('${CurrencyService.symbol} ${delivery.toStringAsFixed(2)}'),
               ],
             ),
             if (deliveryGst > 0)
@@ -2822,7 +2832,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('  • Delivery GST'),
-                  Text('Rs. ${deliveryGst.toStringAsFixed(2)}',
+                  Text('${CurrencyService.symbol} ${deliveryGst.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
@@ -2832,7 +2842,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(cc['name']),
-                Text('Rs. ${cc['amount'].toStringAsFixed(2)}'),
+                Text('${CurrencyService.symbol} ${cc['amount'].toStringAsFixed(2)}'),
               ],
             ),
             if (cc['gst_amount'] > 0)
@@ -2840,7 +2850,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('  • ${cc['name']} GST'),
-                  Text('Rs. ${cc['gst_amount'].toStringAsFixed(2)}',
+                  Text('${CurrencyService.symbol} ${cc['gst_amount'].toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
@@ -2849,14 +2859,14 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Taxable Value (Items)'),
-              Text('Rs. ${(subTotal - couponDiscount - subscriptionDiscount).toStringAsFixed(2)}'),
+              Text('${CurrencyService.symbol} ${(subTotal - couponDiscount - subscriptionDiscount).toStringAsFixed(2)}'),
             ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('GST / Taxes (Items)'),
-              Text('Rs. ${tax.toStringAsFixed(2)}'),
+              Text('${CurrencyService.symbol} ${tax.toStringAsFixed(2)}'),
             ],
           ),
         ] else ...[
@@ -2864,14 +2874,14 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Sub-total'),
-              Text('Rs. ${subTotal.toStringAsFixed(2)}'),
+              Text('${CurrencyService.symbol} ${subTotal.toStringAsFixed(2)}'),
             ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('GST / Taxes (Items)'),
-              Text('Rs. ${tax.toStringAsFixed(2)}'),
+              Text('${CurrencyService.symbol} ${tax.toStringAsFixed(2)}'),
             ],
           ),
           if (delivery > 0) ...[
@@ -2879,7 +2889,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Delivery Charge'),
-                Text('Rs. ${delivery.toStringAsFixed(2)}'),
+                Text('${CurrencyService.symbol} ${delivery.toStringAsFixed(2)}'),
               ],
             ),
             if (deliveryGst > 0)
@@ -2887,7 +2897,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('  • Delivery GST'),
-                  Text('Rs. ${deliveryGst.toStringAsFixed(2)}',
+                  Text('${CurrencyService.symbol} ${deliveryGst.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
@@ -2897,7 +2907,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(cc['name']),
-                Text('Rs. ${cc['amount'].toStringAsFixed(2)}'),
+                Text('${CurrencyService.symbol} ${cc['amount'].toStringAsFixed(2)}'),
               ],
             ),
             if (cc['gst_amount'] > 0)
@@ -2905,7 +2915,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('  • ${cc['name']} GST'),
-                  Text('Rs. ${cc['gst_amount'].toStringAsFixed(2)}',
+                  Text('${CurrencyService.symbol} ${cc['gst_amount'].toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
@@ -2917,7 +2927,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 Text('Coupon Discount (${_appliedCoupon!['code']})',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-Rs. ${couponDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.symbol}${couponDiscount.toStringAsFixed(2)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2929,7 +2939,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 const Text('Subscription Discount',
                     style: TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-Rs. ${subscriptionDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.symbol}${subscriptionDiscount.toStringAsFixed(2)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2941,7 +2951,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 const Text('Subscription Tax Adjustment',
                     style: TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-Rs. ${subscriptionTaxDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.symbol}${subscriptionTaxDiscount.toStringAsFixed(2)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2956,7 +2966,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             Text(
-              'Rs. ${netTotal.toStringAsFixed(2)}',
+              '${CurrencyService.symbol} ${netTotal.toStringAsFixed(2)}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
@@ -3025,7 +3035,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   Text(
                       'Delivery Address: ${_activeOrder!['customer_address']}'),
                   Text(
-                      'Net Amount: Rs. ${double.tryParse(_activeOrder!['net_amount']?.toString() ?? '0')?.toStringAsFixed(2)}'),
+                      'Net Amount: ${CurrencyService.symbol} ${double.tryParse(_activeOrder!['net_amount']?.toString() ?? '0')?.toStringAsFixed(2)}'),
                   Text('Payment Status: ${_activeOrder!['payment_status']}'),
                   const SizedBox(height: 20),
                   const Text('Live Delivery Progress',
@@ -3797,7 +3807,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                     children: [
                                                       if (hasPromo) ...[
                                                         Text(
-                                                          'Rs. ${displayOriginal!.toStringAsFixed(displayOriginal % 1 == 0 ? 0 : 2)}',
+                                                          '${CurrencyService.symbol} ${displayOriginal!.toStringAsFixed(displayOriginal % 1 == 0 ? 0 : 2)}',
                                                           style: TextStyle(
                                                             color: Colors.grey.shade500,
                                                             decoration: TextDecoration.lineThrough,
@@ -3808,8 +3818,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                         const SizedBox(width: 4),
                                                         Text(
                                                           hasVariants
-                                                              ? 'Rs. ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}+'
-                                                              : 'Rs. ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}',
+                                                              ? '${CurrencyService.symbol} ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}+'
+                                                              : '${CurrencyService.symbol} ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}',
                                                           style: const TextStyle(
                                                             color: Color(0xFFD97706),
                                                             fontWeight: FontWeight.w900,
@@ -3819,8 +3829,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                       ] else ...[
                                                         Text(
                                                           hasVariants
-                                                              ? 'Rs. ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}+'
-                                                              : 'Rs. ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}',
+                                                              ? '${CurrencyService.symbol} ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}+'
+                                                              : '${CurrencyService.symbol} ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}',
                                                           style: TextStyle(
                                                             color: theme.colorScheme.primary,
                                                             fontWeight: FontWeight.bold,
@@ -3958,7 +3968,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              'Subscription Covered: max ${remainingQty.toStringAsFixed(0)} daily at Rs. 0',
+                              'Subscription Covered: max ${remainingQty.toStringAsFixed(0)} daily at ${CurrencyService.symbol} 0',
                               style: const TextStyle(
                                 color: Colors.green,
                                 fontSize: 10,
@@ -3969,7 +3979,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       ],
                     ),
                     subtitle: Text(
-                        'Rs. ${price.toStringAsFixed(2)} x ${qty.toStringAsFixed(0)}'),
+                        '${CurrencyService.symbol} ${price.toStringAsFixed(2)} x ${qty.toStringAsFixed(0)}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -4227,7 +4237,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       style:
                           TextStyle(color: detailColor, fontSize: 12)),
                   Text(
-                      '• Refunded Amount: Rs. ${paidAmt.toStringAsFixed(2)} (Pending: Rs. ${remainingPending.toStringAsFixed(2)})',
+                      '• Refunded Amount: ${CurrencyService.symbol} ${paidAmt.toStringAsFixed(2)} (Pending: ${CurrencyService.symbol} ${remainingPending.toStringAsFixed(2)})',
                       style:
                           TextStyle(color: detailColor, fontSize: 12)),
                   if (remarks.isNotEmpty)
@@ -4283,7 +4293,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       icon = Icons.keyboard_return_outlined;
       final isPaid = order['payment_status'] == 'PAID';
       text = isPaid
-          ? 'Refunded (Rs. ${netAmt.toStringAsFixed(2)}) - $returnedItems'
+          ? 'Refunded (${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}) - $returnedItems'
           : 'Return Accepted - $returnedItems';
     } else if (returnStatus == 'EXCHANGED') {
       color = Colors.purple;
@@ -4574,7 +4584,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                    ),
                                                    const SizedBox(width: 16),
                                                    Text(
-                                                     'Rs. ${amt.toStringAsFixed(2)}',
+                                                     '${CurrencyService.symbol} ${amt.toStringAsFixed(2)}',
                                                      style: TextStyle(
                                                          fontSize: 13,
                                                          color: Colors.grey.shade500,
@@ -4625,7 +4635,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                    ),
                                                    const SizedBox(width: 16),
                                                    Text(
-                                                     'Rs. ${amt.toStringAsFixed(2)}',
+                                                     '${CurrencyService.symbol} ${amt.toStringAsFixed(2)}',
                                                      style: TextStyle(
                                                          fontSize: 13,
                                                          fontWeight: FontWeight.bold,
@@ -4668,7 +4678,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                    ),
                                                    const SizedBox(width: 16),
                                                    Text(
-                                                     'Rs. ${amt.toStringAsFixed(2)}',
+                                                     '${CurrencyService.symbol} ${amt.toStringAsFixed(2)}',
                                                      style: TextStyle(
                                                          fontSize: 13,
                                                          fontWeight:
@@ -4693,7 +4703,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                   fontSize: 13),
                                             ),
                                             Text(
-                                              'Rs. ${netAmt.toStringAsFixed(2)}',
+                                              '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
                                               style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 15),
@@ -4800,7 +4810,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                           ),
                                                         ),
                                                         Text(
-                                                          'Rs. ${diff.abs().toStringAsFixed(2)}',
+                                                          '${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)}',
                                                           style: TextStyle(
                                                             fontSize: 13,
                                                             color: textColor,
@@ -4855,7 +4865,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                         ),
                                                       ),
                                                       Text(
-                                                        'Rs. ${netAmt.toStringAsFixed(2)}',
+                                                        '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
                                                         style: TextStyle(
                                                           fontSize: 13,
                                                           color: isRefunded ? Colors.blue.shade800 : Colors.amber.shade900,
@@ -5449,7 +5459,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                 ),
                                                 const SizedBox(width: 16),
                                                 Text(
-                                                  'Rs. ${amt.toStringAsFixed(2)}',
+                                                  '${CurrencyService.symbol} ${amt.toStringAsFixed(2)}',
                                                   style: TextStyle(
                                                       fontSize: 13,
                                                       fontWeight:
@@ -5561,7 +5571,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               Expanded(
                 child: _buildMetricCard(
                   'Total Spend',
-                  'Rs. ${totalSpent.toStringAsFixed(2)}',
+                  '${CurrencyService.symbol} ${totalSpent.toStringAsFixed(2)}',
                   Colors.indigo.shade800,
                   Icons.account_balance_wallet_outlined,
                 ),
@@ -5570,7 +5580,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               Expanded(
                 child: _buildMetricCard(
                   'Total Savings',
-                  'Rs. ${totalSavings.toStringAsFixed(2)}',
+                  '${CurrencyService.symbol} ${totalSavings.toStringAsFixed(2)}',
                   Colors.green.shade800,
                   Icons.savings_outlined,
                 ),
@@ -5832,7 +5842,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       children: [
                         Text('Daily Limit: ${sub['daily_allowed_qty']} $unit',
                             style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-                        Text('Rate: Rs. ${sub['advance_rate'] ?? '0.0'}/unit',
+                        Text('Rate: ${CurrencyService.symbol} ${sub['advance_rate'] ?? '0.0'}/unit',
                             style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
                       ],
                     ),
@@ -5849,10 +5859,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                         children: [
                           Row(
                             children: [
-                              _subStat('Total Paid', 'Rs. ${totalPaid.toStringAsFixed(2)}',
+                              _subStat('Total Paid', '${CurrencyService.symbol} ${totalPaid.toStringAsFixed(2)}',
                                   Icons.payments_outlined, Colors.blue.shade700, theme),
                               const SizedBox(width: 8),
-                              _subStat('Consumed Amt', 'Rs. ${consumedAmount.toStringAsFixed(2)}',
+                              _subStat('Consumed Amt', '${CurrencyService.symbol} ${consumedAmount.toStringAsFixed(2)}',
                                   Icons.shopping_bag_outlined, Colors.orange.shade700, theme),
                             ],
                           ),
@@ -6071,7 +6081,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _ledgerStat('Total Paid', 'Rs. ${(double.tryParse(summary['prepaid_value']?.toString() ?? '0') ?? 0.0).toStringAsFixed(2)}', Colors.blue.shade700),
+                    _ledgerStat('Total Paid', '${CurrencyService.symbol} ${(double.tryParse(summary['prepaid_value']?.toString() ?? '0') ?? 0.0).toStringAsFixed(2)}', Colors.blue.shade700),
                     _ledgerStat('Consumed', '${(double.tryParse(summary['consumed_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} $unit', Colors.orange.shade700),
                     _ledgerStat('Remaining', '${(double.tryParse(sub['advance_remaining_qty']?.toString() ?? sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} $unit', Colors.green.shade700),
                   ],
@@ -6111,7 +6121,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                   Text('${qty.toStringAsFixed(1)} $unit', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                  Text('Rs. ${amt.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                                  Text('${CurrencyService.symbol} ${amt.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                               ],
                             ),
                           );
@@ -6214,7 +6224,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                Text('Daily: ${dailyQty.toStringAsFixed(1)} $unit  |  Rate: Rs. ${rate.toStringAsFixed(2)}/unit',
+                Text('Daily: ${dailyQty.toStringAsFixed(1)} $unit  |  Rate: ${CurrencyService.symbol} ${rate.toStringAsFixed(2)}/unit',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 const Divider(height: 20),
                 const Text('Duration:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -6271,16 +6281,16 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     Text('Total Qty: ${totalQty.toStringAsFixed(1)} $unit', style: const TextStyle(fontWeight: FontWeight.w600)),
                     Text('End Date: ${DateFormat('dd-MMM-yyyy').format(endDate)}', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
                     const SizedBox(height: 4),
-                    Text('Base Cost: Rs. ${totalCost.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
-                    Text('GST: Rs. ${totalGst.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                    Text('Base Cost: ${CurrencyService.symbol} ${totalCost.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                    Text('${CountryTaxHelper.taxName()}: ${CurrencyService.symbol} ${totalGst.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
                     if (isDeliveryFree) ...[
                       Text('Delivery: Free', style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontWeight: FontWeight.bold)),
                     ] else if (totalDeliveryCharge > 0) ...[
-                      Text('Delivery: Rs. ${totalDeliveryCharge.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
-                      Text('Delivery GST: Rs. ${totalDeliveryGst.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                      Text('Delivery: ${CurrencyService.symbol} ${totalDeliveryCharge.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                      Text('Delivery ${CountryTaxHelper.taxName()}: ${CurrencyService.symbol} ${totalDeliveryGst.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
                     ],
                     const Divider(height: 8),
-                    Text('Net Amount Payable: Rs. ${netPayable.toStringAsFixed(2)}',
+                    Text('Net Amount Payable: ${CurrencyService.symbol} ${netPayable.toStringAsFixed(2)}',
                         style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
                   ]),
                 ),
@@ -6467,7 +6477,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   Future<Uint8List> _buildReceiptPdf(Map<String, dynamic> subscription) async {
     final pdf = pw.Document();
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final schemes = (subscription['selected_schemes'] as List? ?? subscription['schemes'] as List? ?? const [])
         .map((entry) => Map<String, dynamic>.from(entry))
         .toList();
@@ -6811,7 +6821,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 Text('Phone: ${receiptData['customer_phone'] ?? ''}'),
                 Text('Item: ${receiptData['item_name'] ?? ''}'),
                 Text('Daily Qty: ${receiptData['daily_allowed_qty'] ?? ''}'),
-                Text('Total: Rs. ${(double.tryParse(receiptData['total_payment_amount']?.toString() ?? '0') ?? 0).toStringAsFixed(2)}'),
+                Text('Total: ${CurrencyService.symbol} ${(double.tryParse(receiptData['total_payment_amount']?.toString() ?? '0') ?? 0).toStringAsFixed(2)}'),
                 const SizedBox(height: 12),
                 const Text(
                   'You can print or save this receipt.',
@@ -7335,7 +7345,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             ],
                           ),
                           Text(
-                            'Rs. ${price.toStringAsFixed(2)}',
+                            '${CurrencyService.symbol} ${price.toStringAsFixed(2)}',
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.w900,
@@ -7899,7 +7909,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                                       : (item['item_name']?.toString() ?? ''),
                                   style: const TextStyle(fontWeight: FontWeight.w500),
                                 ),
-                                subtitle: Text('Rs. ${item['retail_sale_price'] ?? item['rate']}/unit'),
+                                subtitle: Text('${CurrencyService.symbol} ${item['retail_sale_price'] ?? item['rate']}/unit'),
                                 selected: isSelected,
                                 selectedColor: Colors.blue.shade700,
                                 selectedTileColor: Colors.blue.shade50,
@@ -8059,7 +8069,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
               children: [
                 const Text('Base Price:', style: TextStyle(color: Colors.grey)),
                 Text(
-                  'Rs. ${rate.toStringAsFixed(2)} / $unitLabel',
+                  '${CurrencyService.symbol} ${rate.toStringAsFixed(2)} / $unitLabel',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -8068,7 +8078,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('GST:', style: TextStyle(color: Colors.grey)),
+                Text('${CountryTaxHelper.taxName(settings?.billingCountry, settings?.billingTaxMode)}:', style: const TextStyle(color: Colors.grey)),
                 Text(
                   '${taxPercent.toStringAsFixed(1)}%',
                   style: const TextStyle(fontWeight: FontWeight.bold),
@@ -8081,7 +8091,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
               children: [
                 const Text('Total Base Cost:', style: TextStyle(color: Colors.grey)),
                 Text(
-                  'Rs. ${totalCost.toStringAsFixed(2)}',
+                  '${CurrencyService.symbol} ${totalCost.toStringAsFixed(2)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -8090,9 +8100,9 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Total GST:', style: TextStyle(color: Colors.grey)),
+                Text('Total ${CountryTaxHelper.taxName(settings?.billingCountry, settings?.billingTaxMode)}:', style: const TextStyle(color: Colors.grey)),
                 Text(
-                  'Rs. ${totalGst.toStringAsFixed(2)}',
+                  '${CurrencyService.symbol} ${totalGst.toStringAsFixed(2)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -8105,8 +8115,8 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                   Text(settings.subDeliveryChargeName, style: const TextStyle(color: Colors.grey)),
                   Text(
                     isDeliveryFree
-                        ? 'Free (Plan > Rs. ${settings.subDeliveryFreeAbove.toStringAsFixed(0)})'
-                        : 'Rs. ${totalDeliveryCharge.toStringAsFixed(2)}',
+                        ? 'Free (Plan > ${CurrencyService.symbol} ${settings.subDeliveryFreeAbove.toStringAsFixed(0)})'
+                        : '${CurrencyService.symbol} ${totalDeliveryCharge.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: isDeliveryFree ? Colors.green : Colors.black,
@@ -8119,9 +8129,9 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Delivery GST:', style: TextStyle(color: Colors.grey)),
+                    Text('Delivery ${CountryTaxHelper.taxName(settings?.billingCountry, settings?.billingTaxMode)}:', style: const TextStyle(color: Colors.grey)),
                     Text(
-                      'Rs. ${totalDeliveryGst.toStringAsFixed(2)}',
+                      '${CurrencyService.symbol} ${totalDeliveryGst.toStringAsFixed(2)}',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -8134,7 +8144,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
               children: [
                 const Text('Net Amount Payable:', style: TextStyle(color: Colors.grey)),
                 Text(
-                  'Rs. ${netPayable.toStringAsFixed(2)}',
+                  '${CurrencyService.symbol} ${netPayable.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.green,

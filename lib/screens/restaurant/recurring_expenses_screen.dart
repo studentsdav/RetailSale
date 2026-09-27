@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/restaurant/restaurant_controller.dart';
+import '../../core/currency/currency_service.dart';
 
 class RecurringExpensesScreen extends StatefulWidget {
   const RecurringExpensesScreen({super.key});
@@ -14,11 +15,7 @@ class _RecurringExpensesScreenState extends State<RecurringExpensesScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _selectedFreqFilter = 'ALL';
 
-  final NumberFormat _inr = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 2,
-  );
+  NumberFormat get _inr => CurrencyService.currencyFormat;
 
   @override
   void initState() {
@@ -372,9 +369,9 @@ class _RecurringExpensesScreenState extends State<RecurringExpensesScreen> {
                     TextField(
                       controller: amountCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Amount (₹) *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: 'Amount (${CurrencyService.symbol}) *',
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),

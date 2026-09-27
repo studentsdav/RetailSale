@@ -9,6 +9,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../core/printing/device_printer_routing.dart';
+import '../../core/utils/country_tax_helper.dart';
 import 'table_reservation_screen.dart';
 
 class RestaurantSetupScreen extends StatefulWidget {
@@ -531,6 +532,51 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                           if (mounted) setState(() {});
                         },
                       ),
+                      const Divider(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Restaurant Billing & Settlement Workflow',
+                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: primaryDark),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  sysSettings.restaurantSettlementMode == 'DIRECT'
+                                      ? '⚡ Direct Settlement (Retail Style): Checkout tenders payment immediately, saves Completed bill, frees table, and prints receipt.'
+                                      : '🖨️ Settlement After Bill Print: Prints customer bill first (Running Bill status). Payment is settled later from the Reprint / Modify Sales Bill screen.',
+                                  style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          DropdownButton<String>(
+                            value: sysSettings.restaurantSettlementMode == 'AFTER_BILL_PRINT' ? 'AFTER_BILL_PRINT' : 'DIRECT',
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'DIRECT',
+                                child: Text('⚡ Direct Settlement (Retail)', style: TextStyle(fontWeight: FontWeight.w600)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'AFTER_BILL_PRINT',
+                                child: Text('🖨️ Settle After Bill Print (Dine-in)', style: TextStyle(fontWeight: FontWeight.w600)),
+                              ),
+                            ],
+                            onChanged: (val) async {
+                              if (val != null) {
+                                sysSettings.restaurantSettlementMode = val;
+                                await sysSettingsCtrl.save(sysSettings);
+                                if (mounted) setState(() {});
+                              }
+                            },
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -1038,7 +1084,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                             if (resv['address'] != null && resv['address'].toString().isNotEmpty)
                               Text('Address: ${resv['address']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                             if (resv['gstin'] != null && resv['gstin'].toString().isNotEmpty)
-                              Text('GSTIN: ${resv['gstin']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              Text('${CountryTaxHelper.taxIdLabel()}: ${resv['gstin']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                             const SizedBox(height: 4),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1125,7 +1171,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                             if (resv['address'] != null && resv['address'].toString().isNotEmpty)
                               Text('Address: ${resv['address']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                             if (resv['gstin'] != null && resv['gstin'].toString().isNotEmpty)
-                              Text('GSTIN: ${resv['gstin']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              Text('${CountryTaxHelper.taxIdLabel()}: ${resv['gstin']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                             const SizedBox(height: 4),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

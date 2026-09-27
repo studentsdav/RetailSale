@@ -10,6 +10,8 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
+import '../../core/utils/country_tax_helper.dart';
 import '../../core/utils/timezone_utils.dart';
 import '../../utils/branding_storage.dart';
 import '../../core/printing/pos_invoice_printer.dart';
@@ -459,7 +461,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   dense: true,
                   title: Text('${row['start_date']} to ${row['end_date']}'),
                   subtitle: Text(
-                    'Amount Rs. ${amount.toStringAsFixed(2)} | Status ${row['status'] ?? ''}',
+                    'Amount ${CurrencyService.format(amount)} | Status ${row['status'] ?? ''}',
                   ),
                   onTap: () async {
                     Navigator.pop(dialogContext);
@@ -1144,8 +1146,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               Text('Item: ${receiptData['item_name'] ?? ''}'),
               Text(
                   'Period: ${receiptData['start_date']} to ${receiptData['end_date']}'),
-              Text('Paid: Rs. ${paidAmount.toStringAsFixed(2)}'),
-              Text('Outstanding: Rs. ${outstandingAmount.toStringAsFixed(2)}'),
+              Text('Paid: ${CurrencyService.format(paidAmount)}'),
+              Text('Outstanding: ${CurrencyService.format(outstandingAmount)}'),
               const SizedBox(height: 10),
               const Text(
                 'You can preview the slip on screen or send it directly to the printer.',
@@ -1189,7 +1191,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 Text('Item: ${receiptData['item_name'] ?? ''}'),
                 Text('Daily Qty: ${receiptData['daily_allowed_qty'] ?? ''}'),
                 Text(
-                    'Total: Rs. ${(double.tryParse(receiptData['total_payment_amount']?.toString() ?? '0') ?? 0).toStringAsFixed(2)}'),
+                    'Total: ${CurrencyService.format(double.tryParse(receiptData['total_payment_amount']?.toString() ?? '0') ?? 0)}'),
                 const SizedBox(height: 12),
                 const Text('Payment Lines',
                     style: TextStyle(fontWeight: FontWeight.w700)),
@@ -1198,7 +1200,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     .map((entry) {
                   final row = Map<String, dynamic>.from(entry);
                   return Text(
-                    '${row['method'] ?? ''} - Rs. ${(row['amount'] ?? 0).toString()}',
+                    '${row['method'] ?? ''} - ${CurrencyService.format(double.tryParse('${row['amount'] ?? 0}') ?? 0)}',
                   );
                 })),
                 if ((receiptData['payment_notes'] ?? '')
@@ -1234,7 +1236,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final pdf = pw.Document();
     final property = _propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final schemes = (subscription['selected_schemes'] as List? ?? subscription['schemes'] as List? ?? const [])
         .map((entry) => Map<String, dynamic>.from(entry))
         .toList();
@@ -1406,7 +1408,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             fontSize: 9,
           ),
           kvLine(
-            'Item GST',
+            'Item ${CountryTaxHelper.taxName()}',
             currency.format(itemGst),
             fontSize: 9,
           ),
@@ -1418,7 +1420,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ),
             if (totalDeliveryTax > 0)
               kvLine(
-                'Delivery GST',
+                'Delivery ${CountryTaxHelper.taxName()}',
                 currency.format(totalDeliveryTax),
                 fontSize: 9,
               ),
@@ -1685,20 +1687,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   runSpacing: 8,
                   children: [
                     _ledgerInfoChip(
-                        'Prepaid: Rs. ${prepaidValue.toStringAsFixed(2)}'),
+                        'Prepaid: ${CurrencyService.format(prepaidValue)}'),
                     _ledgerInfoChip(
-                        'Gross Covered: Rs. ${grossCoveredValue.toStringAsFixed(2)}'),
+                        'Gross Covered: ${CurrencyService.format(grossCoveredValue)}'),
                     _ledgerInfoChip(
-                        'Scheme Discount Applied: Rs. ${schemeDiscountValue.toStringAsFixed(2)}'),
+                        'Scheme Discount Applied: ${CurrencyService.format(schemeDiscountValue)}'),
                     _ledgerInfoChip(
-                        'Net Actual: Rs. ${actualValue.toStringAsFixed(2)}'),
+                        'Net Actual: ${CurrencyService.format(actualValue)}'),
                     _ledgerInfoChip(
-                        'Outstanding: Rs. ${outstandingValue.toStringAsFixed(2)}'),
+                        'Outstanding: ${CurrencyService.format(outstandingValue)}'),
                     _ledgerInfoChip(
-                        'Credit: Rs. ${creditedValue.toStringAsFixed(2)}'),
+                        'Credit: ${CurrencyService.format(creditedValue)}'),
                     if (pendingSchemeDiscountValue > 0)
                       _ledgerInfoChip(
-                        'Scheme Discount Pending: Rs. ${pendingSchemeDiscountValue.toStringAsFixed(2)}',
+                        'Scheme Discount Pending: ${CurrencyService.format(pendingSchemeDiscountValue)}',
                       ),
                   ],
                 ),
@@ -1749,9 +1751,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
-                    'Paid: Rs. ${cashAdvanceSummary['original_amount'] ?? 0} | '
-                    'Used: Rs. ${cashAdvanceSummary['consumed_amount'] ?? 0} | '
-                    'Left: Rs. ${cashAdvanceSummary['available_amount'] ?? 0}',
+                    'Paid: ${CurrencyService.format(double.tryParse('${cashAdvanceSummary['original_amount'] ?? 0}') ?? 0)} | '
+                    'Used: ${CurrencyService.format(double.tryParse('${cashAdvanceSummary['consumed_amount'] ?? 0}') ?? 0)} | '
+                    'Left: ${CurrencyService.format(double.tryParse('${cashAdvanceSummary['available_amount'] ?? 0}') ?? 0)}',
                   ),
                 ],
                 if (itemAdvanceSummary.isEmpty &&
@@ -2072,7 +2074,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         children: [
           Text(label),
           Text(
-            'Rs. ${amount.toStringAsFixed(2)}',
+            CurrencyService.format(amount),
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ],
@@ -2373,7 +2375,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     if (!showHomeDelivery && _deliveryType == 'HOME') {
       _deliveryType = 'PICKUP';
     }
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final currency = CurrencyService.currencyFormat;
     final activeCount = _subscriptions
         .where((row) => row['active_subscription'] == true)
         .length;
@@ -2896,9 +2898,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                     child: Text(
                                       _isHomeDelivery && (context.read<SystemSettingsController>().settings?.subDeliveryChargeEnabled == true)
                                           ? (_isSubscriptionDeliveryFree
-                                              ? 'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Delivery: Free (Threshold: Rs. ${context.read<SystemSettingsController>().settings?.subDeliveryFreeAbove.toStringAsFixed(0)}) | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}'
-                                              : 'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Delivery: Rs. ${_subscriptionDeliveryChargeAmount.toStringAsFixed(2)} | Delivery GST: Rs. ${_subscriptionDeliveryChargeGstAmount.toStringAsFixed(2)} | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}')
-                                          : 'Taxable: Rs. ${_taxableSubscriptionAmount.toStringAsFixed(2)} | Tax (${_taxPercentValue.toStringAsFixed(2)}%): Rs. ${_taxAmountValue.toStringAsFixed(2)} | Total: Rs. ${_grandTotalSubscriptionAmount.toStringAsFixed(2)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}',
+                                              ? 'Taxable: ${CurrencyService.format(_taxableSubscriptionAmount)} | ${CountryTaxHelper.taxName()} (${_taxPercentValue.toStringAsFixed(2)}%): ${CurrencyService.format(_taxAmountValue)} | Delivery: Free (Threshold: ${CurrencyService.format(context.read<SystemSettingsController>().settings?.subDeliveryFreeAbove ?? 0)}) | Total: ${CurrencyService.format(_grandTotalSubscriptionAmount)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}'
+                                              : 'Taxable: ${CurrencyService.format(_taxableSubscriptionAmount)} | ${CountryTaxHelper.taxName()} (${_taxPercentValue.toStringAsFixed(2)}%): ${CurrencyService.format(_taxAmountValue)} | Delivery: ${CurrencyService.format(_subscriptionDeliveryChargeAmount)} | Delivery ${CountryTaxHelper.taxName()}: ${CurrencyService.format(_subscriptionDeliveryChargeGstAmount)} | Total: ${CurrencyService.format(_grandTotalSubscriptionAmount)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}')
+                                          : 'Taxable: ${CurrencyService.format(_taxableSubscriptionAmount)} | ${CountryTaxHelper.taxName()} (${_taxPercentValue.toStringAsFixed(2)}%): ${CurrencyService.format(_taxAmountValue)} | Total: ${CurrencyService.format(_grandTotalSubscriptionAmount)} | Days: ${_subscriptionDays} | End: ${DateFormat('dd-MMM-yyyy').format(_endDate)}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: Color(0xFF334155),

@@ -169,6 +169,12 @@ propertyDb.models.expense_categories =
     require('../../models/property/expenseCategory.model')(propertyDb, DataTypes);
 propertyDb.models.taxes_master =
     require('../../models/property/taxesMaster.model')(propertyDb, DataTypes);
+propertyDb.models.tax_profiles =
+    require('../../models/property/taxProfile.model')(propertyDb, DataTypes);
+propertyDb.models.tax_groups =
+    require('../../models/property/taxGroup.model')(propertyDb, DataTypes);
+propertyDb.models.tax_group_components =
+    require('../../models/property/taxGroupComponent.model')(propertyDb, DataTypes);
 propertyDb.models.expenses =
     require('../../models/property/expense.model')(propertyDb, DataTypes);
 propertyDb.models.expense_taxes =

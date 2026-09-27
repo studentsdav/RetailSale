@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:convert';
@@ -18,6 +19,9 @@ import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/notification_services.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/utils/timezone_utils.dart';
+import '../../core/utils/country_tax_helper.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 class RiderConsoleScreen extends StatefulWidget {
   const RiderConsoleScreen({super.key});
@@ -473,6 +477,14 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
     final bool hasBillNo = (record['sale_no']?.toString() ?? record['bill_no']?.toString() ?? '').trim().isNotEmpty;
     final int? orderId = record['id'] == null ? null : int.tryParse(record['id'].toString());
 
+    final settings = context.read<SystemSettingsController>().settings;
+    final country = record['billing_country']?.toString() ?? settings?.billingCountry ?? 'India';
+    final taxMode = record['billing_tax_mode']?.toString() ?? settings?.billingTaxMode ?? (CountryTaxHelper.isIndiaCountry(country) ? 'CGST_SGST' : 'VAT');
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(country);
+    final double cgstAmt = isIndia && taxMode == 'CGST_SGST' ? taxAmt / 2 : 0.0;
+    final double sgstAmt = isIndia && taxMode == 'CGST_SGST' ? taxAmt / 2 : 0.0;
+    final double igstAmt = isIndia && taxMode == 'IGST' ? taxAmt : 0.0;
+
     return SaleOrder(
       saleNo: saleNo,
       returnStatus: record['return_status']?.toString(),
@@ -487,8 +499,8 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
       saleDate: DateTime.tryParse(record['sale_date']?.toString() ?? record['created_at']?.toString() ?? '') ?? DateTime.now(),
       status: status,
       orderType: 'B2C',
-      billingCountry: 'India',
-      billingTaxMode: 'CGST_SGST',
+      billingCountry: country,
+      billingTaxMode: taxMode,
       billFormat: _billFormat,
       customerName: record['customer_name']?.toString(),
       customerPhone: record['customer_phone']?.toString(),
@@ -505,9 +517,9 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
       manualDiscountValue: 0.0,
       manualDiscountAmount: 0.0,
       taxableAmount: parseNum(record['sub_total'] ?? calculatedSubTotal) - taxAmt,
-      cgstAmount: taxAmt / 2,
-      sgstAmount: taxAmt / 2,
-      igstAmount: 0.0,
+      cgstAmount: cgstAmt,
+      sgstAmount: sgstAmt,
+      igstAmount: igstAmt,
       totalTax: taxAmt,
       taxBreakup: [],
       charges: billingCharges,
@@ -675,10 +687,10 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                   runSpacing: 8,
                   children: [
                     _buildStatItem('Delivered', '$totalDelivered orders', Colors.teal, itemWidth),
-                    _buildStatItem('Order Value', 'Rs. ${totalOrderValue.toStringAsFixed(2)}', Colors.blue, itemWidth),
-                    _buildStatItem('Cash Collected', 'Rs. ${totalCashCollected.toStringAsFixed(2)}', Colors.indigo, itemWidth),
-                    _buildStatItem('Comm. Unpaid', 'Rs. ${totalCommissionUnpaid.toStringAsFixed(2)}', Colors.red, itemWidth),
-                    _buildStatItem('Comm. Paid', 'Rs. ${totalCommissionPaid.toStringAsFixed(2)}', Colors.green, itemWidth),
+                    _buildStatItem('Order Value', '${CurrencyService.symbol} ${totalOrderValue.toStringAsFixed(2)}', Colors.blue, itemWidth),
+                    _buildStatItem('Cash Collected', '${CurrencyService.symbol} ${totalCashCollected.toStringAsFixed(2)}', Colors.indigo, itemWidth),
+                    _buildStatItem('Comm. Unpaid', '${CurrencyService.symbol} ${totalCommissionUnpaid.toStringAsFixed(2)}', Colors.red, itemWidth),
+                    _buildStatItem('Comm. Paid', '${CurrencyService.symbol} ${totalCommissionPaid.toStringAsFixed(2)}', Colors.green, itemWidth),
                   ],
                 );
               },
@@ -865,8 +877,8 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                                       ? 'STEP 3: Return to store and hand over the old item to supplier.'
                                       : 'STEP 4: Handed over. Awaiting final supplier confirmation.')))
                           : isCredit
-                              ? 'Collect Amount: Rs. 0.00 (CREDIT - DO NOT COLLECT)'
-                              : 'Collect Amount: Rs. ${netAmt.toStringAsFixed(2)} (${isCod ? "CASH ON DELIVERY" : "PREPAID - DO NOT COLLECT"})',
+                              ? 'Collect Amount: ${CurrencyService.symbol} 0.00 (CREDIT - DO NOT COLLECT)'
+                              : 'Collect Amount: ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} (${isCod ? "CASH ON DELIVERY" : "PREPAID - DO NOT COLLECT"})',
                       style: TextStyle(
                         color: isReturn
                             ? Colors.orange.shade900
@@ -917,17 +929,17 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                           String detailText = '';
                           if (isCod) {
                             if (isRefund) {
-                              detailText = 'Original Total: Rs. ${origAmt.toStringAsFixed(2)} (Amount reduced by Rs. ${diff.abs().toStringAsFixed(2)})';
+                              detailText = 'Original Total: ${CurrencyService.symbol} ${origAmt.toStringAsFixed(2)} (Amount reduced by ${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)})';
                             } else {
-                              detailText = 'Original Total: Rs. ${origAmt.toStringAsFixed(2)} (Rs. ${diff.abs().toStringAsFixed(2)} Extra charged)';
+                              detailText = 'Original Total: ${CurrencyService.symbol} ${origAmt.toStringAsFixed(2)} (${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)} Extra charged)';
                             }
                           } else {
                             // Prepaid order
                             if (isRefund) {
                               final isRefunded = order['refund_status']?.toString() == 'REFUNDED';
-                              detailText = 'Original Total: Rs. ${origAmt.toStringAsFixed(2)} (Rs. ${diff.abs().toStringAsFixed(2)} ${isRefunded ? "Refunded" : "Refund pending"})';
+                              detailText = 'Original Total: ${CurrencyService.symbol} ${origAmt.toStringAsFixed(2)} (${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)} ${isRefunded ? "Refunded" : "Refund pending"})';
                             } else {
-                              detailText = 'Original Total: Rs. ${origAmt.toStringAsFixed(2)} (Rs. ${diff.abs().toStringAsFixed(2)} Extra charged)';
+                              detailText = 'Original Total: ${CurrencyService.symbol} ${origAmt.toStringAsFixed(2)} (${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)} Extra charged)';
                             }
                           }
 
@@ -1135,7 +1147,7 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Order #${order['id']} • Rs. ${netAmt.toStringAsFixed(2)}',
+                    'Order #${order['id']} • ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 4),
@@ -1155,7 +1167,7 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'Comm: Rs. ${commAmt.toStringAsFixed(2)}',
+                  'Comm: ${CurrencyService.symbol} ${commAmt.toStringAsFixed(2)}',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 4),

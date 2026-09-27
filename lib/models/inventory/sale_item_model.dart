@@ -1,4 +1,5 @@
 import 'tax_breakdown_model.dart';
+import 'tax_group_model.dart';
 
 class SaleItem {
   final int itemId;
@@ -13,6 +14,8 @@ class SaleItem {
   final double referenceRate;
   final String taxType;
   final double taxPercent;
+  final String? taxGroupId;
+  final TaxGroup? taxGroup;
   final bool discountApplicable;
   final bool schemeApplicable;
   final bool isSchemeFree;
@@ -45,6 +48,8 @@ class SaleItem {
     double? referenceRate,
     this.taxType = 'GST',
     this.taxPercent = 0,
+    this.taxGroupId,
+    this.taxGroup,
     this.discountApplicable = true,
     this.schemeApplicable = true,
     this.isSchemeFree = false,
@@ -87,6 +92,8 @@ class SaleItem {
     String? hsnSacCode,
     String? taxType,
     double? taxPercent,
+    String? taxGroupId,
+    TaxGroup? taxGroup,
     bool? discountApplicable,
     bool? schemeApplicable,
     bool? isSchemeFree,
@@ -119,6 +126,8 @@ class SaleItem {
       referenceRate: referenceRate ?? this.referenceRate,
       taxType: taxType ?? this.taxType,
       taxPercent: taxPercent ?? this.taxPercent,
+      taxGroupId: taxGroupId ?? this.taxGroupId,
+      taxGroup: taxGroup ?? this.taxGroup,
       discountApplicable: discountApplicable ?? this.discountApplicable,
       schemeApplicable: schemeApplicable ?? this.schemeApplicable,
       isSchemeFree: isSchemeFree ?? this.isSchemeFree,
@@ -154,6 +163,8 @@ class SaleItem {
       'reference_rate': referenceRate,
       'tax_type': taxType,
       'tax_percent': taxPercent,
+      'tax_group_id': taxGroupId,
+      'tax_group': taxGroup?.toJson(),
       'discount_applicable': discountApplicable,
       'scheme_applicable': schemeApplicable,
       'is_scheme_free': isSchemeFree,
@@ -180,6 +191,13 @@ class SaleItem {
   factory SaleItem.fromJson(Map<String, dynamic> json) {
     double parseNum(dynamic value) =>
         double.tryParse(value?.toString() ?? '') ?? 0;
+
+    TaxGroup? parsedTaxGroup;
+    if (json['tax_group'] != null && json['tax_group'] is Map) {
+      parsedTaxGroup = TaxGroup.fromJson(Map<String, dynamic>.from(json['tax_group']));
+    } else if (json['item'] is Map && json['item']['tax_group'] != null && json['item']['tax_group'] is Map) {
+      parsedTaxGroup = TaxGroup.fromJson(Map<String, dynamic>.from(json['item']['tax_group']));
+    }
 
     return SaleItem(
       itemId: json['item_id'] ?? 0,
@@ -209,6 +227,9 @@ class SaleItem {
         json['tax_percent'] ??
             (json['item'] is Map ? json['item']['tax_percent'] : null),
       ),
+      taxGroupId: json['tax_group_id']?.toString() ??
+          (json['item'] is Map ? json['item']['tax_group_id']?.toString() : null),
+      taxGroup: parsedTaxGroup,
       discountApplicable: json['discount_applicable'] ?? true,
       schemeApplicable: json['scheme_applicable'] ?? true,
       isSchemeFree: json['is_scheme_free'] ?? false,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
 
+import '../../core/currency/currency_service.dart';
+
 class StockReceiveScreen extends StatefulWidget {
   const StockReceiveScreen({super.key});
 
@@ -132,7 +134,7 @@ class _StockReceiveScreenState extends State<StockReceiveScreen> {
                                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text('Total Qty: ${t['total_qty']} | Total Amount: ₹${t['total_amount']}'),
+                                  Text('Total Qty: ${t['total_qty']} | Total Amount: ${CurrencyService.format(double.tryParse(t['total_amount']?.toString() ?? '0') ?? 0)}'),
                                   Text('Dispatch Date: ${t['dispatch_date'] ?? ''}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                                 ],
                               ),

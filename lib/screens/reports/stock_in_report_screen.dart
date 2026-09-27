@@ -9,7 +9,11 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'package:provider/provider.dart';
 import '../../controllers/reports/stock_in_report_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import '../../core/currency/currency_service.dart';
+import '../../core/utils/country_tax_helper.dart';
 import '../../models/reports/stock_in_model.dart';
 import '../../utils/branding_storage.dart';
 
@@ -275,6 +279,10 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
       );
     }
 
+    final settings = context.watch<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+
     return Column(
       children: [
         _summaryCard(),
@@ -331,11 +339,11 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                             Colors.brown,
                           ),
                           _headerChip(
-                            "Paid: ${header.paidAmount.toStringAsFixed(2)}",
+                            "Paid: ${CurrencyService.format(header.paidAmount)}",
                             Colors.green,
                           ),
                           _headerChip(
-                            "Outstanding: ${header.outstandingAmount.toStringAsFixed(2)}",
+                            "Outstanding: ${CurrencyService.format(header.outstandingAmount)}",
                             header.billStatus.toUpperCase() == 'PAID'
                                 ? Colors.green
                                 : Colors.red,
@@ -370,13 +378,13 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                "Receiving No: ${header.grnNo}  Supplier Invoice: ${header.supplierBill.isEmpty ? '--' : header.supplierBill}  GST: ${header.supplierGstin}",
+                                "Receiving No: ${header.grnNo}  Supplier Invoice: ${header.supplierBill.isEmpty ? '--' : header.supplierBill}  ${CountryTaxHelper.taxIdLabel(country)}: ${header.supplierGstin}",
                                 style: const TextStyle(
                                     fontSize: 12, color: Colors.grey),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                "State: ${header.supplierState}  ${header.billStatus}  Paid: ${header.paidAmount.toStringAsFixed(2)}  Outstanding: ${header.outstandingAmount.toStringAsFixed(2)}",
+                                "State: ${header.supplierState}  ${header.billStatus}  Paid: ${CurrencyService.format(header.paidAmount)}  Outstanding: ${CurrencyService.format(header.outstandingAmount)}",
                                 style: const TextStyle(
                                     fontSize: 12, color: Colors.grey),
                               ),
@@ -392,11 +400,11 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                                     TextStyle(fontSize: 12, color: Colors.grey),
                               ),
                               Text(
-                                "₹${invoiceTotal.toStringAsFixed(2)}",
+                                CurrencyService.format(invoiceTotal),
                                 style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                               ),
                             ],
                           ),
@@ -417,15 +425,15 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                             fontWeight: FontWeight.w600,
                             color: Colors.black87,
                           ),
-                          columns: const [
-                            DataColumn(label: Text('Item')),
-                            DataColumn(label: Text('Unit')),
-                            DataColumn(label: Text('Qty')),
-                            DataColumn(label: Text('Rate')),
-                            DataColumn(label: Text('Amount')),
-                            DataColumn(label: Text('GST %')),
-                            DataColumn(label: Text('GST Amount')),
-                            DataColumn(label: Text('Net Amount')),
+                          columns: [
+                            const DataColumn(label: Text('Item')),
+                            const DataColumn(label: Text('Unit')),
+                            const DataColumn(label: Text('Qty')),
+                            const DataColumn(label: Text('Rate')),
+                            const DataColumn(label: Text('Amount')),
+                            DataColumn(label: Text(CountryTaxHelper.taxPercentLabel(country, taxMode))),
+                            DataColumn(label: Text(CountryTaxHelper.taxAmountLabel(country, taxMode))),
+                            const DataColumn(label: Text('Net Amount')),
                           ],
                           rows: items.map((e) {
                             return DataRow(
@@ -458,11 +466,11 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
-                            color: Colors.blueGrey.shade50,
+                              color: Colors.blueGrey.shade50,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            "Invoice Total : ₹${invoiceTotal.toStringAsFixed(2)}",
+                            "Invoice Total : ${CurrencyService.format(invoiceTotal)}",
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -680,6 +688,9 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
     final excel = exc.Excel.createExcel();
     final sheet = excel['Receiving Report'];
 
+    final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
+    final sysTaxMode = mounted ? context.read<SystemSettingsController>().settings?.billingTaxMode : null;
+
     int row = 0;
 
     // ================= TITLE =================
@@ -732,7 +743,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
               .cell(exc.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
               .value =
           exc.TextCellValue(
-              'GST No: ${header.supplierGstin} | State: ${header.supplierState} | ${header.billStatus} | Paid: ${header.paidAmount.toStringAsFixed(2)} | Outstanding: ${header.outstandingAmount.toStringAsFixed(2)}');
+              '${CountryTaxHelper.taxIdLabel(sysCountry)}: ${header.supplierGstin} | State: ${header.supplierState} | ${header.billStatus} | Paid: ${header.paidAmount.toStringAsFixed(2)} | Outstanding: ${header.outstandingAmount.toStringAsFixed(2)}');
 
       row++;
 
@@ -743,8 +754,8 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
         "Qty",
         "Rate",
         "Amount",
-        "GST %",
-        "GST Amount",
+        CountryTaxHelper.taxPercentLabel(sysCountry, sysTaxMode),
+        CountryTaxHelper.taxAmountLabel(sysCountry, sysTaxMode),
         "Net Amount"
       ];
 
@@ -810,7 +821,13 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
 
   Future<void> exportToPdf() async {
     final pdf = pw.Document();
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
+    final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
+    final sysTaxMode = mounted ? context.read<SystemSettingsController>().settings?.billingTaxMode : null;
+    final currencySymbol = CurrencyService.symbol;
+    final currency = NumberFormat.currency(
+      locale: CurrencyService.code == 'INR' ? 'en_IN' : 'en_US',
+      symbol: '$currencySymbol ',
+    );
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
     final nowStr = DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now());
@@ -966,7 +983,16 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
               ),
             );
 
-            final tableHeaders = ["Item", "Unit", "Qty", "Rate", "Amount", "GST %", "GST Amt", "Net Amount"];
+            final tableHeaders = [
+              "Item",
+              "Unit",
+              "Qty",
+              "Rate",
+              "Amount",
+              CountryTaxHelper.taxPercentLabel(sysCountry, sysTaxMode),
+              CountryTaxHelper.taxAmountLabel(sysCountry, sysTaxMode),
+              "Net Amount",
+            ];
             final tableData = items.map((e) {
               invoiceTotal += e.netAmount;
               return [

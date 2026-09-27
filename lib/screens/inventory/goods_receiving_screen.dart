@@ -22,6 +22,9 @@ import '../../models/inventory/stock_location_model.dart';
 import '../../utils/branding_storage.dart';
 import '../../utils/inclusive_rate_helper.dart';
 import '../../widgets/entry_shortcuts.dart';
+import '../../core/utils/country_tax_helper.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 class GoodsReceivingScreen extends StatefulWidget {
   const GoodsReceivingScreen({super.key});
@@ -704,6 +707,10 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
 
   // ================= ITEM ENTRY =================
   Widget _itemEntryCard() {
+    final settings = context.watch<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+
     return _card(
       title: 'Item Entry',
       child: Wrap(
@@ -994,7 +1001,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
           ),
           _number(
             _tax,
-            'Tax %',
+            CountryTaxHelper.taxPercentLabel(country, taxMode),
             focusNode: _taxFocus,
             prevNode: _saleRateFocus,
             onSubmit: () => _expDateFocus.requestFocus(),
@@ -1129,7 +1136,14 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                     const DataColumn(label: Text('Unit')),
                     const DataColumn(label: Text('Buy Rate')),
                     const DataColumn(label: Text('Sale Rate')),
-                    const DataColumn(label: Text('GST %')),
+                    DataColumn(
+                      label: Text(
+                        CountryTaxHelper.taxPercentLabel(
+                          context.watch<SystemSettingsController>().settings?.billingCountry,
+                          context.watch<SystemSettingsController>().settings?.billingTaxMode,
+                        ),
+                      ),
+                    ),
                     const DataColumn(label: Text('Qty')),
                     const DataColumn(label: Text('Status')),
                     const DataColumn(label: Text('Amount')),
@@ -1229,11 +1243,16 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
 
   // ================= FOOTER =================
   Widget _footerCard() {
+    final settings = context.watch<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+    final taxLabel = CountryTaxHelper.taxName(country, taxMode);
+
     return _card(
       child: Row(
         children: [
           _totalChip('Amount', totalAmount),
-          _totalChip('GST', totalGST),
+          _totalChip(taxLabel, totalGST),
           _totalChip('Net', netAmount, highlight: true),
           const Spacer(),
           FilledButton.icon(
@@ -1454,6 +1473,14 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
     //   }
     // }
 
+    final settings = context.read<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode;
+    final taxName = CountryTaxHelper.taxName(country, taxMode);
+    final taxPercentLabel = CountryTaxHelper.taxPercentLabel(country, taxMode);
+    final taxAmtLabel = CountryTaxHelper.taxAmountLabel(country, taxMode);
+    final taxIdLabel = CountryTaxHelper.taxIdLabel(country);
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -1463,6 +1490,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
+            country: country,
             rightWidget: pw.Container(
               padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: pw.BoxDecoration(border: pw.Border.all()),
@@ -1498,7 +1526,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                       if ((supplier.gstin ?? '').trim().isNotEmpty)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(top: 2),
-                          child: pw.Text("GSTIN: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                          child: pw.Text("$taxIdLabel: ${supplier.gstin!.trim()}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
                         ),
                       if ((_supplierBill.text).trim().isNotEmpty)
                         pw.Padding(
@@ -1548,8 +1576,8 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                   _cell("Unit", bold: true, alignment: pw.Alignment.center),
                   _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
                   _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
-                  _cell("GST %", bold: true, alignment: pw.Alignment.centerRight),
-                  _cell("GST Amt", bold: true, alignment: pw.Alignment.centerRight),
+                  _cell(taxPercentLabel, bold: true, alignment: pw.Alignment.centerRight),
+                  _cell(taxAmtLabel, bold: true, alignment: pw.Alignment.centerRight),
                   _cell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
@@ -1582,7 +1610,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
               child: pw.Column(
                 children: [
                   _total("Sub Total", totalAmount),
-                  _total("GST", totalGST),
+                  _total(taxName, totalGST),
                   pw.Divider(color: PdfColors.grey400, thickness: 0.5),
                   _total("Net Amount", netAmount, bold: true),
                 ],

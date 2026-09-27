@@ -7,12 +7,15 @@ import 'package:printing/printing.dart';
 import '../../controllers/inventory/issue_controller.dart';
 import '../../controllers/modify/issue_modify_controller.dart';
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 import '../../models/auth/permission_service.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart' show PropertyInfo;
 import '../../models/inventory/stock_location_model.dart';
 import '../../utils/branding_storage.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../controllers/settings/system_settings_controller.dart';
+import 'package:provider/provider.dart';
 
 class IssueModifyScreen extends StatefulWidget {
   const IssueModifyScreen({super.key});
@@ -135,6 +138,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
   }
 
   Future<void> _printIssue() async {
+    final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
     final pdf = pw.Document();
 
     final property = propertyCtrl.data;
@@ -153,6 +157,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
+            country: sysCountry,
             rightWidget: pw.Container(
               padding: const pw.EdgeInsets.all(8),
               decoration: pw.BoxDecoration(
@@ -655,7 +660,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                       ),
                       const Spacer(),
                       Text(
-                        "₹ ${total.toStringAsFixed(2)}",
+                        CurrencyService.format(total),
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

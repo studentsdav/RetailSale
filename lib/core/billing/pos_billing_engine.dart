@@ -1,6 +1,7 @@
 import '../../models/inventory/billing_charge_model.dart';
 import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/tax_breakdown_model.dart';
+import '../../models/inventory/tax_group_model.dart';
 
 class PosBillingEngine {
   const PosBillingEngine._();
@@ -12,6 +13,7 @@ class PosBillingEngine {
     required double manualDiscountAmount,
     required List<BillingCharge> charges,
     int? schemeItemId,
+    List<TaxGroup>? taxGroups,
   }) {
     final totalQty = items.fold<double>(0, (sum, item) => sum + item.qty);
 
@@ -62,6 +64,7 @@ class PosBillingEngine {
           taxType: item.taxType,
           taxPercent: item.taxPercent,
           taxableAmount: taxableAmount,
+          taxGroup: item.taxGroup,
         );
         final taxAmount = netInclusive - taxableAmount;
         final lineTotal = netInclusive;
@@ -109,6 +112,7 @@ class PosBillingEngine {
           taxType: item.taxType,
           taxPercent: item.taxPercent,
           taxableAmount: taxableAmount,
+          taxGroup: item.taxGroup,
         );
         final taxAmount = taxableAmount * (item.taxPercent / 100);
         final lineTotal = taxableAmount + taxAmount;
@@ -171,18 +175,33 @@ class PosBillingEngine {
           : subTotal;
       final effectiveAmount = charge.effectiveAmount(chargeBase);
       if (effectiveAmount <= 0) continue;
-      final resolvedCharge = charge.copyWith(amount: effectiveAmount);
-      final chargeTaxes = resolvedCharge.taxable
+
+      TaxGroup? chargeTaxGroup = charge.taxGroup;
+      if (chargeTaxGroup == null && taxGroups != null && taxGroups.isNotEmpty) {
+        chargeTaxGroup = taxGroups.where((g) =>
+            g.id == charge.taxGroupId ||
+            (g.groupCode != null && g.groupCode!.trim().toLowerCase() == charge.taxType.trim().toLowerCase()) ||
+            g.groupName.trim().toLowerCase() == charge.taxType.trim().toLowerCase()
+        ).firstOrNull;
+      }
+
+      final chargeTaxes = charge.taxable
           ? _resolveTaxes(
               taxMode: taxMode,
-              taxType: resolvedCharge.taxType,
-              taxPercent: resolvedCharge.taxPercent,
+              taxType: charge.taxType,
+              taxPercent: charge.taxPercent,
               taxableAmount: effectiveAmount,
+              taxGroup: chargeTaxGroup,
             )
           : const <TaxBreakdown>[];
       final chargeTax = chargeTaxes.fold<double>(
         0,
         (sum, entry) => sum + entry.taxAmount,
+      );
+      final resolvedCharge = charge.copyWith(
+        amount: effectiveAmount,
+        taxGroup: chargeTaxGroup,
+        taxBreakup: chargeTaxes,
       );
       computedCharges.add(
         ComputedCharge(
@@ -264,9 +283,28 @@ class PosBillingEngine {
     required String taxType,
     required double taxPercent,
     required double taxableAmount,
+    TaxGroup? taxGroup,
   }) {
     if (taxMode == 'NONE' || taxPercent <= 0 || taxableAmount <= 0) {
       return const <TaxBreakdown>[];
+    }
+
+    if (taxGroup != null && taxGroup.components.isNotEmpty) {
+      final list = <TaxBreakdown>[];
+      for (final comp in taxGroup.components) {
+        final compAmount = taxableAmount * comp.rate / 100;
+        list.add(
+          TaxBreakdown(
+            code: comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX',
+            label: '${comp.componentName} (${_fmt(comp.rate)}%)',
+            taxType: comp.componentCode,
+            rate: comp.rate,
+            taxableAmount: taxableAmount,
+            taxAmount: compAmount,
+          ),
+        );
+      }
+      return list;
     }
 
     final normalizedType = taxType.toUpperCase();
@@ -274,6 +312,7 @@ class PosBillingEngine {
 
     switch (normalizedType) {
       case 'VAT':
+      case 'VAT_ONLY':
         return [
           TaxBreakdown(
             code: 'VAT',
@@ -282,6 +321,30 @@ class PosBillingEngine {
             rate: taxPercent,
             taxableAmount: taxableAmount,
             taxAmount: taxAmount,
+          ),
+        ];
+      case 'VAT_CTL':
+        // For Kenya restaurant businesses: Tax rate breakdown e.g. 16% VAT + 2% CTL
+        const ctlRate = 2.0;
+        final vatRate = taxPercent > 2.0 ? taxPercent - ctlRate : taxPercent;
+        final vatAmount = taxableAmount * vatRate / 100;
+        final ctlAmount = taxableAmount * ctlRate / 100;
+        return [
+          TaxBreakdown(
+            code: 'VAT',
+            label: 'VAT ${_fmt(vatRate)}%',
+            taxType: 'VAT',
+            rate: vatRate,
+            taxableAmount: taxableAmount,
+            taxAmount: vatAmount,
+          ),
+          TaxBreakdown(
+            code: 'CTL',
+            label: 'CTL ${_fmt(ctlRate)}%',
+            taxType: 'CTL',
+            rate: ctlRate,
+            taxableAmount: taxableAmount,
+            taxAmount: ctlAmount,
           ),
         ];
       case 'CESS':
@@ -295,6 +358,36 @@ class PosBillingEngine {
             taxAmount: taxAmount,
           ),
         ];
+      case 'US_SALES_TAX':
+      case 'COMPOSITE':
+      case 'SALES_TAX':
+        {
+          final stateRate = taxPercent > 1.0 ? double.parse((taxPercent - 1.0).toStringAsFixed(2)) : taxPercent;
+          final cityRate = taxPercent > 1.0 ? 1.0 : 0.0;
+
+          final stateAmt = taxableAmount * stateRate / 100;
+          final cityAmt = taxableAmount * cityRate / 100;
+
+          return [
+            TaxBreakdown(
+              code: 'STATE_TAX',
+              label: 'STATE SALES TAX (${_fmt(stateRate)}%)',
+              taxType: 'STATE_TAX',
+              rate: stateRate,
+              taxableAmount: taxableAmount,
+              taxAmount: stateAmt,
+            ),
+            if (cityRate > 0)
+              TaxBreakdown(
+                code: 'CITY_TAX',
+                label: 'CITY TAX (${_fmt(cityRate)}%)',
+                taxType: 'CITY_TAX',
+                rate: cityRate,
+                taxableAmount: taxableAmount,
+                taxAmount: cityAmt,
+              ),
+          ];
+        }
       case 'OTHER':
       case 'CUSTOM':
         return [
@@ -309,6 +402,35 @@ class PosBillingEngine {
         ];
       case 'GST':
       default:
+        if (normalizedType.contains('USA') ||
+            normalizedType.contains('US_') ||
+            normalizedType.contains('SALES') ||
+            taxMode == 'US_SALES_TAX' ||
+            taxMode == 'SALES_TAX') {
+          final stateRate = taxPercent > 1.0 ? double.parse((taxPercent - 1.0).toStringAsFixed(2)) : taxPercent;
+          final cityRate = taxPercent > 1.0 ? 1.0 : 0.0;
+          final stateAmt = taxableAmount * stateRate / 100;
+          final cityAmt = taxableAmount * cityRate / 100;
+          return [
+            TaxBreakdown(
+              code: 'STATE_TAX',
+              label: 'STATE SALES TAX (${_fmt(stateRate)}%)',
+              taxType: 'STATE_TAX',
+              rate: stateRate,
+              taxableAmount: taxableAmount,
+              taxAmount: stateAmt,
+            ),
+            if (cityRate > 0)
+              TaxBreakdown(
+                code: 'CITY_TAX',
+                label: 'CITY TAX (${_fmt(cityRate)}%)',
+                taxType: 'CITY_TAX',
+                rate: cityRate,
+                taxableAmount: taxableAmount,
+                taxAmount: cityAmt,
+              ),
+          ];
+        }
         if (taxMode == 'IGST') {
           return [
             TaxBreakdown(
@@ -321,12 +443,24 @@ class PosBillingEngine {
             ),
           ];
         }
-        if (taxMode == 'VAT') {
+        if (taxMode == 'VAT' || normalizedType == 'VAT') {
           return [
             TaxBreakdown(
               code: 'VAT',
               label: 'VAT ${_fmt(taxPercent)}%',
               taxType: 'VAT',
+              rate: taxPercent,
+              taxableAmount: taxableAmount,
+              taxAmount: taxAmount,
+            ),
+          ];
+        }
+        if (normalizedType != 'GST' && normalizedType != 'CGST_SGST' && taxMode != 'CGST_SGST') {
+          return [
+            TaxBreakdown(
+              code: normalizedType.isNotEmpty ? normalizedType : 'TAX',
+              label: '${normalizedType.isNotEmpty ? normalizedType : "Tax"} (${_fmt(taxPercent)}%)',
+              taxType: normalizedType.isNotEmpty ? normalizedType : 'TAX',
               rate: taxPercent,
               taxableAmount: taxableAmount,
               taxAmount: taxAmount,

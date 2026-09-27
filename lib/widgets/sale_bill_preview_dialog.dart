@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../core/config/date_time_service.dart';
+import '../core/currency/currency_service.dart';
 import '../core/utils/timezone_utils.dart';
 import '../core/printing/pos_invoice_printer.dart';
 import '../models/inventory/sale_order_model.dart';
@@ -12,7 +13,6 @@ Future<void> showSaleBillPreviewDialog(
 }) async {
   final order = SaleOrder.fromJson(sale);
   final itemCount = order.items.length;
-  final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ');
 
   await showDialog<void>(
     context: context,
@@ -30,7 +30,7 @@ Future<void> showSaleBillPreviewDialog(
               Text('Date: ${TimeZoneUtils.formatInTimeZone(order.saleDate, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy hh:mm a')}'),
               Text('Status: ${order.status}'),
               Text('Payment: ${order.paymentMode}'),
-              Text('Net Amount: ${currency.format(order.netAmount)}'),
+              Text('Net Amount: ${CurrencyService.format(order.netAmount)}'),
               if ((order.paymentReference ?? '').trim().isNotEmpty)
                 Text('Reference: ${order.paymentReference!.trim()}'),
               if ((order.notes ?? '').trim().isNotEmpty) ...[
