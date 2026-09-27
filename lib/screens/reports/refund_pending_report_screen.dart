@@ -9,7 +9,6 @@ import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../../controllers/sales/sales_controller.dart';
 import '../../core/config/date_time_service.dart';
@@ -485,7 +484,7 @@ class _RefundPendingReportScreenState extends State<RefundPendingReportScreen> {
                           labelText: 'Refund Amount To Pay',
                           hintText: 'Enter amount to refund',
                           prefixIcon: const Icon(Icons.payments_outlined, size: 20),
-                          suffixText: 'INR',
+                          suffixText: CurrencyService.code,
                           errorText: errorText,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),

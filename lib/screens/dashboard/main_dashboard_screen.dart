@@ -276,8 +276,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   String _formatMoney(num amount, {int decimals = 0}) {
-    final prefix = _currencyPrefix;
-    return '$prefix ${amount.toDouble().toStringAsFixed(decimals)}';
+    return CurrencyService.formatWithSymbol(amount, _currencyPrefix, decimals);
   }
 
   Future<void> _loadFavorites() async {

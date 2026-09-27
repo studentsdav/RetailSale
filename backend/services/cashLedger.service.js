@@ -57,6 +57,10 @@ function addDays(value, days) {
 }
 
 function entryDelta(entry) {
+    const type = String(entry.transaction_type || '').toUpperCase();
+    if (type === 'SALE_CREDIT' || type === 'SUBSCRIPTION_SETTLEMENT_CREDIT' || type === 'SUBSCRIPTION_SETTLEMENT_PARTIAL') {
+        return 0;
+    }
     return roundAmount(entry.amount_in) - roundAmount(entry.amount_out) + roundAmount(entry.adjustment_amount);
 }
 
@@ -346,7 +350,9 @@ async function createLedgerEntry({
         runningBalance = roundAmount(opening?.opening_balance ?? 0);
     }
 
-    const delta = roundAmount(amount_in) - roundAmount(amount_out) + roundAmount(adjustment_amount);
+    const txnTypeStr = String(transaction_type || '').toUpperCase();
+    const isCreditSaleTxn = txnTypeStr === 'SALE_CREDIT' || txnTypeStr === 'SUBSCRIPTION_SETTLEMENT_CREDIT' || txnTypeStr === 'SUBSCRIPTION_SETTLEMENT_PARTIAL';
+    const delta = isCreditSaleTxn ? 0 : (roundAmount(amount_in) - roundAmount(amount_out) + roundAmount(adjustment_amount));
     const newBalance = roundAmount(runningBalance + delta);
     // ─────────────────────────────────────────────────────────────────────
 

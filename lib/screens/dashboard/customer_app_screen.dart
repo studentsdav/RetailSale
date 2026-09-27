@@ -22,6 +22,7 @@ import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/billing_charge_model.dart';
+import '../../models/inventory/tax_breakdown_model.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/notification_services.dart';
 import '../../utils/order_status_display.dart';
@@ -750,7 +751,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${CurrencyService.symbol} ${amount.toStringAsFixed(2)}',
+                      CurrencyService.format(amount),
                       style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.onSurface,
@@ -983,7 +984,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${CurrencyService.symbol} ${amount.toStringAsFixed(2)}',
+                      CurrencyService.format(amount),
                       style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.onSurface,
@@ -1404,9 +1405,15 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           'qty': qty,
           'rate': rate,
           'amount': itemTotal,
+          'tax_type': item['tax_type'] ?? 'GST',
           'tax_percent': itemTaxPercent,
+          'tax_group_id': item['tax_group_id'],
+          'tax_group': item['tax_group'],
+          'tax_group_components': item['tax_group_components'] ?? item['tax_group']?['components'],
+          'is_tax_inclusive': isInclusive,
           'taxable_amount': taxableAmount,
           'tax_amount': itemTaxAmount,
+          'line_total': taxableAmount + itemTaxAmount,
         });
       });
 
@@ -1873,7 +1880,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(
-                              'Rate: ${CurrencyService.symbol} ${itemMap['rate']} • Total: ${CurrencyService.symbol} ${itemMap['amount']}'),
+                              'Rate: ${CurrencyService.format(double.tryParse(itemMap['rate']?.toString() ?? '0') ?? 0.0)} • Total: ${CurrencyService.format(double.tryParse(itemMap['amount']?.toString() ?? '0') ?? 0.0)}'),
                           value: isChecked,
                           onChanged: (val) {
                             setDialogState(() {
@@ -2029,6 +2036,11 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     double parseNum(dynamic value) =>
         double.tryParse(value?.toString() ?? '') ?? 0.0;
 
+    final settings = context.read<SystemSettingsController>().settings;
+    final country = record['billing_country']?.toString() ?? settings?.billingCountry ?? 'India';
+    final taxMode = record['billing_tax_mode']?.toString() ?? settings?.billingTaxMode ?? (CountryTaxHelper.isIndiaCountry(country) ? 'CGST_SGST' : 'VAT');
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(country);
+
     final rawItems = record['received_items'] as List? ?? record['items'] as List? ?? [];
     List<SaleItem> saleItems = [];
     double calculatedSubTotal = 0.0;
@@ -2037,29 +2049,9 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     for (var it in rawItems) {
       final qty = parseNum(it['qty'] ?? 1.0);
       final rate = parseNum(it['rate'] ?? 0.0);
-      final lineTaxPercent = parseNum(it['tax_percent'] ?? 0.0);
-      
-      final total = qty * rate;
-      final taxAmt = parseNum(it['tax_amount'] ?? (total * lineTaxPercent / 100.0));
-      final taxableAmt = parseNum(it['taxable_amount'] ?? (total - taxAmt));
-      final lineTotal = parseNum(it['line_total'] ?? total);
-
-      calculatedSubTotal += total;
+      calculatedSubTotal += (qty * rate);
       calculatedTotalQty += qty;
-
-      saleItems.add(SaleItem(
-        itemId: int.tryParse(it['item_id']?.toString() ?? '') ?? 0,
-        itemCode: it['item_code']?.toString() ?? '',
-        itemName: it['item_name']?.toString() ?? '',
-        barcode: it['barcode']?.toString() ?? '',
-        unit: it['unit']?.toString() ?? 'Pcs',
-        qty: qty,
-        rate: rate,
-        taxPercent: lineTaxPercent,
-        taxAmount: taxAmt,
-        taxableAmount: taxableAmt,
-        lineTotal: lineTotal,
-      ));
+      saleItems.add(SaleItem.fromJson(Map<String, dynamic>.from(it)));
     }
 
     List<BillingCharge> billingCharges = [];
@@ -2146,10 +2138,6 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       ];
     }
 
-    final settings = context.read<SystemSettingsController>().settings;
-    final country = record['billing_country']?.toString() ?? settings?.billingCountry ?? 'India';
-    final taxMode = record['billing_tax_mode']?.toString() ?? settings?.billingTaxMode ?? (CountryTaxHelper.isIndiaCountry(country) ? 'CGST_SGST' : 'VAT');
-    final bool isIndia = CountryTaxHelper.isIndiaCountry(country);
     final double cgstAmt = isIndia && taxMode == 'CGST_SGST' ? taxAmt / 2 : 0.0;
     final double sgstAmt = isIndia && taxMode == 'CGST_SGST' ? taxAmt / 2 : 0.0;
     final double igstAmt = isIndia && taxMode == 'IGST' ? taxAmt : 0.0;
@@ -2349,13 +2337,13 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     const SizedBox(height: 3),
                     if (isStillValid)
                       Text(
-                        'You save ${CurrencyService.symbol} ${disc.toStringAsFixed(2)}',
+                        'You save ${CurrencyService.format(disc)}',
                         style: TextStyle(
                             color: Colors.green.shade700, fontSize: 12),
                       )
                     else
                       Text(
-                        'Add ${CurrencyService.symbol} ${(minPurchase - subTotal).toStringAsFixed(2)} more to unlock this offer',
+                        'Add ${CurrencyService.format(minPurchase - subTotal)} more to unlock this offer',
                         style:
                             const TextStyle(color: Colors.orange, fontSize: 12),
                       ),
@@ -2429,18 +2417,18 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             // Build human-readable offer description
             String offerText;
             if (discountType == 'FLAT') {
-              offerText = '${CurrencyService.symbol} ${discountVal.toStringAsFixed(0)} OFF';
+              offerText = '${CurrencyService.format(discountVal)} OFF';
             } else {
               offerText = '${discountVal.toStringAsFixed(0)}% OFF';
               if (maxDiscount > 0) {
-                offerText += ' (max ${CurrencyService.symbol} ${maxDiscount.toStringAsFixed(0)})';
+                offerText += ' (max ${CurrencyService.format(maxDiscount)})';
               }
             }
 
             String conditionText = '';
             if (minPurchase > 0) {
               conditionText =
-                  'on orders above ${CurrencyService.symbol} ${minPurchase.toStringAsFixed(0)}';
+                  'on orders above ${CurrencyService.format(minPurchase)}';
             }
 
             return Padding(
@@ -2451,7 +2439,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Add ${CurrencyService.symbol} ${(minPurchase - subTotal).toStringAsFixed(2)} more to use this coupon.',
+                          'Add ${CurrencyService.format(minPurchase - subTotal)} more to use this coupon.',
                         ),
                         backgroundColor: Colors.orange.shade700,
                       ),
@@ -2549,7 +2537,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               ),
                             if (!meetsMinPurchase && minPurchase > 0)
                               Text(
-                                'Add ${CurrencyService.symbol} ${(minPurchase - subTotal).toStringAsFixed(0)} more',
+                                'Add ${CurrencyService.format(minPurchase - subTotal)} more',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.orange,
@@ -2621,6 +2609,12 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     double couponDiscount = _calculateCouponDiscount(subTotal);
     double discountRatio = nonSubscriptionSubTotal > 0 ? (nonSubscriptionSubTotal - couponDiscount) / nonSubscriptionSubTotal : 1.0;
 
+    final settings = context.watch<SystemSettingsController>().settings;
+    final country = settings?.billingCountry;
+    final taxMode = settings?.billingTaxMode ?? (CountryTaxHelper.isIndiaCountry(country) ? 'CGST_SGST' : 'VAT');
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(country);
+    final String taxName = CountryTaxHelper.taxName(country, taxMode);
+
     double tax = 0;
     double subscriptionDiscount = 0.0;
     double subscriptionTaxDiscount = 0.0;
@@ -2628,6 +2622,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     double calculatedSubTotalExclusive = 0.0;
     double calculatedCouponDiscountExclusive = 0.0;
     double calculatedSubscriptionDiscountExclusive = 0.0;
+
+    final Map<String, TaxBreakdown> itemTaxBreakupMap = {};
 
     _cart.forEach((itemId, value) {
       final item = value['item'];
@@ -2656,6 +2652,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           item['is_tax_inclusive'].toString() == 'true';
       final itemTaxPercent =
           double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+      final itemTaxType = (item['tax_type']?.toString() ?? '').trim().toUpperCase();
 
       double taxableAmount;
       double itemTaxAmount;
@@ -2685,7 +2682,198 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         }
       }
       tax += itemTaxAmount;
+
+      final double netTaxableForBreakup = isInclusive
+          ? (discountedPaidItemTotal / (1 + itemTaxPercent / 100))
+          : discountedPaidItemTotal;
+
+      if (netTaxableForBreakup > 0 && itemTaxPercent > 0) {
+        List<TaxBreakdown> itemBreakdowns = [];
+
+        dynamic tg = item['tax_group'];
+        List<dynamic>? tgComponents;
+        if (tg is Map && tg['components'] is List) {
+          tgComponents = tg['components'] as List;
+        } else if (item['tax_group_components'] is List) {
+          tgComponents = item['tax_group_components'] as List;
+        }
+
+        if (tgComponents != null && tgComponents.isNotEmpty) {
+          for (final comp in tgComponents) {
+            final double compRate = double.tryParse(comp['rate']?.toString() ?? '0') ?? 0.0;
+            final String compCode = (comp['component_code']?.toString() ?? 'TAX').trim();
+            final String compName = (comp['component_name']?.toString() ?? compCode).trim();
+            final compAmount = netTaxableForBreakup * compRate / 100;
+            itemBreakdowns.add(
+              TaxBreakdown(
+                code: compCode,
+                label: '$compName (${compRate.toStringAsFixed(compRate.truncateToDouble() == compRate ? 0 : 2)}%)',
+                taxType: compCode,
+                rate: compRate,
+                taxableAmount: netTaxableForBreakup,
+                taxAmount: compAmount,
+              ),
+            );
+          }
+        } else if (itemTaxType == 'US_SALES_TAX' || itemTaxType == 'SALES_TAX' || itemTaxType == 'COMPOSITE') {
+          final stateRate = itemTaxPercent > 1.0 ? double.parse((itemTaxPercent - 1.0).toStringAsFixed(2)) : itemTaxPercent;
+          final cityRate = itemTaxPercent > 1.0 ? 1.0 : 0.0;
+          itemBreakdowns.add(
+            TaxBreakdown(
+              code: 'STATE_TAX',
+              label: 'STATE SALES TAX (${stateRate.toStringAsFixed(stateRate.truncateToDouble() == stateRate ? 0 : 2)}%)',
+              taxType: 'STATE_TAX',
+              rate: stateRate,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: netTaxableForBreakup * stateRate / 100,
+            ),
+          );
+          if (cityRate > 0) {
+            itemBreakdowns.add(
+              TaxBreakdown(
+                code: 'CITY_TAX',
+                label: 'CITY TAX (${cityRate.toStringAsFixed(cityRate.truncateToDouble() == cityRate ? 0 : 2)}%)',
+                taxType: 'CITY_TAX',
+                rate: cityRate,
+                taxableAmount: netTaxableForBreakup,
+                taxAmount: netTaxableForBreakup * cityRate / 100,
+              ),
+            );
+          }
+        } else if (itemTaxType == 'VAT') {
+          itemBreakdowns.add(
+            TaxBreakdown(
+              code: 'VAT',
+              label: 'VAT ${itemTaxPercent.toStringAsFixed(itemTaxPercent.truncateToDouble() == itemTaxPercent ? 0 : 2)}%',
+              taxType: 'VAT',
+              rate: itemTaxPercent,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: netTaxableForBreakup * itemTaxPercent / 100,
+            ),
+          );
+        } else if (itemTaxType == 'IGST') {
+          itemBreakdowns.add(
+            TaxBreakdown(
+              code: 'IGST',
+              label: 'IGST ${itemTaxPercent.toStringAsFixed(itemTaxPercent.truncateToDouble() == itemTaxPercent ? 0 : 2)}%',
+              taxType: 'GST',
+              rate: itemTaxPercent,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: netTaxableForBreakup * itemTaxPercent / 100,
+            ),
+          );
+        } else if (itemTaxType == 'GST' || itemTaxType == 'CGST_SGST') {
+          final halfRate = itemTaxPercent / 2;
+          final halfAmount = (netTaxableForBreakup * itemTaxPercent / 100) / 2;
+          itemBreakdowns.addAll([
+            TaxBreakdown(
+              code: 'CGST',
+              label: 'CGST (${halfRate.toStringAsFixed(halfRate.truncateToDouble() == halfRate ? 0 : 2)}%)',
+              taxType: 'GST',
+              rate: halfRate,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: halfAmount,
+            ),
+            TaxBreakdown(
+              code: 'SGST',
+              label: 'SGST/UTGST (${halfRate.toStringAsFixed(halfRate.truncateToDouble() == halfRate ? 0 : 2)}%)',
+              taxType: 'GST',
+              rate: halfRate,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: halfAmount,
+            ),
+          ]);
+        } else if (taxMode == 'US_SALES_TAX' || taxMode == 'SALES_TAX') {
+          final stateRate = itemTaxPercent > 1.0 ? double.parse((itemTaxPercent - 1.0).toStringAsFixed(2)) : itemTaxPercent;
+          final cityRate = itemTaxPercent > 1.0 ? 1.0 : 0.0;
+          itemBreakdowns.add(
+            TaxBreakdown(
+              code: 'STATE_TAX',
+              label: 'STATE SALES TAX (${stateRate.toStringAsFixed(stateRate.truncateToDouble() == stateRate ? 0 : 2)}%)',
+              taxType: 'STATE_TAX',
+              rate: stateRate,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: netTaxableForBreakup * stateRate / 100,
+            ),
+          );
+          if (cityRate > 0) {
+            itemBreakdowns.add(
+              TaxBreakdown(
+                code: 'CITY_TAX',
+                label: 'CITY TAX (${cityRate.toStringAsFixed(cityRate.truncateToDouble() == cityRate ? 0 : 2)}%)',
+                taxType: 'CITY_TAX',
+                rate: cityRate,
+                taxableAmount: netTaxableForBreakup,
+                taxAmount: netTaxableForBreakup * cityRate / 100,
+              ),
+            );
+          }
+        } else if (taxMode == 'VAT' || (!isIndia && taxName == 'VAT')) {
+          itemBreakdowns.add(
+            TaxBreakdown(
+              code: 'VAT',
+              label: 'VAT ${itemTaxPercent.toStringAsFixed(itemTaxPercent.truncateToDouble() == itemTaxPercent ? 0 : 2)}%',
+              taxType: 'VAT',
+              rate: itemTaxPercent,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: netTaxableForBreakup * itemTaxPercent / 100,
+            ),
+          );
+        } else if (taxMode == 'IGST') {
+          itemBreakdowns.add(
+            TaxBreakdown(
+              code: 'IGST',
+              label: 'IGST ${itemTaxPercent.toStringAsFixed(itemTaxPercent.truncateToDouble() == itemTaxPercent ? 0 : 2)}%',
+              taxType: 'GST',
+              rate: itemTaxPercent,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: netTaxableForBreakup * itemTaxPercent / 100,
+            ),
+          );
+        } else {
+          final halfRate = itemTaxPercent / 2;
+          final halfAmount = (netTaxableForBreakup * itemTaxPercent / 100) / 2;
+          itemBreakdowns.addAll([
+            TaxBreakdown(
+              code: 'CGST',
+              label: 'CGST (${halfRate.toStringAsFixed(halfRate.truncateToDouble() == halfRate ? 0 : 2)}%)',
+              taxType: 'GST',
+              rate: halfRate,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: halfAmount,
+            ),
+            TaxBreakdown(
+              code: 'SGST',
+              label: 'SGST/UTGST (${halfRate.toStringAsFixed(halfRate.truncateToDouble() == halfRate ? 0 : 2)}%)',
+              taxType: 'GST',
+              rate: halfRate,
+              taxableAmount: netTaxableForBreakup,
+              taxAmount: halfAmount,
+            ),
+          ]);
+        }
+
+        for (final tb in itemBreakdowns) {
+          final key = '${tb.code}_${tb.rate}';
+          if (itemTaxBreakupMap.containsKey(key)) {
+            final existing = itemTaxBreakupMap[key]!;
+            itemTaxBreakupMap[key] = TaxBreakdown(
+              code: existing.code,
+              label: existing.label,
+              taxType: existing.taxType,
+              rate: existing.rate,
+              taxableAmount: existing.taxableAmount + tb.taxableAmount,
+              taxAmount: existing.taxAmount + tb.taxAmount,
+            );
+          } else {
+            itemTaxBreakupMap[key] = tb;
+          }
+        }
+      }
     });
+
+    final List<TaxBreakdown> groupedItemTaxes = itemTaxBreakupMap.values.toList()
+      ..sort((a, b) => a.label.compareTo(b.label));
 
     final double thresholdSubTotal = subTotal;
 
@@ -2780,8 +2968,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Sub-total (Incl. GST)'),
-              Text('${CurrencyService.symbol} ${displaySubTotal.toStringAsFixed(2)}'),
+              Text('Sub-total (Incl. $taxName)'),
+              Text(CurrencyService.format(displaySubTotal)),
             ],
           ),
           if (displayCouponDiscount > 0)
@@ -2791,7 +2979,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 Text('Coupon Discount (${_appliedCoupon!['code']})',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-${CurrencyService.symbol}${displayCouponDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.format(displayCouponDiscount)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2803,7 +2991,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 const Text('Subscription Discount',
                     style: TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-${CurrencyService.symbol}${displaySubscriptionDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.format(displaySubscriptionDiscount)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2811,10 +2999,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Net Amount (Incl. GST)',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              Text('Net Amount (Incl. $taxName)',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
               Text(
-                '${CurrencyService.symbol} ${(displaySubTotal - displayCouponDiscount - displaySubscriptionDiscount).toStringAsFixed(2)}',
+                CurrencyService.format(displaySubTotal - displayCouponDiscount - displaySubscriptionDiscount),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
@@ -2824,15 +3012,15 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Delivery Charge'),
-                Text('${CurrencyService.symbol} ${delivery.toStringAsFixed(2)}'),
+                Text(CurrencyService.format(delivery)),
               ],
             ),
             if (deliveryGst > 0)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('  • Delivery GST'),
-                  Text('${CurrencyService.symbol} ${deliveryGst.toStringAsFixed(2)}',
+                  Text('  • Delivery $taxName'),
+                  Text(CurrencyService.format(deliveryGst),
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
@@ -2842,15 +3030,15 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(cc['name']),
-                Text('${CurrencyService.symbol} ${cc['amount'].toStringAsFixed(2)}'),
+                Text(CurrencyService.format(cc['amount'] ?? 0)),
               ],
             ),
             if (cc['gst_amount'] > 0)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('  • ${cc['name']} GST'),
-                  Text('${CurrencyService.symbol} ${cc['gst_amount'].toStringAsFixed(2)}',
+                  Text('  • ${cc['name']} $taxName'),
+                  Text(CurrencyService.format(cc['gst_amount'] ?? 0),
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
@@ -2859,67 +3047,35 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Taxable Value (Items)'),
-              Text('${CurrencyService.symbol} ${(subTotal - couponDiscount - subscriptionDiscount).toStringAsFixed(2)}'),
+              Text(CurrencyService.format(subTotal - couponDiscount - subscriptionDiscount)),
             ],
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('GST / Taxes (Items)'),
-              Text('${CurrencyService.symbol} ${tax.toStringAsFixed(2)}'),
-            ],
-          ),
+          if (groupedItemTaxes.isNotEmpty) ...[
+            for (final t in groupedItemTaxes)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(t.label),
+                  Text(CurrencyService.format(t.taxAmount)),
+                ],
+              ),
+          ] else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$taxName (Items)'),
+                Text(CurrencyService.format(tax)),
+              ],
+            ),
+          ],
         ] else ...[
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Sub-total'),
-              Text('${CurrencyService.symbol} ${subTotal.toStringAsFixed(2)}'),
+              Text(CurrencyService.format(subTotal)),
             ],
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('GST / Taxes (Items)'),
-              Text('${CurrencyService.symbol} ${tax.toStringAsFixed(2)}'),
-            ],
-          ),
-          if (delivery > 0) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Delivery Charge'),
-                Text('${CurrencyService.symbol} ${delivery.toStringAsFixed(2)}'),
-              ],
-            ),
-            if (deliveryGst > 0)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('  • Delivery GST'),
-                  Text('${CurrencyService.symbol} ${deliveryGst.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ),
-          ],
-          for (final cc in computedCustomCharges) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(cc['name']),
-                Text('${CurrencyService.symbol} ${cc['amount'].toStringAsFixed(2)}'),
-              ],
-            ),
-            if (cc['gst_amount'] > 0)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('  • ${cc['name']} GST'),
-                  Text('${CurrencyService.symbol} ${cc['gst_amount'].toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ),
-          ],
           if (couponDiscount > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2927,7 +3083,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 Text('Coupon Discount (${_appliedCoupon!['code']})',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-${CurrencyService.symbol}${couponDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.format(couponDiscount)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2939,11 +3095,72 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 const Text('Subscription Discount',
                     style: TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-${CurrencyService.symbol}${subscriptionDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.format(subscriptionDiscount)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
             ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Taxable Value (Items)'),
+              Text(CurrencyService.format(subTotal - couponDiscount - subscriptionDiscount)),
+            ],
+          ),
+          if (groupedItemTaxes.isNotEmpty) ...[
+            for (final t in groupedItemTaxes)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(t.label),
+                  Text(CurrencyService.format(t.taxAmount)),
+                ],
+              ),
+          ] else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$taxName (Items)'),
+                Text(CurrencyService.format(tax)),
+              ],
+            ),
+          ],
+          if (delivery > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Delivery Charge'),
+                Text(CurrencyService.format(delivery)),
+              ],
+            ),
+            if (deliveryGst > 0)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('  • Delivery $taxName'),
+                  Text(CurrencyService.format(deliveryGst),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+          ],
+          for (final cc in computedCustomCharges) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(cc['name']),
+                Text(CurrencyService.format(cc['amount'] ?? 0)),
+              ],
+            ),
+            if (cc['gst_amount'] > 0)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('  • ${cc['name']} $taxName'),
+                  Text(CurrencyService.format(cc['gst_amount'] ?? 0),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+          ],
           if (subscriptionTaxDiscount > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2951,7 +3168,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 const Text('Subscription Tax Adjustment',
                     style: TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('-${CurrencyService.symbol}${subscriptionTaxDiscount.toStringAsFixed(2)}',
+                Text('-${CurrencyService.format(subscriptionTaxDiscount)}',
                     style: const TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold)),
               ],
@@ -2966,7 +3183,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             Text(
-              '${CurrencyService.symbol} ${netTotal.toStringAsFixed(2)}',
+              CurrencyService.format(netTotal),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
@@ -3035,7 +3252,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   Text(
                       'Delivery Address: ${_activeOrder!['customer_address']}'),
                   Text(
-                      'Net Amount: ${CurrencyService.symbol} ${double.tryParse(_activeOrder!['net_amount']?.toString() ?? '0')?.toStringAsFixed(2)}'),
+                      'Net Amount: ${CurrencyService.format(double.tryParse(_activeOrder!['net_amount']?.toString() ?? '0') ?? 0.0)}'),
                   Text('Payment Status: ${_activeOrder!['payment_status']}'),
                   const SizedBox(height: 20),
                   const Text('Live Delivery Progress',
@@ -3807,7 +4024,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                     children: [
                                                       if (hasPromo) ...[
                                                         Text(
-                                                          '${CurrencyService.symbol} ${displayOriginal!.toStringAsFixed(displayOriginal % 1 == 0 ? 0 : 2)}',
+                                                          CurrencyService.format(displayOriginal!, displayOriginal % 1 == 0 ? 0 : 2),
                                                           style: TextStyle(
                                                             color: Colors.grey.shade500,
                                                             decoration: TextDecoration.lineThrough,
@@ -3818,8 +4035,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                         const SizedBox(width: 4),
                                                         Text(
                                                           hasVariants
-                                                              ? '${CurrencyService.symbol} ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}+'
-                                                              : '${CurrencyService.symbol} ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}',
+                                                              ? '${CurrencyService.format(displaySelling, displaySelling % 1 == 0 ? 0 : 2)}+'
+                                                              : CurrencyService.format(displaySelling, displaySelling % 1 == 0 ? 0 : 2),
                                                           style: const TextStyle(
                                                             color: Color(0xFFD97706),
                                                             fontWeight: FontWeight.w900,
@@ -3829,8 +4046,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                       ] else ...[
                                                         Text(
                                                           hasVariants
-                                                              ? '${CurrencyService.symbol} ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}+'
-                                                              : '${CurrencyService.symbol} ${displaySelling.toStringAsFixed(displaySelling % 1 == 0 ? 0 : 2)}',
+                                                              ? '${CurrencyService.format(displaySelling, displaySelling % 1 == 0 ? 0 : 2)}+'
+                                                              : CurrencyService.format(displaySelling, displaySelling % 1 == 0 ? 0 : 2),
                                                           style: TextStyle(
                                                             color: theme.colorScheme.primary,
                                                             fontWeight: FontWeight.bold,
@@ -3968,7 +4185,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              'Subscription Covered: max ${remainingQty.toStringAsFixed(0)} daily at ${CurrencyService.symbol} 0',
+                              'Subscription Covered: max ${remainingQty.toStringAsFixed(0)} daily at ${CurrencyService.format(0)}',
                               style: const TextStyle(
                                 color: Colors.green,
                                 fontSize: 10,
@@ -3979,7 +4196,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       ],
                     ),
                     subtitle: Text(
-                        '${CurrencyService.symbol} ${price.toStringAsFixed(2)} x ${qty.toStringAsFixed(0)}'),
+                        '${CurrencyService.format(price)} x ${qty.toStringAsFixed(0)}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -4237,7 +4454,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       style:
                           TextStyle(color: detailColor, fontSize: 12)),
                   Text(
-                      '• Refunded Amount: ${CurrencyService.symbol} ${paidAmt.toStringAsFixed(2)} (Pending: ${CurrencyService.symbol} ${remainingPending.toStringAsFixed(2)})',
+                      '• Refunded Amount: ${CurrencyService.format(paidAmt)} (Pending: ${CurrencyService.format(remainingPending)})',
                       style:
                           TextStyle(color: detailColor, fontSize: 12)),
                   if (remarks.isNotEmpty)
@@ -4293,7 +4510,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       icon = Icons.keyboard_return_outlined;
       final isPaid = order['payment_status'] == 'PAID';
       text = isPaid
-          ? 'Refunded (${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}) - $returnedItems'
+          ? 'Refunded (${CurrencyService.format(netAmt)}) - $returnedItems'
           : 'Return Accepted - $returnedItems';
     } else if (returnStatus == 'EXCHANGED') {
       color = Colors.purple;
@@ -4584,7 +4801,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                    ),
                                                    const SizedBox(width: 16),
                                                    Text(
-                                                     '${CurrencyService.symbol} ${amt.toStringAsFixed(2)}',
+                                                     CurrencyService.format(amt),
                                                      style: TextStyle(
                                                          fontSize: 13,
                                                          color: Colors.grey.shade500,
@@ -4635,7 +4852,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                    ),
                                                    const SizedBox(width: 16),
                                                    Text(
-                                                     '${CurrencyService.symbol} ${amt.toStringAsFixed(2)}',
+                                                     CurrencyService.format(amt),
                                                      style: TextStyle(
                                                          fontSize: 13,
                                                          fontWeight: FontWeight.bold,
@@ -4678,7 +4895,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                    ),
                                                    const SizedBox(width: 16),
                                                    Text(
-                                                     '${CurrencyService.symbol} ${amt.toStringAsFixed(2)}',
+                                                     CurrencyService.format(amt),
                                                      style: TextStyle(
                                                          fontSize: 13,
                                                          fontWeight:
@@ -4703,7 +4920,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                   fontSize: 13),
                                             ),
                                             Text(
-                                              '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
+                                              CurrencyService.format(netAmt),
                                               style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 15),
@@ -4810,7 +5027,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                           ),
                                                         ),
                                                         Text(
-                                                          '${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)}',
+                                                          CurrencyService.format(diff.abs()),
                                                           style: TextStyle(
                                                             fontSize: 13,
                                                             color: textColor,
@@ -4865,7 +5082,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                         ),
                                                       ),
                                                       Text(
-                                                        '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
+                                                        CurrencyService.format(netAmt),
                                                         style: TextStyle(
                                                           fontSize: 13,
                                                           color: isRefunded ? Colors.blue.shade800 : Colors.amber.shade900,
@@ -5459,7 +5676,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                 ),
                                                 const SizedBox(width: 16),
                                                 Text(
-                                                  '${CurrencyService.symbol} ${amt.toStringAsFixed(2)}',
+                                                  CurrencyService.format(amt),
                                                   style: TextStyle(
                                                       fontSize: 13,
                                                       fontWeight:
@@ -5571,7 +5788,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               Expanded(
                 child: _buildMetricCard(
                   'Total Spend',
-                  '${CurrencyService.symbol} ${totalSpent.toStringAsFixed(2)}',
+                  '${CurrencyService.format(totalSpent)}',
                   Colors.indigo.shade800,
                   Icons.account_balance_wallet_outlined,
                 ),
@@ -5580,7 +5797,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               Expanded(
                 child: _buildMetricCard(
                   'Total Savings',
-                  '${CurrencyService.symbol} ${totalSavings.toStringAsFixed(2)}',
+                  '${CurrencyService.format(totalSavings)}',
                   Colors.green.shade800,
                   Icons.savings_outlined,
                 ),
@@ -5842,7 +6059,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                       children: [
                         Text('Daily Limit: ${sub['daily_allowed_qty']} $unit',
                             style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-                        Text('Rate: ${CurrencyService.symbol} ${sub['advance_rate'] ?? '0.0'}/unit',
+                        Text('Rate: ${CurrencyService.format(double.tryParse(sub['advance_rate']?.toString() ?? '0') ?? 0.0)}/unit',
                             style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
                       ],
                     ),
@@ -5859,10 +6076,10 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                         children: [
                           Row(
                             children: [
-                              _subStat('Total Paid', '${CurrencyService.symbol} ${totalPaid.toStringAsFixed(2)}',
+                              _subStat('Total Paid', CurrencyService.format(totalPaid),
                                   Icons.payments_outlined, Colors.blue.shade700, theme),
                               const SizedBox(width: 8),
-                              _subStat('Consumed Amt', '${CurrencyService.symbol} ${consumedAmount.toStringAsFixed(2)}',
+                              _subStat('Consumed Amt', CurrencyService.format(consumedAmount),
                                   Icons.shopping_bag_outlined, Colors.orange.shade700, theme),
                             ],
                           ),
@@ -6081,7 +6298,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _ledgerStat('Total Paid', '${CurrencyService.symbol} ${(double.tryParse(summary['prepaid_value']?.toString() ?? '0') ?? 0.0).toStringAsFixed(2)}', Colors.blue.shade700),
+                    _ledgerStat('Total Paid', CurrencyService.format(double.tryParse(summary['prepaid_value']?.toString() ?? '0') ?? 0.0), Colors.blue.shade700),
                     _ledgerStat('Consumed', '${(double.tryParse(summary['consumed_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} $unit', Colors.orange.shade700),
                     _ledgerStat('Remaining', '${(double.tryParse(sub['advance_remaining_qty']?.toString() ?? sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0).toStringAsFixed(1)} $unit', Colors.green.shade700),
                   ],
@@ -6121,7 +6338,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                   Text('${qty.toStringAsFixed(1)} $unit', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                  Text('${CurrencyService.symbol} ${amt.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                                  Text(CurrencyService.format(amt), style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                               ],
                             ),
                           );
@@ -6224,7 +6441,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                Text('Daily: ${dailyQty.toStringAsFixed(1)} $unit  |  Rate: ${CurrencyService.symbol} ${rate.toStringAsFixed(2)}/unit',
+                Text('Daily: ${dailyQty.toStringAsFixed(1)} $unit  |  Rate: ${CurrencyService.format(rate)}/unit',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 const Divider(height: 20),
                 const Text('Duration:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -6281,16 +6498,16 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                     Text('Total Qty: ${totalQty.toStringAsFixed(1)} $unit', style: const TextStyle(fontWeight: FontWeight.w600)),
                     Text('End Date: ${DateFormat('dd-MMM-yyyy').format(endDate)}', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
                     const SizedBox(height: 4),
-                    Text('Base Cost: ${CurrencyService.symbol} ${totalCost.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
-                    Text('${CountryTaxHelper.taxName()}: ${CurrencyService.symbol} ${totalGst.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                    Text('Base Cost: ${CurrencyService.format(totalCost)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                    Text('${CountryTaxHelper.taxName()}: ${CurrencyService.format(totalGst)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
                     if (isDeliveryFree) ...[
                       Text('Delivery: Free', style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontWeight: FontWeight.bold)),
                     ] else if (totalDeliveryCharge > 0) ...[
-                      Text('Delivery: ${CurrencyService.symbol} ${totalDeliveryCharge.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
-                      Text('Delivery ${CountryTaxHelper.taxName()}: ${CurrencyService.symbol} ${totalDeliveryGst.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                      Text('Delivery: ${CurrencyService.format(totalDeliveryCharge)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
+                      Text('Delivery ${CountryTaxHelper.taxName()}: ${CurrencyService.format(totalDeliveryGst)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
                     ],
                     const Divider(height: 8),
-                    Text('Net Amount Payable: ${CurrencyService.symbol} ${netPayable.toStringAsFixed(2)}',
+                    Text('Net Amount Payable: ${CurrencyService.format(netPayable)}',
                         style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
                   ]),
                 ),
@@ -6476,7 +6693,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   }
 
   Future<Uint8List> _buildReceiptPdf(Map<String, dynamic> subscription) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final currency = CurrencyService.currencyFormat;
     final schemes = (subscription['selected_schemes'] as List? ?? subscription['schemes'] as List? ?? const [])
         .map((entry) => Map<String, dynamic>.from(entry))
@@ -6632,7 +6849,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             fontSize: 9,
           ),
           kvLine(
-            'Item GST',
+            'Item ${CountryTaxHelper.taxName()}',
             currency.format(itemGst),
             fontSize: 9,
           ),
@@ -6644,7 +6861,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             ),
             if (totalDeliveryTax > 0)
               kvLine(
-                'Delivery GST',
+                'Delivery ${CountryTaxHelper.taxName()}',
                 currency.format(totalDeliveryTax),
                 fontSize: 9,
               ),
@@ -6821,7 +7038,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                 Text('Phone: ${receiptData['customer_phone'] ?? ''}'),
                 Text('Item: ${receiptData['item_name'] ?? ''}'),
                 Text('Daily Qty: ${receiptData['daily_allowed_qty'] ?? ''}'),
-                Text('Total: ${CurrencyService.symbol} ${(double.tryParse(receiptData['total_payment_amount']?.toString() ?? '0') ?? 0).toStringAsFixed(2)}'),
+                Text('Total: ${CurrencyService.format(double.tryParse(receiptData['total_payment_amount']?.toString() ?? '0') ?? 0.0)}'),
                 const SizedBox(height: 12),
                 const Text(
                   'You can print or save this receipt.',
@@ -7345,7 +7562,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             ],
                           ),
                           Text(
-                            '${CurrencyService.symbol} ${price.toStringAsFixed(2)}',
+                            '${CurrencyService.format(price)}',
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.w900,
@@ -7909,7 +8126,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                                       : (item['item_name']?.toString() ?? ''),
                                   style: const TextStyle(fontWeight: FontWeight.w500),
                                 ),
-                                subtitle: Text('${CurrencyService.symbol} ${item['retail_sale_price'] ?? item['rate']}/unit'),
+                                subtitle: Text('${CurrencyService.format(double.tryParse((item['retail_sale_price'] ?? item['rate'])?.toString() ?? '0') ?? 0.0)}/unit'),
                                 selected: isSelected,
                                 selectedColor: Colors.blue.shade700,
                                 selectedTileColor: Colors.blue.shade50,
@@ -8069,7 +8286,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
               children: [
                 const Text('Base Price:', style: TextStyle(color: Colors.grey)),
                 Text(
-                  '${CurrencyService.symbol} ${rate.toStringAsFixed(2)} / $unitLabel',
+                  '${CurrencyService.format(rate)} / $unitLabel',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -8091,7 +8308,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
               children: [
                 const Text('Total Base Cost:', style: TextStyle(color: Colors.grey)),
                 Text(
-                  '${CurrencyService.symbol} ${totalCost.toStringAsFixed(2)}',
+                  '${CurrencyService.format(totalCost)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -8102,7 +8319,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
               children: [
                 Text('Total ${CountryTaxHelper.taxName(settings?.billingCountry, settings?.billingTaxMode)}:', style: const TextStyle(color: Colors.grey)),
                 Text(
-                  '${CurrencyService.symbol} ${totalGst.toStringAsFixed(2)}',
+                  '${CurrencyService.format(totalGst)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -8115,8 +8332,8 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                   Text(settings.subDeliveryChargeName, style: const TextStyle(color: Colors.grey)),
                   Text(
                     isDeliveryFree
-                        ? 'Free (Plan > ${CurrencyService.symbol} ${settings.subDeliveryFreeAbove.toStringAsFixed(0)})'
-                        : '${CurrencyService.symbol} ${totalDeliveryCharge.toStringAsFixed(2)}',
+                        ? 'Free (Plan > ${CurrencyService.format(settings.subDeliveryFreeAbove)})'
+                        : CurrencyService.format(totalDeliveryCharge),
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: isDeliveryFree ? Colors.green : Colors.black,
@@ -8131,7 +8348,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
                   children: [
                     Text('Delivery ${CountryTaxHelper.taxName(settings?.billingCountry, settings?.billingTaxMode)}:', style: const TextStyle(color: Colors.grey)),
                     Text(
-                      '${CurrencyService.symbol} ${totalDeliveryGst.toStringAsFixed(2)}',
+                      '${CurrencyService.format(totalDeliveryGst)}',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -8144,7 +8361,7 @@ class _SubscribeDialogState extends State<_SubscribeDialog> {
               children: [
                 const Text('Net Amount Payable:', style: TextStyle(color: Colors.grey)),
                 Text(
-                  '${CurrencyService.symbol} ${netPayable.toStringAsFixed(2)}',
+                  '${CurrencyService.format(netPayable)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.green,

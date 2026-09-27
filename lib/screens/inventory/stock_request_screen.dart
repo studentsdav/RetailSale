@@ -951,7 +951,7 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
 
   Future<void> _printRequest() async {
     final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final property = propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);

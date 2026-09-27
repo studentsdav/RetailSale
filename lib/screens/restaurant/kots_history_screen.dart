@@ -10,6 +10,7 @@ import '../../core/api/api_client.dart';
 import '../../controllers/restaurant/restaurant_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/printing/device_printer_routing.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../core/settings/local_preferences.dart';
 
 class KotsHistoryScreen extends StatefulWidget {
@@ -714,7 +715,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
   }
 
   Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items, String locationName) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     
     final String tableName = kot['table']?['table_name'] ?? 'Takeaway';
     

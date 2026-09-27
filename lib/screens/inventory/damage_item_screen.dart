@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -725,8 +726,8 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
                         DataCell(Text(d.itemName)),
                         DataCell(Text(d.unit)),
                         DataCell(Text(d.qty.toString())),
-                        DataCell(Text(d.rate.toStringAsFixed(2))),
-                        DataCell(Text(d.amount.toStringAsFixed(2))),
+                        DataCell(Text(CurrencyService.format(d.rate))),
+                        DataCell(Text(CurrencyService.format(d.amount))),
                         DataCell(Text(d.remarks)),
                         DataCell(Text(d.itemCode)),
                         DataCell(Row(
@@ -758,7 +759,7 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
         children: [
           Chip(
             label: Text(
-              'Total Damage : ${totalDamageValue.toStringAsFixed(2)}',
+              'Total Damage : ${CurrencyService.format(totalDamageValue)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -937,7 +938,7 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
 
   Future<void> _printDamage() async {
     final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final property = propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
@@ -1020,7 +1021,7 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
                     _cell(d.itemName),
                     _cell(d.unit, alignment: pw.Alignment.center),
                     _cell(d.qty.toString(), alignment: pw.Alignment.centerRight),
-                    _cell(d.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(d.rate), alignment: pw.Alignment.centerRight),
                     _cell(d.remarks),
                   ],
                 );
@@ -1041,7 +1042,7 @@ class _DamageItemScreenState extends State<DamageItemScreen> {
                 color: PdfColors.grey50,
               ),
               child: pw.Text(
-                "Total Damage Value : ${totalDamageValue.toStringAsFixed(2)}",
+                "Total Damage Value : ${CurrencyService.format(totalDamageValue)}",
                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.blueGrey900),
               ),
             ),

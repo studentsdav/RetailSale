@@ -8,6 +8,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import 'pay_schedule_screen.dart';
 
 class PayrollScreen extends StatefulWidget {
@@ -399,7 +400,7 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
   }
 
   Future<void> _printPayrollSummaryReport() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final periodStr = DateFormat('MMMM yyyy').format(_currentMonth);
 
     final List<List<String>> tableData = [];
@@ -417,10 +418,10 @@ class _PayrollScreenState extends State<PayrollScreen> with SingleTickerProvider
       tableData.add([
         '$name ($code)',
         days.toStringAsFixed(1),
-        'Rs. ${gross.toStringAsFixed(2)}',
-        'Rs. ${statutory.toStringAsFixed(2)}',
-        'Rs. ${totalDeducts.toStringAsFixed(2)}',
-        'Rs. ${net.toStringAsFixed(2)}',
+        CurrencyService.format(gross),
+        CurrencyService.format(statutory),
+        CurrencyService.format(totalDeducts),
+        CurrencyService.format(net),
       ]);
     }
 

@@ -70,9 +70,14 @@ class SaleItem {
     this.notes,
   })  : originalQty = originalQty ?? qty,
         referenceRate = referenceRate ?? rate,
-        taxableAmount = taxableAmount ?? ((qty * rate) - lineDiscount),
+        taxableAmount = taxableAmount ??
+            (isTaxInclusive && taxPercent > 0
+                ? (((qty * rate) - lineDiscount) / (1 + taxPercent / 100))
+                : ((qty * rate) - lineDiscount)),
         lineTotal = lineTotal ??
-            ((taxableAmount ?? ((qty * rate) - lineDiscount)) + taxAmount);
+            (isTaxInclusive
+                ? ((qty * rate) - lineDiscount)
+                : ((taxableAmount ?? ((qty * rate) - lineDiscount)) + taxAmount));
 
   double get amount => qty * rate;
   double get netAmount {
@@ -237,20 +242,24 @@ class SaleItem {
       appliedSchemeId: json['applied_scheme_id'],
       appliedHappyHourId: json['applied_happy_hour_id'],
       lineDiscount: parseNum(json['line_discount']),
-      taxableAmount: parseNum(json['taxable_amount']),
+      taxableAmount: json['taxable_amount'] != null ? parseNum(json['taxable_amount']) : null,
       taxAmount: parseNum(json['tax_amount']),
-      lineTotal: parseNum(json['line_total']),
+      lineTotal: json['line_total'] != null ? parseNum(json['line_total']) : null,
       taxBreakup: (json['tax_breakup'] as List? ?? const [])
           .map((entry) =>
               TaxBreakdown.fromJson(Map<String, dynamic>.from(entry)))
           .toList(),
       isTaxInclusive: json['is_tax_inclusive'] == true ||
           json['is_tax_inclusive'] == 1 ||
+          json['is_tax_inclusive'] == '1' ||
+          json['is_tax_inclusive'] == 'true' ||
           json['tax_type']?.toString().toUpperCase() == 'GST_INCLUSIVE' ||
           json['tax_type']?.toString().toUpperCase() == 'INCLUSIVE' ||
           (json['item'] is Map &&
               (json['item']['is_tax_inclusive'] == true ||
                   json['item']['is_tax_inclusive'] == 1 ||
+                  json['item']['is_tax_inclusive'] == '1' ||
+                  json['item']['is_tax_inclusive'] == 'true' ||
                   json['item']['tax_type']?.toString().toUpperCase() == 'GST_INCLUSIVE' ||
                   json['item']['tax_type']?.toString().toUpperCase() == 'INCLUSIVE')),
       originalRate: json['original_rate'] != null ? parseNum(json['original_rate']) : null,

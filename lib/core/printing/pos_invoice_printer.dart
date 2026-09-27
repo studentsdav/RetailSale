@@ -20,6 +20,7 @@ import '../../utils/branding_storage.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../currency/currency_service.dart';
+import '../utils/country_tax_helper.dart';
 
 class PosInvoicePrinter {
   PosInvoicePrinter._();
@@ -78,6 +79,49 @@ class PosInvoicePrinter {
   static PdfPageFormat pageFormatFor(String billFormat, [String? configWidth]) {
     if (_isThermalFormat(billFormat)) return _thermalSheetFor(billFormat, configWidth);
     return PdfPageFormat.a4;
+  }
+
+  static pw.Font? _cachedRegular;
+  static pw.Font? _cachedBold;
+
+  /// Loads and caches Unicode-compatible TrueType fonts (Noto Sans / Roboto)
+  /// so that currency symbols such as ₹ (Indian Rupee), € (Euro), ₽, etc.
+  /// are rendered properly without falling back to broken glyphs or WinAnsi limitations.
+  static Future<({pw.Font regular, pw.Font bold})> getInvoiceFonts() async {
+    if (_cachedRegular != null && _cachedBold != null) {
+      return (regular: _cachedRegular!, bold: _cachedBold!);
+    }
+    try {
+      final reg = await PdfGoogleFonts.notoSansRegular();
+      final bld = await PdfGoogleFonts.notoSansBold();
+      _cachedRegular = reg;
+      _cachedBold = bld;
+      return (regular: reg, bold: bld);
+    } catch (_) {
+      try {
+        final reg = await PdfGoogleFonts.robotoRegular();
+        final bld = await PdfGoogleFonts.robotoBold();
+        _cachedRegular = reg;
+        _cachedBold = bld;
+        return (regular: reg, bold: bld);
+      } catch (_) {
+        final reg = pw.Font.helvetica();
+        final bld = pw.Font.helveticaBold();
+        return (regular: reg, bold: bld);
+      }
+    }
+  }
+
+  /// Creates a [pw.Document] pre-configured with Unicode TrueType fonts
+  /// so currency symbols (₹, €, $, £, ¥, etc.) render properly across all PDFs.
+  static Future<pw.Document> createDocument() async {
+    final fonts = await getInvoiceFonts();
+    return pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fonts.regular,
+        bold: fonts.bold,
+      ),
+    );
   }
 
   static Future<void> printSaleInvoice({
@@ -172,7 +216,13 @@ class PosInvoicePrinter {
     final bool showBrandName = receiptConfig['show_brand'] ?? (sysSettings?.showBrandName ?? true);
     final bool enableTokenSystem = receiptConfig['show_token'] ?? (sysSettings?.enableTokenSystem ?? false);
 
-    final document = pw.Document();
+    final fonts = await getInvoiceFonts();
+    final document = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fonts.regular,
+        bold: fonts.bold,
+      ),
+    );
     final logo = await BrandingStorage.loadPdfLogo(prop?.logoPath);
     final invoiceData = _InvoiceContext(
       order: order,
@@ -214,6 +264,8 @@ class PosInvoicePrinter {
       enableTokenSystem: enableTokenSystem,
       receiptTemplateConfig: receiptConfig,
       a4TemplateConfig: a4Config,
+      regularFont: fonts.regular,
+      boldFont: fonts.bold,
     );
 
     final String thermalWidthSetting = (receiptConfig['thermal_width'] ?? '').toString();
@@ -260,8 +312,8 @@ class PosInvoicePrinter {
     if (fontSizeSetting == 'SMALL') scale = 0.85;
     if (fontSizeSetting == 'LARGE') scale = 1.25;
 
-    final regular = pw.Font.helvetica();
-    final bold = pw.Font.helveticaBold();
+    final regular = data.regularFont ?? _cachedRegular ?? pw.Font.helvetica();
+    final bold = data.boldFont ?? _cachedBold ?? pw.Font.helveticaBold();
     final bodyStyle =
         pw.TextStyle(font: regular, fontSize: 8.9 * scale, color: _thermalSecondary);
     final emphasisStyle =
@@ -480,8 +532,8 @@ class PosInvoicePrinter {
           pw.SizedBox(height: 3),
           ...order.items.map((item) => _thermalItemRow(item, order, data.showBrandName)),
           _dashedDivider(),
-          _thermalAmountRow('Total Items', totalItems.toDouble()),
-          _thermalAmountRow('Total Qty', order.totalQty),
+          _thermalValueRow('Total Items', '$totalItems'),
+          _thermalValueRow('Total Qty', order.totalQty % 1 == 0 ? order.totalQty.toInt().toString() : order.totalQty.toStringAsFixed(2)),
           ...(() {
             final double preTaxSum = order.items
                 .where((item) => !item.isTaxInclusive && item.taxPercent > 0)
@@ -499,8 +551,9 @@ class PosInvoicePrinter {
                 .where((item) => item.taxPercent <= 0)
                 .fold<double>(0, (sum, item) => sum + (item.rate > 0 ? (item.qty * item.rate) : (item.qty * _displayRate(item))));
 
+            final bool isIndia = CountryTaxHelper.isIndiaCountry(order.billingCountry);
             final bool allInclusive = order.items.isNotEmpty && order.items.every((item) => item.isTaxInclusive);
-            final String subtotalLabel = allInclusive ? 'Subtotal (Incl. GST)' : 'Subtotal';
+            final String subtotalLabel = allInclusive ? 'Subtotal (Incl. ${CountryTaxHelper.taxName(order.billingCountry, order.billingTaxMode)})' : 'Subtotal';
             final double grossSub = _grossItemsSubtotal(order);
             final double rawSubtotal = grossSub > 0.0009
                 ? grossSub
@@ -533,7 +586,7 @@ class PosInvoicePrinter {
               if (savingsAmount > 0.0009)
                 _thermalAmountRow(_savingLabel(order), savingsAmount),
               if (allInclusive)
-                _thermalAmountRow('Net Amount (Incl. GST)', (rawSubtotal - savingsAmount).clamp(0.0, double.infinity)),
+                _thermalAmountRow('Net Amount (Incl. ${CountryTaxHelper.taxName(order.billingCountry, order.billingTaxMode)})', (rawSubtotal - savingsAmount).clamp(0.0, double.infinity)),
               if (order.refundAmount > 0) ...[
                 _dashedDivider(),
                 _thermalAmountRow('Refunded Amt', order.refundAmount),
@@ -547,12 +600,8 @@ class PosInvoicePrinter {
                 ),
               if (hasTaxData) _dashedDivider(),
               if (hasTaxData) _thermalAmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
-              if (hasTaxData && cgstTotal > 0)
-                _thermalAmountRow('CGST', cgstTotal),
-              if (hasTaxData && sgstTotal > 0)
-                _thermalAmountRow('SGST/UTGST', sgstTotal),
-              if (hasTaxData && igstTotal > 0)
-                _thermalAmountRow('IGST', igstTotal),
+              if (hasTaxData)
+                ...itemGroupedTaxes.map((tax) => _thermalAmountRow(tax.label, tax.taxAmount)),
             ];
           })(),
           ...order.charges.where((charge) => charge.amount > 0).map(
@@ -604,7 +653,7 @@ class PosInvoicePrinter {
           ...(() {
             final rawStatus = order.status.trim().toUpperCase();
             final rawMode = order.paymentMode.trim().toUpperCase();
-            final bool isUnsettled = rawMode == 'UNSETTLED' || rawStatus == 'PRINTED' || rawStatus == 'RUNNING' || rawStatus == 'DRAFT';
+            final bool isUnsettled = rawMode == 'UNSETTLED' || rawStatus == 'PRINTED' || rawStatus == 'RUNNING' || (rawStatus == 'DRAFT' && rawMode != 'CREDIT');
 
             if (isUnsettled) {
               return [
@@ -639,6 +688,13 @@ class PosInvoicePrinter {
             final pmts = _calculateActualPayments(order, data.amountReceived);
             final splits = _parseSplitPayments(order);
             if (splits.length > 1) {
+              final nonCreditPaid = splits
+                  .where((s) => s['method'].toString().toUpperCase() != 'CREDIT' && s['method'].toString().toUpperCase() != 'DUE')
+                  .fold<double>(0, (sum, s) => sum + (s['amount'] as double));
+              final creditDueAmt = splits
+                  .where((s) => s['method'].toString().toUpperCase() == 'CREDIT' || s['method'].toString().toUpperCase() == 'DUE')
+                  .fold<double>(0, (sum, s) => sum + (s['amount'] as double));
+
               return [
                 _thermalMetaRow(
                   'Payment Mode',
@@ -661,37 +717,75 @@ class PosInvoicePrinter {
                   _thermalMetaRow('Add to Advance', _money(pmts['advanceCreated']!), '', ''),
                 if (_refundTimestamp(order).isNotEmpty)
                   _thermalMetaRow('Refunded On', _refundTimestamp(order), '', ''),
-                if (pmts['received']! > 0)
-                  _thermalMetaRow('Total Received', _money(pmts['received']!), '', ''),
+                if (nonCreditPaid > 0)
+                  _thermalMetaRow('Total Received', _money(nonCreditPaid), '', ''),
+                if (creditDueAmt > 0)
+                  _thermalMetaRow('Balance Due (Credit)', _money(creditDueAmt), '', ''),
               ];
             }
-            if (order.paymentMode.toUpperCase() == 'CREDIT' && order.repayments.isNotEmpty) {
-              final repaymentRows = <pw.Widget>[
+
+            if (rawMode == 'CREDIT') {
+              final double initialPaid = order.initialAmountPaid > 0
+                  ? order.initialAmountPaid
+                  : (order.amountPaid > 0 && order.repayments.isEmpty && order.balanceDue > 0 ? order.amountPaid : 0.0);
+              final double dueAmt = order.balanceDue > 0 ? order.balanceDue : math.max(0.0, displayNetPayable - initialPaid);
+
+              if (order.repayments.isNotEmpty) {
+                final repaymentRows = <pw.Widget>[
+                  _thermalMetaRow(
+                    'Payment',
+                    _displayPaymentMode(order),
+                    'Initial Paid',
+                    _money(initialPaid),
+                  ),
+                ];
+                for (final rep in order.repayments) {
+                  final rMode = (rep['payment_mode'] ?? 'REPAYMENT').toString().toUpperCase();
+                  final rAmt = double.tryParse((rep['amount'] ?? 0).toString()) ?? 0.0;
+                  repaymentRows.add(_thermalMetaRow(
+                    'Repaid ($rMode)',
+                    _money(rAmt),
+                    '',
+                    '',
+                  ));
+                }
+                repaymentRows.add(_thermalMetaRow(
+                  'Total Paid',
+                  _money(order.amountPaid),
+                  'Balance Due',
+                  _money(order.balanceDue),
+                ));
+                return repaymentRows;
+              }
+
+              return [
                 _thermalMetaRow(
                   'Payment',
-                  _displayPaymentMode(order),
-                  'Initial Paid',
-                  _money(order.initialAmountPaid),
+                  'CREDIT',
+                  _isRefundedOrder(order)
+                      ? 'Refund'
+                      : (pmts['refund']! > 0 ? 'Refund (CASH)' : 'Refund'),
+                  _money(pmts['refund']!),
                 ),
+                if (initialPaid > 0)
+                  _thermalMetaRow(
+                    'Received',
+                    _money(initialPaid),
+                    'Balance Due (Credit)',
+                    _money(dueAmt),
+                  )
+                else
+                  _thermalMetaRow(
+                    'Balance Due (Credit)',
+                    _money(dueAmt),
+                    '',
+                    '',
+                  ),
+                if (_refundTimestamp(order).isNotEmpty)
+                  _thermalMetaRow('Refunded On', _refundTimestamp(order), '', ''),
               ];
-              for (final rep in order.repayments) {
-                final rMode = (rep['payment_mode'] ?? 'REPAYMENT').toString().toUpperCase();
-                final rAmt = double.tryParse((rep['amount'] ?? 0).toString()) ?? 0.0;
-                repaymentRows.add(_thermalMetaRow(
-                  'Repaid ($rMode)',
-                  _money(rAmt),
-                  '',
-                  '',
-                ));
-              }
-              repaymentRows.add(_thermalMetaRow(
-                'Total Paid',
-                _money(order.amountPaid),
-                'Balance Due',
-                _money(order.balanceDue),
-              ));
-              return repaymentRows;
             }
+
             return [
               _thermalMetaRow(
                 'Payment',
@@ -1322,22 +1416,64 @@ class PosInvoicePrinter {
     );
   }
 
+  static bool _isInterStateSale(SaleOrder order) {
+    if (order.igstAmount > 0) return true;
+    final mode = order.billingTaxMode.trim().toUpperCase();
+    if (mode == 'IGST' || mode == 'INTER_STATE') return true;
+    return false;
+  }
+
   static pw.Widget _buildA4ItemsTable(SaleOrder order, bool showBrand) {
     final hasTaxData = _hasTaxData(order);
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(order.billingCountry);
+    final bool isInterState = isIndia && _isInterStateSale(order);
+    final String taxName = CountryTaxHelper.taxName(order.billingCountry, order.billingTaxMode);
+
+    final bool hasExplicitSingleTax = order.items.any((item) =>
+        item.taxGroup != null ||
+        item.taxType.toUpperCase().contains('SALES_TAX') ||
+        item.taxType.toUpperCase().contains('VAT') ||
+        item.taxType.toUpperCase().contains('COMPOSITE') ||
+        item.taxBreakup.any((tb) =>
+            tb.label.toUpperCase().contains('SALES TAX') ||
+            tb.label.toUpperCase().contains('VAT') ||
+            tb.code.toUpperCase().contains('SALES_TAX') ||
+            tb.code.toUpperCase().contains('VAT')));
+
+    final bool isDualGst = isIndia &&
+        !isInterState &&
+        order.billingTaxMode != 'VAT' &&
+        order.billingTaxMode != 'SALES_TAX' &&
+        order.billingTaxMode != 'SINGLE' &&
+        !hasExplicitSingleTax;
+
     final headers = hasTaxData
-        ? [
-            'S.No',
-            'Description of Goods',
-            'HSN / SAC Code',
-            'Qty',
-            'Unit',
-            'Unit Rate',
-            'Discount',
-            'Taxable Value',
-            'CGST (Rate% & Amt)',
-            'SGST/UTGST (Rate% & Amt)',
-            'Total Amount',
-          ]
+        ? (isDualGst
+            ? [
+                'S.No',
+                'Description of Goods',
+                'HSN / SAC Code',
+                'Qty',
+                'Unit',
+                'Unit Rate',
+                'Discount',
+                'Taxable Value',
+                'CGST (Rate% & Amt)',
+                'SGST/UTGST (Rate% & Amt)',
+                'Total Amount',
+              ]
+            : [
+                'S.No',
+                'Description of Goods',
+                'HSN / SAC Code',
+                'Qty',
+                'Unit',
+                'Unit Rate',
+                'Discount',
+                'Taxable Value',
+                '${isInterState ? 'IGST' : (taxName.isNotEmpty ? taxName : 'Tax')} (Rate% & Amt)',
+                'Total Amount',
+              ])
         : [
             'S.No',
             'Description of Goods',
@@ -1375,19 +1511,53 @@ class PosInvoicePrinter {
       final name =
           (item.isSchemeFree || item.isAdvanceFree) ? '$brandStr${item.itemName} (FREE)$suffix' : '$brandStr${item.itemName}$suffix';
       if (hasTaxData) {
-        return [
-          '${index + 1}',
-          name,
-          item.hsnSacCode.isEmpty ? item.itemCode : item.hsnSacCode,
-          _qty(item.qty),
-          item.unit,
-          item.isTaxInclusive ? '${_money(_displayRate(item))} (Incl.)' : _money(_displayRate(item)),
-          _money(item.lineDiscount),
-          _money(_taxableAmountForItem(item)),
-          item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'CGST')} / ${_money(_taxAmount(order, item, 'CGST'))}${item.isTaxInclusive ? ' (Incl.)' : ''}',
-          item.taxPercent <= 0 ? 'NILL' : '${_taxRate(order, item, 'SGST')} / ${_money(_taxAmount(order, item, 'SGST'))}${item.isTaxInclusive ? ' (Incl.)' : ''}',
-          _money(_displayItemLineTotal(item)),
-        ];
+        if (isDualGst) {
+          final cgstRate = _taxRate(order, item, 'CGST');
+          final cgstAmt = _taxAmount(order, item, 'CGST');
+          final sgstRate = _taxRate(order, item, 'SGST');
+          final sgstAmt = _taxAmount(order, item, 'SGST');
+
+          // Fallback if item has tax but wasn't broken down into CGST/SGST
+          final effCgstRate = (cgstRate == '-' && item.taxPercent > 0)
+              ? '${_formatTaxPercent(item.taxPercent / 2)}%'
+              : cgstRate;
+          final effCgstAmt = (cgstAmt <= 0 && item.taxAmount > 0)
+              ? item.taxAmount / 2
+              : cgstAmt;
+          final effSgstRate = (sgstRate == '-' && item.taxPercent > 0)
+              ? '${_formatTaxPercent(item.taxPercent / 2)}%'
+              : sgstRate;
+          final effSgstAmt = (sgstAmt <= 0 && item.taxAmount > 0)
+              ? item.taxAmount / 2
+              : sgstAmt;
+
+          return [
+            '${index + 1}',
+            name,
+            item.hsnSacCode.isEmpty ? item.itemCode : item.hsnSacCode,
+            _qty(item.qty),
+            item.unit,
+            item.isTaxInclusive ? '${_money(_displayRate(item))} (Incl.)' : _money(_displayRate(item)),
+            _money(item.lineDiscount),
+            _money(_taxableAmountForItem(item)),
+            item.taxPercent <= 0 ? 'NILL' : '$effCgstRate / ${_money(effCgstAmt)}${item.isTaxInclusive ? ' (Incl.)' : ''}',
+            item.taxPercent <= 0 ? 'NILL' : '$effSgstRate / ${_money(effSgstAmt)}${item.isTaxInclusive ? ' (Incl.)' : ''}',
+            _money(_displayItemLineTotal(item)),
+          ];
+        } else {
+          return [
+            '${index + 1}',
+            name,
+            item.hsnSacCode.isEmpty ? item.itemCode : item.hsnSacCode,
+            _qty(item.qty),
+            item.unit,
+            item.isTaxInclusive ? '${_money(_displayRate(item))} (Incl.)' : _money(_displayRate(item)),
+            _money(item.lineDiscount),
+            _money(_taxableAmountForItem(item)),
+            item.taxPercent <= 0 ? 'NILL' : '${_formatTaxPercent(item.taxPercent)}% / ${_money(item.taxAmount)}${item.isTaxInclusive ? ' (Incl.)' : ''}',
+            _money(_displayItemLineTotal(item)),
+          ];
+        }
       }
       return [
         '${index + 1}',
@@ -1419,9 +1589,14 @@ class PosInvoicePrinter {
         5: const pw.FixedColumnWidth(42),
         6: const pw.FixedColumnWidth(48),
         7: const pw.FixedColumnWidth(54),
-        if (hasTaxData) 8: const pw.FixedColumnWidth(60),
-        if (hasTaxData) 9: const pw.FixedColumnWidth(60),
-        if (hasTaxData) 10: const pw.FixedColumnWidth(56),
+        if (hasTaxData && isDualGst) ...{
+          8: const pw.FixedColumnWidth(60),
+          9: const pw.FixedColumnWidth(60),
+          10: const pw.FixedColumnWidth(56),
+        } else if (hasTaxData && !isDualGst) ...{
+          8: const pw.FixedColumnWidth(70),
+          9: const pw.FixedColumnWidth(56),
+        },
       },
     );
   }
@@ -1435,13 +1610,16 @@ class PosInvoicePrinter {
     final itemGroupedTaxes = _adjustedItemGroupedTaxes(order, _groupedTaxBreakup(order));
     final chargeGroupedTaxes = _groupedChargeTaxBreakup(order);
     final chargeTaxSummaryTotal = _groupTaxTotal(chargeGroupedTaxes);
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(order.billingCountry);
     final cgstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'CGST') +
         _taxAmountFromBreakup(chargeGroupedTaxes, 'CGST');
     final sgstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'SGST') +
         _taxAmountFromBreakup(chargeGroupedTaxes, 'SGST');
     final igstTotal = _taxAmountFromBreakup(itemGroupedTaxes, 'IGST') +
         _taxAmountFromBreakup(chargeGroupedTaxes, 'IGST');
-    final summaryTaxTotal = cgstTotal + sgstTotal + igstTotal;
+    final summaryTaxTotal = isIndia
+        ? (cgstTotal + sgstTotal + igstTotal)
+        : (_groupTaxTotal(itemGroupedTaxes) + chargeTaxSummaryTotal);
     final displayNetPayable = _displayNetPayable(
       order,
       chargeTaxTotal: chargeTaxSummaryTotal,
@@ -1481,9 +1659,8 @@ class PosInvoicePrinter {
                 ),
               ),
             if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
-            if (hasTaxData && cgstTotal > 0) _a4AmountRow('Total CGST Amount', cgstTotal),
-            if (hasTaxData && sgstTotal > 0) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
-            if (hasTaxData && igstTotal > 0) _a4AmountRow('Total IGST Amount', igstTotal),
+            if (hasTaxData)
+              ...itemGroupedTaxes.map((tax) => _a4AmountRow('Total ${tax.label} Amount', tax.taxAmount)),
           ] else ...[
             _a4AmountRow(
               'Subtotal',
@@ -1506,9 +1683,8 @@ class PosInvoicePrinter {
                 ),
               ),
             if (hasTaxData) _a4AmountRow('Taxable Value', _adjustedItemTaxableTotal(order)),
-            if (hasTaxData && cgstTotal > 0) _a4AmountRow('Total CGST Amount', cgstTotal),
-            if (hasTaxData && sgstTotal > 0) _a4AmountRow('Total SGST/UTGST Amount', sgstTotal),
-            if (hasTaxData && igstTotal > 0) _a4AmountRow('Total IGST Amount', igstTotal),
+            if (hasTaxData)
+              ...itemGroupedTaxes.map((tax) => _a4AmountRow('Total ${tax.label} Amount', tax.taxAmount)),
           ],
           if (roundOff.abs() > 0.0009)
             _a4AmountRow(
@@ -1529,6 +1705,38 @@ class PosInvoicePrinter {
             ),
           ],
           ...(() {
+            final rawMode = order.paymentMode.trim().toUpperCase();
+            final splits = _parseSplitPayments(order);
+            if (splits.length > 1) {
+              final nonCreditPaid = splits
+                  .where((s) => s['method'].toString().toUpperCase() != 'CREDIT' && s['method'].toString().toUpperCase() != 'DUE')
+                  .fold<double>(0, (sum, s) => sum + (s['amount'] as double));
+              final creditDueAmt = splits
+                  .where((s) => s['method'].toString().toUpperCase() == 'CREDIT' || s['method'].toString().toUpperCase() == 'DUE')
+                  .fold<double>(0, (sum, s) => sum + (s['amount'] as double));
+              final pmts = _calculateActualPayments(order);
+              return [
+                pw.Divider(height: 10),
+                _a4ValueRow('Payment Mode', 'SPLIT (${splits.length} Modes)', bold: true),
+                ...splits.map((s) => _a4AmountRow('  - ${s['method']}', s['amount'] as double)),
+                if (nonCreditPaid > 0) _a4AmountRow('Total Received', nonCreditPaid, bold: true),
+                if (creditDueAmt > 0) _a4AmountRow('Balance Due (Credit)', creditDueAmt, bold: true),
+                if (pmts['refund']! > 0) _a4AmountRow('Refund (CASH)', pmts['refund']!),
+                if (pmts['advanceCreated']! > 0.009) _a4AmountRow('Added to Advance', pmts['advanceCreated']!),
+              ];
+            }
+            if (rawMode == 'CREDIT') {
+              final double initialPaid = order.initialAmountPaid > 0
+                  ? order.initialAmountPaid
+                  : (order.amountPaid > 0 && order.repayments.isEmpty && order.balanceDue > 0 ? order.amountPaid : 0.0);
+              final double dueAmt = order.balanceDue > 0 ? order.balanceDue : math.max(0.0, displayNetPayable - initialPaid);
+              return [
+                pw.Divider(height: 10),
+                _a4ValueRow('Payment Mode', 'CREDIT', bold: true),
+                if (initialPaid > 0) _a4AmountRow('Received', initialPaid),
+                _a4AmountRow('Balance Due (Credit)', dueAmt, bold: true),
+              ];
+            }
             final pmts = _calculateActualPayments(order);
             return [
               if (pmts['received']! > 0) ...[
@@ -1695,7 +1903,7 @@ class PosInvoicePrinter {
   static String _displayPaymentMode(SaleOrder order) {
     final rawStatus = order.status.trim().toUpperCase();
     final rawMode = order.paymentMode.trim().toUpperCase();
-    if (rawMode == 'UNSETTLED' || rawStatus == 'PRINTED' || rawStatus == 'RUNNING' || rawStatus == 'DRAFT') {
+    if (rawMode == 'UNSETTLED' || rawStatus == 'PRINTED' || rawStatus == 'RUNNING' || (rawStatus == 'DRAFT' && rawMode != 'CREDIT')) {
       return 'UNSETTLED (Awaiting Payment)';
     }
     if (_isExchangeOrder(order)) {
@@ -1803,7 +2011,16 @@ class PosInvoicePrinter {
   }
 
   static Map<String, double> _calculateActualPayments(SaleOrder order, [double? fallbackAmountReceived]) {
-    double totalReceived = fallbackAmountReceived ?? order.amountPaid;
+    final mode = order.paymentMode.trim().toUpperCase();
+    double totalReceived = 0.0;
+    if (mode == 'CREDIT') {
+      totalReceived = order.initialAmountPaid > 0
+          ? order.initialAmountPaid
+          : (order.repayments.isNotEmpty ? order.amountPaid : 0.0);
+    } else {
+      totalReceived = fallbackAmountReceived ?? order.amountPaid;
+    }
+
     final ref = (order.paymentReference ?? '').trim();
     if (ref.startsWith('POSPAY:')) {
       try {
@@ -1813,10 +2030,13 @@ class PosInvoicePrinter {
           double sum = 0;
           for (final entry in decoded) {
             if (entry is Map) {
-              sum += double.tryParse((entry['amount'] ?? 0).toString()) ?? 0.0;
+              final m = (entry['method'] ?? entry['mode'] ?? '').toString().toUpperCase().trim();
+              if (m != 'CREDIT' && m != 'DUE') {
+                sum += double.tryParse((entry['amount'] ?? 0).toString()) ?? 0.0;
+              }
             }
           }
-          if (sum > 0) {
+          if (sum > 0 || decoded.isNotEmpty) {
             totalReceived = sum;
           }
         }
@@ -1889,9 +2109,6 @@ class PosInvoicePrinter {
   }
 
   static pw.Widget _thermalItemRow(SaleItem item, SaleOrder order, bool showBrand) {
-    final font = pw.Font.helvetica();
-    final bold = pw.Font.helveticaBold();
-
     bool isReturned = false;
     bool isExchanged = false;
     if (order.returnedItems != null && order.returnedItems!.isNotEmpty) {
@@ -1955,10 +2172,10 @@ class PosInvoicePrinter {
               pw.Expanded(
                 child: pw.Text(
                   (item.isSchemeFree || item.isAdvanceFree)
-                      ? '${showBrand && item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)${suffix}'
-                      : '${showBrand && item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}${suffix}',
+                      ? '${showBrand && item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)$suffix'
+                      : '${showBrand && item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}$suffix',
                   style: pw.TextStyle(
-                    font: bold,
+                    fontWeight: pw.FontWeight.bold,
                     fontSize: 8.7,
                     color: _thermalPrimary,
                   ),
@@ -1969,7 +2186,7 @@ class PosInvoicePrinter {
               pw.Text(
                 _money(_displayItemLineTotal(item)),
                 style: pw.TextStyle(
-                  font: bold,
+                  fontWeight: pw.FontWeight.bold,
                   fontSize: 8.7,
                   color: _thermalPrimary,
                 ),
@@ -1984,7 +2201,6 @@ class PosInvoicePrinter {
             detailParts
                 .join('  |  '), // Pipes make it easy to read on narrow paper
             style: pw.TextStyle(
-              font: font,
               fontSize: 7.8,
               color: _thermalSecondary,
             ),
@@ -2016,7 +2232,6 @@ class PosInvoicePrinter {
     String rightLabel,
     String rightValue,
   ) {
-    final font = pw.Font.helvetica();
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 1),
       child: pw.Row(
@@ -2025,7 +2240,7 @@ class PosInvoicePrinter {
             child: pw.Text(
               '$leftLabel: $leftValue',
               style: pw.TextStyle(
-                  font: font, fontSize: 8.1, color: _thermalSecondary),
+                  fontSize: 8.1, color: _thermalSecondary),
               softWrap: true,
             ),
           ),
@@ -2036,7 +2251,7 @@ class PosInvoicePrinter {
                 '$rightLabel: $rightValue',
                 textAlign: pw.TextAlign.right,
                 style: pw.TextStyle(
-                    font: font, fontSize: 8.1, color: _thermalSecondary),
+                    fontSize: 8.1, color: _thermalSecondary),
                 softWrap: true,
               ),
             ),
@@ -2047,9 +2262,8 @@ class PosInvoicePrinter {
 
   static pw.Widget _thermalAmountRow(String label, double value,
       {bool bold = false}) {
-    final font = bold ? pw.Font.helveticaBold() : pw.Font.helvetica();
     final style = pw.TextStyle(
-      font: font,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
       fontSize: bold ? 9.4 : 8.5,
       color: bold ? _thermalPrimary : _thermalSecondary,
     );
@@ -2077,9 +2291,39 @@ class PosInvoicePrinter {
     );
   }
 
+  static pw.Widget _thermalValueRow(String label, String value,
+      {bool bold = false}) {
+    final style = pw.TextStyle(
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      fontSize: bold ? 9.4 : 8.5,
+      color: bold ? _thermalPrimary : _thermalSecondary,
+    );
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1),
+      child: pw.Row(
+        children: [
+          pw.Expanded(
+            child: pw.Text(
+              label,
+              style: style,
+              maxLines: 1,
+            ),
+          ),
+          pw.SizedBox(
+            width: 86,
+            child: pw.Text(
+              value,
+              style: style,
+              textAlign: pw.TextAlign.right,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static pw.Widget _thermalTaxSummaryRow(
       String label, double taxable, double tax) {
-    final font = pw.Font.helvetica();
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 1),
       child: pw.Table(
@@ -2094,7 +2338,6 @@ class PosInvoicePrinter {
               pw.Text(
                 label,
                 style: pw.TextStyle(
-                  font: font,
                   fontSize: 7.8,
                   color: _thermalSecondary,
                 ),
@@ -2103,7 +2346,6 @@ class PosInvoicePrinter {
                 _money(taxable),
                 textAlign: pw.TextAlign.right,
                 style: pw.TextStyle(
-                  font: font,
                   fontSize: 7.8,
                   color: _thermalSecondary,
                 ),
@@ -2112,7 +2354,6 @@ class PosInvoicePrinter {
                 _money(tax),
                 textAlign: pw.TextAlign.right,
                 style: pw.TextStyle(
-                  font: font,
                   fontSize: 7.8,
                   color: _thermalSecondary,
                 ),
@@ -2163,6 +2404,24 @@ class PosInvoicePrinter {
         children: [
           pw.Text(label, style: style),
           pw.Text(_money(value), style: style),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _a4ValueRow(String label, String value,
+      {bool bold = false}) {
+    final style = pw.TextStyle(
+      fontSize: 9,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    );
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: style),
+          pw.Text(value, style: style),
         ],
       ),
     );
@@ -2605,13 +2864,16 @@ class PosInvoicePrinter {
     final itemBase = itemTaxableTotal ?? _itemTaxableTotal(order);
     final chargeBase = order.chargeTotal;
     final chargeTax = chargeTaxTotal ?? _groupTaxTotal(_groupedChargeTaxBreakup(order));
-    final summaryTax = summaryTaxTotal ??
-        (_taxAmountFromBreakup(_groupedTaxBreakup(order), 'CGST') +
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(order.billingCountry);
+    final summaryTax = summaryTaxTotal ?? (isIndia
+        ? (_taxAmountFromBreakup(_groupedTaxBreakup(order), 'CGST') +
             _taxAmountFromBreakup(_groupedTaxBreakup(order), 'SGST') +
             _taxAmountFromBreakup(_groupedTaxBreakup(order), 'IGST') +
             _taxAmountFromBreakup(_groupedChargeTaxBreakup(order), 'CGST') +
             _taxAmountFromBreakup(_groupedChargeTaxBreakup(order), 'SGST') +
-            _taxAmountFromBreakup(_groupedChargeTaxBreakup(order), 'IGST'));
+            _taxAmountFromBreakup(_groupedChargeTaxBreakup(order), 'IGST'))
+        : (_groupTaxTotal(_groupedTaxBreakup(order)) +
+            _groupTaxTotal(_groupedChargeTaxBreakup(order))));
     final subscription = subscriptionAdjustment ?? _subscriptionAdjustmentAmount(order);
     return math.max(0, itemBase + chargeBase + chargeTax + summaryTax - subscription);
   }
@@ -2657,10 +2919,6 @@ class PosInvoicePrinter {
     final taxPercent = item.taxPercent;
     if (taxPercent <= 0) return const <TaxBreakdown>[];
 
-    if (item.taxBreakup.isNotEmpty) {
-      return item.taxBreakup;
-    }
-
     final double taxableAmount;
     final double taxAmount;
     final isTaxInclusive = item.isTaxInclusive ||
@@ -2683,16 +2941,18 @@ class PosInvoicePrinter {
       taxAmount = taxableAmount * taxPercent / 100;
     }
     if (taxableAmount <= 0) return const <TaxBreakdown>[];
-    final normalizedType = item.taxType.trim().toUpperCase();
+
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(order.billingCountry);
 
     if (item.taxGroup != null && item.taxGroup!.components.isNotEmpty) {
       final list = <TaxBreakdown>[];
       for (final comp in item.taxGroup!.components) {
         final compAmount = taxableAmount * comp.rate / 100;
+        final compName = comp.componentName.isNotEmpty ? comp.componentName : (isIndia ? 'GST' : 'Sales Tax');
         list.add(
           TaxBreakdown(
             code: comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX',
-            label: '${comp.componentName} (${_formatTaxPercent(comp.rate)}%)',
+            label: '$compName (${_formatTaxPercent(comp.rate)}%)',
             taxType: comp.componentCode,
             rate: comp.rate,
             taxableAmount: taxableAmount,
@@ -2702,6 +2962,12 @@ class PosInvoicePrinter {
       }
       return list;
     }
+
+    if (item.taxBreakup.isNotEmpty) {
+      return item.taxBreakup;
+    }
+
+    final normalizedType = item.taxType.trim().toUpperCase();
 
     if (normalizedType == 'US_SALES_TAX' ||
         normalizedType == 'COMPOSITE' ||
@@ -2753,6 +3019,42 @@ class PosInvoicePrinter {
         ),
       ];
     }
+    final billingMode = order.billingTaxMode.trim().toUpperCase();
+
+    if (isIndia && (normalizedType == 'GST' || normalizedType == 'CGST_SGST')) {
+      final halfRate = taxPercent / 2;
+      final halfAmount = taxAmount / 2;
+      return [
+        TaxBreakdown(
+          code: 'CGST',
+          label: 'CGST ${_formatTaxPercent(halfRate)}%',
+          taxType: 'GST',
+          rate: halfRate,
+          taxableAmount: taxableAmount,
+          taxAmount: halfAmount,
+        ),
+        TaxBreakdown(
+          code: 'SGST',
+          label: 'SGST/UTGST ${_formatTaxPercent(halfRate)}%',
+          taxType: 'GST',
+          rate: halfRate,
+          taxableAmount: taxableAmount,
+          taxAmount: halfAmount,
+        ),
+      ];
+    }
+    if (normalizedType == 'IGST') {
+      return [
+        TaxBreakdown(
+          code: 'IGST',
+          label: 'IGST ${_formatTaxPercent(taxPercent)}%',
+          taxType: 'GST',
+          rate: taxPercent,
+          taxableAmount: taxableAmount,
+          taxAmount: taxAmount,
+        ),
+      ];
+    }
     if (normalizedType == 'OTHER' || normalizedType == 'CUSTOM') {
       return [
         TaxBreakdown(
@@ -2765,8 +3067,6 @@ class PosInvoicePrinter {
         ),
       ];
     }
-
-    final billingMode = order.billingTaxMode.trim().toUpperCase();
     if (billingMode == 'IGST') {
       return [
         TaxBreakdown(
@@ -2786,6 +3086,20 @@ class PosInvoicePrinter {
           code: 'VAT',
           label: 'VAT ${_formatTaxPercent(taxPercent)}%',
           taxType: 'VAT',
+          rate: taxPercent,
+          taxableAmount: taxableAmount,
+          taxAmount: taxAmount,
+        ),
+      ];
+    }
+
+    if (!isIndia) {
+      final tName = CountryTaxHelper.taxName(order.billingCountry, billingMode);
+      return [
+        TaxBreakdown(
+          code: 'SALES_TAX',
+          label: '$tName ${_formatTaxPercent(taxPercent)}%',
+          taxType: 'SALES_TAX',
           rate: taxPercent,
           taxableAmount: taxableAmount,
           taxAmount: taxAmount,
@@ -3149,10 +3463,15 @@ class PosInvoicePrinter {
     await Printing.layoutPdf(
       name: 'Voucher_${voucherNo.replaceAll('/', '_')}',
       onLayout: (format) async {
-        final pdf = pw.Document();
-        final mono = pw.Font.courier();
-        final bold = pw.Font.helveticaBold();
-        final regular = pw.Font.helvetica();
+        final fonts = await getInvoiceFonts();
+        final pdf = pw.Document(
+          theme: pw.ThemeData.withFont(
+            base: fonts.regular,
+            bold: fonts.bold,
+          ),
+        );
+        final bold = fonts.bold;
+        final regular = fonts.regular;
 
         pw.Widget divider() => pw.Container(
               margin: const pw.EdgeInsets.symmetric(vertical: 4),
@@ -3163,7 +3482,6 @@ class PosInvoicePrinter {
 
         pw.Widget kvLine(String label, String value, {bool boldFont = false}) {
           final style = pw.TextStyle(
-            font: mono,
             fontSize: 9,
             fontWeight: boldFont ? pw.FontWeight.bold : pw.FontWeight.normal,
           );
@@ -3198,7 +3516,6 @@ class PosInvoicePrinter {
                 child: pw.Text(
                   '${voucherType.toUpperCase()} VOUCHER',
                   style: pw.TextStyle(
-                    font: mono,
                     fontSize: 11,
                     fontWeight: pw.FontWeight.bold,
                   ),
@@ -3214,7 +3531,7 @@ class PosInvoicePrinter {
               divider(),
               if (lines.isNotEmpty) ...[
                 pw.Text('LEDGER BREAKDOWN:',
-                    style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                    style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
                 pw.SizedBox(height: 2),
                 ...lines.map((l) {
                   final lineMap = l is Map ? l : (l.toJson != null ? l.toJson() : {});
@@ -3228,9 +3545,9 @@ class PosInvoicePrinter {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Expanded(
-                        child: pw.Text('[$prefix] $accName', style: pw.TextStyle(font: mono, fontSize: 8.5)),
+                        child: pw.Text('[$prefix] $accName', style: const pw.TextStyle(fontSize: 8.5)),
                       ),
-                      pw.Text(CurrencyService.format(lineAmt), style: pw.TextStyle(font: mono, fontSize: 8.5)),
+                      pw.Text(CurrencyService.format(lineAmt), style: const pw.TextStyle(fontSize: 8.5)),
                     ],
                   );
                 }),
@@ -3239,22 +3556,22 @@ class PosInvoicePrinter {
               kvLine('Total Amount:', CurrencyService.format(amount), boldFont: true),
               divider(),
               if (note.isNotEmpty) ...[
-                pw.Text('Narration / Note:', style: pw.TextStyle(font: mono, fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                pw.Text(note, style: pw.TextStyle(font: mono, fontSize: 8)),
+                pw.Text('Narration / Note:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                pw.Text(note, style: const pw.TextStyle(fontSize: 8)),
                 divider(),
               ],
               pw.SizedBox(height: 12),
               pw.Center(
                 child: pw.Text(
                   'Signature / Authorized Sign',
-                  style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
                 ),
               ),
               pw.SizedBox(height: 4),
               pw.Center(
                 child: pw.Text(
                   'Thank you!',
-                  style: pw.TextStyle(font: mono, fontSize: 8),
+                  style: const pw.TextStyle(fontSize: 8),
                 ),
               ),
             ],
@@ -3315,12 +3632,50 @@ class PosInvoicePrinter {
     return _stateCodes[state.trim().toLowerCase()];
   }
 
-  static String _amountInWords(double amount) {
-    final rupees = amount.floor();
-    final paise = ((amount - rupees) * 100).round();
-    final rupeeWords = _numberToWords(rupees);
-    final paiseWords = paise > 0 ? ' and ${_numberToWords(paise)} Paise' : '';
-    return 'Indian Rupees $rupeeWords$paiseWords Only';
+  static String _amountInWords(double amount, [String? currencyCode]) {
+    final curCode = currencyCode ?? CurrencyService.code;
+    final String majorUnit;
+    final String minorUnit;
+
+    switch (curCode.toUpperCase()) {
+      case 'INR':
+        majorUnit = 'Indian Rupees';
+        minorUnit = 'Paise';
+        break;
+      case 'USD':
+        majorUnit = 'US Dollars';
+        minorUnit = 'Cents';
+        break;
+      case 'EUR':
+        majorUnit = 'Euros';
+        minorUnit = 'Cents';
+        break;
+      case 'GBP':
+        majorUnit = 'Pounds';
+        minorUnit = 'Pence';
+        break;
+      case 'KES':
+        majorUnit = 'Kenyan Shillings';
+        minorUnit = 'Cents';
+        break;
+      case 'AED':
+        majorUnit = 'UAE Dirhams';
+        minorUnit = 'Fils';
+        break;
+      case 'JPY':
+        majorUnit = 'Japanese Yen';
+        minorUnit = '';
+        break;
+      default:
+        majorUnit = curCode.isNotEmpty ? curCode : 'Units';
+        minorUnit = 'Cents';
+    }
+
+    final mainVal = amount.floor();
+    final subVal = ((amount - mainVal) * 100).round();
+    final mainWords = _numberToWords(mainVal);
+    final subWords = (subVal > 0 && minorUnit.isNotEmpty) ? ' and ${_numberToWords(subVal)} $minorUnit' : '';
+    return '$majorUnit $mainWords$subWords Only';
   }
 
   static String _numberToWords(int number) {
@@ -3473,7 +3828,13 @@ class PosInvoicePrinter {
     required Map<String, dynamic> creditNote,
     required PropertyInfo? property,
   }) async {
-    final document = pw.Document();
+    final fonts = await getInvoiceFonts();
+    final document = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fonts.regular,
+        bold: fonts.bold,
+      ),
+    );
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
 
     final originalSale = creditNote['sale'] is Map ? creditNote['sale'] as Map<String, dynamic> : null;
@@ -3483,7 +3844,7 @@ class PosInvoicePrinter {
       document.addPage(
         pw.MultiPage(
           pageFormat: _thermalSheetFor(billFormat),
-          build: (_) => [_buildThermalCreditNoteReceipt(creditNote, property, logo)],
+          build: (_) => [_buildThermalCreditNoteReceipt(creditNote, property, logo, fontRegular: fonts.regular, fontBold: fonts.bold)],
         ),
       );
     } else {
@@ -3789,9 +4150,10 @@ class PosInvoicePrinter {
   }
 
   static pw.Widget _buildThermalCreditNoteReceipt(
-      Map<String, dynamic> creditNote, PropertyInfo? property, pw.MemoryImage? logo) {
-    final regular = pw.Font.helvetica();
-    final bold = pw.Font.helveticaBold();
+      Map<String, dynamic> creditNote, PropertyInfo? property, pw.MemoryImage? logo,
+      {pw.Font? fontRegular, pw.Font? fontBold}) {
+    final regular = fontRegular ?? _cachedRegular ?? pw.Font.helvetica();
+    final bold = fontBold ?? _cachedBold ?? pw.Font.helveticaBold();
     final bodyStyle =
         pw.TextStyle(font: regular, fontSize: 8.9, color: _thermalSecondary);
     final emphasisStyle =
@@ -4081,7 +4443,13 @@ class PosInvoicePrinter {
     required String gateway,
     String? creditNoteNo,
   }) async {
-    final document = pw.Document();
+    final fonts = await getInvoiceFonts();
+    final document = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fonts.regular,
+        bold: fonts.bold,
+      ),
+    );
     final pageFormat = _thermalSheetFor('THERMAL_80');
     final formattedDate = refundedAt.isNotEmpty ? refundedAt : DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');
 
@@ -4472,9 +4840,15 @@ class PosInvoicePrinter {
     Map<String, dynamic>? tokenTemplateConfig,
     int copyCount = 1,
   }) async {
-    final document = pw.Document();
-    final regular = pw.Font.helvetica();
-    final bold = pw.Font.helveticaBold();
+    final fonts = await getInvoiceFonts();
+    final document = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fonts.regular,
+        bold: fonts.bold,
+      ),
+    );
+    final regular = fonts.regular;
+    final bold = fonts.bold;
 
     final config = tokenTemplateConfig ?? settings?.tokenTemplateConfig ?? {};
     final String headerTitle = (config['header_title']?.toString() ?? 'ORDER TOKEN').trim();
@@ -4894,6 +5268,8 @@ class _InvoiceContext {
   final bool enableTokenSystem;
   final Map<String, dynamic> receiptTemplateConfig;
   final Map<String, dynamic> a4TemplateConfig;
+  final pw.Font? regularFont;
+  final pw.Font? boldFont;
 
   const _InvoiceContext({
     required this.order,
@@ -4916,5 +5292,7 @@ class _InvoiceContext {
     required this.enableTokenSystem,
     this.receiptTemplateConfig = const {},
     this.a4TemplateConfig = const {},
+    this.regularFont,
+    this.boldFont,
   });
 }

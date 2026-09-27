@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/reports/stock_in_report_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../core/utils/country_tax_helper.dart';
 import '../../models/reports/stock_in_model.dart';
 import '../../utils/branding_storage.dart';
@@ -441,12 +442,12 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
                   DataCell(Text('${e.itemName}${e.brand.isNotEmpty ? ' (${e.brand})' : ''}')),
                                 DataCell(Text(e.unit)),
                                 DataCell(Text(e.qty.toString())),
-                                DataCell(Text(e.rate.toStringAsFixed(2))),
-                                DataCell(Text(e.amount.toStringAsFixed(2))),
+                                DataCell(Text(CurrencyService.format(e.rate))),
+                                DataCell(Text(CurrencyService.format(e.amount))),
                                 DataCell(Text(e.gst.toString())),
-                                DataCell(Text(e.taxAmount.toStringAsFixed(2))),
+                                DataCell(Text(CurrencyService.format(e.taxAmount))),
                                 DataCell(Text(
-                                  e.netAmount.toStringAsFixed(2),
+                                  CurrencyService.format(e.netAmount),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -603,10 +604,10 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
         DataCell(Text(e.itemName)),
         DataCell(Text(e.unit)),
         DataCell(Text(e.qty.toString())),
-        DataCell(Text(e.rate.toStringAsFixed(2))),
+        DataCell(Text(CurrencyService.format(e.rate))),
         DataCell(Text(e.gst.toStringAsFixed(0))),
         DataCell(Text(
-          e.netAmount.toStringAsFixed(2),
+          CurrencyService.format(e.netAmount),
           style: const TextStyle(fontWeight: FontWeight.w600),
         )),
       ],
@@ -633,7 +634,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
     return Chip(
       backgroundColor: color.withOpacity(.15),
       label: Text(
-        '$label : ${value.toStringAsFixed(2)}',
+        '$label : ${CurrencyService.format(value)}',
         style: TextStyle(color: color, fontWeight: FontWeight.bold),
       ),
     );
@@ -820,7 +821,7 @@ class _StockInReportScreenState extends State<StockInReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
     final sysTaxMode = mounted ? context.read<SystemSettingsController>().settings?.billingTaxMode : null;
     final currencySymbol = CurrencyService.symbol;

@@ -1032,22 +1032,61 @@ exports.acceptOrder = async (req, res) => {
                 }
             });
 
-        const finalItems = subscriptionAllocation.items;
+        const finalItems = (subscriptionAllocation.items || []).map((subItem, idx) => {
+            const originalItem = (order.items || []).find(it => String(it.item_id) === String(subItem.item_id)) || (order.items || [])[idx] || {};
+            return {
+                ...originalItem,
+                ...subItem,
+                tax_type: originalItem.tax_type || subItem.tax_type,
+                tax_percent: subItem.tax_percent !== undefined ? subItem.tax_percent : originalItem.tax_percent,
+                tax_group_id: originalItem.tax_group_id || subItem.tax_group_id,
+                tax_group: originalItem.tax_group || subItem.tax_group,
+                tax_group_components: originalItem.tax_group_components || subItem.tax_group_components,
+                is_tax_inclusive: originalItem.is_tax_inclusive !== undefined ? originalItem.is_tax_inclusive : subItem.is_tax_inclusive,
+            };
+        });
 
-        // Fetch item master entries to resolve is_tax_inclusive
+        // Fetch system settings for billing country and tax mode
+        const systemSettings = await req.propertyDb.models.system_settings.findOne({
+            where: { outlet_id },
+            transaction: t
+        });
+        const billingCountry = systemSettings?.billing_country || 'India';
+        const billingTaxMode = systemSettings?.billing_tax_mode || 'CGST_SGST';
+        const billFormat = systemSettings?.bill_format || 'A4';
+
+        // Fetch item master entries to resolve is_tax_inclusive and tax groups
         const itemIds = finalItems.map(item => item.item_id).filter(Boolean);
         const itemMasters = await req.propertyDb.models.item_master.findAll({
             where: { id: itemIds },
+            include: [
+                {
+                    model: req.propertyDb.models.tax_groups,
+                    as: 'tax_group',
+                    include: [
+                        {
+                            model: req.propertyDb.models.tax_group_components,
+                            as: 'components'
+                        }
+                    ]
+                }
+            ],
             transaction: t
         });
         const itemMasterMap = new Map(itemMasters.map(im => [im.id, im]));
 
-        const isInclusive = (item_id) => {
-            const im = itemMasterMap.get(item_id);
-            return im ? !!im.is_tax_inclusive : false;
+        const isInclusive = (item) => {
+            if (typeof item === 'object' && item !== null) {
+                if (item.is_tax_inclusive === true || item.is_tax_inclusive === 1 || String(item.is_tax_inclusive) === 'true' || String(item.tax_type).toUpperCase().includes('INCLUSIVE')) {
+                    return true;
+                }
+            }
+            const itemId = typeof item === 'object' && item !== null ? (item.item_id || item.id) : item;
+            const im = itemMasterMap.get(Number(itemId));
+            return im ? (!!im.is_tax_inclusive || String(im.tax_type).toUpperCase().includes('INCLUSIVE')) : false;
         };
 
-        const anyInclusive = finalItems.some(item => isInclusive(item.item_id));
+        const anyInclusive = finalItems.some(item => isInclusive(item));
 
         // 3. Local tax calculation helpers
         const taxSummary = new Map();
@@ -1075,13 +1114,213 @@ exports.acceptOrder = async (req, res) => {
             }
         };
 
-        const calculateTaxesForAmountLocal = (taxMode, taxType, taxPercent, taxableAmount) => {
+        const calculateTaxesForAmountLocal = (taxMode, taxType, taxPercent, taxableAmount, itemData, itemMaster) => {
             if (taxMode === 'NONE' || taxPercent <= 0 || taxableAmount <= 0) {
                 return [];
             }
-            const taxAmount = taxableAmount * taxPercent / 100;
+
+            let tgComponents = null;
+            if (Array.isArray(itemData?.tax_group_components) && itemData.tax_group_components.length > 0) {
+                tgComponents = itemData.tax_group_components;
+            } else if (itemData?.tax_group?.components && Array.isArray(itemData.tax_group.components) && itemData.tax_group.components.length > 0) {
+                tgComponents = itemData.tax_group.components;
+            } else if (itemMaster?.tax_group?.components && Array.isArray(itemMaster.tax_group.components) && itemMaster.tax_group.components.length > 0) {
+                tgComponents = itemMaster.tax_group.components;
+            } else if (typeof itemData?.tax_group_components === 'string') {
+                try {
+                    const parsed = JSON.parse(itemData.tax_group_components);
+                    if (Array.isArray(parsed) && parsed.length > 0) tgComponents = parsed;
+                } catch (_) {}
+            }
+
+            if (tgComponents && tgComponents.length > 0) {
+                const list = [];
+                for (const comp of tgComponents) {
+                    const compRate = parseFloat(comp.rate || 0.0);
+                    const compCode = (comp.component_code || comp.code || 'TAX').trim();
+                    const compName = (comp.component_name || comp.name || compCode).trim();
+                    const compAmount = toAmount(taxableAmount * compRate / 100);
+                    list.push({
+                        code: compCode,
+                        label: `${compName} (${compRate % 1 === 0 ? compRate.toFixed(0) : compRate.toFixed(2)}%)`,
+                        taxType: compCode,
+                        tax_type: compCode,
+                        rate: compRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxable_amount: toAmount(taxableAmount),
+                        taxAmount: compAmount,
+                        tax_amount: compAmount
+                    });
+                }
+                return list;
+            }
+
+            const itemTaxType = String(itemData?.tax_type || itemMaster?.tax_type || taxType || '').trim().toUpperCase();
+
+            // 1. If explicit item tax type is GST/CGST_SGST:
+            if (itemTaxType === 'GST' || itemTaxType === 'CGST_SGST' || itemTaxType === 'GST_INCLUSIVE') {
+                const halfRate = taxPercent / 2;
+                const halfAmount = toAmount((taxableAmount * taxPercent / 100) / 2);
+                return [
+                    {
+                        code: 'CGST',
+                        label: `CGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
+                        taxType: 'GST',
+                        tax_type: 'GST',
+                        rate: halfRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxable_amount: toAmount(taxableAmount),
+                        taxAmount: halfAmount,
+                        tax_amount: halfAmount
+                    },
+                    {
+                        code: 'SGST',
+                        label: `SGST ${halfRate % 1 === 0 ? halfRate.toFixed(0) : halfRate.toFixed(2)}%`,
+                        taxType: 'GST',
+                        tax_type: 'GST',
+                        rate: halfRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxable_amount: toAmount(taxableAmount),
+                        taxAmount: halfAmount,
+                        tax_amount: halfAmount
+                    }
+                ];
+            }
+
+            // 2. If explicit item tax type is US_SALES_TAX or COMPOSITE:
+            if (itemTaxType === 'US_SALES_TAX' || itemTaxType === 'SALES_TAX' || itemTaxType === 'COMPOSITE') {
+                const stateRate = taxPercent > 1.0 ? parseFloat((taxPercent - 1.0).toFixed(2)) : taxPercent;
+                const cityRate = taxPercent > 1.0 ? 1.0 : 0.0;
+                const stateAmount = toAmount(taxableAmount * stateRate / 100);
+                const res = [
+                    {
+                        code: 'STATE_TAX',
+                        label: `STATE SALES TAX (${stateRate % 1 === 0 ? stateRate.toFixed(0) : stateRate.toFixed(2)}%)`,
+                        taxType: 'STATE_TAX',
+                        tax_type: 'STATE_TAX',
+                        rate: stateRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxable_amount: toAmount(taxableAmount),
+                        taxAmount: stateAmount,
+                        tax_amount: stateAmount
+                    }
+                ];
+                if (cityRate > 0) {
+                    const cityAmount = toAmount(taxableAmount * cityRate / 100);
+                    res.push({
+                        code: 'CITY_TAX',
+                        label: `CITY TAX (${cityRate % 1 === 0 ? cityRate.toFixed(0) : cityRate.toFixed(2)}%)`,
+                        taxType: 'CITY_TAX',
+                        tax_type: 'CITY_TAX',
+                        rate: cityRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxable_amount: toAmount(taxableAmount),
+                        taxAmount: cityAmount,
+                        tax_amount: cityAmount
+                    });
+                }
+                return res;
+            }
+
+            // 3. If explicit item tax type is IGST:
+            if (itemTaxType === 'IGST') {
+                const igstAmount = toAmount(taxableAmount * taxPercent / 100);
+                return [{
+                    code: 'IGST',
+                    label: `IGST ${taxPercent % 1 === 0 ? taxPercent.toFixed(0) : taxPercent.toFixed(2)}%`,
+                    taxType: 'GST',
+                    tax_type: 'GST',
+                    rate: taxPercent,
+                    taxableAmount: toAmount(taxableAmount),
+                    taxable_amount: toAmount(taxableAmount),
+                    taxAmount: igstAmount,
+                    tax_amount: igstAmount
+                }];
+            }
+
+            // 4. If explicit item tax type is VAT:
+            if (itemTaxType === 'VAT') {
+                const vatAmount = toAmount(taxableAmount * taxPercent / 100);
+                return [{
+                    code: 'VAT',
+                    label: `VAT (${taxPercent % 1 === 0 ? taxPercent.toFixed(0) : taxPercent.toFixed(2)}%)`,
+                    taxType: 'VAT',
+                    tax_type: 'VAT',
+                    rate: taxPercent,
+                    taxableAmount: toAmount(taxableAmount),
+                    taxable_amount: toAmount(taxableAmount),
+                    taxAmount: vatAmount,
+                    tax_amount: vatAmount
+                }];
+            }
+
+            // 5. Fallback based on taxMode:
+            if (taxMode === 'US_SALES_TAX') {
+                const stateRate = taxPercent > 1.0 ? parseFloat((taxPercent - 1.0).toFixed(2)) : taxPercent;
+                const cityRate = taxPercent > 1.0 ? 1.0 : 0.0;
+                const stateAmount = toAmount(taxableAmount * stateRate / 100);
+                const res = [
+                    {
+                        code: 'STATE_TAX',
+                        label: `STATE SALES TAX (${stateRate % 1 === 0 ? stateRate.toFixed(0) : stateRate.toFixed(2)}%)`,
+                        taxType: 'STATE_TAX',
+                        tax_type: 'STATE_TAX',
+                        rate: stateRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxable_amount: toAmount(taxableAmount),
+                        taxAmount: stateAmount,
+                        tax_amount: stateAmount
+                    }
+                ];
+                if (cityRate > 0) {
+                    const cityAmount = toAmount(taxableAmount * cityRate / 100);
+                    res.push({
+                        code: 'CITY_TAX',
+                        label: `CITY TAX (${cityRate % 1 === 0 ? cityRate.toFixed(0) : cityRate.toFixed(2)}%)`,
+                        taxType: 'CITY_TAX',
+                        tax_type: 'CITY_TAX',
+                        rate: cityRate,
+                        taxableAmount: toAmount(taxableAmount),
+                        taxable_amount: toAmount(taxableAmount),
+                        taxAmount: cityAmount,
+                        tax_amount: cityAmount
+                    });
+                }
+                return res;
+            }
+
+            if (taxMode === 'VAT') {
+                const vatAmount = toAmount(taxableAmount * taxPercent / 100);
+                return [{
+                    code: 'VAT',
+                    label: `VAT (${taxPercent % 1 === 0 ? taxPercent.toFixed(0) : taxPercent.toFixed(2)}%)`,
+                    taxType: 'VAT',
+                    tax_type: 'VAT',
+                    rate: taxPercent,
+                    taxableAmount: toAmount(taxableAmount),
+                    taxable_amount: toAmount(taxableAmount),
+                    taxAmount: vatAmount,
+                    tax_amount: vatAmount
+                }];
+            }
+
+            if (taxMode === 'IGST') {
+                const igstAmount = toAmount(taxableAmount * taxPercent / 100);
+                return [{
+                    code: 'IGST',
+                    label: `IGST ${taxPercent % 1 === 0 ? taxPercent.toFixed(0) : taxPercent.toFixed(2)}%`,
+                    taxType: 'GST',
+                    tax_type: 'GST',
+                    rate: taxPercent,
+                    taxableAmount: toAmount(taxableAmount),
+                    taxable_amount: toAmount(taxableAmount),
+                    taxAmount: igstAmount,
+                    tax_amount: igstAmount
+                }];
+            }
+
             const halfRate = taxPercent / 2;
-            const halfAmount = taxAmount / 2;
+            const halfAmount = toAmount((taxableAmount * taxPercent / 100) / 2);
             return [
                 {
                     code: 'CGST',
@@ -1089,8 +1328,8 @@ exports.acceptOrder = async (req, res) => {
                     taxType: 'GST',
                     tax_type: 'GST',
                     rate: halfRate,
-                    taxableAmount,
-                    taxable_amount: taxableAmount,
+                    taxableAmount: toAmount(taxableAmount),
+                    taxable_amount: toAmount(taxableAmount),
                     taxAmount: halfAmount,
                     tax_amount: halfAmount
                 },
@@ -1100,8 +1339,8 @@ exports.acceptOrder = async (req, res) => {
                     taxType: 'GST',
                     tax_type: 'GST',
                     rate: halfRate,
-                    taxableAmount,
-                    taxable_amount: taxableAmount,
+                    taxableAmount: toAmount(taxableAmount),
+                    taxable_amount: toAmount(taxableAmount),
                     taxAmount: halfAmount,
                     tax_amount: halfAmount
                 }
@@ -1120,7 +1359,7 @@ exports.acceptOrder = async (req, res) => {
                 const taxPercent = parseFloat(item.tax_percent || 0.0);
                 
                 if (anyInclusive) {
-                    if (isInclusive(item.item_id)) {
+                    if (isInclusive(item)) {
                         nonSubscriptionSubTotal += amount / (1 + taxPercent / 100);
                         nonSubscriptionSubTotalInclusive += amount;
                     } else {
@@ -1162,7 +1401,7 @@ exports.acceptOrder = async (req, res) => {
                 chargeSubtotal += chTaxableAmount;
                 chargeTaxTotal += chTaxAmount;
 
-                const chBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', chTaxPercent, chTaxableAmount);
+                const chBreakup = calculateTaxesForAmountLocal(billingTaxMode, 'GST', chTaxPercent, chTaxableAmount);
                 addTaxBreakup(chBreakup);
             }
         }
@@ -1179,7 +1418,7 @@ exports.acceptOrder = async (req, res) => {
             const amount = itemQty * itemRate;
             const taxPercent = parseFloat(item.tax_percent || 0.0);
             
-            const grossInclusive = isInclusive(item.item_id)
+            const grossInclusive = isInclusive(item)
                 ? amount
                 : amount * (1 + taxPercent / 100);
                 
@@ -1188,7 +1427,7 @@ exports.acceptOrder = async (req, res) => {
                 itemDiscountInclusive = (grossInclusive / nonSubscriptionSubTotalInclusive) * resolvedCouponDiscountAmount;
             }
             
-            const lineDiscount = isInclusive(item.item_id)
+            const lineDiscount = isInclusive(item)
                 ? itemDiscountInclusive
                 : itemDiscountInclusive / (1 + taxPercent / 100);
                 
@@ -1212,7 +1451,7 @@ exports.acceptOrder = async (req, res) => {
             let itemTaxAmount;
             let itemLineTotal;
             
-            if (isInclusive(item.item_id)) {
+            if (isInclusive(item)) {
                 const netInclusive = Math.max(0, amount - lineDiscount);
                 itemTaxableAmount = toAmount(netInclusive / (1 + taxPercent / 100));
                 itemTaxAmount = toAmount(netInclusive - itemTaxableAmount);
@@ -1238,7 +1477,8 @@ exports.acceptOrder = async (req, res) => {
             item.tax_amount = itemTaxAmount;
             item.line_total = itemLineTotal;
 
-            const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', taxPercent, itemTaxableAmount);
+            const dbItem = itemMasterMap.get(item.item_id);
+            const itemBreakup = calculateTaxesForAmountLocal(billingTaxMode, item.tax_type, taxPercent, itemTaxableAmount, item, dbItem);
             addTaxBreakup(itemBreakup);
         }
 
@@ -1276,7 +1516,7 @@ exports.acceptOrder = async (req, res) => {
                 let itemTaxAmount;
                 let itemTaxable;
                 
-                if (isInclusive(item.item_id)) {
+                if (isInclusive(item)) {
                     itemTaxable = toAmount(amount / (1 + taxPercent / 100));
                     itemTaxAmount = toAmount(amount - itemTaxable);
                 } else {
@@ -1287,7 +1527,8 @@ exports.acceptOrder = async (req, res) => {
                 subscriptionTaxAmount += itemTaxAmount;
                 subscriptionTaxableAmount += itemTaxable;
 
-                const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', taxPercent, itemTaxable);
+                const dbItem = itemMasterMap.get(item.item_id);
+                const itemBreakup = calculateTaxesForAmountLocal(billingTaxMode, item.tax_type, taxPercent, itemTaxable, item, dbItem);
                 for (const tax of itemBreakup) {
                     if (tax.code === 'CGST') subscriptionTaxCgst += tax.taxAmount;
                     else if (tax.code === 'SGST') subscriptionTaxSgst += tax.taxAmount;
@@ -1312,13 +1553,11 @@ exports.acceptOrder = async (req, res) => {
                 copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxSgst));
                 copy.tax_amount = copy.taxAmount;
                 copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-                copy.tax_amount = copy.taxAmount;
                 copy.taxable_amount = copy.taxableAmount;
             } else if (copy.code === 'IGST') {
                 copy.taxAmount = Math.max(0, toAmount(copy.taxAmount - subscriptionTaxIgst));
                 copy.tax_amount = copy.taxAmount;
                 copy.taxableAmount = Math.max(0, toAmount(copy.taxableAmount - subscriptionTaxableAmount));
-                copy.tax_amount = copy.taxAmount;
                 copy.taxable_amount = copy.taxableAmount;
             }
             return copy;
@@ -1358,9 +1597,9 @@ exports.acceptOrder = async (req, res) => {
             change_amount: 0,
             balance_due: balanceDue,
             order_type: 'DELIVERY',
-            billing_country: 'India',
-            billing_tax_mode: 'CGST_SGST',
-            bill_format: 'A4',
+            billing_country: billingCountry,
+            billing_tax_mode: billingTaxMode,
+            bill_format: billFormat,
             tax_percent: 0,
             total_qty: finalItems.reduce((sum, item) => sum + toAmount(item.qty), 0),
             sub_total: derivedSubTotal,
@@ -1397,7 +1636,9 @@ exports.acceptOrder = async (req, res) => {
             const itemTaxAmount = item.tax_amount;
             const lineDiscount = item.line_discount || 0.0;
             const itemLineTotal = toAmount(itemTaxableAmount + itemTaxAmount);
-            const itemBreakup = calculateTaxesForAmountLocal('CGST_SGST', 'GST', itemTaxPercent, itemTaxableAmount);
+            const dbItem = itemMasterMap.get(item.item_id);
+            const itemBreakup = calculateTaxesForAmountLocal(billingTaxMode, item.tax_type, itemTaxPercent, itemTaxableAmount, item, dbItem);
+            const itemTaxType = item.tax_type || dbItem?.tax_type || (billingCountry === 'India' ? 'GST' : 'US_SALES_TAX');
 
             // Fetch unit from item master if it is not sent in the order items payload
             let resolvedUnit = item.unit;
@@ -1417,7 +1658,7 @@ exports.acceptOrder = async (req, res) => {
                 line_discount: lineDiscount,
                 amount: itemAmount,
                 taxable_amount: itemTaxableAmount,
-                tax_type: 'GST',
+                tax_type: itemTaxType,
                 tax_percent: itemTaxPercent,
                 tax_amount: itemTaxAmount,
                 line_total: itemLineTotal,
@@ -1430,7 +1671,6 @@ exports.acceptOrder = async (req, res) => {
             }, { transaction: t });
 
 
-            const dbItem = itemMasterMap.get(item.item_id);
             const isRecipeBased = dbItem?.is_recipe_based ?? false;
             const isStockable = dbItem?.stockable ?? true;
 
@@ -1854,6 +2094,7 @@ exports.updateOrderDeliveryStatus = async (req, res) => {
                         party_name: sale.customer_name || sale.customer_phone || 'Walk-in Customer',
                         payment_method: 'CREDIT',
                         amount_in: 0,
+                        adjustment_amount: toAmount(order.net_amount),
                         notes: `Delivery order #${order.id} delivered on Credit. Outstanding: ${toAmount(order.net_amount).toFixed(2)}`,
                         created_by: req.user?.id || 1,
                         transaction: t
@@ -4812,13 +5053,24 @@ exports.refundGatewayViaCreditNote = async (req, res) => {
 
 exports.getSaleDetailsPublic = async (req, res) => {
     try {
+        const param = String(req.params.id || '').trim();
+        const num = Number(param);
+        const whereConditions = [];
+        if (!isNaN(num) && num > 0) {
+            whereConditions.push({ id: num });
+            whereConditions.push({ notes: `Auto-generated from delivery order #${num}` });
+        }
+        if (param.length > 0) {
+            whereConditions.push({ sale_no: param });
+        }
+
         const sale = await req.propertyDb.models.sales_headers.findOne({
             where: {
-                [Op.or]: [
-                    { id: isNaN(Number(req.params.id)) ? -1 : Number(req.params.id) },
-                    { sale_no: req.params.id }
-                ]
+                [Op.or]: whereConditions,
+                is_latest: true,
+                is_deleted: false
             },
+            order: [['id', 'DESC']],
             include: [
                 {
                     model: req.propertyDb.models.sales_items,
@@ -4827,7 +5079,19 @@ exports.getSaleDetailsPublic = async (req, res) => {
                         {
                             model: req.propertyDb.models.item_master,
                             as: 'item',
-                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand', 'is_tax_inclusive']
+                            attributes: ['id', 'rate', 'retail_sale_price', 'tax_type', 'tax_percent', 'brand', 'is_tax_inclusive'],
+                            include: [
+                                {
+                                    model: req.propertyDb.models.tax_groups,
+                                    as: 'tax_group',
+                                    include: [
+                                        {
+                                            model: req.propertyDb.models.tax_group_components,
+                                            as: 'components'
+                                        }
+                                    ]
+                                }
+                            ]
                         }
                     ]
                 },

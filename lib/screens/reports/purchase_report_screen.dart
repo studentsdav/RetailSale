@@ -357,7 +357,7 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                   DataCell(Text(DateFormat('dd-MMM-yyyy').format(po.poDate))),
                   DataCell(Text(po.supplierName)),
                   DataCell(Text(po.status)),
-                  DataCell(Text(po.totalAmount.toStringAsFixed(2))),
+                  DataCell(Text(CurrencyService.format(po.totalAmount))),
                   DataCell(TextButton(
                     onPressed: () => _showPoDetails(po.id, po.poNo),
                     child: const Text('Show Items'),
@@ -453,9 +453,9 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
                               DataCell(Text(brand)),
                               DataCell(Text(unit)),
                               DataCell(Text(qty.toString())),
-                              DataCell(Text(rate.toStringAsFixed(2))),
-                              DataCell(Text(tax.toStringAsFixed(2))),
-                              DataCell(Text(amount.toStringAsFixed(2))),
+                              DataCell(Text(CurrencyService.format(rate))),
+                              DataCell(Text(CurrencyService.format(tax))),
+                              DataCell(Text(CurrencyService.format(amount))),
                             ],
                           );
                         }).toList(),
@@ -519,7 +519,7 @@ class _PurchaseReportScreenState extends State<PurchaseReportScreen> {
         child: Chip(
           backgroundColor: color.withOpacity(.15),
           label: Text(
-            '$label : ${val.toStringAsFixed(2)}',
+            '$label : ${CurrencyService.format(val)}',
             style: TextStyle(color: color, fontWeight: FontWeight.bold),
           ),
         ),

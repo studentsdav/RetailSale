@@ -21,6 +21,7 @@ import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/config/app_brand.dart';
 import '../../core/currency/currency_service.dart';
 import '../../core/printing/device_printer_routing.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../core/settings/local_preferences.dart';
 
 class KotBuilderScreen extends StatefulWidget {
@@ -295,7 +296,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   }
 
   Future<Uint8List> _generateKot80mmPdf(PdfPageFormat format) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final String tableName = _displayTableName;
     final String floorName = widget.table['floor_name']?.toString() ?? 'Main Floor';
@@ -2640,7 +2641,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   }
 
   Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items, {String? locationName}) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final String brandName = AppBrand.companyName.trim();
     
     final config = settingsCtrl.settings?.kotTemplateConfig ?? {};

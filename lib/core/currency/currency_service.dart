@@ -39,8 +39,9 @@ class CurrencyService {
         symbol: _hasSpacing ? '$_symbol ' : _symbol,
       );
 
-  static String format(num amount) {
-    final formattedAmount = amount.toDouble().toStringAsFixed(_decimals);
+  static String format(num amount, [int? decimals]) {
+    final d = decimals ?? _decimals;
+    final formattedAmount = amount.toDouble().toStringAsFixed(d);
     final sym = _symbol.trim();
     final space = _hasSpacing ? ' ' : '';
     if (_position == 'AFTER') {
@@ -50,11 +51,16 @@ class CurrencyService {
     }
   }
 
-  static String formatWithSymbol(num amount, String overrideSymbol) {
-    final formattedAmount = amount.toDouble().toStringAsFixed(_decimals);
+  static String formatWithSymbol(num amount, String overrideSymbol, [int? decimals]) {
+    final d = decimals ?? _decimals;
+    final formattedAmount = amount.toDouble().toStringAsFixed(d);
     final sym = overrideSymbol.trim();
     final hasSpace = sym.length > 1;
     final space = hasSpace ? ' ' : '';
-    return '$sym$space$formattedAmount';
+    if (_position == 'AFTER') {
+      return '$formattedAmount$space$sym';
+    } else {
+      return '$sym$space$formattedAmount';
+    }
   }
 }

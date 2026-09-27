@@ -139,7 +139,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
 
   Future<void> _printIssue() async {
     final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final property = propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);

@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 import '../../controllers/reports/return_report_controller.dart'
     show ReturnReportController;
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../utils/branding_storage.dart';
 
 class ReturnReportScreen extends StatefulWidget {
@@ -370,9 +371,9 @@ class _ReturnReportScreenState extends State<ReturnReportScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           )),
                           DataCell(Text(item.qty.toString())),
-                          DataCell(Text(item.rate.toStringAsFixed(2))),
+                          DataCell(Text(CurrencyService.format(item.rate))),
                           DataCell(Text(
-                            item.amount.toStringAsFixed(2),
+                            CurrencyService.format(item.amount),
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           )),
                         ],
@@ -558,7 +559,7 @@ class _ReturnReportScreenState extends State<ReturnReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);

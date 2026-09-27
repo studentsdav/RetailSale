@@ -184,7 +184,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
   }
 
   Future<void> _printPurchaseOrder(PurchaseOrder po) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final supplier = supplierCtrl.list.firstWhere((e) => e.id == po.supplierId);
 

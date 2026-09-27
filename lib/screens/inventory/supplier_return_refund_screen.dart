@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -194,7 +195,7 @@ class _SupplierReturnRefundScreenState
                               ),
                               DataCell(Text(e.paymentMode)),
                               DataCell(Text(e.referenceNo)),
-                              DataCell(Text(e.amount.toStringAsFixed(2))),
+                              DataCell(Text(CurrencyService.format(e.amount))),
                             ],
                           ),
                         )
@@ -319,9 +320,9 @@ class _SupplierReturnRefundScreenState
                       DataCell(Text(record.supplierName)),
                       DataCell(Text(record.grnNo)),
                       DataCell(Text(record.billNo)),
-                      DataCell(Text(record.totalAmount.toStringAsFixed(2))),
-                      DataCell(Text(record.refundedAmount.toStringAsFixed(2))),
-                      DataCell(Text(record.pendingAmount.toStringAsFixed(2))),
+                      DataCell(Text(CurrencyService.format(record.totalAmount))),
+                      DataCell(Text(CurrencyService.format(record.refundedAmount))),
+                      DataCell(Text(CurrencyService.format(record.pendingAmount))),
                       DataCell(Text(record.status)),
                       DataCell(
                         Row(

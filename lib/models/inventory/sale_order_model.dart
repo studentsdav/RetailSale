@@ -5,6 +5,7 @@ import 'tax_breakdown_model.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import '../../core/config/date_time_service.dart';
+import '../../core/currency/currency_service.dart';
 
 class SaleOrder {
   final String saleNo;
@@ -434,8 +435,14 @@ class SaleOrder {
       ),
       status: json['status']?.toString() ?? 'COMPLETED',
       orderType: json['order_type']?.toString() ?? 'B2C',
-      billingCountry: json['billing_country']?.toString() ?? 'India',
-      billingTaxMode: json['billing_tax_mode']?.toString() ?? 'CGST_SGST',
+      billingCountry: json['billing_country']?.toString() ??
+          (CurrencyService.code == 'INR' || CurrencyService.symbol == '₹'
+              ? 'India'
+              : (CurrencyService.code == 'USD' || CurrencyService.symbol == '\$' ? 'USA' : 'International')),
+      billingTaxMode: json['billing_tax_mode']?.toString() ??
+          (CurrencyService.code == 'INR' || CurrencyService.symbol == '₹'
+              ? 'CGST_SGST'
+              : (CurrencyService.code == 'USD' || CurrencyService.symbol == '\$' ? 'SALES_TAX' : 'VAT')),
       billFormat: json['bill_format']?.toString() ?? 'A4',
       saleSource: json['sale_source']?.toString(),
       customerName: json['customer_name']?.toString(),

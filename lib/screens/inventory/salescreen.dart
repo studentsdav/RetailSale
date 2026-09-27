@@ -4032,7 +4032,7 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   Future<void> _exportCustomerListPdf(List<SaleCustomer> customers) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final rows = customers
         .map(
           (customer) => [
@@ -10471,9 +10471,9 @@ class _SaleScreenState extends State<SaleScreen> {
                             _qtyStepper(line, index),
                             const SizedBox(width: 8),
                             SizedBox(
-                              width: 62,
+                              width: 80,
                               child: Text(
-                                _displayLineTotal(line).toStringAsFixed(2),
+                                CurrencyService.format(_displayLineTotal(line)),
                                 textAlign: TextAlign.right,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
@@ -14107,7 +14107,7 @@ class _SaleScreenState extends State<SaleScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              _displayLineTotal(line).toStringAsFixed(2),
+              CurrencyService.format(_displayLineTotal(line)),
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),

@@ -13,6 +13,7 @@ import '../../controllers/inventory/damage_controller.dart';
 import '../../controllers/reports/damage_report_controller.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../utils/branding_storage.dart';
 
 //
@@ -297,9 +298,9 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
                             DataCell(Text('${e.itemName}${e.brand.isNotEmpty ? ' (${e.brand})' : ''}')),
                             DataCell(Text(e.unit)),
                             DataCell(Text(e.qty.toString())),
-                            DataCell(Text(e.rate.toStringAsFixed(2))),
+                            DataCell(Text(CurrencyService.format(e.rate))),
                             DataCell(Text(
-                              e.amount.toStringAsFixed(2),
+                              CurrencyService.format(e.amount),
                               style:
                                   const TextStyle(fontWeight: FontWeight.w600),
                             )),
@@ -555,7 +556,7 @@ class _DamageReportSumScreenState extends State<DamageReportSumScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);

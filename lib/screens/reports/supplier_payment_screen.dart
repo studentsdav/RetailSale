@@ -14,6 +14,7 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/suppliers/supplier_bill_controller.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/inventory/supplier_bill_model.dart'
     show PaymentStatus, SupplierBill, SupplierBillDetail;
 import '../modify/receiving_modify.dart';
@@ -337,9 +338,9 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                       DataCell(Text(b.billNo)),
                       DataCell(
                           Text(DateFormat('dd-MMM-yyyy').format(b.billDate))),
-                      DataCell(Text(b.billAmount.toStringAsFixed(2))),
-                      DataCell(Text(b.paidAmount.toStringAsFixed(2))),
-                      DataCell(Text(b.balance.toStringAsFixed(2))),
+                      DataCell(Text(CurrencyService.format(b.billAmount))),
+                      DataCell(Text(CurrencyService.format(b.paidAmount))),
+                      DataCell(Text(CurrencyService.format(b.balance))),
                       DataCell(Text(b.status.name.toUpperCase())),
                       DataCell(
                         Row(
@@ -629,7 +630,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                           labelText: 'Pay Amount',
                           hintText: 'Enter amount to settle',
                           prefixIcon: const Icon(Icons.payments_outlined, size: 20),
-                          suffixText: 'INR',
+                          suffixText: CurrencyService.code,
                           errorText: errorText,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -661,7 +662,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                             labelText: 'Credit to Adjust',
                             hintText: 'Enter credit amount to use',
                             prefixIcon: const Icon(Icons.star_border, size: 20),
-                            suffixText: 'INR',
+                            suffixText: CurrencyService.code,
                             errorText: errorText,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -1170,7 +1171,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                             ),
                             DataCell(Text(item.unit)),
                             DataCell(Text(item.qty.toStringAsFixed(2))),
-                            DataCell(Text(item.rate.toStringAsFixed(2))),
+                            DataCell(Text(CurrencyService.format(item.rate))),
                             DataCell(Text(item.tax.toStringAsFixed(2))),
                             DataCell(
                               Text(
@@ -1393,7 +1394,7 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     pdf.addPage(
       pw.MultiPage(
@@ -1445,8 +1446,8 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                   b.supplier,
                   b.billNo,
                   DateFormat('dd-MMM-yyyy').format(b.billDate),
-                  b.billAmount.toStringAsFixed(2),
-                  b.paidAmount.toStringAsFixed(2),
+                  CurrencyService.format(b.billAmount),
+                  CurrencyService.format(b.paidAmount),
                   b.balance.toStringAsFixed(2),
                   b.status.name.toUpperCase(),
                 ];
@@ -1456,9 +1457,9 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
             pw.Align(
               alignment: pw.Alignment.centerRight,
               child: pw.Text(
-                'Total Purchase: ${ctrl.totalPurchase.toStringAsFixed(2)}   '
-                'Paid: ${ctrl.totalPaid.toStringAsFixed(2)}   '
-                'Unpaid: ${ctrl.totalUnpaid.toStringAsFixed(2)}',
+                'Total Purchase: ${CurrencyService.format(ctrl.totalPurchase)}   '
+                'Paid: ${CurrencyService.format(ctrl.totalPaid)}   '
+                'Unpaid: ${CurrencyService.format(ctrl.totalUnpaid)}',
                 style:
                     pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
               ),

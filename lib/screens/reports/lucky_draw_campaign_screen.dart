@@ -415,7 +415,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                         decoration: InputDecoration(
                           labelText: 'Ticket Purchase Threshold (${CurrencyService.symbol})',
                           border: const OutlineInputBorder(),
-                          prefixText: '${CurrencyService.symbol} ',
+                          prefixText: CurrencyService.symbol.length == 1 ? CurrencyService.symbol : '${CurrencyService.symbol} ',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -614,7 +614,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                         decoration: InputDecoration(
                           labelText: 'Ticket Purchase Threshold (${CurrencyService.symbol})',
                           border: const OutlineInputBorder(),
-                          prefixText: '${CurrencyService.symbol} ',
+                          prefixText: CurrencyService.symbol.length == 1 ? CurrencyService.symbol : '${CurrencyService.symbol} ',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -755,7 +755,7 @@ class _LuckyDrawCampaignScreenState extends State<LuckyDrawCampaignScreen> with 
                       decoration: InputDecoration(
                         labelText: 'Ticket Purchase Threshold (${CurrencyService.symbol})',
                         border: const OutlineInputBorder(),
-                        prefixText: '${CurrencyService.symbol} ',
+                        prefixText: CurrencyService.symbol.length == 1 ? CurrencyService.symbol : '${CurrencyService.symbol} ',
                       ),
                     ),
                     const SizedBox(height: 12),

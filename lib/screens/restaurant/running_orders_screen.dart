@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/printing/device_printer_routing.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../core/settings/local_preferences.dart';
 import '../inventory/salescreen.dart';
 import 'kot_builder_screen.dart';
@@ -406,7 +407,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
   }
 
   Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items, String locationName) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final String tableName = widget.tableName.isNotEmpty ? widget.tableName : (kot['table']?['table_name'] ?? 'Takeaway');
     
     final rawGuest = kot['guest_count'] ?? kot['guests'] ?? kot['table']?['current_guest_count'] ?? kot['table']?['guest_count'] ?? kot['table']?['pax'];

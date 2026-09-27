@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../core/currency/currency_service.dart';
 
 import '../../controllers/inventory/issue_controller.dart' show IssueController;
 import '../../controllers/inventory/item_controller.dart';
@@ -964,9 +965,9 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                       DataCell(Text(r.brand)),
                       DataCell(Text(r.unit)),
                       DataCell(Text(_fmtNumber(r.qty))),
-                      DataCell(Text(r.rate.toStringAsFixed(2))),
+                      DataCell(Text(CurrencyService.format(r.rate))),
                       DataCell(Text(r.tax.toStringAsFixed(2))),
-                      DataCell(Text(r.amount.toStringAsFixed(2))),
+                      DataCell(Text(CurrencyService.format(r.amount))),
                       DataCell(Text(depname)),
                       DataCell(Row(
                         children: [
@@ -1003,21 +1004,21 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         children: [
           Chip(
             label: Text(
-              'Before $taxLabel : ${totalAmount.toStringAsFixed(2)}',
+              'Before $taxLabel : ${CurrencyService.format(totalAmount)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
           const SizedBox(width: 12),
           Chip(
             label: Text(
-              '$taxLabel : ${totalGST.toStringAsFixed(2)}',
+              '$taxLabel : ${CurrencyService.format(totalGST)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
           const SizedBox(width: 12),
           Chip(
             label: Text(
-              'Net : ${netAmount.toStringAsFixed(2)}',
+              'Net : ${CurrencyService.format(netAmount)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -1282,7 +1283,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
   }
 
   Future<pw.Document> _buildPurchaseOrderPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final Supplier? supplier = supplierCtrl.list.cast<Supplier?>().firstWhere(
       (e) => e?.id == _supplierId,
@@ -1448,10 +1449,10 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                     _tableCell(item.brand),
                     _tableCell(item.unit, alignment: pw.Alignment.center),
                     _tableCell(_fmtNumber(item.qty), alignment: pw.Alignment.centerRight),
-                    _tableCell(item.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _tableCell(CurrencyService.format(item.rate), alignment: pw.Alignment.centerRight),
                     _tableCell(item.tax.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _tableCell(gstAmount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _tableCell(item.amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _tableCell(CurrencyService.format(gstAmount), alignment: pw.Alignment.centerRight),
+                    _tableCell(CurrencyService.format(item.amount), alignment: pw.Alignment.centerRight),
                   ],
                 );
               }),
@@ -1536,7 +1537,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         pw.Text(label,
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        pw.Text(value.toStringAsFixed(2),
+        pw.Text(CurrencyService.format(value),
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],

@@ -446,7 +446,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                       ),
                       decoration: InputDecoration(
                         border: InputBorder.none,
-                        prefixText: '${CurrencyService.symbol} ',
+                        prefixText: '${CurrencyService.symbol}',
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
@@ -481,7 +481,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                               final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
                               if (amt <= 0 || amt > refundAmount + 0.01) {
                                 ScaffoldMessenger.of(dialogCtx).showSnackBar(
-                                  SnackBar(content: Text('Invalid refund amount. Max: ${CurrencyService.symbol} ${refundAmount.toStringAsFixed(2)}')),
+                                  SnackBar(content: Text('Invalid refund amount. Max: ${CurrencyService.symbol}${refundAmount.toStringAsFixed(2)}')),
                                 );
                                 return;
                               }
@@ -685,10 +685,10 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                       _buildReceiptRow('Customer Phone:', '${txn['customer_phone'] ?? 'N/A'}'),
                       _buildReceiptRow('Address:', '${txn['customer_address'] ?? 'Dehradun'}'),
                       const Divider(),
-                      _buildReceiptRow('Original Amount Paid:', '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}'),
+                      _buildReceiptRow('Original Amount Paid:', '${CurrencyService.symbol}${netAmt.toStringAsFixed(2)}'),
                       _buildReceiptRow(
                         'Refunded Amount:',
-                        '${CurrencyService.symbol} ${refundAmt.toStringAsFixed(2)}',
+                        '${CurrencyService.symbol}${refundAmt.toStringAsFixed(2)}',
                         isBold: true,
                         valueColor: Colors.blue.shade900,
                       ),
@@ -944,7 +944,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      '${CurrencyService.symbol} ${refundVal.toStringAsFixed(2)}',
+                                      '${CurrencyService.symbol}${refundVal.toStringAsFixed(2)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: theme.colorScheme.primary,
@@ -996,7 +996,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Confirm Gateway Refund'),
         content: Text(
-          'Are you sure you want to process a gateway refund of ${CurrencyService.symbol} ${finalRefundAmt.toStringAsFixed(2)} for Credit Note $cnNo?\n\nThis will transfer the amount to the customer\'s source account.',
+          'Are you sure you want to process a gateway refund of ${CurrencyService.symbol}${finalRefundAmt.toStringAsFixed(2)} for Credit Note $cnNo?\n\nThis will transfer the amount to the customer\'s source account.',
         ),
         actions: [
           TextButton(
@@ -1127,7 +1127,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           });
       if (res['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('B2B rate updated to ${CurrencyService.symbol} ${rate.toStringAsFixed(2)}')),
+          SnackBar(content: Text('B2B rate updated to ${CurrencyService.symbol}${rate.toStringAsFixed(2)}')),
         );
         _fetchB2bItems();
       } else {
@@ -1156,7 +1156,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Standard Rate: ${CurrencyService.symbol} ${stdRate.toStringAsFixed(2)}',
+            Text('Standard Rate: ${CurrencyService.symbol}${stdRate.toStringAsFixed(2)}',
                 style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 12),
             TextField(
@@ -1351,7 +1351,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'This is a prepaid order. The customer paid ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} online.',
+                'This is a prepaid order. The customer paid ${CurrencyService.symbol}${netAmt.toStringAsFixed(2)} online.',
                 style: const TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 12),
@@ -1712,7 +1712,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Refund Amount: ${CurrencyService.symbol} ${refundAmount.toStringAsFixed(2)}',
+                'Refund Amount: ${CurrencyService.symbol}${refundAmount.toStringAsFixed(2)}',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green.shade700),
               ),
               const SizedBox(height: 16),
@@ -1801,29 +1801,9 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
     for (var it in rawItems) {
       final qty = parseNum(it['qty'] ?? 1.0);
       final rate = parseNum(it['rate'] ?? 0.0);
-      final lineTaxPercent = parseNum(it['tax_percent'] ?? 0.0);
-      
-      final total = qty * rate;
-      final taxAmt = parseNum(it['tax_amount'] ?? (total * lineTaxPercent / 100.0));
-      final taxableAmt = parseNum(it['taxable_amount'] ?? (total - taxAmt));
-      final lineTotal = parseNum(it['line_total'] ?? total);
-
-      calculatedSubTotal += total;
+      calculatedSubTotal += (qty * rate);
       calculatedTotalQty += qty;
-
-      saleItems.add(SaleItem(
-        itemId: int.tryParse(it['item_id']?.toString() ?? '') ?? 0,
-        itemCode: it['item_code']?.toString() ?? '',
-        itemName: it['item_name']?.toString() ?? '',
-        barcode: it['barcode']?.toString() ?? '',
-        unit: it['unit']?.toString() ?? 'Pcs',
-        qty: qty,
-        rate: rate,
-        taxPercent: lineTaxPercent,
-        taxAmount: taxAmt,
-        taxableAmount: taxableAmt,
-        lineTotal: lineTotal,
-      ));
+      saleItems.add(SaleItem.fromJson(Map<String, dynamic>.from(it)));
     }
 
     List<BillingCharge> billingCharges = [];
@@ -2162,7 +2142,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                           runSpacing: 8,
                           children: [
                             ChoiceChip(
-                              label: Text('Full (${CurrencyService.symbol} ${maxRefundAmount.toStringAsFixed(2)})'),
+                              label: Text('Full (${CurrencyService.symbol}${maxRefundAmount.toStringAsFixed(2)})'),
                               selected: refundAmountType == 'FULL',
                               onSelected: (selected) {
                                 if (selected) {
@@ -2174,7 +2154,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                               },
                             ),
                             ChoiceChip(
-                              label: Text('Half (${CurrencyService.symbol} ${(maxRefundAmount / 2).toStringAsFixed(2)})'),
+                              label: Text('Half (${CurrencyService.symbol}${(maxRefundAmount / 2).toStringAsFixed(2)})'),
                               selected: refundAmountType == 'HALF',
                               onSelected: (selected) {
                                 if (selected) {
@@ -2207,7 +2187,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                           decoration: InputDecoration(
                             hintText: 'Enter refund amount',
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            prefixText: '${CurrencyService.symbol} ',
+                            prefixText: '${CurrencyService.symbol}',
                             suffixText: refundAmountType != 'CUSTOM' ? '(Selected Option)' : null,
                           ),
                           onChanged: (val) {
@@ -3633,7 +3613,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                                 ),
                                                 Text(
-                                                  'Order #${order['id']} • ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} • ${isPrepaid ? "Prepaid" : (isCredit ? "Credit" : "CoD")}',
+                                                  'Order #${order['id']} • ${CurrencyService.symbol}${netAmt.toStringAsFixed(2)} • ${isPrepaid ? "Prepaid" : (isCredit ? "Credit" : "CoD")}',
                                                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                                                 ),
                                               ],
@@ -3766,7 +3746,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                               ),
                                               const SizedBox(width: 16),
                                               Text(
-                                                '${CurrencyService.symbol} ${total.toStringAsFixed(2)}',
+                                                '${CurrencyService.symbol}${total.toStringAsFixed(2)}',
                                                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
                                               ),
                                             ],
@@ -3915,7 +3895,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                           ),
                           subtitle: Text(
-                            'Order #${order['id']} • ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} • ${isCredit ? "Credit" : (paymentMode.toUpperCase() == "EXCHANGE" ? "Exchange" : (isCod ? "CoD" : "Prepaid"))}',
+                            'Order #${order['id']} • ${CurrencyService.symbol}${netAmt.toStringAsFixed(2)} • ${isCredit ? "Credit" : (paymentMode.toUpperCase() == "EXCHANGE" ? "Exchange" : (isCod ? "CoD" : "Prepaid"))}',
                             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                           ),
                           trailing: Container(
@@ -4185,7 +4165,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             ),
                                             const SizedBox(width: 16),
                                             Text(
-                                              '${CurrencyService.symbol} ${total.toStringAsFixed(2)}',
+                                              '${CurrencyService.symbol}${total.toStringAsFixed(2)}',
                                               style: TextStyle(fontSize: 13, color: Colors.grey.shade500, decoration: TextDecoration.lineThrough),
                                             ),
                                           ],
@@ -4229,7 +4209,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             ),
                                             const SizedBox(width: 16),
                                             Text(
-                                              '${CurrencyService.symbol} ${total.toStringAsFixed(2)}',
+                                              '${CurrencyService.symbol}${total.toStringAsFixed(2)}',
                                               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
                                             ),
                                           ],
@@ -4272,7 +4252,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             ),
                                             const SizedBox(width: 16),
                                             Text(
-                                              '${CurrencyService.symbol} ${total.toStringAsFixed(2)}',
+                                              '${CurrencyService.symbol}${total.toStringAsFixed(2)}',
                                               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
                                             ),
                                           ],
@@ -4380,7 +4360,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                   ),
                                                 ),
                                                 Text(
-                                                  '${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)}',
+                                                  '${CurrencyService.symbol}${diff.abs().toStringAsFixed(2)}',
                                                   style: TextStyle(
                                                     fontSize: 13,
                                                     color: textColor,
@@ -4433,7 +4413,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                 ),
                                               ),
                                               Text(
-                                                '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
+                                                '${CurrencyService.symbol}${netAmt.toStringAsFixed(2)}',
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: isRefunded ? Colors.blue.shade800 : Colors.amber.shade900,
@@ -4623,7 +4603,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                           children: [
                             Text('Phone: ${rider['phone']}'),
                             Text(
-                              'Unpaid Comm: ${CurrencyService.symbol} ${unpaidCommission.toStringAsFixed(2)}',
+                              'Unpaid Comm: ${CurrencyService.symbol}${unpaidCommission.toStringAsFixed(2)}',
                               style: TextStyle(
                                 fontWeight: unpaidCommission > 0 ? FontWeight.bold : FontWeight.normal,
                                 color: unpaidCommission > 0 ? Colors.red.shade700 : Colors.grey.shade700,
@@ -4967,28 +4947,28 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('SUB TOTAL', style: TextStyle(fontFamily: 'Courier')),
-            Text('${CurrencyService.symbol} ${subTotal.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
+            Text('${CurrencyService.symbol}${subTotal.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
           ],
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('GST (18%)', style: TextStyle(fontFamily: 'Courier')),
-            Text('${CurrencyService.symbol} ${tax.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
+            Text('${CurrencyService.symbol}${tax.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
           ],
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('DELIVERY', style: TextStyle(fontFamily: 'Courier')),
-            Text('${CurrencyService.symbol} ${delivery.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
+            Text('${CurrencyService.symbol}${delivery.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier')),
           ],
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('NET TOTAL', style: TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold)),
-            Text('${CurrencyService.symbol} ${netTotal.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold)),
+            Text('${CurrencyService.symbol}${netTotal.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 4),
@@ -5127,7 +5107,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                               ),
                                               Text(
-                                                'Order #${order['id']} • ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} • ${order['customer_phone']}',
+                                                'Order #${order['id']} • ${CurrencyService.symbol}${netAmt.toStringAsFixed(2)} • ${order['customer_phone']}',
                                                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                                               ),
                                             ],
@@ -5192,7 +5172,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                               ),
                                               const SizedBox(width: 16),
                                               Text(
-                                                '${CurrencyService.symbol} ${itMap['amount'] ?? ''}',
+                                                '${CurrencyService.symbol}${itMap['amount'] ?? ''}',
                                                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
                                               ),
                                             ],
@@ -5379,7 +5359,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                 runSpacing: 4,
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  Text('Retail: ${CurrencyService.symbol} ${stdRate.toStringAsFixed(2)}',
+                                  Text('Retail: ${CurrencyService.symbol}${stdRate.toStringAsFixed(2)}',
                                       style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey.shade600)),
@@ -5394,7 +5374,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             color: Colors.indigo.shade200),
                                       ),
                                       child: Text(
-                                        'B2B: ${CurrencyService.symbol} ${b2bRate.toStringAsFixed(2)}',
+                                        'B2B: ${CurrencyService.symbol}${b2bRate.toStringAsFixed(2)}',
                                         style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
@@ -5869,7 +5849,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                     controller: _minDeliveryOrderValueCtrl,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     decoration: InputDecoration(
-                                      prefixText: '${CurrencyService.symbol} ',
+                                      prefixText: '${CurrencyService.symbol}',
                                       border: OutlineInputBorder(),
                                       isDense: true,
                                     ),
@@ -5881,7 +5861,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                     controller: _deliveryChargeCtrl,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     decoration: InputDecoration(
-                                      prefixText: '${CurrencyService.symbol} ',
+                                      prefixText: '${CurrencyService.symbol}',
                                       border: OutlineInputBorder(),
                                       isDense: true,
                                     ),
@@ -5971,7 +5951,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                             child: TextField(
                                                               decoration: InputDecoration(
                                                                 labelText: 'Charge',
-                                                                prefixText: '${CurrencyService.symbol} ',
+                                                                prefixText: '${CurrencyService.symbol}',
                                                                 isDense: true,
                                                                 border: OutlineInputBorder(),
                                                               ),
@@ -6038,7 +6018,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                     child: TextField(
                                                       decoration: InputDecoration(
                                                         labelText: 'Charge',
-                                                        prefixText: '${CurrencyService.symbol} ',
+                                                        prefixText: '${CurrencyService.symbol}',
                                                         isDense: true,
                                                         border: OutlineInputBorder(),
                                                       ),
@@ -6200,7 +6180,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                                 border: OutlineInputBorder(),
                                                               ),
                                                               items: [
-                                                                DropdownMenuItem(value: 'FLAT', child: Text('Flat ${CurrencyService.symbol} Off')),
+                                                                DropdownMenuItem(value: 'FLAT', child: Text('Flat ${CurrencyService.symbol}Off')),
                                                                 DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage % Off')),
                                                               ],
                                                               onChanged: (val) {
@@ -6238,7 +6218,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                             child: TextField(
                                                               decoration: InputDecoration(
                                                                 labelText: 'Min Purchase',
-                                                                prefixText: '${CurrencyService.symbol} ',
+                                                                prefixText: '${CurrencyService.symbol}',
                                                                 isDense: true,
                                                                 border: OutlineInputBorder(),
                                                               ),
@@ -6254,7 +6234,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                             child: TextField(
                                                               decoration: InputDecoration(
                                                                 labelText: 'Max Discount',
-                                                                prefixText: '${CurrencyService.symbol} ',
+                                                                prefixText: '${CurrencyService.symbol}',
                                                                 isDense: true,
                                                                 border: OutlineInputBorder(),
                                                               ),
@@ -6348,7 +6328,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                               border: OutlineInputBorder(),
                                                             ),
                                                             items: [
-                                                              DropdownMenuItem(value: 'FLAT', child: Text('Flat ${CurrencyService.symbol} Off')),
+                                                              DropdownMenuItem(value: 'FLAT', child: Text('Flat ${CurrencyService.symbol}Off')),
                                                               DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage % Off')),
                                                             ],
                                                             onChanged: (val) {
@@ -6397,7 +6377,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                           child: TextField(
                                                             decoration: InputDecoration(
                                                               labelText: 'Min Purchase',
-                                                              prefixText: '${CurrencyService.symbol} ',
+                                                              prefixText: '${CurrencyService.symbol}',
                                                               isDense: true,
                                                               border: OutlineInputBorder(),
                                                             ),
@@ -6414,7 +6394,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                                           child: TextField(
                                                             decoration: InputDecoration(
                                                               labelText: 'Max Discount',
-                                                              prefixText: '${CurrencyService.symbol} ',
+                                                              prefixText: '${CurrencyService.symbol}',
                                                               isDense: true,
                                                               border: OutlineInputBorder(),
                                                             ),
@@ -6555,7 +6535,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                       controller: _commissionValueCtrl,
                                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                       decoration: InputDecoration(
-                                        prefixText: _commissionType == 'PERCENTAGE' ? null : '${CurrencyService.symbol} ',
+                                        prefixText: _commissionType == 'PERCENTAGE' ? null : '${CurrencyService.symbol}',
                                         suffixText: _commissionType == 'PERCENTAGE' ? '%' : null,
                                         border: const OutlineInputBorder(),
                                         isDense: true,
@@ -6818,7 +6798,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                         ),
                                       ),
                                       Text(
-                                        '${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
+                                        '${CurrencyService.symbol}${netAmt.toStringAsFixed(2)}',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
@@ -6909,7 +6889,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                           Text('Refund Method: $refundMethodFormatted', style: const TextStyle(fontSize: 12, color: Colors.black87)),
                                           const SizedBox(height: 2),
                                           Text(
-                                            'Refund Amount: ${CurrencyService.symbol} ${refundAmt.toStringAsFixed(2)}',
+                                            'Refund Amount: ${CurrencyService.symbol}${refundAmt.toStringAsFixed(2)}',
                                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
                                           ),
                                           const SizedBox(height: 12),

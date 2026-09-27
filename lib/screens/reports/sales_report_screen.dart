@@ -19,6 +19,7 @@ import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class SalesReportScreen extends StatefulWidget {
@@ -2421,7 +2422,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   Future<void> _exportPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final summary = _summary;
     final taxCols = _availableTaxColumns;
     final title = switch (_reportTabIndex) {

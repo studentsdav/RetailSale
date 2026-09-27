@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -304,7 +305,7 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
                       DataCell(Text(e.itemName)),
                       DataCell(Text(e.unit)),
                       DataCell(Text(e.qty.toString())),
-                      DataCell(Text(e.rate.toStringAsFixed(2))),
+                      DataCell(Text(CurrencyService.format(e.rate))),
                     ],
                   );
                 }).toList(),
@@ -337,8 +338,8 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
                   return DataRow(cells: [
                     DataCell(Text(e.itemName)),
                     DataCell(Text(e.qty.toString())),
-                    DataCell(Text(e.rate.toStringAsFixed(2))),
-                    DataCell(Text(e.amount.toStringAsFixed(2))),
+                    DataCell(Text(CurrencyService.format(e.rate))),
+                    DataCell(Text(CurrencyService.format(e.amount))),
                     DataCell(Row(
                       children: [
                         IconButton(
@@ -475,7 +476,7 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
 
   Future<void> _printReturn(String issueNo) async {
     final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final property = propertyCtrl.data; // ensure loaded
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
@@ -548,7 +549,7 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
                     _cell(r.itemName),
                     _cell(r.unit),
                     _cell(r.qty.toString()),
-                    _cell(r.rate.toStringAsFixed(2)),
+                    _cell(CurrencyService.format(r.rate)),
                   ],
                 );
               })
@@ -564,10 +565,10 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
                 pw.Text(
-                  "Stock Dispatch Total : ${issuedTotal.toStringAsFixed(2)}",
+                  "Stock Dispatch Total : ${CurrencyService.format(issuedTotal)}",
                 ),
                 pw.Text(
-                  "Returned Total : ${returnTotal.toStringAsFixed(2)}",
+                  "Returned Total : ${CurrencyService.format(returnTotal)}",
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 ),
               ],
@@ -708,7 +709,7 @@ class _ReturnIssueScreenState extends State<ReturnIssueScreen> {
       );
   Widget _amountChip(String label, double value) => Chip(
         label: Text(
-          '$label : ${value.toStringAsFixed(2)}',
+          '$label : ${CurrencyService.format(value)}',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       );

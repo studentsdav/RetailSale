@@ -7,6 +7,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 
 class EmployeeScreen extends StatefulWidget {
   const EmployeeScreen({Key? key}) : super(key: key);
@@ -3694,14 +3695,14 @@ class _EmployeeDetailScreenState extends State<_EmployeeDetailScreen>
     );
   }
 
-Future<pw.Document> _buildPayslipPdf(
+  Future<pw.Document> _buildPayslipPdf(
     Map<String, dynamic> payslip,
     String propName,
     String propAddress,
     String propContact,
     String propEmail,
   ) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     
     final periodText = payslip['payrollRun'] != null
         ? payslip['payrollRun']['pay_period']?.toString() ?? ''

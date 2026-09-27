@@ -441,10 +441,26 @@ class SalesController extends ChangeNotifier {
     required int saleId,
     required String paymentMode,
     List<Map<String, dynamic>> paymentLines = const [],
+    String? customerName,
+    String? customerPhone,
+    String? customerAddress,
+    String? customerGstin,
   }) async {
     final payload = <String, dynamic>{'payment_mode': paymentMode};
     if (paymentLines.isNotEmpty) {
       payload['payment_lines'] = paymentLines;
+    }
+    if (customerName != null && customerName.trim().isNotEmpty) {
+      payload['customer_name'] = customerName.trim();
+    }
+    if (customerPhone != null && customerPhone.trim().isNotEmpty) {
+      payload['customer_phone'] = customerPhone.trim();
+    }
+    if (customerAddress != null && customerAddress.trim().isNotEmpty) {
+      payload['customer_address'] = customerAddress.trim();
+    }
+    if (customerGstin != null && customerGstin.trim().isNotEmpty) {
+      payload['customer_gstin'] = customerGstin.trim();
     }
     final res = await ApiClient.put(
       '${ApiEndpoints.sales}/$saleId/payment-mode',
@@ -561,6 +577,10 @@ class SalesController extends ChangeNotifier {
     required String paymentMode,
     List<Map<String, dynamic>> paymentLines = const [],
     double? amountPaid,
+    String? customerName,
+    String? customerPhone,
+    String? customerAddress,
+    String? customerGstin,
   }) async {
     final payload = <String, dynamic>{
       'status': 'COMPLETED',
@@ -569,6 +589,18 @@ class SalesController extends ChangeNotifier {
     };
     if (paymentLines.isNotEmpty) {
       payload['payment_lines'] = paymentLines;
+    }
+    if (customerName != null && customerName.trim().isNotEmpty) {
+      payload['customer_name'] = customerName.trim();
+    }
+    if (customerPhone != null && customerPhone.trim().isNotEmpty) {
+      payload['customer_phone'] = customerPhone.trim();
+    }
+    if (customerAddress != null && customerAddress.trim().isNotEmpty) {
+      payload['customer_address'] = customerAddress.trim();
+    }
+    if (customerGstin != null && customerGstin.trim().isNotEmpty) {
+      payload['customer_gstin'] = customerGstin.trim();
     }
     final res = await ApiClient.put(
       '${ApiEndpoints.sales}/$saleId/settle',

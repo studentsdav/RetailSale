@@ -579,7 +579,7 @@ exports.getTrialBalance = async (req, res) => {
         // 4. Sales Revenue & Output Tax
         const { netSalesRevenue, totalOutputTax } = await getCompletedSalesMetrics(req, reqOutlet, startDateStr, endDateStr);
 
-        // 5. Purchases (GRN) & Input GST Taxes
+        // 5. Purchases (GRN) & Input Taxes
         const grnWhere = { outlet_id: scope.outlet_id };
         if (startDateStr && endDateStr) {
             grnWhere.receipt_date = {
@@ -646,7 +646,7 @@ exports.getTrialBalance = async (req, res) => {
                 credit: 0
             },
             {
-                account_name: 'Input GST (ITC) Account',
+                account_name: 'Input Tax (ITC) Account',
                 group_name: 'Duties & Taxes (Assets)',
                 nature: 'ASSET',
                 debit: Number(totalInputTax.toFixed(2)),
@@ -660,7 +660,7 @@ exports.getTrialBalance = async (req, res) => {
                 credit: Number(netSalesRevenue.toFixed(2))
             },
             {
-                account_name: 'Output GST Payable Account',
+                account_name: 'Output Tax Payable Account',
                 group_name: 'Duties & Taxes (Liabilities)',
                 nature: 'LIABILITY',
                 debit: 0,
@@ -1009,7 +1009,7 @@ exports.getBalanceSheet = async (req, res) => {
             { name: 'Bank Balances', amount: Number(bankBalance.toFixed(2)) },
             { name: 'Cash in Hand', amount: Number(cashBalance.toFixed(2)) },
             { name: 'Closing Stock (Unsold Goods)', amount: Number(closingStock.toFixed(2)) },
-            { name: 'Input GST Credit (ITC)', amount: Number(inputGstCredit.toFixed(2)) }
+            { name: 'Input Tax Credit (ITC)', amount: Number(inputGstCredit.toFixed(2)) }
         ];
 
         assetGroupMap.forEach((val, catName) => {
@@ -1025,7 +1025,7 @@ exports.getBalanceSheet = async (req, res) => {
         const totalAssets = Number(assets.reduce((sum, a) => sum + a.amount, 0).toFixed(2));
 
         const liabilities = [
-            { name: 'Output GST Payable', amount: Number(outputGstPayable.toFixed(2)) }
+            { name: 'Output Tax Payable', amount: Number(outputGstPayable.toFixed(2)) }
         ];
 
         if (totalLoanLiabilities > 0) {

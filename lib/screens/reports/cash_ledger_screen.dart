@@ -207,16 +207,25 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   double get _ledgerCreditGrandTotal => _ledgerDaysAsc.fold<double>(
         0,
         (sum, day) =>
-            sum + day.entries.fold<double>(0, (entrySum, entry) => entrySum + entry.amountIn),
+            sum +
+            day.entries.fold<double>(0, (entrySum, entry) {
+              final isCreditMode = entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
+                  entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
+              return entrySum + (isCreditMode ? 0.0 : entry.amountIn);
+            }),
       );
   double get _ledgerDebitGrandTotal => _ledgerDaysAsc.fold<double>(
         0,
-        (sum, day) => sum +
+        (sum, day) =>
+            sum +
             day.entries.fold<double>(
               0,
-              (entrySum, entry) =>
-                  entrySum +
-                  (entry.amountOut > 0 ? entry.amountOut : entry.adjustmentAmount),
+              (entrySum, entry) {
+                final isCreditMode = entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
+                    entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
+                final rawDebit = entry.amountOut > 0 ? entry.amountOut : entry.adjustmentAmount;
+                return entrySum + (isCreditMode ? 0.0 : rawDebit);
+              },
             ),
       );
 
@@ -867,8 +876,18 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(bill.billNo),
-                    subtitle: Text('Outstanding ${_money(bill.outstanding)}'),
+                    title: Text(bill.billNo, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Credit: ${_money(bill.amount)} - Paid: ${_money(bill.totalPaid)} = Outstanding: ${_money(bill.outstanding)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: bill.outstanding > 0.009 ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                        ),
+                      ),
+                    ),
                   ),
                   TextField(
                     controller: amountCtrl,
@@ -954,22 +973,30 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     adjustExtra = true;
                   }
 
-                  await ctrl.saveRepayment(
-                    repaymentId: payment?.id,
-                    saleId: bill.saleId,
-                    paymentDate: paymentDate,
-                    amount: amount,
-                    paymentMode: paymentMode,
-                    referenceNo: refCtrl.text.trim(),
-                    note: noteCtrl.text.trim(),
-                    adjustExtra: adjustExtra,
-                  );
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  await ctrl.loadCreditReport(
-                      fromDate: fromDate,
-                      toDate: toDate,
-                      customer: creditSearchCtrl.text);
+                  try {
+                    await ctrl.saveRepayment(
+                      repaymentId: payment?.id,
+                      saleId: bill.saleId,
+                      paymentDate: paymentDate,
+                      amount: amount,
+                      paymentMode: paymentMode,
+                      referenceNo: refCtrl.text.trim(),
+                      note: noteCtrl.text.trim(),
+                      adjustExtra: adjustExtra,
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    await ctrl.loadCreditReport(
+                        fromDate: fromDate,
+                        toDate: toDate,
+                        customer: creditSearchCtrl.text);
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save repayment: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -1085,24 +1112,32 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     ..sort((a, b) => a.billDate.compareTo(b.billDate));
                   final oldestBill = sortedBills.first;
 
-                  await ctrl.saveRepayment(
-                    saleId: oldestBill.saleId,
-                    paymentDate: paymentDate,
-                    amount: amount,
-                    paymentMode: paymentMode,
-                    referenceNo: refCtrl.text.trim(),
-                    note: noteCtrl.text.trim().isNotEmpty 
-                        ? noteCtrl.text.trim() 
-                        : 'Bulk repayment adjusted across bills',
-                    adjustExtra: true,
-                  );
+                  try {
+                    await ctrl.saveRepayment(
+                      saleId: oldestBill.saleId,
+                      paymentDate: paymentDate,
+                      amount: amount,
+                      paymentMode: paymentMode,
+                      referenceNo: refCtrl.text.trim(),
+                      note: noteCtrl.text.trim().isNotEmpty 
+                          ? noteCtrl.text.trim() 
+                          : 'Bulk repayment adjusted across bills',
+                      adjustExtra: true,
+                    );
 
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  await ctrl.loadCreditReport(
-                      fromDate: fromDate,
-                      toDate: toDate,
-                      customer: creditSearchCtrl.text);
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    await ctrl.loadCreditReport(
+                        fromDate: fromDate,
+                        toDate: toDate,
+                        customer: creditSearchCtrl.text);
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save bulk repayment: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
                 },
                 child: const Text('Save Repayment'),
               ),
@@ -1883,7 +1918,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   }
 
   Future<void> _exportPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final rows = <List<String>>[];
     List<String> headers = const [];
     PdfColor accent = PdfColors.blueGrey700;
@@ -2872,26 +2907,52 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                             Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      bill.billNo,
-                                                      style: const TextStyle(
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: 14,
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Row(
+                                                        children: [
+                                                          Text(
+                                                            bill.billNo,
+                                                            style: const TextStyle(
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 14,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 8),
+                                                          Text(
+                                                            _fmtDate(bill.billDate),
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                              color: Colors.grey.shade600,
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      '${_fmtDate(bill.billDate)} - Total: ${_money(bill.amount)}',
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors.grey.shade600,
+                                                      const SizedBox(height: 4),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFF1F5F9),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                                                        ),
+                                                        child: Text(
+                                                          'Credit: ${_money(bill.amount)} - Paid: ${_money(bill.totalPaid)} = Outstanding: ${_money(bill.outstanding)}',
+                                                          style: TextStyle(
+                                                            fontSize: 11.5,
+                                                            fontWeight: FontWeight.w700,
+                                                            color: bill.outstanding > 0.009
+                                                                ? const Color(0xFFDC2626)
+                                                                : const Color(0xFF16A34A),
+                                                          ),
+                                                        ),
                                                       ),
-                                                    ),
-                                                  ],
+                                                    ],
+                                                  ),
                                                 ),
+                                                const SizedBox(width: 8),
                                                 _statusChip(bill.paymentStatus),
                                               ],
                                             ),
@@ -2900,7 +2961,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                               spacing: 8,
                                               runSpacing: 6,
                                               children: [
-                                                miniSummaryText('Initial Paid', _money(bill.initialPaid)),
+                                                miniSummaryText('Credit Amount', _money(bill.amount)),
+                                                if (bill.initialPaid > 0.009)
+                                                  miniSummaryText('Initial Paid', _money(bill.initialPaid)),
                                                 miniSummaryText('Repaid', _money(bill.repaymentTotal)),
                                                 miniSummaryText('Total Paid', _money(bill.totalPaid)),
                                                 miniSummaryText('Outstanding', _money(bill.outstanding), isHighlight: true),
@@ -2930,67 +2993,98 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                             ),
                                             if (bill.payments.isNotEmpty) ...[
                                               const Divider(height: 16),
-                                              const Text(
-                                                'Repayment History',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF64748B),
-                                                ),
+                                              Row(
+                                                children: [
+                                                  const Icon(Icons.history, size: 14, color: Color(0xFF64748B)),
+                                                  const SizedBox(width: 4),
+                                                  const Text(
+                                                    'Repayment History & Running Balance',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Color(0xFF64748B),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                               const SizedBox(height: 6),
-                                              ...bill.payments.map((payment) {
-                                                return Container(
-                                                  margin: const EdgeInsets.symmetric(vertical: 4),
-                                                  padding: const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFFF8FAFC),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                    border: Border.all(color: Colors.grey.shade100),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                    children: [
-                                                      Expanded(
-                                                        child: Column(
-                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                          children: [
-                                                            Text(
-                                                              '${_paymentModeLabel(payment.paymentMode)} - ${_money(payment.amount)}',
-                                                              style: const TextStyle(
-                                                                fontWeight: FontWeight.bold,
-                                                                fontSize: 11,
-                                                              ),
-                                                            ),
-                                                            Text(
-                                                              '${_fmtDate(payment.paymentDate)} - Voucher No: ${payment.referenceNo.startsWith('RV-') ? payment.referenceNo : (payment.referenceNo.isNotEmpty ? 'RV-${payment.referenceNo}' : 'RV-PAY-${payment.id}')}',
-                                                              style: const TextStyle(
-                                                                fontSize: 10,
-                                                                fontWeight: FontWeight.w600,
-                                                                color: Color(0xFF0B5CAD),
-                                                              ),
-                                                            ),
-                                                            if (payment.note.trim().isNotEmpty)
-                                                              Text(
-                                                                payment.note,
-                                                                style: const TextStyle(
-                                                                  fontSize: 10,
-                                                                  fontStyle: FontStyle.italic,
+                                              (() {
+                                                double runningDue = bill.amount - bill.initialPaid;
+                                                return Column(
+                                                  children: bill.payments.asMap().entries.map((entry) {
+                                                    final index = entry.key;
+                                                    final payment = entry.value;
+                                                    final beforeBal = runningDue;
+                                                    runningDue = (runningDue - payment.amount).clamp(0.0, double.infinity);
+                                                    return Container(
+                                                      margin: const EdgeInsets.symmetric(vertical: 4),
+                                                      padding: const EdgeInsets.all(8),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFF8FAFC),
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: Colors.grey.shade200),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                        children: [
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                                              children: [
+                                                                Text(
+                                                                  'Payment #${index + 1}: ${_paymentModeLabel(payment.paymentMode)} - ${_money(payment.amount)}',
+                                                                  style: const TextStyle(
+                                                                    fontWeight: FontWeight.bold,
+                                                                    fontSize: 11.5,
+                                                                    color: Color(0xFF1E293B),
+                                                                  ),
                                                                 ),
-                                                              ),
-                                                          ],
-                                                        ),
+                                                                const SizedBox(height: 2),
+                                                                Text(
+                                                                  '${_fmtDate(payment.paymentDate)} • Voucher: ${payment.referenceNo.startsWith('RV-') ? payment.referenceNo : (payment.referenceNo.isNotEmpty ? 'RV-${payment.referenceNo}' : 'RV-PAY-${payment.id}')}',
+                                                                  style: const TextStyle(
+                                                                    fontSize: 10,
+                                                                    fontWeight: FontWeight.w600,
+                                                                    color: Color(0xFF0B5CAD),
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(height: 2),
+                                                                Text(
+                                                                  'Due: ${_money(beforeBal)} - ${_money(payment.amount)} = Remaining: ${_money(runningDue)}',
+                                                                  style: TextStyle(
+                                                                    fontSize: 10.5,
+                                                                    fontWeight: FontWeight.w600,
+                                                                    color: runningDue > 0.009
+                                                                        ? const Color(0xFFDC2626)
+                                                                        : const Color(0xFF16A34A),
+                                                                  ),
+                                                                ),
+                                                                if (payment.note.trim().isNotEmpty) ...[
+                                                                  const SizedBox(height: 2),
+                                                                  Text(
+                                                                    payment.note,
+                                                                    style: const TextStyle(
+                                                                      fontSize: 10,
+                                                                      fontStyle: FontStyle.italic,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ],
+                                                            ),
+                                                          ),
+                                                          IconButton(
+                                                            padding: EdgeInsets.zero,
+                                                            constraints: const BoxConstraints(),
+                                                            icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.blue),
+                                                            tooltip: 'Edit Repayment',
+                                                            onPressed: () => _showRepaymentDialog(bill, payment: payment),
+                                                          ),
+                                                        ],
                                                       ),
-                                                      IconButton(
-                                                        padding: EdgeInsets.zero,
-                                                        constraints: const BoxConstraints(),
-                                                        icon: const Icon(Icons.edit_outlined, size: 14, color: Colors.blue),
-                                                        onPressed: () => _showRepaymentDialog(bill, payment: payment),
-                                                      ),
-                                                    ],
-                                                  ),
+                                                    );
+                                                  }).toList(),
                                                 );
-                                              }),
+                                              })(),
                                             ],
                                           ],
                                         ),
@@ -3302,15 +3396,20 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   );
                   final dayCreditTotal = day.entries.fold<double>(
                     0,
-                    (sum, entry) => sum + entry.amountIn,
+                    (sum, entry) {
+                      final isCreditMode = entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
+                          entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
+                      return sum + (isCreditMode ? 0.0 : entry.amountIn);
+                    },
                   );
                   final dayDebitTotal = day.entries.fold<double>(
                     0,
-                    (sum, entry) =>
-                        sum +
-                        (entry.amountOut > 0
-                            ? entry.amountOut
-                            : entry.adjustmentAmount),
+                    (sum, entry) {
+                      final isCreditMode = entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
+                          entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
+                      final rawDebit = entry.amountOut > 0 ? entry.amountOut : entry.adjustmentAmount;
+                      return sum + (isCreditMode ? 0.0 : rawDebit);
+                    },
                   );
                   return Container(
                     margin: const EdgeInsets.only(bottom: 16),
@@ -4473,8 +4572,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     if (rawNote.isEmpty) return '-';
 
     if (rawNote.toLowerCase().contains('outstanding') &&
-        !rawNote.contains('Settled') &&
-        !rawNote.contains('Paid')) {
+        !rawNote.contains('(Settled / Paid)')) {
       final remOut = _ledgerOutstanding(entry, allEntries);
       if (remOut <= 0.009) {
         rawNote = rawNote
@@ -4503,16 +4601,39 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   }
 
   double _ledgerOutstanding(CashLedgerEntry entry, [List<CashLedgerEntry>? allEntries]) {
-    final text = entry.notes.trim();
-    if (text.isEmpty) return 0;
-    if (text.contains('Settled') || text.contains('Paid')) return 0;
+    final type = entry.transactionType.trim().toUpperCase();
+    final method = entry.paymentMethod.trim().toUpperCase();
+    final isCreditType = type == 'SALE_CREDIT' ||
+        type == 'SUBSCRIPTION_SETTLEMENT_CREDIT' ||
+        type == 'SUBSCRIPTION_SETTLEMENT_PARTIAL' ||
+        method == 'CREDIT';
 
-    final match =
-        RegExp(r'outstanding\s+([0-9]+(?:\.[0-9]+)?)', caseSensitive: false)
-            .firstMatch(text);
-    if (match == null) return 0;
-    final initialAmt = double.tryParse(match.group(1) ?? '') ?? 0;
+    if (!isCreditType) {
+      return 0.0;
+    }
+
+    double initialAmt = 0.0;
+    if (entry.adjustmentAmount > 0) {
+      initialAmt = entry.adjustmentAmount;
+    } else if (entry.amountIn > 0) {
+      initialAmt = entry.amountIn;
+    } else if (entry.amountOut > 0) {
+      initialAmt = entry.amountOut;
+    }
+
+    final text = entry.notes.trim();
+    if (initialAmt <= 0 && text.isNotEmpty) {
+      final match = RegExp(
+        r'(?:outstanding|due:?|credit)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)',
+        caseSensitive: false,
+      ).firstMatch(text);
+      if (match != null) {
+        initialAmt = double.tryParse(match.group(1) ?? '') ?? 0;
+      }
+    }
+
     if (initialAmt <= 0) return 0;
+    if (text.contains('(Settled / Paid)')) return 0;
 
     final pool = (allEntries != null && allEntries.isNotEmpty)
         ? allEntries
@@ -4726,10 +4847,15 @@ class ExpenseEntryDialog extends StatefulWidget {
     await Printing.layoutPdf(
       name: 'Expense_Receipt_${expense.id.length >= 8 ? expense.id.substring(0, 8) : expense.id}',
       onLayout: (format) async {
-        final pdf = pw.Document();
-        final mono = pw.Font.courier();
-        final bold = pw.Font.helveticaBold();
-        final regular = pw.Font.helvetica();
+        final fonts = await PosInvoicePrinter.getInvoiceFonts();
+        final pdf = pw.Document(
+          theme: pw.ThemeData.withFont(
+            base: fonts.regular,
+            bold: fonts.bold,
+          ),
+        );
+        final bold = fonts.bold;
+        final regular = fonts.regular;
         
         pw.Widget divider() => pw.Container(
               margin: const pw.EdgeInsets.symmetric(vertical: 5),
@@ -4740,7 +4866,6 @@ class ExpenseEntryDialog extends StatefulWidget {
 
         pw.Widget kvLine(String label, String value, {bool boldFont = false}) {
           final style = pw.TextStyle(
-            font: mono,
             fontSize: 9,
             fontWeight: boldFont ? pw.FontWeight.bold : pw.FontWeight.normal,
           );
@@ -4775,7 +4900,6 @@ class ExpenseEntryDialog extends StatefulWidget {
                 child: pw.Text(
                   'EXPENSE RECEIPT',
                   style: pw.TextStyle(
-                    font: mono,
                     fontSize: 11,
                     fontWeight: pw.FontWeight.bold,
                   ),
@@ -4790,18 +4914,18 @@ class ExpenseEntryDialog extends StatefulWidget {
               kvLine('Status:', expense.status),
               if (displayNote.isNotEmpty) ...[
                 divider(),
-                pw.Text('Notes: $displayNote', style: pw.TextStyle(font: mono, fontSize: 8.5)),
+                pw.Text('Notes: $displayNote', style: const pw.TextStyle(fontSize: 8.5)),
               ],
               divider(),
               kvLine('Base Amount:', CurrencyService.format(expense.baseAmount)),
               if (expense.taxes.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
-                pw.Text('TAX DETAILS:', style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                pw.Text('TAX DETAILS:', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
                 ...expense.taxes.map((t) => kvLine('  ${t.taxName} (${t.taxPercentage}%):', CurrencyService.format(t.taxAmount))),
               ],
               if (expense.deductions.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
-                pw.Text('DEDUCTION DETAILS:', style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                pw.Text('DEDUCTION DETAILS:', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
                 ...expense.deductions.map((d) => kvLine('  ${d.deductionType} (${d.deductionPercentage}%):', '-${CurrencyService.format(d.deductionAmount)}')),
               ],
               divider(),
@@ -4811,14 +4935,14 @@ class ExpenseEntryDialog extends StatefulWidget {
               pw.Center(
                 child: pw.Text(
                   'Signature / Authorized Sign',
-                  style: pw.TextStyle(font: mono, fontSize: 8.5, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
                 ),
               ),
               pw.SizedBox(height: 5),
               pw.Center(
                 child: pw.Text(
                   'Thank you!',
-                  style: pw.TextStyle(font: mono, fontSize: 8),
+                  style: const pw.TextStyle(fontSize: 8),
                 ),
               ),
             ],

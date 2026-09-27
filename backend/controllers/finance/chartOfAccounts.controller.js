@@ -16,7 +16,7 @@ const DEFAULT_COA_SEEDS = [
     // LIABILITIES
     { account_code: '2001', account_name: 'Sundry Creditors (Vendor Payables)', group_name: 'Current Liabilities', nature: 'LIABILITY', is_system: true },
     { account_code: '2010', account_name: 'Customer Advances & Subscriptions', group_name: 'Current Liabilities', nature: 'LIABILITY', is_system: true },
-    { account_code: '2100', account_name: 'Output VAT / GST Payable', group_name: 'Duties & Taxes', nature: 'LIABILITY', is_system: true },
+    { account_code: '2100', account_name: 'Output Tax Payable', group_name: 'Duties & Taxes', nature: 'LIABILITY', is_system: true },
     { account_code: '2110', account_name: 'Catering / Tourism Levy (CTL) Payable', group_name: 'Duties & Taxes', nature: 'LIABILITY', is_system: false },
     { account_code: '2200', account_name: 'Bank & Business Loans', group_name: 'Loans (Liability)', nature: 'LIABILITY', is_system: false },
 

@@ -15,7 +15,8 @@ const {
 const {
     refreshSaleOutstanding,
     getRepaymentTotal,
-    resolvePaymentStatus
+    resolvePaymentStatus,
+    extractInitialPaid
 } = require('../../services/salesFinance.service');
 
 async function createAutoAccountingVoucher({
@@ -91,9 +92,14 @@ async function createAutoAccountingVoucher({
 
 async function updateSaleLedgerOutstanding({ db, outlet_id, sale, balance, transaction }) {
     try {
-        const saleEntry = await db.models.cash_ledger.findOne({
+        const balNum = typeof balance === 'object' && balance !== null
+            ? Number(balance.balanceDue ?? balance.balance ?? 0)
+            : Number(balance || 0);
+
+        const saleEntries = await db.models.cash_ledger.findAll({
             where: {
                 outlet_id,
+                transaction_type: 'SALE_CREDIT',
                 [Op.or]: [
                     { reference_id: String(sale.id) },
                     { reference_no: sale.sale_no }
@@ -101,14 +107,24 @@ async function updateSaleLedgerOutstanding({ db, outlet_id, sale, balance, trans
             },
             transaction
         });
-        if (saleEntry) {
+        for (const saleEntry of saleEntries) {
             let updatedNotes = saleEntry.notes || '';
-            if (balance <= 0.009) {
+            if (balNum <= 0.009) {
                 updatedNotes = updatedNotes.replace(/-?\s*outstanding\s+[0-9]+(?:\.[0-9]+)?/gi, '(Settled / Paid)');
+                if (!updatedNotes.includes('(Settled / Paid)')) {
+                    updatedNotes = `${updatedNotes} (Settled / Paid)`.trim();
+                }
             } else {
-                updatedNotes = updatedNotes.replace(/outstanding\s+[0-9]+(?:\.[0-9]+)?/gi, `outstanding ${balance.toFixed(2)}`);
+                if (/outstanding\s+[0-9]+(?:\.[0-9]+)?/i.test(updatedNotes)) {
+                    updatedNotes = updatedNotes.replace(/outstanding\s+[0-9]+(?:\.[0-9]+)?/gi, `outstanding ${balNum.toFixed(2)}`);
+                } else {
+                    updatedNotes = `${updatedNotes} - outstanding ${balNum.toFixed(2)}`.trim();
+                }
             }
-            await saleEntry.update({ notes: updatedNotes }, { transaction });
+            await saleEntry.update({
+                adjustment_amount: balNum > 0 ? balNum : 0,
+                notes: updatedNotes
+            }, { transaction });
         }
     } catch (err) {
         console.error('Error updating sale ledger outstanding:', err);
@@ -318,19 +334,16 @@ async function ensureExpenseDuplicateFree({ req, payment_date, category_id, net_
 }
 
 async function ensureRepaymentDuplicateFree({ req, sale_id, payment_date, amount, payment_mode, reference_no, excludeId = null, transaction }) {
-    const where = {
-        outlet_id: req.user.outlet_id,
-        sale_id,
-        payment_date,
-        amount: toAmount(amount),
-        payment_mode,
-        reference_no: reference_no || null
-    };
-
-    if (excludeId) where.id = { [Op.ne]: excludeId };
-
-    const existing = await req.propertyDb.models.customer_repayments.findOne({ where, transaction });
-    if (existing) throw new Error('Duplicate repayment entry already exists');
+    if (reference_no && String(reference_no).trim().length > 0) {
+        const where = {
+            outlet_id: req.user.outlet_id,
+            sale_id,
+            reference_no: String(reference_no).trim()
+        };
+        if (excludeId) where.id = { [Op.ne]: excludeId };
+        const existing = await req.propertyDb.models.customer_repayments.findOne({ where, transaction });
+        if (existing) throw new Error(`Repayment with reference '${reference_no}' already exists`);
+    }
 }
 
 function isWaiveOffMode(paymentMode) {
@@ -1142,9 +1155,9 @@ exports.createRepayment = async (req, res) => {
         const repaymentVoucherNo = sale ? sale.sale_no : (reference_no || 'REC');
 
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id, transaction: t });
-        const isCreditMode9 = String(sale.payment_mode || '').trim().toUpperCase().includes('CREDIT');
-        const initialPaid = (sale.initial_amount_paid !== null && sale.initial_amount_paid !== undefined && isCreditMode9)
-            ? toAmount(sale.initial_amount_paid)
+        const parsedInitial = extractInitialPaid(sale);
+        const initialPaid = parsedInitial !== null
+            ? parsedInitial
             : Math.max(0, toAmount(sale.amount_paid) - repaymentTotal);
         const available = Math.max(0, toAmount(sale.net_amount) - initialPaid - repaymentTotal);
 
@@ -1436,9 +1449,9 @@ exports.updateRepayment = async (req, res) => {
 
         await ensureRepaymentDuplicateFree({ req, sale_id: repayment.sale_id, payment_date, amount, payment_mode, reference_no, excludeId: repayment.id, transaction: t });
         const repaymentTotal = await getRepaymentTotal({ db: req.propertyDb, sale_id: repayment.sale_id, exclude_repayment_id: repayment.id, transaction: t });
-        const isCreditMode11 = String(sale.payment_mode || '').trim().toUpperCase().includes('CREDIT');
-        const initialPaid = (sale.initial_amount_paid !== null && sale.initial_amount_paid !== undefined && isCreditMode11)
-            ? toAmount(sale.initial_amount_paid)
+        const parsedInitial = extractInitialPaid(sale);
+        const initialPaid = parsedInitial !== null
+            ? parsedInitial
             : Math.max(0, toAmount(sale.amount_paid) - repaymentTotal);
         const available = Math.max(0, toAmount(sale.net_amount) - initialPaid - repaymentTotal);
         if (amount > available + 0.009) throw new Error(`Repayment exceeds outstanding balance. Available amount is ${available.toFixed(2)}`);
@@ -2351,6 +2364,7 @@ exports.getCreditReport = async (req, res) => {
             status: 'COMPLETED',
             is_latest: true,
             is_deleted: false,
+            sale_no: { [Op.notILike]: 'DRAFT-%' },
             ...scope.outletWhere
         };
 
@@ -2379,9 +2393,9 @@ exports.getCreditReport = async (req, res) => {
 
         for (const sale of sales) {
             const repaymentTotal = (sale.repayments || []).reduce((sum, payment) => sum + toAmount(payment.amount), 0);
-            const isCreditMode = String(sale.payment_mode || '').trim().toUpperCase().includes('CREDIT');
-            const initialPaid = (sale.initial_amount_paid !== null && sale.initial_amount_paid !== undefined && isCreditMode)
-                ? toAmount(sale.initial_amount_paid)
+            const parsedInitial = extractInitialPaid(sale);
+            const initialPaid = parsedInitial !== null
+                ? parsedInitial
                 : Math.max(0, toAmount(sale.amount_paid) - repaymentTotal);
             const totalPaid = toAmount(initialPaid + repaymentTotal);
             const balanceDue = Math.max(0, toAmount(sale.net_amount) - totalPaid);
@@ -2734,7 +2748,8 @@ exports.adjustBulkRepayment = async (req, res) => {
                 transaction: t
             });
 
-            await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
+            const refreshResult = await refreshSaleOutstanding({ db: req.propertyDb, sale, transaction: t });
+            await updateSaleLedgerOutstanding({ db: req.propertyDb, outlet_id: req.user.outlet_id, sale, balance: refreshResult, transaction: t });
 
             remainingAmount = roundAmount(remainingAmount - applyAmount);
         }

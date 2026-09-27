@@ -13,6 +13,7 @@ import 'package:printing/printing.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../utils/branding_storage.dart';
 import '../../widgets/sale_bill_preview_dialog.dart';
 
@@ -346,11 +347,11 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
                       _ReportCell(
                           advanceLeftQty.toStringAsFixed(advanceLeftQty % 1 == 0 ? 0 : 2),
                           align: TextAlign.right),
-                      _ReportCell(advanceLeftAmt.toStringAsFixed(2),
+                      _ReportCell(CurrencyService.format(advanceLeftAmt),
                           align: TextAlign.right),
-                      _ReportCell(prepaid.toStringAsFixed(2), align: TextAlign.right),
-                      _ReportCell(actual.toStringAsFixed(2), align: TextAlign.right),
-                      _ReportCell(outstanding.toStringAsFixed(2), align: TextAlign.right),
+                      _ReportCell(CurrencyService.format(prepaid), align: TextAlign.right),
+                      _ReportCell(CurrencyService.format(actual), align: TextAlign.right),
+                      _ReportCell(CurrencyService.format(outstanding), align: TextAlign.right),
                       _ReportCell(status, align: TextAlign.center, bold: true),
                     ],
                   );
@@ -528,7 +529,7 @@ class _SubscriptionReportScreenState extends State<SubscriptionReportScreen> {
   }
 
   Future<void> _exportToPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final currency = CurrencyService.currencyFormat;
     final nowStr = DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');
 

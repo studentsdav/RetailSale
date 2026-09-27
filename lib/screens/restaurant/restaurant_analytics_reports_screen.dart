@@ -11,6 +11,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../controllers/restaurant/restaurant_analytics_reports_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/reports/sales_report_model.dart';
 
 class RestaurantAnalyticsReportsScreen extends StatefulWidget {
@@ -467,7 +468,7 @@ class _RestaurantAnalyticsReportsScreenState
 
   // --- Export PDF ---
   Future<void> _exportPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final tabTitle = '${_tabs[_selectedTab]} Sales Analysis';
     final activeRows = _getCurrentActiveRows();
 

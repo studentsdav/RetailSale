@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/restaurant/restaurant_controller.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../inventory/salescreen.dart';
 
 class DeliveryChallanScreen extends StatefulWidget {
@@ -698,7 +699,7 @@ class _DeliveryChallanScreenState extends State<DeliveryChallanScreen> {
         ? double.tryParse(details['total_qty'].toString()) ?? 0.0
         : itemsList.fold<double>(0.0, (sum, it) => sum + (double.tryParse(it['qty']?.toString() ?? '0') ?? 0.0));
 
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     pdf.addPage(
       pw.Page(

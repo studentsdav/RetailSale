@@ -4,7 +4,6 @@ import 'dart:io' show Platform;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
@@ -369,29 +368,9 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
     for (var it in rawItems) {
       final qty = parseNum(it['qty'] ?? 1.0);
       final rate = parseNum(it['rate'] ?? 0.0);
-      final lineTaxPercent = parseNum(it['tax_percent'] ?? 0.0);
-      
-      final total = qty * rate;
-      final taxAmt = parseNum(it['tax_amount'] ?? (total * lineTaxPercent / 100.0));
-      final taxableAmt = parseNum(it['taxable_amount'] ?? (total - taxAmt));
-      final lineTotal = parseNum(it['line_total'] ?? total);
-
-      calculatedSubTotal += total;
+      calculatedSubTotal += (qty * rate);
       calculatedTotalQty += qty;
-
-      saleItems.add(SaleItem(
-        itemId: int.tryParse(it['item_id']?.toString() ?? '') ?? 0,
-        itemCode: it['item_code']?.toString() ?? '',
-        itemName: it['item_name']?.toString() ?? '',
-        barcode: it['barcode']?.toString() ?? '',
-        unit: it['unit']?.toString() ?? 'Pcs',
-        qty: qty,
-        rate: rate,
-        taxPercent: lineTaxPercent,
-        taxAmount: taxAmt,
-        taxableAmount: taxableAmt,
-        lineTotal: lineTotal,
-      ));
+      saleItems.add(SaleItem.fromJson(Map<String, dynamic>.from(it)));
     }
 
     List<BillingCharge> billingCharges = [];
@@ -687,10 +666,10 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                   runSpacing: 8,
                   children: [
                     _buildStatItem('Delivered', '$totalDelivered orders', Colors.teal, itemWidth),
-                    _buildStatItem('Order Value', '${CurrencyService.symbol} ${totalOrderValue.toStringAsFixed(2)}', Colors.blue, itemWidth),
-                    _buildStatItem('Cash Collected', '${CurrencyService.symbol} ${totalCashCollected.toStringAsFixed(2)}', Colors.indigo, itemWidth),
-                    _buildStatItem('Comm. Unpaid', '${CurrencyService.symbol} ${totalCommissionUnpaid.toStringAsFixed(2)}', Colors.red, itemWidth),
-                    _buildStatItem('Comm. Paid', '${CurrencyService.symbol} ${totalCommissionPaid.toStringAsFixed(2)}', Colors.green, itemWidth),
+                    _buildStatItem('Order Value', CurrencyService.format(totalOrderValue), Colors.blue, itemWidth),
+                    _buildStatItem('Cash Collected', CurrencyService.format(totalCashCollected), Colors.indigo, itemWidth),
+                    _buildStatItem('Comm. Unpaid', CurrencyService.format(totalCommissionUnpaid), Colors.red, itemWidth),
+                    _buildStatItem('Comm. Paid', CurrencyService.format(totalCommissionPaid), Colors.green, itemWidth),
                   ],
                 );
               },
@@ -877,8 +856,8 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                                       ? 'STEP 3: Return to store and hand over the old item to supplier.'
                                       : 'STEP 4: Handed over. Awaiting final supplier confirmation.')))
                           : isCredit
-                              ? 'Collect Amount: ${CurrencyService.symbol} 0.00 (CREDIT - DO NOT COLLECT)'
-                              : 'Collect Amount: ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)} (${isCod ? "CASH ON DELIVERY" : "PREPAID - DO NOT COLLECT"})',
+                              ? 'Collect Amount: ${CurrencyService.format(0.0)} (CREDIT - DO NOT COLLECT)'
+                              : 'Collect Amount: ${CurrencyService.format(netAmt)} (${isCod ? "CASH ON DELIVERY" : "PREPAID - DO NOT COLLECT"})',
                       style: TextStyle(
                         color: isReturn
                             ? Colors.orange.shade900
@@ -929,17 +908,17 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                           String detailText = '';
                           if (isCod) {
                             if (isRefund) {
-                              detailText = 'Original Total: ${CurrencyService.symbol} ${origAmt.toStringAsFixed(2)} (Amount reduced by ${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)})';
+                              detailText = 'Original Total: ${CurrencyService.format(origAmt)} (Amount reduced by ${CurrencyService.format(diff.abs())})';
                             } else {
-                              detailText = 'Original Total: ${CurrencyService.symbol} ${origAmt.toStringAsFixed(2)} (${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)} Extra charged)';
+                              detailText = 'Original Total: ${CurrencyService.format(origAmt)} (${CurrencyService.format(diff.abs())} Extra charged)';
                             }
                           } else {
                             // Prepaid order
                             if (isRefund) {
                               final isRefunded = order['refund_status']?.toString() == 'REFUNDED';
-                              detailText = 'Original Total: ${CurrencyService.symbol} ${origAmt.toStringAsFixed(2)} (${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)} ${isRefunded ? "Refunded" : "Refund pending"})';
+                              detailText = 'Original Total: ${CurrencyService.format(origAmt)} (${CurrencyService.format(diff.abs())} ${isRefunded ? "Refunded" : "Refund pending"})';
                             } else {
-                              detailText = 'Original Total: ${CurrencyService.symbol} ${origAmt.toStringAsFixed(2)} (${CurrencyService.symbol} ${diff.abs().toStringAsFixed(2)} Extra charged)';
+                              detailText = 'Original Total: ${CurrencyService.format(origAmt)} (${CurrencyService.format(diff.abs())} Extra charged)';
                             }
                           }
 
@@ -1147,7 +1126,7 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Order #${order['id']} • ${CurrencyService.symbol} ${netAmt.toStringAsFixed(2)}',
+                    'Order #${order['id']} • ${CurrencyService.format(netAmt)}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 4),
@@ -1167,7 +1146,7 @@ class _RiderConsoleScreenState extends State<RiderConsoleScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'Comm: ${CurrencyService.symbol} ${commAmt.toStringAsFixed(2)}',
+                  'Comm: ${CurrencyService.format(commAmt)}',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 4),

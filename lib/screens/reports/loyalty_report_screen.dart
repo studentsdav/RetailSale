@@ -5,6 +5,7 @@ import '../../controllers/reports/loyalty_report_controller.dart';
 import '../../controllers/sales/sales_controller.dart';
 import '../../models/reports/loyalty_report_model.dart';
 import '../../widgets/sale_bill_preview_dialog.dart';
+import '../../core/currency/currency_service.dart';
 
 class LoyaltyReportScreen extends StatefulWidget {
   const LoyaltyReportScreen({super.key});
@@ -117,7 +118,7 @@ class _LoyaltyReportScreenState extends State<LoyaltyReportScreen> {
                                       ),
                                     ),
                                   ),
-                                  DataCell(Text(row.totalLifetimePurchase.toStringAsFixed(2))),
+                                  DataCell(Text(CurrencyService.format(row.totalLifetimePurchase))),
                                   DataCell(Text(row.totalPointsEarned.toString())),
                                   DataCell(Text(row.totalPointsRedeemed.toString())),
                                   DataCell(Text(row.pointsExpired.toString())),

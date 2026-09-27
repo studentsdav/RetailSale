@@ -4,31 +4,42 @@ class CountryTaxHelper {
   CountryTaxHelper._();
 
   static bool isIndiaCountry(String? country) {
+    if (CurrencyService.code != 'INR' && CurrencyService.symbol != '₹' && (CurrencyService.code.isNotEmpty || CurrencyService.symbol.isNotEmpty)) {
+      return false;
+    }
     if (country == null || country.trim().isEmpty) {
       return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR';
     }
     final c = country.trim().toLowerCase();
-    if (c == 'usa' || c == 'united states' || c == 'kenya' || c == 'uk' || c == 'united kingdom' || c == 'uae') {
+    if (c == 'usa' ||
+        c == 'united states' ||
+        c == 'kenya' ||
+        c == 'uk' ||
+        c == 'united kingdom' ||
+        c == 'uae' ||
+        c == 'euro' ||
+        c == 'europe' ||
+        c == 'germany' ||
+        c == 'france' ||
+        c == 'italy' ||
+        c == 'spain' ||
+        c == 'international') {
       return false;
     }
-    if (c == 'india') return true;
+    if (c == 'india') {
+      return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR' || CurrencyService.code.isEmpty;
+    }
     return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR';
   }
 
   static String taxName([String? country, String? taxMode]) {
     final mode = (taxMode ?? '').trim().toUpperCase();
-    if (mode == 'VAT' || mode == 'VAT_ONLY' || mode == 'VAT_CTL') return 'VAT';
-    if (mode == 'US_SALES_TAX' || mode == 'SALES_TAX') return 'Sales Tax';
-    if (mode == 'CGST_SGST' || mode == 'IGST') return 'GST';
-
-    final c = (country ?? '').trim().toLowerCase();
-    if (c == 'usa' || c == 'united states') return 'Sales Tax';
-    if (c == 'kenya' || c == 'uk' || c == 'united kingdom' || c == 'uae') return 'VAT';
-    if (c == 'india' || isIndiaCountry(country)) return 'GST';
-
-    if (CurrencyService.symbol == '\$') return 'Tax';
-    if (CurrencyService.code == 'KES' || CurrencyService.symbol == '£' || CurrencyService.code == 'AED') return 'VAT';
-    return 'Tax';
+    if (isIndiaCountry(country)) {
+      if (mode == 'IGST') return 'IGST';
+      return 'GST';
+    }
+    if (mode == 'VAT' || mode == 'VAT_ONLY' || mode == 'VAT_CTL') return 'Sales Tax';
+    return 'Sales Tax';
   }
 
   static String taxPercentLabel([String? country, String? taxMode]) {

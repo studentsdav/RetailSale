@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1183,8 +1184,8 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                         DataCell(Text(r.name)),
                         DataCell(Text(r.brand)),
                         DataCell(Text(r.unit)),
-                        DataCell(Text(r.rate.toStringAsFixed(2))),
-                        DataCell(Text(r.saleRate.toStringAsFixed(2))),
+                        DataCell(Text(CurrencyService.format(r.rate))),
+                        DataCell(Text(CurrencyService.format(r.saleRate))),
                         DataCell(Text(r.tax.toStringAsFixed(2))),
                         DataCell(Text(_fmtNumber(r.qty))),
                         DataCell(
@@ -1213,7 +1214,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                             ),
                           ),
                         ),
-                        DataCell(Text(r.amount.toStringAsFixed(2))),
+                        DataCell(Text(CurrencyService.format(r.amount))),
                         DataCell(Text(r.remarks)),
                         DataCell(Text(_selectedSupplier ?? '')),
                         if (showDepartment) DataCell(Text(depname)),
@@ -1444,7 +1445,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
         backgroundColor:
             highlight ? Colors.green.shade100 : Colors.grey.shade200,
         label: Text(
-          '$label : ${value.toStringAsFixed(2)}',
+          '$label : ${CurrencyService.format(value)}',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
@@ -1452,7 +1453,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
   }
 
   Future<void> _printReceiving() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final supplier = supplierCtrl.list.firstWhere((e) => e.id == _supplierId);
 
@@ -1590,10 +1591,10 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                     _cell(r.name),
                     _cell(r.unit, alignment: pw.Alignment.center),
                     _cell(r.qty.toString(), alignment: pw.Alignment.centerRight),
-                    _cell(r.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(r.rate), alignment: pw.Alignment.centerRight),
                     _cell(r.tax.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _cell(gstAmount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _cell(r.amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(gstAmount), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(r.amount), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -1676,7 +1677,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
         pw.Text(label,
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        pw.Text(value.toStringAsFixed(2),
+        pw.Text(CurrencyService.format(value),
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],

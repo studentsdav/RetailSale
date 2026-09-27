@@ -1233,7 +1233,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   Future<Uint8List> _buildReceiptPdf(Map<String, dynamic> subscription) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final property = _propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
     final currency = CurrencyService.currencyFormat;

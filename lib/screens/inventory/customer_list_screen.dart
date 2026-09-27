@@ -12,6 +12,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../controllers/sales/sales_controller.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/inventory/item_model.dart';
 import '../../models/inventory/sale_customer_model.dart';
 import 'subscription_screen.dart';
@@ -760,8 +761,8 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     await OpenFile.open(file.path);
   }
 
-  pw.Document _buildCustomerPdf() {
-    final pdf = pw.Document();
+  Future<pw.Document> _buildCustomerPdf() async {
+    final pdf = await PosInvoicePrinter.createDocument();
     final rows = _customers
         .map(
           (customer) => [
@@ -800,7 +801,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   }
 
   Future<void> _exportCustomerListPdf() async {
-    final pdf = _buildCustomerPdf();
+    final pdf = await _buildCustomerPdf();
     final bytes = await pdf.save();
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/customer_list.pdf');
@@ -809,7 +810,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   }
 
   Future<void> _printCustomerList() async {
-    final pdf = _buildCustomerPdf();
+    final pdf = await _buildCustomerPdf();
     await Printing.layoutPdf(name: 'Customer_List', onLayout: (format) async => pdf.save());
   }
 

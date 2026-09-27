@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../controllers/inventory/item_controller.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/inventory/item_model.dart';
 
 class ItemBarcodeManagerScreen extends StatefulWidget {
@@ -135,7 +136,7 @@ class _ItemBarcodeManagerScreenState extends State<ItemBarcodeManagerScreen> {
             .toList(growable: false),
       );
 
-      final pdf = pw.Document();
+      final pdf = await PosInvoicePrinter.createDocument();
       final size = _labelSizes[_sizeKey]!;
       final labels = <pw.Widget>[];
 

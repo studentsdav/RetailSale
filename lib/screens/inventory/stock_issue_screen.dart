@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../core/currency/currency_service.dart';
 
 import '../../controllers/inventory/issue_controller.dart' show IssueController;
 import '../../controllers/inventory/item_controller.dart';
@@ -435,15 +436,18 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                     if ((i['line_status'] ?? 'OPEN').toString() != 'OPEN') {
                       continue;
                     }
+                    final itemTax = (double.tryParse(i['tax']?.toString() ?? '') ?? 0) > 0
+                        ? (double.tryParse(i['tax']?.toString() ?? '') ?? 0)
+                        : (double.tryParse(i['item_master']?['tax_percent']?.toString() ?? '') ?? 0);
                     _items.add(
                       IssueItem(
                         itemId: i['item_id'],
                         itemCode: i['item_code'],
-                        itemName: i['item_master']['item_name'],
-                        unit: i['item_master']['unit'],
+                        itemName: i['item_master']?['item_name'] ?? '',
+                        unit: i['item_master']?['unit'] ?? '',
                         qty: double.parse(i['qty'].toString()),
                         rate: double.parse(i['rate'].toString()),
-                        tax: 0,
+                        tax: itemTax,
                         type: _issueType ?? '',
                         lineStatus: 'CLOSED',
                       ),
@@ -557,9 +561,31 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                     _selectedBrandItemId = null;
                     _code.clear();
                     _rate.clear();
+                    _tax.clear();
                     _qty.clear();
                   });
-                  _brandFocus.requestFocus(); // Forward Chaining
+                  if (_filteredBrands.length == 1) {
+                    final single = _filteredBrands.first;
+                    setState(() {
+                      _selectedBrandItemId = single.id;
+                      _code.text = single.itemCode;
+                      _unit.text = single.unit;
+                      _rate.text = single.rate.toString();
+                      _tax.text = single.taxPercent.toString();
+                      _selectedItem = single;
+                    });
+                    ctrl.getAvailableStock(single.itemCode).then((stock) {
+                      if (mounted) {
+                        setState(() {
+                          _availableStock = stock;
+                          _remainingStock = stock;
+                        });
+                      }
+                    });
+                    _qtyNode.requestFocus();
+                  } else {
+                    _brandFocus.requestFocus(); // Forward Chaining
+                  }
                 },
               ),
             ),
@@ -593,6 +619,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                     _code.text = selected.itemCode;
                     _unit.text = selected.unit;
                     _rate.text = selected.rate.toString();
+                    _tax.text = selected.taxPercent.toString();
                     _selectedItem = selected;
                   });
                   final stock = await ctrl.getAvailableStock(selected.itemCode);
@@ -756,8 +783,8 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                         DataCell(Text(r.itemName)),
                         DataCell(Text(r.unit)),
                         DataCell(Text(r.qty.toString())),
-                        DataCell(Text(r.rate.toStringAsFixed(2))),
-                        DataCell(Text(r.amount.toStringAsFixed(2))),
+                        DataCell(Text(CurrencyService.format(r.rate))),
+                        DataCell(Text(CurrencyService.format(r.amount))),
                         DataCell(Text(r.itemCode)),
                         DataCell(
                           SizedBox(
@@ -1029,7 +1056,11 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
             controller: c,
             keyboardType: TextInputType.number,
             textInputAction: textInputAction ?? TextInputAction.next,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(
+                RegExp(r'^\d*\.?\d{0,2}'),
+              ),
+            ],
             decoration: InputDecoration(labelText: l),
             onSubmitted: (_) {
               if (onSubmit != null) {
@@ -1120,7 +1151,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
   Future<void> _printIssue() async {
     final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
     final sysTaxMode = mounted ? context.read<SystemSettingsController>().settings?.billingTaxMode : null;
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
 
     final property = propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
@@ -1238,10 +1269,10 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
                     _cell(r.itemName),
                     _cell(r.unit, alignment: pw.Alignment.center),
                     _cell(r.qty.toString(), alignment: pw.Alignment.centerRight),
-                    _cell(r.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(r.rate), alignment: pw.Alignment.centerRight),
                     _cell(r.tax.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _cell(gstAmount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _cell(r.amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(gstAmount), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(r.amount), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -1329,7 +1360,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
         pw.Text(label,
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        pw.Text(value.toStringAsFixed(2),
+        pw.Text(CurrencyService.format(value),
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],
@@ -1365,7 +1396,7 @@ class _StockIssueScreenState extends State<StockIssueScreen> {
         backgroundColor:
             highlight ? Colors.orange.shade100 : Colors.grey.shade200,
         label: Text(
-          '$label : ${value.toStringAsFixed(2)}',
+          '$label : ${CurrencyService.format(value)}',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),

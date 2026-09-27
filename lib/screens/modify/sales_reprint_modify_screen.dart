@@ -17,6 +17,7 @@ import '../../core/printing/pos_invoice_printer.dart';
 import '../../core/printing/device_printer_routing.dart';
 import '../../models/auth/permission_service.dart';
 import '../../models/inventory/sale_order_model.dart';
+import '../../models/inventory/sale_customer_model.dart';
 import '../../models/security/app_user_model.dart';
 import '../inventory/salescreen.dart';
 import '../../core/printing/pdf_preview_dialog.dart';
@@ -130,7 +131,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
           ? _searchCtrl.text.trim()
           : (_customerPhoneCtrl.text.trim().isNotEmpty ? _customerPhoneCtrl.text.trim() : null);
 
-      final sales = await ctrl.listSales(
+      final rawSales = await ctrl.listSales(
         status: _orderStatusFilter,
         fromDate: _fromDate,
         toDate: _toDate,
@@ -139,6 +140,13 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         userId: _selectedUserFilter != 'ALL' ? _selectedUserFilter : null,
         latestOnly: _orderStatusFilter != 'RUNNING',
       );
+
+      // Exclude draft bills from reprint / modify bills list
+      final sales = rawSales.where((s) {
+        final st = (s['status'] ?? '').toString().toUpperCase().trim();
+        final no = (s['sale_no'] ?? '').toString().toUpperCase().trim();
+        return st != 'DRAFT' && !no.startsWith('DRAFT-');
+      }).toList();
 
       sales.sort((a, b) {
         final aDate = a['sale_date']?.toString() ?? '';
@@ -215,7 +223,9 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
   bool _isUnsettled(Map<String, dynamic>? sale) {
     if (sale == null) return false;
     final status = (sale['status'] ?? '').toString().toUpperCase().trim();
-    return status == 'DRAFT' || status == 'RUNNING' || status == 'BILLED' || status == 'PRINTED' || status == 'PENDING';
+    final no = (sale['sale_no'] ?? '').toString().toUpperCase().trim();
+    if (status == 'DRAFT' || no.startsWith('DRAFT-')) return false;
+    return status == 'RUNNING' || status == 'BILLED' || status == 'PRINTED' || status == 'PENDING';
   }
 
   Future<void> _showSettleBillDialog() async {
@@ -224,6 +234,22 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     final saleId = int.parse('${_selectedSale!['id']}');
     final double netAmount = _selectedOrder!.netAmount;
     final String initialMode = (_selectedSale!['payment_mode'] ?? 'CASH').toString().trim();
+
+    // Customer controllers
+    final rawCustName = _selectedOrder?.customerName?.trim() ?? '';
+    final String initialCustName = (rawCustName.isNotEmpty &&
+            rawCustName.toLowerCase() != 'walk-in' &&
+            rawCustName.toLowerCase() != 'walk-in customer')
+        ? rawCustName
+        : '';
+    final rawCustPhone = _selectedOrder?.customerPhone?.trim() ?? '';
+    final String initialCustPhone = (rawCustPhone.isNotEmpty && rawCustPhone != '--')
+        ? rawCustPhone
+        : '';
+    final String initialCustAddress = _selectedOrder?.customerAddress?.trim() ?? '';
+    final customerNameCtrl = TextEditingController(text: initialCustName);
+    final customerPhoneCtrl = TextEditingController(text: initialCustPhone);
+    final customerAddressCtrl = TextEditingController(text: initialCustAddress);
 
     final List<Map<String, dynamic>> lines = [];
     final parsedSplits = _parseSplitPaymentsForOrder(_selectedOrder!);
@@ -255,6 +281,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
           }
           final double diff = netAmount - totalAllocated;
           final bool isBalanced = diff.abs() <= 0.05;
+          final bool hasCredit = lines.any((l) => (l['mode'] as String).toUpperCase() == 'CREDIT');
 
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -271,7 +298,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
               ],
             ),
             content: SizedBox(
-              width: 480,
+              width: 500,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -393,6 +420,127 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('+ Add Payment Method (Split Bill)'),
                     ),
+                    const SizedBox(height: 12),
+                    Divider(color: Colors.grey.shade300),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.person, size: 16, color: hasCredit ? Colors.deepOrange : Colors.grey.shade800),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Customer Details:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: hasCredit ? Colors.deepOrange : Colors.black87,
+                          ),
+                        ),
+                        if (hasCredit) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.red.shade300),
+                            ),
+                            child: const Text('Required for CREDIT', style: TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (hasCredit) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 15, color: Colors.amber),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Select or enter customer name & phone so the credit amount is tracked to their account.',
+                                style: TextStyle(fontSize: 11, color: Colors.black87),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Autocomplete<SaleCustomer>(
+                      displayStringForOption: (SaleCustomer option) => '${option.customerName} (${option.customerPhone})',
+                      optionsBuilder: (TextEditingValue textEditingValue) async {
+                        final query = textEditingValue.text.trim();
+                        if (query.length < 2) return const Iterable<SaleCustomer>.empty();
+                        try {
+                          return await ctrl.searchCustomers(query);
+                        } catch (_) {
+                          return const Iterable<SaleCustomer>.empty();
+                        }
+                      },
+                      onSelected: (SaleCustomer selection) {
+                        setInnerState(() {
+                          customerNameCtrl.text = selection.customerName;
+                          customerPhoneCtrl.text = selection.customerPhone;
+                          customerAddressCtrl.text = selection.customerAddress;
+                        });
+                      },
+                      fieldViewBuilder: (context, searchCtrl, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: searchCtrl,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Search Existing Customer (Name / Phone)',
+                            hintText: 'Type 2+ chars to search...',
+                            prefixIcon: Icon(Icons.person_search, size: 18),
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: TextField(
+                            controller: customerNameCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Customer Name',
+                              isDense: true,
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              errorText: (hasCredit && customerNameCtrl.text.trim().isEmpty && customerPhoneCtrl.text.trim().isEmpty) ? 'Name required for credit' : null,
+                            ),
+                            onChanged: (_) => setInnerState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 4,
+                          child: TextField(
+                            controller: customerPhoneCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Phone / Mobile',
+                              isDense: true,
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              errorText: (hasCredit && customerNameCtrl.text.trim().isEmpty && customerPhoneCtrl.text.trim().isEmpty) ? 'Phone required' : null,
+                            ),
+                            keyboardType: TextInputType.phone,
+                            onChanged: (_) => setInnerState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -434,16 +582,33 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                     return;
                   }
 
+                  if (hasCredit && customerNameCtrl.text.trim().isEmpty && customerPhoneCtrl.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please select or enter Customer Name / Phone for Credit bill settlement.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
                   final String finalMode = paymentLines.length > 1 ? 'SPLIT' : (paymentLines.first['method'] as String);
 
                   Navigator.pop(dialogContext, true);
                   setState(() => _loading = true);
+                  final nonCreditPaid = paymentLines
+                      .where((p) => (p['method'] as String).toUpperCase() != 'CREDIT')
+                      .fold<double>(0.0, (sum, p) => sum + (p['amount'] as double));
+
                   try {
                     await ctrl.settleSaleBill(
                       saleId: saleId,
                       paymentMode: finalMode,
                       paymentLines: paymentLines,
-                      amountPaid: netAmount,
+                      amountPaid: nonCreditPaid,
+                      customerName: customerNameCtrl.text.trim().isNotEmpty ? customerNameCtrl.text.trim() : null,
+                      customerPhone: customerPhoneCtrl.text.trim().isNotEmpty ? customerPhoneCtrl.text.trim() : null,
+                      customerAddress: customerAddressCtrl.text.trim().isNotEmpty ? customerAddressCtrl.text.trim() : null,
                     );
 
                     // 1. Immediately fetch fresh settled sale details from server
@@ -788,6 +953,9 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
         paymentLines: (selectedPayment['payment_lines'] as List? ?? const [])
             .map((entry) => Map<String, dynamic>.from(entry))
             .toList(),
+        customerName: selectedPayment['customer_name'] as String?,
+        customerPhone: selectedPayment['customer_phone'] as String?,
+        customerAddress: selectedPayment['customer_address'] as String?,
       );
       await _loadSales();
       if (_selectedSale != null) await _selectSale(_selectedSale!);
@@ -878,6 +1046,22 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     required double currentPaid,
     required double currentDue,
   }) async {
+    // Customer controllers
+    final rawCustName = _selectedOrder?.customerName?.trim() ?? '';
+    final String initialCustName = (rawCustName.isNotEmpty &&
+            rawCustName.toLowerCase() != 'walk-in' &&
+            rawCustName.toLowerCase() != 'walk-in customer')
+        ? rawCustName
+        : '';
+    final rawCustPhone = _selectedOrder?.customerPhone?.trim() ?? '';
+    final String initialCustPhone = (rawCustPhone.isNotEmpty && rawCustPhone != '--')
+        ? rawCustPhone
+        : '';
+    final String initialCustAddress = _selectedOrder?.customerAddress?.trim() ?? '';
+    final customerNameCtrl = TextEditingController(text: initialCustName);
+    final customerPhoneCtrl = TextEditingController(text: initialCustPhone);
+    final customerAddressCtrl = TextEditingController(text: initialCustAddress);
+
     // 1. Initial list of payment lines
     final List<Map<String, dynamic>> lines = [];
     
@@ -911,6 +1095,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
           }
           final double diff = netAmount - totalAllocated;
           final bool isBalanced = diff.abs() <= 0.05;
+          final bool hasCredit = lines.any((l) => (l['mode'] as String).toUpperCase() == 'CREDIT');
 
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -922,7 +1107,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
               ],
             ),
             content: SizedBox(
-              width: 480,
+              width: 500,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1035,6 +1220,127 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('+ Add Payment Method (Split Bill)'),
                     ),
+                    const SizedBox(height: 12),
+                    Divider(color: Colors.grey.shade300),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.person, size: 16, color: hasCredit ? Colors.deepOrange : Colors.grey.shade800),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Customer Details:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: hasCredit ? Colors.deepOrange : Colors.black87,
+                          ),
+                        ),
+                        if (hasCredit) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.red.shade300),
+                            ),
+                            child: const Text('Required for CREDIT', style: TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (hasCredit) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 15, color: Colors.amber),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Select or enter customer name & phone so the credit amount is tracked to their account.',
+                                style: TextStyle(fontSize: 11, color: Colors.black87),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Autocomplete<SaleCustomer>(
+                      displayStringForOption: (SaleCustomer option) => '${option.customerName} (${option.customerPhone})',
+                      optionsBuilder: (TextEditingValue textEditingValue) async {
+                        final query = textEditingValue.text.trim();
+                        if (query.length < 2) return const Iterable<SaleCustomer>.empty();
+                        try {
+                          return await ctrl.searchCustomers(query);
+                        } catch (_) {
+                          return const Iterable<SaleCustomer>.empty();
+                        }
+                      },
+                      onSelected: (SaleCustomer selection) {
+                        setInnerState(() {
+                          customerNameCtrl.text = selection.customerName;
+                          customerPhoneCtrl.text = selection.customerPhone;
+                          customerAddressCtrl.text = selection.customerAddress;
+                        });
+                      },
+                      fieldViewBuilder: (context, searchCtrl, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: searchCtrl,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Search Existing Customer (Name / Phone)',
+                            hintText: 'Type 2+ chars to search...',
+                            prefixIcon: Icon(Icons.person_search, size: 18),
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: TextField(
+                            controller: customerNameCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Customer Name',
+                              isDense: true,
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              errorText: (hasCredit && customerNameCtrl.text.trim().isEmpty && customerPhoneCtrl.text.trim().isEmpty) ? 'Name required for credit' : null,
+                            ),
+                            onChanged: (_) => setInnerState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 4,
+                          child: TextField(
+                            controller: customerPhoneCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Phone / Mobile',
+                              isDense: true,
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              errorText: (hasCredit && customerNameCtrl.text.trim().isEmpty && customerPhoneCtrl.text.trim().isEmpty) ? 'Phone required' : null,
+                            ),
+                            keyboardType: TextInputType.phone,
+                            onChanged: (_) => setInnerState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -1073,10 +1379,23 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                     return;
                   }
 
+                  if (hasCredit && customerNameCtrl.text.trim().isEmpty && customerPhoneCtrl.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please select or enter Customer Name / Phone for Credit payment mode.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
                   final String finalMode = paymentLines.length > 1 ? 'SPLIT' : (paymentLines.first['method'] as String);
                   Navigator.pop(dialogContext, {
                     'payment_mode': finalMode,
                     'payment_lines': paymentLines,
+                    'customer_name': customerNameCtrl.text.trim(),
+                    'customer_phone': customerPhoneCtrl.text.trim(),
+                    'customer_address': customerAddressCtrl.text.trim(),
                   });
                 },
                 child: const Text('Save & Update Payment'),
@@ -1113,6 +1432,15 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     }
 
     final repayments = (detailsToUse['repayments'] as List? ?? const []).cast<dynamic>();
+    if (orderToUse.paymentMode.toUpperCase() == 'CREDIT') {
+      if (repayments.isEmpty) {
+        final initialPaid = orderToUse.initialAmountPaid > 0 ? orderToUse.initialAmountPaid : (orderToUse.amountPaid > 0 ? orderToUse.amountPaid : 0.0);
+        final due = orderToUse.balanceDue > 0 ? orderToUse.balanceDue : (orderToUse.netAmount - initialPaid);
+        return 'Payment Mode: CREDIT | ${initialPaid > 0 ? 'Paid: ${CurrencyService.format(initialPaid)} • ' : ''}Balance Due: ${CurrencyService.format(due)}';
+      } else {
+        return 'Payment Mode: CREDIT (Repaid: ${CurrencyService.format(orderToUse.amountPaid)}) • Balance Due: ${CurrencyService.format(orderToUse.balanceDue)}';
+      }
+    }
     if (repayments.isEmpty) {
       return 'Payment Mode: ${orderToUse.paymentMode} | Paid ${CurrencyService.format(orderToUse.amountPaid)} on ${DateFormat('dd-MMM-yyyy').format(orderToUse.saleDate)}';
     }

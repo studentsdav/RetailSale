@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -322,7 +323,7 @@ class _SupplierReturnScreenState extends State<SupplierReturnScreen> {
                   DataCell(Text(e.itemName)),
                   DataCell(Text(e.unit)),
                   DataCell(Text(_fmtNumber(e.qty))),
-                  DataCell(Text(e.rate.toStringAsFixed(2))),
+                  DataCell(Text(CurrencyService.format(e.rate))),
                 ],
               );
             }).toList(),
@@ -354,8 +355,8 @@ class _SupplierReturnScreenState extends State<SupplierReturnScreen> {
                 cells: [
                   DataCell(Text(item.itemName)),
                   DataCell(Text(_fmtNumber(item.qty))),
-                  DataCell(Text(item.rate.toStringAsFixed(2))),
-                  DataCell(Text(item.amount.toStringAsFixed(2))),
+                  DataCell(Text(CurrencyService.format(item.rate))),
+                  DataCell(Text(CurrencyService.format(item.amount))),
                   DataCell(
                     Row(
                       children: [

@@ -12,6 +12,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../utils/branding_storage.dart';
 
 class CashierHandoverReportScreen extends StatefulWidget {
@@ -281,7 +282,7 @@ class _CashierHandoverReportScreenState extends State<CashierHandoverReportScree
   }
 
   Future<pw.Document> _buildPdfDocument() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);

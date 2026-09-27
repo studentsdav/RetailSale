@@ -460,16 +460,16 @@ class _SourceAnalysisScreenState extends State<SourceAnalysisScreen> {
                                     scrollDirection: Axis.horizontal,
                                     child: DataTable(
                                       headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                                      columns: const [
-                                        DataColumn(label: Text('Source Channel')),
-                                        DataColumn(label: Text('Bills Count')),
-                                        DataColumn(label: Text('Units Sold')),
-                                        DataColumn(label: Text('Subtotal')),
-                                        DataColumn(label: Text('Discounts')),
-                                        DataColumn(label: Text('Net Sales (INR)')),
-                                        DataColumn(label: Text('Sales Share (%)')),
-                                        DataColumn(label: Text('Est. Profit (INR)')),
-                                        DataColumn(label: Text('Profit Margin (%)')),
+                                      columns: [
+                                        const DataColumn(label: Text('Source Channel')),
+                                        const DataColumn(label: Text('Bills Count')),
+                                        const DataColumn(label: Text('Units Sold')),
+                                        const DataColumn(label: Text('Subtotal')),
+                                        const DataColumn(label: Text('Discounts')),
+                                        DataColumn(label: Text('Net Sales (${CurrencyService.code})')),
+                                        const DataColumn(label: Text('Sales Share (%)')),
+                                        DataColumn(label: Text('Est. Profit (${CurrencyService.code})')),
+                                        const DataColumn(label: Text('Profit Margin (%)')),
                                       ],
                                       rows: [
                                         ...metrics.map((row) => DataRow(

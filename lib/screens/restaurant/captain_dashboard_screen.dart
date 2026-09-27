@@ -16,6 +16,7 @@ import 'kots_history_screen.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../core/printing/device_printer_routing.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../core/auth/token_storage.dart';
 import '../../controllers/security/user_controller.dart';
 import '../auth/login_screen.dart';
@@ -3080,7 +3081,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
   }
 
   Future<Uint8List> _generateKotPdfForPrint(Map<String, dynamic> kot, List<dynamic> items, String locationName) async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     
     final String kottypeLower = (kot['kottype'] ?? '').toString().toLowerCase();
     final String serviceTypeLower = (kot['service_type'] ?? '').toString().toLowerCase();

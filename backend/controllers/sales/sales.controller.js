@@ -2565,10 +2565,11 @@ function buildSalePaymentLedgerEntries({
         }
         if (lineAmount <= 0) continue;
 
-        let lineTxnType = 'SALE_CASH';
         const method = String(line.method || paymentMode || '').toUpperCase();
-        if (method === 'CREDIT') lineTxnType = 'SALE_CREDIT';
-        else if (method === 'CARD') lineTxnType = 'SALE_CARD';
+        if (method === 'CREDIT' || method === 'DUE') continue;
+
+        let lineTxnType = 'SALE_CASH';
+        if (method === 'CARD') lineTxnType = 'SALE_CARD';
         else if (method === 'UPI') lineTxnType = 'SALE_UPI';
         else if (method === 'ADVANCE' || method === 'ADVANCE_ADJUSTMENT' || method === 'ADVANCE_APPLY') lineTxnType = 'ADVANCE_APPLY';
         else lineTxnType = 'SALE_CASH';
@@ -3302,7 +3303,7 @@ async function createSaleVersion({
                     vLines.push({
                         voucher_id: vHeader.id,
                         line_type: 'CREDIT',
-                        account_name: 'Output GST Payable Account',
+                        account_name: 'Output Tax Payable Account',
                         account_type: 'LIABILITY',
                         debit_amount: 0,
                         credit_amount: taxAmount,
@@ -4764,10 +4765,61 @@ exports.updateSalePaymentMode = async (req, res) => {
             ? Math.max(nonCreditCollected - netAmount, 0)
             : 0;
 
+        const customerNameInput = req.body.customer_name !== undefined ? String(req.body.customer_name || '').trim() : null;
+        const customerPhoneInput = req.body.customer_phone !== undefined ? String(req.body.customer_phone || '').trim() : null;
+        const customerAddressInput = req.body.customer_address !== undefined ? String(req.body.customer_address || '').trim() : null;
+        const customerGstinInput = req.body.customer_gstin !== undefined ? String(req.body.customer_gstin || '').trim() : null;
+
+        const updateCustomerFields = {};
+        if (customerNameInput !== null) updateCustomerFields.customer_name = customerNameInput;
+        if (customerPhoneInput !== null) updateCustomerFields.customer_phone = customerPhoneInput;
+        if (customerAddressInput !== null) updateCustomerFields.customer_address = customerAddressInput;
+        if (customerGstinInput !== null) updateCustomerFields.customer_gstin = customerGstinInput;
+
+        const resolvedPartyName = (customerNameInput || sale.customer_name || customerPhoneInput || sale.customer_phone || 'Walk-in Customer');
+
+        if (customerNameInput || customerPhoneInput) {
+            try {
+                const searchScope = [];
+                if (customerPhoneInput) searchScope.push({ customer_phone: customerPhoneInput });
+                if (customerNameInput && customerNameInput.toLowerCase() !== 'walk-in customer' && customerNameInput.toLowerCase() !== 'walk-in') {
+                    searchScope.push({ customer_name: customerNameInput });
+                }
+                if (searchScope.length > 0) {
+                    const existingCust = await req.propertyDb.models.customers.findOne({
+                        where: {
+                            outlet_id: req.user.outlet_id,
+                            [Op.or]: searchScope
+                        },
+                        transaction: t
+                    });
+                    const custPayload = {};
+                    if (customerNameInput && customerNameInput.toLowerCase() !== 'walk-in customer' && customerNameInput.toLowerCase() !== 'walk-in') {
+                        custPayload.customer_name = customerNameInput;
+                    }
+                    if (customerPhoneInput) custPayload.customer_phone = customerPhoneInput;
+                    if (customerAddressInput) custPayload.customer_address = customerAddressInput;
+                    if (customerGstinInput) custPayload.customer_gstin = customerGstinInput;
+
+                    if (existingCust) {
+                        await existingCust.update(custPayload, { transaction: t });
+                    } else if (customerNameInput && customerNameInput.toLowerCase() !== 'walk-in customer' && customerNameInput.toLowerCase() !== 'walk-in') {
+                        await req.propertyDb.models.customers.create({
+                            outlet_id: req.user.outlet_id,
+                            ...custPayload
+                        }, { transaction: t });
+                    }
+                }
+            } catch (custErr) {
+                console.warn('Customer upsert non-fatal error:', custErr.message);
+            }
+        }
+
         const noChange = previousMode === resolvedMode &&
             toAmount(sale.amount_paid) === amountPaid &&
             toAmount(sale.balance_due) === balanceDue &&
-            previousPaymentReference === nextPaymentReference;
+            previousPaymentReference === nextPaymentReference &&
+            Object.keys(updateCustomerFields).length === 0;
         if (noChange) {
             await t.commit();
             return res.json({
@@ -4790,11 +4842,12 @@ exports.updateSalePaymentMode = async (req, res) => {
             balance_due: balanceDue,
             change_amount: nextChangeAmount,
             payment_reference: nextPaymentReference,
-            notes: nextNotes
+            notes: nextNotes,
+            ...updateCustomerFields
         }, { transaction: t });
 
         await req.propertyDb.models.cash_ledger.update(
-            { payment_method: resolvedMode },
+            { payment_method: resolvedMode, party_name: resolvedPartyName },
             {
                 where: {
                     outlet_id: req.user.outlet_id,
@@ -4810,35 +4863,41 @@ exports.updateSalePaymentMode = async (req, res) => {
                 outlet_id: req.user.outlet_id,
                 reference_type: 'SALE',
                 reference_id: String(sale.id),
-                transaction_type: { [Op.in]: ['SALE_CASH', 'SALE_CREDIT'] }
+                transaction_type: { [Op.in]: ['SALE_CASH', 'SALE_CREDIT', 'SALE_CARD', 'SALE_UPI', 'SALE_BANK', 'ADVANCE_APPLY'] }
             },
             transaction: t
         });
 
-        const entryType = balanceDue > 0 ? 'SALE_CREDIT' : 'SALE_CASH';
         for (const row of nonCreditLines) {
             if (row.amount <= 0) continue;
+            let lineTxnType = 'SALE_CASH';
+            const m = String(row.method || '').toUpperCase();
+            if (m === 'CARD') lineTxnType = 'SALE_CARD';
+            else if (m === 'UPI') lineTxnType = 'SALE_UPI';
+            else if (m === 'BANK') lineTxnType = 'SALE_BANK';
+            else if (m === 'ADVANCE' || m === 'ADVANCE_ADJUSTMENT' || m === 'ADVANCE_APPLY') lineTxnType = 'ADVANCE_APPLY';
+            else lineTxnType = 'SALE_CASH';
+
             await createLedgerEntry({
                 db: req.propertyDb,
                 outlet_id: req.user.outlet_id,
                 txn_date: sale.sale_date || new Date(),
-                transaction_type: entryType,
+                transaction_type: lineTxnType,
                 reference_type: 'SALE',
                 reference_id: sale.id,
                 reference_no: sale.sale_no,
-                party_name: sale.customer_name || sale.customer_phone || 'Walk-in Customer',
+                party_name: resolvedPartyName,
                 payment_method: row.method,
                 amount_in: row.amount,
                 notes: balanceDue > 0
-                    ? `Sale ${sale.sale_no} payment updated with outstanding ${balanceDue.toFixed(2)}`
+                    ? `Sale ${sale.sale_no} payment of ${row.method} ${toAmount(row.amount).toFixed(2)} (Credit Outstanding: ${balanceDue.toFixed(2)})`
                     : `Payment updated for sale ${sale.sale_no}`,
                 created_by: req.user.id,
                 transaction: t
             });
         }
 
-        const hasNonCredit = nonCreditLines.some(row => row.amount > 0);
-        if (!hasNonCredit && balanceDue > 0) {
+        if (balanceDue > 0) {
             await createLedgerEntry({
                 db: req.propertyDb,
                 outlet_id: req.user.outlet_id,
@@ -4847,9 +4906,10 @@ exports.updateSalePaymentMode = async (req, res) => {
                 reference_type: 'SALE',
                 reference_id: sale.id,
                 reference_no: sale.sale_no,
-                party_name: sale.customer_name || sale.customer_phone || 'Walk-in Customer',
+                party_name: resolvedPartyName,
                 payment_method: 'CREDIT',
                 amount_in: 0,
+                adjustment_amount: balanceDue,
                 notes: `Sale ${sale.sale_no} payment updated with outstanding ${balanceDue.toFixed(2)}`,
                 created_by: req.user.id,
                 transaction: t
@@ -4942,15 +5002,67 @@ exports.settleRunningBill = async (req, res) => {
             }
         }
 
+        const customerNameInput = req.body.customer_name !== undefined ? String(req.body.customer_name || '').trim() : null;
+        const customerPhoneInput = req.body.customer_phone !== undefined ? String(req.body.customer_phone || '').trim() : null;
+        const customerAddressInput = req.body.customer_address !== undefined ? String(req.body.customer_address || '').trim() : null;
+        const customerGstinInput = req.body.customer_gstin !== undefined ? String(req.body.customer_gstin || '').trim() : null;
+
+        const updateCustomerFields = {};
+        if (customerNameInput !== null) updateCustomerFields.customer_name = customerNameInput;
+        if (customerPhoneInput !== null) updateCustomerFields.customer_phone = customerPhoneInput;
+        if (customerAddressInput !== null) updateCustomerFields.customer_address = customerAddressInput;
+        if (customerGstinInput !== null) updateCustomerFields.customer_gstin = customerGstinInput;
+
+        const resolvedPartyName = (customerNameInput || sale.customer_name || customerPhoneInput || sale.customer_phone || 'Walk-in Customer');
+
+        if (customerNameInput || customerPhoneInput) {
+            try {
+                const searchScope = [];
+                if (customerPhoneInput) searchScope.push({ customer_phone: customerPhoneInput });
+                if (customerNameInput && customerNameInput.toLowerCase() !== 'walk-in customer' && customerNameInput.toLowerCase() !== 'walk-in') {
+                    searchScope.push({ customer_name: customerNameInput });
+                }
+                if (searchScope.length > 0) {
+                    const existingCust = await req.propertyDb.models.customers.findOne({
+                        where: {
+                            outlet_id: req.user.outlet_id,
+                            [Op.or]: searchScope
+                        },
+                        transaction: t
+                    });
+                    const custPayload = {};
+                    if (customerNameInput && customerNameInput.toLowerCase() !== 'walk-in customer' && customerNameInput.toLowerCase() !== 'walk-in') {
+                        custPayload.customer_name = customerNameInput;
+                    }
+                    if (customerPhoneInput) custPayload.customer_phone = customerPhoneInput;
+                    if (customerAddressInput) custPayload.customer_address = customerAddressInput;
+                    if (customerGstinInput) custPayload.customer_gstin = customerGstinInput;
+
+                    if (existingCust) {
+                        await existingCust.update(custPayload, { transaction: t });
+                    } else if (customerNameInput && customerNameInput.toLowerCase() !== 'walk-in customer' && customerNameInput.toLowerCase() !== 'walk-in') {
+                        await req.propertyDb.models.customers.create({
+                            outlet_id: req.user.outlet_id,
+                            ...custPayload
+                        }, { transaction: t });
+                    }
+                }
+            } catch (custErr) {
+                console.warn('Customer upsert non-fatal error:', custErr.message);
+            }
+        }
+
         await sale.update({
             status: 'COMPLETED',
             payment_mode: paymentModeInput,
+            initial_amount_paid: amountPaid,
             amount_paid: amountPaid,
             balance_due: balanceDue,
             change_amount: changeAmount,
             payment_reference: nextPaymentReference,
             is_latest: true,
-            is_deleted: false
+            is_deleted: false,
+            ...updateCustomerFields
         }, { transaction: t });
 
         // Ledger creation
@@ -4961,20 +5073,49 @@ exports.settleRunningBill = async (req, res) => {
             })).filter(row => row.amount > 0 && row.method !== 'CREDIT')
             : (paymentModeInput !== 'CREDIT' && amountPaid > 0 ? [{ method: paymentModeInput, amount: amountPaid }] : []);
 
-        const entryType = balanceDue > 0 ? 'SALE_CREDIT' : 'SALE_CASH';
         for (const row of nonCreditLines) {
+            if (row.amount <= 0) continue;
+            let lineTxnType = 'SALE_CASH';
+            const m = String(row.method || '').toUpperCase();
+            if (m === 'CARD') lineTxnType = 'SALE_CARD';
+            else if (m === 'UPI') lineTxnType = 'SALE_UPI';
+            else if (m === 'BANK') lineTxnType = 'SALE_BANK';
+            else if (m === 'ADVANCE' || m === 'ADVANCE_ADJUSTMENT' || m === 'ADVANCE_APPLY') lineTxnType = 'ADVANCE_APPLY';
+            else lineTxnType = 'SALE_CASH';
+
             await createLedgerEntry({
                 db: req.propertyDb,
                 outlet_id: req.user.outlet_id,
                 txn_date: sale.sale_date || new Date(),
-                transaction_type: entryType,
+                transaction_type: lineTxnType,
                 reference_type: 'SALE',
                 reference_id: sale.id,
                 reference_no: sale.sale_no,
-                party_name: sale.customer_name || sale.customer_phone || 'Walk-in Customer',
+                party_name: resolvedPartyName,
                 payment_method: row.method,
                 amount_in: row.amount,
-                notes: `Direct Settlement for Sale ${sale.sale_no}`,
+                notes: balanceDue > 0
+                    ? `Sale ${sale.sale_no} settlement of ${row.method} ${toAmount(row.amount).toFixed(2)} (Credit Outstanding: ${balanceDue.toFixed(2)})`
+                    : `Direct Settlement for Sale ${sale.sale_no}`,
+                created_by: req.user.id,
+                transaction: t
+            });
+        }
+
+        if (balanceDue > 0) {
+            await createLedgerEntry({
+                db: req.propertyDb,
+                outlet_id: req.user.outlet_id,
+                txn_date: sale.sale_date || new Date(),
+                transaction_type: 'SALE_CREDIT',
+                reference_type: 'SALE',
+                reference_id: sale.id,
+                reference_no: sale.sale_no,
+                party_name: resolvedPartyName,
+                payment_method: 'CREDIT',
+                amount_in: 0,
+                adjustment_amount: balanceDue,
+                notes: `Direct Settlement for Sale ${sale.sale_no} with outstanding ${balanceDue.toFixed(2)}`,
                 created_by: req.user.id,
                 transaction: t
             });
@@ -5043,10 +5184,17 @@ exports.listSales = async (req, res) => {
             if (status === 'COMPLETED') {
                 where.status = { [Op.in]: ['COMPLETED', 'RETURNED'] };
             } else if (status === 'RUNNING' || status === 'UNSETTLED' || status === 'PENDING') {
-                where.status = { [Op.in]: ['DRAFT', 'RUNNING', 'BILLED', 'PRINTED', 'PENDING'] };
+                where.status = { [Op.in]: ['RUNNING', 'BILLED', 'PRINTED', 'PENDING'] };
             } else if (status !== 'ALL') {
                 where.status = status;
             }
+        }
+
+        if (status !== 'DRAFT') {
+            if (!where.status) {
+                where.status = { [Op.ne]: 'DRAFT' };
+            }
+            where.sale_no = { [Op.notILike]: 'DRAFT-%' };
         }
 
         if (source && source !== 'ALL') {

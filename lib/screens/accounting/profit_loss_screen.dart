@@ -176,13 +176,13 @@ class _ProfitLossScreenState extends State<ProfitLossScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '💡 TAX & GST HANDLING NOTE:',
+                      '💡 TAX HANDLING NOTE:',
                       style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1E40AF)),
                     ),
                     SizedBox(height: 4),
                     Text(
-                      '• Same universal formula applies for Taxable, Non-Taxable, Inclusive, & Exclusive GST sales.\n'
-                      '• GST collected is a government liability, NOT revenue. For Inclusive GST, tax is deducted before calculating Gross Profit.\n'
+                      '• Same universal formula applies for Taxable, Non-Taxable, Inclusive, & Exclusive sales.\n'
+                      '• Tax collected is a government liability, NOT revenue. For Inclusive tax, tax is deducted before calculating Gross Profit.\n'
                       '• COGS = Sold Quantity × Item Purchase Cost Rate.',
                       style: TextStyle(fontSize: 11, color: Color(0xFF1E3A8A), height: 1.35),
                     ),

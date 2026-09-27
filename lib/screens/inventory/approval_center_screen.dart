@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -503,7 +504,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen> with Single
         final dateParsed = dmg['damage_date'] != null
             ? DateFormat('dd-MMM-yyyy').format(DateTime.parse(dmg['damage_date']))
             : '-';
-        final totalValue = NumberFormat.currency(symbol: 'Rs. ').format(
+        final totalValue = CurrencyService.format(
           double.tryParse(dmg['total_value']?.toString() ?? '') ?? 0.0,
         );
 
@@ -668,8 +669,8 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen> with Single
             final unit = i['unit'] ?? i['item_master']?['unit'] ?? '-';
             final amount = double.tryParse(i['amount']?.toString() ?? '') ?? (qty * rate);
 
-            final rateFmt = NumberFormat.currency(symbol: 'Rs.').format(rate);
-            final amountFmt = NumberFormat.currency(symbol: 'Rs.').format(amount);
+            final rateFmt = CurrencyService.format(rate);
+            final amountFmt = CurrencyService.format(amount);
 
             return TableRow(
               children: [

@@ -51,20 +51,36 @@ exports.getDamageReport = async (req, res) => {
             order: [['damage_date', 'DESC']]
         });
 
-        const data = damages.map((damage) => ({
-            id: damage.id,
-            damage_no: damage.damage_no,
-            damage_date: damage.damage_date,
-            total_value: Number(damage.total_value || 0),
-            status: damage.status,
-            approval_status: damage.approval_status || 'PENDING',
-            approved_by: damage.approved_by,
-            approved_at: damage.approved_at,
-            rejected_by: damage.rejected_by,
-            rejected_at: damage.rejected_at,
-            rejection_reason: damage.rejection_reason,
-            items: damage.items
-        }));
+        const data = damages.map((damage) => {
+            const items = (damage.items || []).map((i) => {
+                const itemData = i.toJSON ? i.toJSON() : i;
+                const itemMaster = i.item || i.item_master || {};
+                return {
+                    ...itemData,
+                    item_name: itemMaster.item_name || i.item_name || '',
+                    brand: itemMaster.brand || i.brand || '',
+                    unit: itemMaster.unit || i.unit || '',
+                    qty: Number(i.qty || 0),
+                    rate: Number(i.rate || 0),
+                    amount: Number(i.amount || (Number(i.qty || 0) * Number(i.rate || 0)))
+                };
+            });
+
+            return {
+                id: damage.id,
+                damage_no: damage.damage_no,
+                damage_date: damage.damage_date,
+                total_value: Number(damage.total_value || 0),
+                status: damage.status,
+                approval_status: damage.approval_status || 'PENDING',
+                approved_by: damage.approved_by,
+                approved_at: damage.approved_at,
+                rejected_by: damage.rejected_by,
+                rejected_at: damage.rejected_at,
+                rejection_reason: damage.rejection_reason,
+                items
+            };
+        });
 
         res.json({
             success: true,

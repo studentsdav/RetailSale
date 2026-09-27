@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dropdown_search/dropdown_search.dart';
@@ -214,8 +215,8 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                   Text('Finished Good: [${details.parentItemCode}] ${details.parentItemName}${details.parentBrand.isNotEmpty ? ' (${details.parentBrand})' : ''}'),
                   Text('Produced Qty: ${details.qty.toStringAsFixed(2)} ${details.parentUnit}'),
                   Text('Assembly Date: ${details.assemblyDate}'),
-                  Text('Composite Cost per unit: Rs. ${details.compositeCost.toStringAsFixed(2)}'),
-                  Text('Total Cost: Rs. ${details.totalCost.toStringAsFixed(2)}'),
+                  Text('Composite Cost per unit: ${CurrencyService.format(details.compositeCost)}'),
+                  Text('Total Cost: ${CurrencyService.format(details.totalCost)}'),
                   if (details.notes.isNotEmpty) Text('Notes: ${details.notes}'),
                   const Divider(height: 20),
                   const Text('Components Consumed:', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -230,7 +231,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                           title: Text('${usage.componentItemName}${usage.componentBrand.isNotEmpty ? ' (${usage.componentBrand})' : ''}'),
                           subtitle: Text(usage.componentItemCode),
                           trailing: Text(
-                            '${usage.qtyUsed.toStringAsFixed(2)} ${usage.componentUnit} @ Rs. ${usage.rate.toStringAsFixed(2)} = Rs. ${usage.totalCost.toStringAsFixed(2)}',
+                            '${usage.qtyUsed.toStringAsFixed(2)} ${usage.componentUnit} @ ${CurrencyService.format(usage.rate)} = Rs. ${usage.totalCost.toStringAsFixed(2)}',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         );
@@ -453,7 +454,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                                         ),
                                       ),
                                     ),
-                                    Padding(padding: const EdgeInsets.all(8), child: Text('Rs. ${cost.toStringAsFixed(2)}')),
+                                    Padding(padding: const EdgeInsets.all(8), child: Text('${CurrencyService.format(cost)}')),
                                   ],
                                 );
                               }),
@@ -467,12 +468,12 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    'Composite Cost per Unit: Rs. ${_unitCompositeCost.toStringAsFixed(2)}',
+                                    'Composite Cost per Unit: ${CurrencyService.format(_unitCompositeCost)}',
                                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Total Assembly Cost: Rs. ${_totalAssemblyCost.toStringAsFixed(2)}',
+                                    'Total Assembly Cost: ${CurrencyService.format(_totalAssemblyCost)}',
                                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
                                   ),
                                 ],
@@ -601,7 +602,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> with SingleTickerProvid
                                           DataCell(Text('${asm.qty.toStringAsFixed(2)} ${asm.parentUnit}')),
                                           DataCell(
                                             Text(
-                                              'Rs. ${asm.totalCost.toStringAsFixed(2)}',
+                                              '${CurrencyService.format(asm.totalCost)}',
                                               style: const TextStyle(fontWeight: FontWeight.bold),
                                             ),
                                           ),

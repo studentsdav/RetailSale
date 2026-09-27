@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 import '../../controllers/reports/closing_report_controller.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/closing_item_model.dart';
 import '../../utils/branding_storage.dart';
 
@@ -446,7 +447,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
   }
 
   Future<void> exportToPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final currency = CurrencyService.currencyFormat;
     final branding = await BrandingStorage.getCurrentBrandingContext();
     final logo = await BrandingStorage.loadPdfLogo(branding?.logoPath);
@@ -828,7 +829,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
                     cells: [
                       DataCell(Text(e.name)),
                       DataCell(Text(e.brand)),
-                      DataCell(Text(e.avgRate.toStringAsFixed(2))),
+                      DataCell(Text(CurrencyService.format(e.avgRate))),
                       DataCell(Text(e.opening.toString())),
                       DataCell(Text(e.receive.toString())),
                       DataCell(Text(e.issue.toString())),
@@ -837,7 +838,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
                       DataCell(Text(e.supplierReturnQty.toString())),
                       DataCell(Text(e.closing.toString())),
                       DataCell(Text(
-                        e.amount.toStringAsFixed(2),
+                        CurrencyService.format(e.amount),
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       )),
                     ],
@@ -850,7 +851,7 @@ class _ClosingReportScreenState extends State<ClosingReportScreen> {
               child: Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  "Group Total : ${groupTotal.toStringAsFixed(2)}",
+                  "Group Total : ${CurrencyService.format(groupTotal)}",
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),

@@ -1,3 +1,4 @@
+import '../../core/currency/currency_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -346,7 +347,7 @@ class _SubmittedStatusScreenState extends State<SubmittedStatusScreen> with Sing
         final dateParsed = dmg['damage_date'] != null
             ? DateFormat('dd-MMM-yyyy').format(DateTime.parse(dmg['damage_date']))
             : '-';
-        final totalValue = NumberFormat.currency(symbol: 'Rs. ').format(
+        final totalValue = CurrencyService.format(
           double.tryParse(dmg['total_value']?.toString() ?? '') ?? 0.0,
         );
 
@@ -493,17 +494,24 @@ class _SubmittedStatusScreenState extends State<SubmittedStatusScreen> with Sing
             final qty = double.tryParse(i['qty']?.toString() ?? '') ?? 0.0;
             final remarks = i['remarks'] ?? i['remarks_desc'] ?? '-';
             final rate = double.tryParse(i['rate']?.toString() ?? '') ?? 0.0;
-            final unit = i['unit'] ?? i['item_master']?['unit'] ?? '-';
+            final unit = i['unit'] ?? i['item']?['unit'] ?? i['item_master']?['unit'] ?? '-';
             final amount = double.tryParse(i['amount']?.toString() ?? '') ?? (qty * rate);
 
-            final rateFmt = NumberFormat.currency(symbol: 'Rs.').format(rate);
-            final amountFmt = NumberFormat.currency(symbol: 'Rs.').format(amount);
+            final rawName = i['item_name'] ??
+                i['item']?['item_name'] ??
+                i['item_master']?['item_name'] ??
+                i['name'] ??
+                '-';
+            final itemName = rawName.toString().trim().isEmpty ? '-' : rawName.toString().trim();
+
+            final rateFmt = CurrencyService.format(rate);
+            final amountFmt = CurrencyService.format(amount);
 
             return TableRow(
               children: [
                 Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: Text(i['item_name'] ?? i['item_master']?['item_name'] ?? '-', style: const TextStyle(fontSize: 12)),
+                  child: Text(itemName, style: const TextStyle(fontSize: 12)),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(8.0),

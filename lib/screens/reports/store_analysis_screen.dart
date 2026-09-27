@@ -14,6 +14,7 @@ import '../../controllers/reports/stock_balance_controller.dart';
 import '../../controllers/reports/store_analysis_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/reports/sales_report_model.dart';
 import '../../models/reports/stock_item_model.dart';
 
@@ -327,7 +328,7 @@ class _StoreAnalysisScreenState extends State<StoreAnalysisScreen> {
 
   // Export PDF
   Future<void> _exportPdf() async {
-    final pdf = pw.Document();
+    final pdf = await PosInvoicePrinter.createDocument();
     final title = 'Store Analysis Report - ${_tabNames[_selectedTabIndex]}';
 
     pdf.addPage(

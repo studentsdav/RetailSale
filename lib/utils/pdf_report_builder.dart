@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 
 import 'branding_storage.dart';
 import '../core/config/date_time_service.dart';
+import '../core/printing/pos_invoice_printer.dart';
 
 class PdfKpiItem {
   final String label;
@@ -33,7 +34,13 @@ class PdfReportBuilder {
     String? pdfFileName,
   }) async {
     final format = pageFormat ?? PdfPageFormat.a4.landscape;
-    final pdf = pw.Document();
+    final fonts = await PosInvoicePrinter.getInvoiceFonts();
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fonts.regular,
+        bold: fonts.bold,
+      ),
+    );
     final nowStr = DateTimeService.instance.formatNow('dd-MMM-yyyy hh:mm a');
 
     final branding = await BrandingStorage.getCurrentBrandingContext();

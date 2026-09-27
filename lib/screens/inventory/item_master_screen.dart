@@ -26,6 +26,7 @@ import '../../widgets/entry_shortcuts.dart';
 import 'item_barcode_manager_screen.dart';
 import 'stock_transfer_screen.dart';
 import 'bom_setup_dialog.dart';
+import '../../core/currency/currency_service.dart';
 
 class ItemMasterScreen extends StatefulWidget {
   const ItemMasterScreen({super.key});
@@ -3111,10 +3112,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                             DataCell(Text(it.brand)),
                             DataCell(Text(it.unit)),
                             DataCell(Text(it.barcode)),
-                            DataCell(Text(it.rate.toStringAsFixed(2))),
+                            DataCell(Text(CurrencyService.format(it.rate))),
                             DataCell(
-                                Text(it.retailSalePrice.toStringAsFixed(2))),
-                            DataCell(Text(it.mrp.toStringAsFixed(2))),
+                                Text(CurrencyService.format(it.retailSalePrice))),
+                            DataCell(Text(CurrencyService.format(it.mrp))),
                             DataCell(Text(it.taxType)),
                             DataCell(Text(it.taxPercent.toStringAsFixed(2))),
                             DataCell(
