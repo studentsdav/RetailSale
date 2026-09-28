@@ -327,10 +327,10 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                     _tableCell(item.brand),
                     _tableCell(item.unit, alignment: pw.Alignment.center),
                     _tableCell(item.qty.toString(), alignment: pw.Alignment.centerRight),
-                    _tableCell(item.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _tableCell(CurrencyService.format(item.rate), alignment: pw.Alignment.centerRight),
                     _tableCell(item.tax.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _tableCell(gstAmount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _tableCell(item.amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _tableCell(CurrencyService.format(gstAmount), alignment: pw.Alignment.centerRight),
+                    _tableCell(CurrencyService.format(item.amount), alignment: pw.Alignment.centerRight),
                   ],
                 );
               }),
@@ -415,7 +415,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
         pw.Text(label,
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        pw.Text(value.toStringAsFixed(2),
+        pw.Text(CurrencyService.format(value),
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],

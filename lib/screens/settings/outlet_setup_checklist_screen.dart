@@ -8,7 +8,9 @@ import '../inventory/supplier_master_screen.dart';
 import '../restaurant/restaurant_setup_screen.dart';
 import 'document_sequence_screen.dart';
 import 'property_info_screen.dart';
+import 'settings_screen.dart';
 import 'stock_location_screen.dart';
+import 'tax_group_setup_screen.dart';
 
 class OutletSetupChecklistScreen extends StatefulWidget {
   const OutletSetupChecklistScreen({super.key});
@@ -31,6 +33,12 @@ class _OutletSetupChecklistScreenState extends State<OutletSetupChecklistScreen>
     switch (key) {
       case 'PROPERTY':
         destination = const PropertyInfoScreen(outletid: 0);
+        break;
+      case 'SETTINGS':
+        destination = const SettingsScreen();
+        break;
+      case 'TAX_GROUP':
+        destination = const TaxGroupSetupScreen();
         break;
       case 'SEQUENCE':
         destination = const DocumentSequenceScreen();

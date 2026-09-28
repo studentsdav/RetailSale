@@ -175,7 +175,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     'DAY',
     'HOUR',
   ];
-  final List<String> _taxTypes = ['GST', 'VAT', 'US_SALES_TAX', 'COMPOSITE', 'SALES_TAX', 'CESS', 'OTHER'];
+  final List<String> _taxTypes = ['GST', 'VAT', 'US_SALES_TAX', 'TAX_GROUP', 'COMPOSITE', 'SALES_TAX', 'CESS', 'OTHER'];
 
   GroupModel? _selectedGroup;
   SubCategoryModel? _selectedSubCategory;
@@ -1915,18 +1915,27 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                 ],
                 if (_taxGroups.isNotEmpty)
                   SizedBox(
-                    width: 220,
-                    child: DropdownButtonFormField<TaxGroup>(
+                    width: 240,
+                    child: DropdownButtonFormField<TaxGroup?>(
                       value: _selectedTaxGroup,
                       isExpanded: true,
                       style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-                      decoration: _compactDecoration('Tax Group / Structure'),
-                      items: _taxGroups.map((g) {
-                        return DropdownMenuItem<TaxGroup>(
-                          value: g,
-                          child: Text('${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)', overflow: TextOverflow.ellipsis),
-                        );
-                      }).toList(),
+                      decoration: _compactDecoration('Tax Group (Created)'),
+                      items: [
+                        const DropdownMenuItem<TaxGroup?>(
+                          value: null,
+                          child: Text('None (Standalone Tax)', style: TextStyle(color: Colors.grey)),
+                        ),
+                        ..._taxGroups.map((g) {
+                          return DropdownMenuItem<TaxGroup?>(
+                            value: g,
+                            child: Text(
+                              '${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }),
+                      ],
                       onChanged: (val) {
                         setState(() {
                           _selectedTaxGroup = val;
@@ -1935,10 +1944,13 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                             if (_taxTypes.contains(codeUpper)) {
                               _taxType = codeUpper;
                             } else {
-                              _taxType = 'US_SALES_TAX';
+                              _taxType = 'TAX_GROUP';
                             }
-                            _taxPercent.text = val.totalRate.toString();
+                            _taxPercent.text = val.totalRate.toStringAsFixed(val.totalRate % 1 == 0 ? 0 : 2);
                             _useInclusiveRates = val.isTaxInclusive;
+                          } else {
+                            _taxPercent.text = '0';
+                            _taxType = 'GST';
                           }
                         });
                       },
@@ -1969,7 +1981,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                           focusNode: _taxTypeFocus,
                           value: selectedTaxVal,
                           style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-                          decoration: _compactDecoration('Tax Type'),
+                          decoration: _compactDecoration(
+                            'Tax Type',
+                            helperText: _selectedTaxGroup != null ? 'Via Tax Group' : null,
+                          ),
                           items: availableTaxTypes
                               .map(
                                 (value) => DropdownMenuItem(
@@ -1978,25 +1993,56 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                                 ),
                               )
                               .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _taxType = value);
-                            }
-                            _taxPercentFocus.requestFocus();
-                          },
+                          onChanged: _selectedTaxGroup != null
+                              ? null
+                              : (value) {
+                                  if (value != null) {
+                                    setState(() => _taxType = value);
+                                  }
+                                  _taxPercentFocus.requestFocus();
+                                },
                         );
                       },
                     ),
                   ),
                 ),
-                _text(_taxPercent, 'Tax %',
-                    isDouble: true,
-                    focusNode: _taxPercentFocus,
-                    prevNode: _taxTypeFocus,
-                    onSubmit: () => _hasVariants
-                        ? _discountFocus.requestFocus()
-                        : _openingFocus.requestFocus(),
-                    width: 110),
+                _text(
+                  _taxPercent,
+                  'Tax %',
+                  isDouble: true,
+                  readOnly: _selectedTaxGroup != null,
+                  helperText: _selectedTaxGroup != null ? 'Locked to Group' : null,
+                  focusNode: _taxPercentFocus,
+                  prevNode: _taxTypeFocus,
+                  onSubmit: () => _hasVariants
+                      ? _discountFocus.requestFocus()
+                      : _openingFocus.requestFocus(),
+                  width: 110,
+                ),
+                if (_selectedTaxGroup != null && _selectedTaxGroup!.components.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.account_tree_outlined, size: 15, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Includes ${_selectedTaxGroup!.components.length} tax types: ' +
+                              _selectedTaxGroup!.components
+                                  .map((c) => '${c.componentName} (${c.rate.toStringAsFixed(c.rate % 1 == 0 ? 0 : 2)}%)')
+                                  .join(' + ') +
+                              ' = Total ${_selectedTaxGroup!.totalRate.toStringAsFixed(2)}%',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF1E40AF)),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (!_hasVariants) ...[
                   _text(_opening, 'Opening Balance',
                       isDouble: true,

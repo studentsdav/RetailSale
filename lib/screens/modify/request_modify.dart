@@ -279,7 +279,7 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
                     _cell(r.name),
                     _cell(r.unit, alignment: pw.Alignment.center),
                     _cell(r.qty.toString(), alignment: pw.Alignment.centerRight),
-                    _cell(r.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(r.rate), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -299,7 +299,7 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
                 color: PdfColors.grey50,
               ),
               child: pw.Text(
-                "Total Amount : ${totalAmount.toStringAsFixed(2)}",
+                "Total Amount : ${CurrencyService.format(totalAmount)}",
                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.blueGrey900),
               ),
             ),

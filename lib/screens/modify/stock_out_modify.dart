@@ -257,8 +257,8 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                     _cell(brand.isNotEmpty ? '$itemName ($brand)' : '$itemName'),
                     _cell(r['item_master']?['unit'] ?? "", alignment: pw.Alignment.center),
                     _cell(qty.toString(), alignment: pw.Alignment.centerRight),
-                    _cell(rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _cell(amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(rate), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(amount), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -278,7 +278,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                 color: PdfColors.grey50,
               ),
               child: pw.Text(
-                "Total Amount : ${total.toStringAsFixed(2)}",
+                "Total Amount : ${CurrencyService.format(total)}",
                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.blueGrey900),
               ),
             ),

@@ -39,6 +39,22 @@ import '../../controllers/public/outlet_controller.dart';
 import '../../core/auth/token_storage.dart';
 import 'package:file_picker/file_picker.dart';
 
+class CountryPreset {
+  final String name;
+  final String symbol;
+  final String code;
+  final String timezone;
+  final String label;
+
+  const CountryPreset({
+    required this.name,
+    required this.symbol,
+    required this.code,
+    required this.timezone,
+    required this.label,
+  });
+}
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -48,6 +64,99 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String _currentMachineId = LocalPreferences.getSystemHardwareId();
+  static const List<CountryPreset> _countryPresets = [
+    CountryPreset(
+      name: 'India',
+      symbol: '₹',
+      code: 'INR',
+      timezone: 'Asia/Kolkata',
+      label: '🇮🇳 India (INR - ₹)',
+    ),
+    CountryPreset(
+      name: 'United States',
+      symbol: '\$',
+      code: 'USD',
+      timezone: 'America/New_York',
+      label: '🇺🇸 United States (USD - \$)',
+    ),
+    CountryPreset(
+      name: 'Eurozone',
+      symbol: '€',
+      code: 'EUR',
+      timezone: 'Europe/Paris',
+      label: '🇪🇺 Eurozone (EUR - €)',
+    ),
+    CountryPreset(
+      name: 'United Kingdom',
+      symbol: '£',
+      code: 'GBP',
+      timezone: 'Europe/London',
+      label: '🇬🇧 United Kingdom (GBP - £)',
+    ),
+    CountryPreset(
+      name: 'United Arab Emirates',
+      symbol: 'AED',
+      code: 'AED',
+      timezone: 'Asia/Dubai',
+      label: '🇦🇪 United Arab Emirates (AED)',
+    ),
+    CountryPreset(
+      name: 'Kenya',
+      symbol: 'KSh',
+      code: 'KES',
+      timezone: 'Africa/Nairobi',
+      label: '🇰🇪 Kenya (KES - KSh)',
+    ),
+    CountryPreset(
+      name: 'Canada',
+      symbol: '\$',
+      code: 'CAD',
+      timezone: 'America/Toronto',
+      label: '🇨🇦 Canada (CAD - \$)',
+    ),
+    CountryPreset(
+      name: 'Australia',
+      symbol: '\$',
+      code: 'AUD',
+      timezone: 'Australia/Sydney',
+      label: '🇦🇺 Australia (AUD - \$)',
+    ),
+    CountryPreset(
+      name: 'Singapore',
+      symbol: '\$',
+      code: 'SGD',
+      timezone: 'Asia/Singapore',
+      label: '🇸🇬 Singapore (SGD - \$)',
+    ),
+    CountryPreset(
+      name: 'Saudi Arabia',
+      symbol: 'SAR',
+      code: 'SAR',
+      timezone: 'Asia/Riyadh',
+      label: '🇸🇦 Saudi Arabia (SAR)',
+    ),
+    CountryPreset(
+      name: 'South Africa',
+      symbol: 'R',
+      code: 'ZAR',
+      timezone: 'Africa/Johannesburg',
+      label: '🇿🇦 South Africa (ZAR - R)',
+    ),
+    CountryPreset(
+      name: 'Nigeria',
+      symbol: '₦',
+      code: 'NGN',
+      timezone: 'Africa/Lagos',
+      label: '🇳🇬 Nigeria (NGN - ₦)',
+    ),
+    CountryPreset(
+      name: 'Philippines',
+      symbol: '₱',
+      code: 'PHP',
+      timezone: 'Asia/Manila',
+      label: '🇵🇭 Philippines (PHP - ₱)',
+    ),
+  ];
   static const _taxModes = [
     'CGST_SGST',
     'IGST',
@@ -653,15 +762,123 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   _customSection(
-                    'Regional & Timezone Settings',
-                    'Configure software time zone for local date and time handling (Default: India Standard Time).',
+                    'Regional, Country & Currency Settings',
+                    'Configure store country, base currency symbol, ISO currency code, and timezone for all bills and reports.',
                     [
+                      _settingRow(
+                        title: 'Country Preset & Quick Setup',
+                        description: 'Select a country preset to auto-fill Currency Symbol, ISO Code, and Software Timezone, or choose Custom for manual setup.',
+                        control: SizedBox(
+                          width: 340,
+                          child: Builder(
+                            builder: (context) {
+                              final matchedPreset = _countryPresets.where((p) =>
+                                  p.name.toLowerCase() == s.billingCountry.trim().toLowerCase() ||
+                                  p.code.toUpperCase() == s.baseCurrencyCode.trim().toUpperCase()
+                              ).firstOrNull;
+                              final currentValue = matchedPreset != null ? matchedPreset.name : 'CUSTOM';
+
+                              return DropdownButtonFormField<String>(
+                                key: ValueKey('countryPreset-$currentValue'),
+                                value: currentValue,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                items: [
+                                  ..._countryPresets.map((preset) => DropdownMenuItem<String>(
+                                    value: preset.name,
+                                    child: Text(preset.label, overflow: TextOverflow.ellipsis),
+                                  )),
+                                  const DropdownMenuItem<String>(
+                                    value: 'CUSTOM',
+                                    child: Text('⚙️ Custom / Manual Country & Currency'),
+                                  ),
+                                ],
+                                onChanged: (val) {
+                                  if (val == null) return;
+                                  if (val != 'CUSTOM') {
+                                    final preset = _countryPresets.firstWhere((p) => p.name == val);
+                                    setState(() {
+                                      s.billingCountry = preset.name;
+                                      s.baseCurrencySymbol = preset.symbol;
+                                      s.baseCurrencyCode = preset.code;
+                                      if (TimeZoneUtils.supportedTimeZones.any((tz) => tz.id == preset.timezone)) {
+                                        s.timeZone = preset.timezone;
+                                      }
+                                    });
+                                    CurrencyService.updateFromSettings(s);
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Billing Country',
+                        description: 'Country name used for invoice compliance and tax headers (e.g. USA, India, Kenya, UK, UAE)',
+                        control: SizedBox(
+                          width: 340,
+                          child: TextFormField(
+                            key: ValueKey('bCountry-${s.billingCountry}'),
+                            initialValue: s.billingCountry,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. United States, India, UK',
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            onChanged: (v) {
+                              s.billingCountry = v.trim().isEmpty ? 'India' : v.trim();
+                              CurrencyService.updateFromSettings(s);
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Base Currency Symbol',
+                        description: 'Currency symbol displayed on POS checkout, invoices, receipts, and financial reports (e.g. \$, ₹, £, AED, KSh, €)',
+                        control: SizedBox(
+                          width: 340,
+                          child: TextFormField(
+                            key: ValueKey('bSym-${s.baseCurrencySymbol}'),
+                            initialValue: s.baseCurrencySymbol,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. \$, ₹, £, AED, KSh, €',
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            onChanged: (v) {
+                              s.baseCurrencySymbol = v.trim();
+                              CurrencyService.updateFromSettings(s);
+                            },
+                          ),
+                        ),
+                      ),
+                      _settingRow(
+                        title: 'Base Currency Code',
+                        description: 'ISO Currency Code for multi-currency compatibility (e.g. USD, INR, GBP, EUR, AED, KES)',
+                        control: SizedBox(
+                          width: 340,
+                          child: TextFormField(
+                            key: ValueKey('bCode-${s.baseCurrencyCode}'),
+                            initialValue: s.baseCurrencyCode,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. USD, INR, GBP, EUR, AED',
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            onChanged: (v) {
+                              s.baseCurrencyCode = v.trim().toUpperCase();
+                              CurrencyService.updateFromSettings(s);
+                            },
+                          ),
+                        ),
+                      ),
                       _settingRow(
                         title: 'Software Time Zone',
                         description: 'All dates, bill timestamps, and transactions in the software will convert according to the selected time zone.',
                         control: SizedBox(
                           width: 340,
                           child: DropdownButtonFormField<String>(
+                            key: ValueKey('bTz-${s.timeZone}'),
                             value: TimeZoneUtils.supportedTimeZones.any((tz) => tz.id == s.timeZone)
                                 ? s.timeZone
                                 : TimeZoneUtils.defaultTimeZone,
@@ -690,51 +907,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       _settingRow(
-                        title: 'Base Currency Symbol',
-                        description: 'Currency symbol displayed on POS checkout, invoices, thermal receipts, and financial reports (e.g. \$, KSh, ₹, £, AED)',
-                        control: SizedBox(
-                          width: 340,
-                          child: TextFormField(
-                            initialValue: s.baseCurrencySymbol,
-                            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                            onChanged: (v) {
-                              s.baseCurrencySymbol = v.trim();
-                              CurrencyService.updateFromSettings(s);
-                            },
-                          ),
-                        ),
-                      ),
-                      _settingRow(
-                        title: 'Base Currency Code',
-                        description: 'ISO Currency Code for multi-currency compatibility (e.g. USD, KES, INR, GBP, EUR, AED)',
-                        control: SizedBox(
-                          width: 340,
-                          child: TextFormField(
-                            initialValue: s.baseCurrencyCode,
-                            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                            onChanged: (v) {
-                              s.baseCurrencyCode = v.trim().toUpperCase();
-                              CurrencyService.updateFromSettings(s);
-                            },
-                          ),
-                        ),
-                      ),
-                      _settingRow(
                         title: 'Currency Symbol Position',
                         description: 'Position of currency symbol relative to transaction amounts',
                         control: SizedBox(
                           width: 340,
                           child: DropdownButtonFormField<String>(
                             value: (s.currencySymbolPosition == 'AFTER') ? 'AFTER' : 'BEFORE',
+                            isExpanded: true,
                             decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                             items: const [
                               DropdownMenuItem(
                                 value: 'BEFORE',
-                                child: Text('Before Amount (Prefix, e.g. \$100.00 / KSh 100.00)'),
+                                child: Text('Prefix (e.g. \$100.00 / ₹100.00)'),
                               ),
                               DropdownMenuItem(
                                 value: 'AFTER',
-                                child: Text('After Amount (Suffix, e.g. 100.00\$ / 100.00 KSh)'),
+                                child: Text('Suffix (e.g. 100.00\$ / 100.00 KSh)'),
                               ),
                             ],
                             onChanged: (val) {
@@ -753,6 +941,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           width: 340,
                           child: DropdownButtonFormField<int>(
                             value: s.currencyDecimals,
+                            isExpanded: true,
                             decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                             items: const [
                               DropdownMenuItem(value: 2, child: Text('2 Decimals (e.g. 100.00)')),
@@ -1729,11 +1918,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     [
                       _settingRow(
                         title: 'Billing Country',
-                        description: 'Preselect default tax configurations and regional specifications (e.g. USA, Kenya, UK, UAE, India)',
+                        description: 'Country name used for invoice compliance and tax headers (e.g. USA, India, Kenya, UK, UAE)',
                         control: SizedBox(
                           width: 280,
                           child: TextFormField(
+                            key: ValueKey('gInvoicingCountry-${s.billingCountry}'),
                             initialValue: s.billingCountry,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. United States, India, UK',
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
                             onChanged: (value) {
                               final country = value.trim().isEmpty ? 'India' : value.trim();
                               s.billingCountry = country;
@@ -1744,21 +1938,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       _settingRow(
                         title: 'Default Billing Tax Mode',
-                        description: 'Configure active regional tax compliance formats',
+                        description: 'Default tax group applied automatically to new sales & invoices (Only created Tax Groups are listed)',
                         control: SizedBox(
                           width: 280,
                           child: Builder(builder: (_) {
                             final items = <DropdownMenuItem<String>>[];
                             final knownValues = <String>{};
 
-                            for (final mode in _taxModes) {
-                              knownValues.add(mode);
-                              items.add(DropdownMenuItem(
-                                value: mode,
-                                child: Text(mode.replaceAll('_', ' ')),
-                              ));
-                            }
+                            // Always include NONE / Tax Exempt
+                            knownValues.add('NONE');
+                            items.add(const DropdownMenuItem(
+                              value: 'NONE',
+                              child: Text('None / Tax Exempt (0%)'),
+                            ));
 
+                            // Only show created Tax Groups
                             for (final g in _loadedTaxGroups) {
                               final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
                                   ? g.groupCode!.trim().toUpperCase()
@@ -1767,31 +1961,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 knownValues.add(key);
                                 items.add(DropdownMenuItem(
                                   value: key,
-                                  child: Text('Tax Group: ${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)', overflow: TextOverflow.ellipsis),
+                                  child: Text('${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)', overflow: TextOverflow.ellipsis),
                                 ));
                               }
                             }
 
-                            String selectedVal = s.billingTaxMode;
+                            String selectedVal = s.billingTaxMode.trim();
                             if (!knownValues.contains(selectedVal)) {
                               final match = _loadedTaxGroups.where((g) =>
-                                  g.groupName.trim().toLowerCase() == selectedVal.trim().toLowerCase() ||
-                                  g.id == selectedVal).firstOrNull;
+                                  g.groupName.trim().toLowerCase() == selectedVal.toLowerCase() ||
+                                  g.id == selectedVal ||
+                                  (g.groupCode != null && g.groupCode!.trim().toUpperCase() == selectedVal.toUpperCase())).firstOrNull;
                               if (match != null) {
                                 selectedVal = match.groupCode != null && match.groupCode!.trim().isNotEmpty
                                     ? match.groupCode!.trim().toUpperCase()
                                     : match.groupName;
+                              } else if (items.length > 1) {
+                                selectedVal = items[1].value!;
                               } else {
-                                items.add(DropdownMenuItem(
-                                  value: selectedVal,
-                                  child: Text(selectedVal.replaceAll('_', ' ')),
-                                ));
+                                selectedVal = 'NONE';
                               }
                             }
 
                             return DropdownButtonFormField<String>(
                               value: selectedVal,
                               isExpanded: true,
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
                               items: items,
                               onChanged: (value) {
                                 if (value != null) {
@@ -2956,6 +3153,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       final items = <DropdownMenuItem<String>>[];
                       final knownValues = <String>{};
 
+                      // Add NONE / Exempt option
+                      knownValues.add('NONE');
+                      items.add(const DropdownMenuItem(
+                        value: 'NONE',
+                        child: Text('None / Tax Exempt (0%)'),
+                      ));
+
+                      // Strictly show only created Tax Groups!
                       for (final g in _loadedTaxGroups) {
                         final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
                             ? g.groupCode!.trim().toUpperCase()
@@ -2966,21 +3171,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             DropdownMenuItem(
                               value: key,
                               child: Text(
-                                'Tax Group: ${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)',
+                                '${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)',
                                 overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          );
-                        }
-                      }
-
-                      for (final type in _taxTypes) {
-                        if (!knownValues.contains(type)) {
-                          knownValues.add(type);
-                          items.add(
-                            DropdownMenuItem(
-                              value: type,
-                              child: Text(type.replaceAll('_', ' ')),
                             ),
                           );
                         }
@@ -2990,21 +3183,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (!knownValues.contains(selectedVal)) {
                         final match = _loadedTaxGroups.where((g) =>
                             g.groupName.trim().toLowerCase() == selectedVal.toLowerCase() ||
-                            g.id == selectedVal).firstOrNull;
+                            g.id == selectedVal ||
+                            (g.groupCode != null && g.groupCode!.trim().toUpperCase() == selectedVal.toUpperCase())).firstOrNull;
                         if (match != null) {
                           selectedVal = match.groupCode != null && match.groupCode!.trim().isNotEmpty
                               ? match.groupCode!.trim().toUpperCase()
                               : match.groupName;
-                        } else if (selectedVal.isNotEmpty) {
-                          knownValues.add(selectedVal);
-                          items.add(
-                            DropdownMenuItem(
-                              value: selectedVal,
-                              child: Text(selectedVal.replaceAll('_', ' ')),
-                            ),
-                          );
                         } else {
-                          selectedVal = knownValues.isNotEmpty ? knownValues.first : 'GST';
+                          selectedVal = 'NONE';
                         }
                       }
 
@@ -3017,6 +3203,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onChanged: charge.taxable
                             ? (value) {
                                 if (value != null) {
+                                  if (value == 'NONE') {
+                                    onChanged(charge.copyWith(
+                                      taxType: 'NONE',
+                                      taxGroupId: null,
+                                      taxGroup: null,
+                                      taxPercent: 0.0,
+                                    ));
+                                    return;
+                                  }
                                   final matchGroup = _loadedTaxGroups.where((g) {
                                     final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
                                         ? g.groupCode!.trim().toUpperCase()

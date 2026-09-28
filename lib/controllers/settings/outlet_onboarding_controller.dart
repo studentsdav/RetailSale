@@ -29,6 +29,8 @@ class OutletOnboardingController extends ChangeNotifier {
   String businessModule = 'ALL';
 
   bool propertyConfigured = false;
+  bool settingsConfigured = false;
+  bool taxGroupConfigured = false;
   bool sequenceConfigured = false;
   bool locationConfigured = false;
   bool itemMasterConfigured = false;
@@ -53,6 +55,24 @@ class OutletOnboardingController extends ChangeNotifier {
         isConfigured: propertyConfigured,
         allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
         actionText: 'Configure Property',
+      ),
+      OnboardingStepStatus(
+        key: 'SETTINGS',
+        title: 'Regional, Country & Currency Settings',
+        subtitle: 'Set billing country, base currency symbol, ISO code, timezone, and billing rules',
+        icon: Icons.public_rounded,
+        isConfigured: settingsConfigured,
+        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
+        actionText: 'Setup Currency',
+      ),
+      OnboardingStepStatus(
+        key: 'TAX_GROUP',
+        title: 'Tax Groups & Multi-Tax Structure',
+        subtitle: 'Create regional tax groups (State Tax, City Tax, GST, VAT) for items and billing',
+        icon: Icons.account_balance_wallet_outlined,
+        isConfigured: taxGroupConfigured,
+        allowedModules: const ['RETAIL', 'RESTAURANT', 'HOTEL', 'INVENTORY', 'ALL'],
+        actionText: 'Manage Taxes',
       ),
       OnboardingStepStatus(
         key: 'SEQUENCE',
@@ -135,6 +155,8 @@ class OutletOnboardingController extends ChangeNotifier {
         ApiClient.get(ApiEndpoints.suppliers).catchError((_) => null),
         ApiClient.get('/api/restaurant/tables').catchError((_) => null),
         ApiClient.get(ApiEndpoints.users).catchError((_) => null),
+        ApiClient.get(ApiEndpoints.settings).catchError((_) => null),
+        ApiClient.get(ApiEndpoints.taxGroups).catchError((_) => null),
       ]);
 
       // 1. Determine Business Module (Inventory Only / Retail / Restaurant / Hotel)
@@ -170,7 +192,27 @@ class OutletOnboardingController extends ChangeNotifier {
         propertyConfigured = false;
       }
 
-      // 3. Document Sequence Status
+      // 3. Settings Status (Country, Currency & Timezone)
+      final settingsRes = results[7];
+      if (settingsRes != null && settingsRes['success'] == true && settingsRes['data'] != null) {
+        final data = settingsRes['data'];
+        final String sym = (data['base_currency_symbol'] ?? data['baseCurrencySymbol'] ?? '').toString().trim();
+        final String country = (data['billing_country'] ?? data['billingCountry'] ?? '').toString().trim();
+        settingsConfigured = sym.isNotEmpty && country.isNotEmpty;
+      } else {
+        settingsConfigured = false;
+      }
+
+      // 4. Tax Groups Status
+      final taxGroupsRes = results[8];
+      if (taxGroupsRes != null && taxGroupsRes['success'] == true && taxGroupsRes['data'] is List) {
+        final list = taxGroupsRes['data'] as List;
+        taxGroupConfigured = list.isNotEmpty;
+      } else {
+        taxGroupConfigured = false;
+      }
+
+      // 5. Document Sequence Status
       final seqRes = results[1];
       if (seqRes != null && seqRes['success'] == true && seqRes['data'] is List) {
         final list = seqRes['data'] as List;
@@ -179,7 +221,7 @@ class OutletOnboardingController extends ChangeNotifier {
         sequenceConfigured = false;
       }
 
-      // 4. Location Setup Status
+      // 6. Location Setup Status
       final locRes = results[2];
       if (locRes != null && locRes['success'] == true && locRes['data'] is List) {
         final list = locRes['data'] as List;
@@ -188,7 +230,7 @@ class OutletOnboardingController extends ChangeNotifier {
         locationConfigured = false;
       }
 
-      // 5. Item Master Status
+      // 7. Item Master Status
       final itemRes = results[3];
       if (itemRes != null && itemRes['success'] == true && itemRes['data'] is List) {
         final list = itemRes['data'] as List;
@@ -197,7 +239,7 @@ class OutletOnboardingController extends ChangeNotifier {
         itemMasterConfigured = false;
       }
 
-      // 6. Supplier Status
+      // 8. Supplier Status
       final supRes = results[4];
       if (supRes != null && supRes['success'] == true && supRes['data'] is List) {
         final list = supRes['data'] as List;
@@ -206,7 +248,7 @@ class OutletOnboardingController extends ChangeNotifier {
         supplierConfigured = false;
       }
 
-      // 7. Restaurant Setup Status
+      // 9. Restaurant Setup Status
       final restRes = results[5];
       if (restRes != null && restRes['success'] == true && restRes['data'] is List) {
         final list = restRes['data'] as List;
@@ -215,7 +257,7 @@ class OutletOnboardingController extends ChangeNotifier {
         restaurantConfigured = false;
       }
 
-      // 8. Users Status
+      // 10. Users Status
       final usersRes = results[6];
       if (usersRes != null && usersRes['success'] == true && usersRes['data'] is List) {
         final list = usersRes['data'] as List;

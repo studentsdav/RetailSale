@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../core/printing/pos_invoice_printer.dart';
+import '../../core/currency/currency_service.dart';
 
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/inventory/request_controller.dart';
@@ -1046,7 +1047,7 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
                     _cell(r.name),
                     _cell(r.unit, alignment: pw.Alignment.center),
                     _cell(r.qty.toString(), alignment: pw.Alignment.centerRight),
-                    _cell(r.rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(r.rate), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -1066,7 +1067,7 @@ class _StockRequestScreenState extends State<StockRequestScreen> {
                 color: PdfColors.grey50,
               ),
               child: pw.Text(
-                "Total Amount : ${totalAmount.toStringAsFixed(2)}",
+                "Total Amount : ${CurrencyService.format(totalAmount)}",
                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.blueGrey900),
               ),
             ),

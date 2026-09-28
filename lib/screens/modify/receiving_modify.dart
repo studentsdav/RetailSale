@@ -323,9 +323,9 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                     _cell('${r['item_name'] ?? ''}${r['brand'] != null && r['brand'].toString().isNotEmpty ? ' (${r['brand']})' : ''}'),
                     _cell(r['unit'] ?? "", alignment: pw.Alignment.center),
                     _cell(qty.toString(), alignment: pw.Alignment.centerRight),
-                    _cell(rate.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(rate), alignment: pw.Alignment.centerRight),
                     _cell(tax.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
-                    _cell(amount.toStringAsFixed(2), alignment: pw.Alignment.centerRight),
+                    _cell(CurrencyService.format(amount), alignment: pw.Alignment.centerRight),
                   ],
                 );
               })
@@ -420,7 +420,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
         pw.Text(label,
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        pw.Text(value.toStringAsFixed(2),
+        pw.Text(CurrencyService.format(value),
             style: pw.TextStyle(
                 fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],
