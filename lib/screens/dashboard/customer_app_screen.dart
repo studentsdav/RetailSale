@@ -23,6 +23,7 @@ import '../../models/inventory/sale_order_model.dart';
 import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../models/inventory/tax_breakdown_model.dart';
+import '../../models/common/property_info_model.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../controllers/settings/notification_services.dart';
 import '../../utils/order_status_display.dart';
@@ -30,9 +31,21 @@ import 'package:provider/provider.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/currency/currency_service.dart';
 import '../../core/utils/country_tax_helper.dart';
+import '../../core/settings/local_preferences.dart';
 
 class CustomerAppScreen extends StatefulWidget {
-  const CustomerAppScreen({super.key});
+  final String? initialOutletId;
+  final String? initialVendorName;
+  final bool isB2BMode;
+  final PropertyInfo? buyerPropertyInfo;
+
+  const CustomerAppScreen({
+    super.key,
+    this.initialOutletId,
+    this.initialVendorName,
+    this.isB2BMode = false,
+    this.buyerPropertyInfo,
+  });
 
   @override
   State<CustomerAppScreen> createState() => _CustomerAppScreenState();
@@ -170,25 +183,71 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     super.dispose();
   }
 
-  double _getItemPrice(Map<String, dynamic> item) {
-    final b2bRate = double.tryParse(item['b2b_rate']?.toString() ?? '') ?? 0.0;
-    final specialPrice = double.tryParse(item['special_price']?.toString() ?? '');
-    final originalPrice = double.tryParse(item['original_price']?.toString() ?? '');
+  Map<String, dynamic> _marketplaceItemOverrides = {};
+  bool get _isB2BWholesaleMode => widget.isB2BMode || _gstin.trim().isNotEmpty;
 
-    double rawPrice = 0.0;
-    if (_gstin.isNotEmpty && b2bRate > 0) {
-      rawPrice = b2bRate;
-    } else if (specialPrice != null && originalPrice != null && specialPrice < originalPrice) {
-      rawPrice = specialPrice;
-    } else {
-      rawPrice = double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
-          double.tryParse(item['rate']?.toString() ?? '') ??
-          0.0;
+  Map<String, dynamic>? _getOverrideForItem(Map<String, dynamic> item) {
+    final itemIdStr = item['id']?.toString() ?? '';
+    final itemCodeStr = item['item_code']?.toString() ?? '';
+
+    if (itemIdStr.isNotEmpty && _marketplaceItemOverrides.containsKey(itemIdStr)) {
+      final val = _marketplaceItemOverrides[itemIdStr];
+      if (val is Map) return Map<String, dynamic>.from(val);
     }
+    if (itemCodeStr.isNotEmpty && _marketplaceItemOverrides.containsKey(itemCodeStr)) {
+      final val = _marketplaceItemOverrides[itemCodeStr];
+      if (val is Map) return Map<String, dynamic>.from(val);
+    }
+    return null;
+  }
 
-    // When is_tax_inclusive=true the stored retail_sale_price already contains GST.
-    // Do NOT add tax again — just return the raw price as the display price.
-    return rawPrice;
+  double _getItemPrice(Map<String, dynamic> item) {
+    final override = _getOverrideForItem(item);
+
+    if (_isB2BWholesaleMode) {
+      // 1. Highest priority: Wholesale rate configured in Marketplace & Vendor Settings
+      if (override != null && override['b2b_price'] != null) {
+        final double op = double.tryParse(override['b2b_price'].toString()) ?? 0.0;
+        if (op > 0) return op;
+      }
+      // 2. Direct item b2b fields
+      final double itemB2B = double.tryParse(item['b2b_price']?.toString() ?? '') ??
+          double.tryParse(item['b2b_rate']?.toString() ?? '') ??
+          0.0;
+      if (itemB2B > 0) return itemB2B;
+
+      // 3. Item's base purchase cost / rate
+      final double itemRate = double.tryParse(item['rate']?.toString() ?? '') ?? 0.0;
+      if (itemRate > 0) return itemRate;
+
+      // 4. Default wholesale fallback: 15% discount on retail price
+      final double b2cBase = double.tryParse(override?['b2c_price']?.toString() ?? '') ??
+          double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
+          double.tryParse(item['mrp']?.toString() ?? '') ??
+          0.0;
+      if (b2cBase > 0) return b2cBase * 0.85;
+      return 0.0;
+    } else {
+      // B2C Customer Retail Mode
+      // 1. Retail price configured in Marketplace & Vendor Settings
+      if (override != null && override['b2c_price'] != null) {
+        final double op = double.tryParse(override['b2c_price'].toString()) ?? 0.0;
+        if (op > 0) return op;
+      }
+      // 2. Special Promo Price if valid
+      final specialPrice = double.tryParse(item['special_price']?.toString() ?? '');
+      final originalPrice = double.tryParse(item['original_price']?.toString() ?? '');
+      if (specialPrice != null && originalPrice != null && specialPrice < originalPrice && specialPrice > 0) {
+        return specialPrice;
+      }
+      // 3. Retail Sale Price / Rate / MRP
+      final double rsp = double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
+          double.tryParse(item['b2c_price']?.toString() ?? '') ??
+          double.tryParse(item['rate']?.toString() ?? '') ??
+          double.tryParse(item['mrp']?.toString() ?? '') ??
+          0.0;
+      return rsp;
+    }
   }
 
   void _scrollListener() {
@@ -205,6 +264,12 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     _currentUser = await UserProfiledata.load();
 
     try {
+      _marketplaceItemOverrides = await LocalPreferences.getMarketplaceItemOverrides();
+    } catch (e) {
+      debugPrint('Error loading marketplace rate overrides: $e');
+    }
+
+    try {
       final prefs = await SharedPreferences.getInstance();
       final customerDataStr = prefs.getString('delivery_logged_in_customer');
       if (customerDataStr != null) {
@@ -216,6 +281,66 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       }
     } catch (e) {
       debugPrint('Error loading saved customer: $e');
+    }
+
+    PropertyInfo? onboardedProperty = widget.buyerPropertyInfo;
+    if (onboardedProperty == null) {
+      try {
+        final propCtrl = PropertyInfoController();
+        await propCtrl.load();
+        if (propCtrl.data != null &&
+            (propCtrl.data!.propertyName.isNotEmpty ||
+                propCtrl.data!.legalName.isNotEmpty ||
+                propCtrl.data!.mobile.isNotEmpty)) {
+          onboardedProperty = propCtrl.data;
+        }
+      } catch (_) {}
+    }
+
+    if (onboardedProperty != null) {
+      final b = onboardedProperty;
+      final buyerName = b.propertyName.isNotEmpty ? b.propertyName : b.legalName;
+      final buyerPhone = b.mobile.isNotEmpty ? b.mobile : '9999999999';
+      final buyerAddress = '${b.address}, ${b.city}'.trim();
+      final buyerGstin = b.gstNo;
+
+      _custNameCtrl.text = buyerName;
+      _custPhoneCtrl.text = buyerPhone;
+      _custAddressCtrl.text = buyerAddress;
+      if (buyerGstin.isNotEmpty) {
+        _custGstinCtrl.text = buyerGstin;
+        _gstin = buyerGstin;
+      }
+
+      // Auto-create / set onboarded profile so no login screen is ever shown
+      _loggedInCustomer = {
+        'name': buyerName,
+        'phone': buyerPhone,
+        'address': buyerAddress,
+        'gstin': buyerGstin,
+        'email': b.email,
+        'is_b2b_buyer': true,
+      };
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('delivery_logged_in_customer', jsonEncode(_loggedInCustomer));
+      } catch (_) {}
+    } else if (_currentUser != null && _loggedInCustomer == null) {
+      final buyerName = _currentUser!.name.isNotEmpty ? _currentUser!.name : _currentUser!.username;
+      final buyerPhone = _custPhoneCtrl.text.isNotEmpty ? _custPhoneCtrl.text : '9999999999';
+      _custNameCtrl.text = buyerName;
+      _custPhoneCtrl.text = buyerPhone;
+      _loggedInCustomer = {
+        'name': buyerName,
+        'phone': buyerPhone,
+        'address': '',
+        'is_b2b_buyer': true,
+      };
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('delivery_logged_in_customer', jsonEncode(_loggedInCustomer));
+      } catch (_) {}
     }
 
     setState(() => _isLoading = false);
@@ -470,7 +595,12 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
 
   Future<void> _fetchCatalog() async {
     try {
-      final outletCode = _loggedInCustomer?['outlet_id'] ??
+      try {
+        _marketplaceItemOverrides = await LocalPreferences.getMarketplaceItemOverrides();
+      } catch (_) {}
+
+      final outletCode = widget.initialOutletId ??
+          _loggedInCustomer?['outlet_id'] ??
           _currentUser?.outletCode ??
           (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
       if (outletCode.isEmpty) return;
@@ -494,7 +624,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   }
 
   Future<void> _loadNextPage() async {
-    final outletCode = _loggedInCustomer?['outlet_id'] ??
+    final outletCode = widget.initialOutletId ??
+        _loggedInCustomer?['outlet_id'] ??
         _currentUser?.outletCode ??
         (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '');
     if (outletCode.isEmpty) return;
@@ -3685,10 +3816,40 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Retailer Shop Products',
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  Text(
+                    widget.isB2BMode ? 'Vendor Wholesale Catalog' : 'Retailer Shop Products',
+                    style: theme.textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  if (_isB2BWholesaleMode) ...[
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.verified, size: 14, color: Colors.blue.shade800),
+                          const SizedBox(width: 4),
+                          Text(
+                            'B2B Wholesale Rates Active',
+                            style: TextStyle(
+                              color: Colors.blue.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
               IconButton(
                 icon: const Icon(Icons.refresh),
@@ -3810,7 +3971,6 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                           itemCount: _groupedCatalogItems.length,
                           itemBuilder: (context, index) {
                             final item = _groupedCatalogItems[index];
-                            final price = _getItemPrice(item);
 
                             final int itemId = item['id'];
                             final int? templateId = item['product_template_id'];
@@ -3847,36 +4007,37 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                 ? (item['item_name'] ?? 'Product').toString().split(' - ').first 
                                 : (item['item_name'] ?? 'Product');
 
-                             final double? specialPrice = item['special_price'] != null
-                                  ? double.tryParse(item['special_price'].toString())
-                                  : null;
-                              final double? originalPrice = item['original_price'] != null
-                                  ? double.tryParse(item['original_price'].toString())
-                                  : null;
-                              final double? itemMrp = item['mrp'] != null
-                                  ? double.tryParse(item['mrp'].toString())
-                                  : null;
+                            final override = _getOverrideForItem(item);
+                            final double displaySelling = _getItemPrice(item);
 
-                              final double rawSellingPrice = specialPrice ?? 
-                                  (double.tryParse(item['retail_sale_price']?.toString() ?? '') ?? 
-                                   double.tryParse(item['rate']?.toString() ?? '') ?? 0.0);
+                            final double retailReferencePrice = double.tryParse(override?['b2c_price']?.toString() ?? '') ??
+                                double.tryParse(item['retail_sale_price']?.toString() ?? '') ??
+                                double.tryParse(item['original_price']?.toString() ?? '') ??
+                                double.tryParse(item['mrp']?.toString() ?? '') ??
+                                0.0;
 
-                              final bool isInclusive = item['is_tax_inclusive'] == true ||
-                                  item['is_tax_inclusive'] == 1 ||
-                                  item['is_tax_inclusive'].toString() == 'true';
-                              final double taxPercent = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+                            final double? originalPrice = item['original_price'] != null
+                                ? double.tryParse(item['original_price'].toString())
+                                : null;
+                            final double? itemMrp = item['mrp'] != null
+                                ? double.tryParse(item['mrp'].toString())
+                                : null;
 
-                              // When is_tax_inclusive=true the stored retail_sale_price already includes GST.
-                              // Do NOT add tax again — display the price as stored.
-                              final double displaySelling = rawSellingPrice;
-
+                            double? displayOriginal;
+                            if (_isB2BWholesaleMode) {
+                              if (retailReferencePrice > displaySelling) {
+                                displayOriginal = retailReferencePrice;
+                              }
+                            } else {
                               final double? baseOriginalPrice = originalPrice ?? 
                                   ((itemMrp != null && itemMrp > displaySelling) ? itemMrp : null);
+                              if (baseOriginalPrice != null && baseOriginalPrice > displaySelling) {
+                                displayOriginal = baseOriginalPrice;
+                              }
+                            }
 
-                              double? displayOriginal = baseOriginalPrice;
-
-                              final bool hasPromo = displayOriginal != null && displayOriginal > displaySelling;
-                              final int percentOff = hasPromo ? (((displayOriginal! - displaySelling) / displayOriginal!) * 100).round() : 0;
+                            final bool hasPromo = displayOriginal != null && displayOriginal > displaySelling;
+                            final int percentOff = hasPromo ? (((displayOriginal - displaySelling) / displayOriginal) * 100).round() : 0;
 
                               return Card(
                                 elevation: 0,
@@ -7075,8 +7236,12 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     final bool isMobile = MediaQuery.of(context).size.width < 768;
 
     // ── LOGIN GATE ──────────────────────────────────────────────
-    // Block all sections until customer has logged in / registered
-    if (_loggedInCustomer == null && !_isLoading) {
+    // Only block external anonymous public retail consumers; POS & B2B buyers bypass seamlessly
+    final bool isB2bOrPosUser = widget.isB2BMode ||
+        widget.buyerPropertyInfo != null ||
+        _currentUser != null;
+
+    if (_loggedInCustomer == null && !isB2bOrPosUser && !_isLoading) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Customer Shopping App'),
@@ -7477,8 +7642,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
             }
 
             final price = matchingItem != null
-                ? (double.tryParse(matchingItem['retail_sale_price']?.toString() ?? '') ?? 
-                   double.tryParse(matchingItem['rate']?.toString() ?? '') ?? 0.0)
+                ? _getItemPrice(matchingItem)
                 : 0.0;
             
             final bool isStockable = matchingItem?['stockable'] == true;

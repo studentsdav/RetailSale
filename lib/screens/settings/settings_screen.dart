@@ -30,6 +30,7 @@ import 'commission_rules_screen.dart';
 import 'happy_hour_config_screen.dart';
 import 'bill_value_promo_config_screen.dart';
 import 'property_info_screen.dart';
+import 'vendor_marketplace_settings_screen.dart';
 import 'outlet_detail_modification_screen.dart';
 import 'outlet_hierarchy_linking_screen.dart';
 import 'receipt_template_designer_screen.dart';
@@ -691,7 +692,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final showSaleAndPayment = _currentActiveModule != 'INVENTORY';
 
     return DefaultTabController(
-      length: showSaleAndPayment ? 9 : 8,
+      length: showSaleAndPayment ? 10 : 9,
       child: Scaffold(
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? const Color(0xFF121214)
@@ -709,6 +710,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Tab(text: 'Keyboard Shortcuts'),
               if (showSaleAndPayment) const Tab(text: 'Sale & Payment'),
               const Tab(text: 'Promos & Configs'),
+              const Tab(text: 'Marketplace & Vendor'),
               const Tab(text: 'Business Module'),
             ],
           ),
@@ -2219,7 +2221,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // 8. PROMOS & CONFIGS TAB
                 _buildPromosAndConfigsTab(buildTabBody, constraints),
 
-                // 9. BUSINESS MODULE TAB
+                // 9. MARKETPLACE & VENDOR TAB
+                const VendorMarketplaceSettingsView(),
+
+                // 10. BUSINESS MODULE TAB
                 _buildBusinessModuleTab(buildTabBody, constraints),
               ],
             );

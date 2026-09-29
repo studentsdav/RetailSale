@@ -33,6 +33,12 @@ class Item {
   final double mrp;
   final int? productTemplateId;
   final List<AttributeValue> attributeValues;
+  final bool isListedOnMarketplace;
+  final bool isB2BEnabled;
+  final bool isB2CEnabled;
+  final double b2bPrice;
+  final double b2cPrice;
+  final int minOrderQtyB2B;
 
   Item({
     required this.id,
@@ -66,6 +72,12 @@ class Item {
     this.mrp = 0.0,
     this.productTemplateId,
     this.attributeValues = const [],
+    this.isListedOnMarketplace = false,
+    this.isB2BEnabled = false,
+    this.isB2CEnabled = true,
+    this.b2bPrice = 0.0,
+    this.b2cPrice = 0.0,
+    this.minOrderQtyB2B = 1,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -111,6 +123,12 @@ class Item {
       mrp: double.tryParse(json['mrp']?.toString() ?? '') ?? 0.0,
       productTemplateId: json['product_template_id'],
       attributeValues: vals,
+      isListedOnMarketplace: json['is_listed_on_marketplace'] == true || json['is_listed_on_marketplace'] == 1,
+      isB2BEnabled: json['is_b2b_enabled'] == true || json['is_b2b_enabled'] == 1,
+      isB2CEnabled: json['is_b2c_enabled'] ?? true,
+      b2bPrice: double.tryParse(json['b2b_price']?.toString() ?? json['b2b_rate']?.toString() ?? '') ?? (double.tryParse(json['retail_sale_price']?.toString() ?? '') ?? 0.0),
+      b2cPrice: double.tryParse(json['b2c_price']?.toString() ?? json['b2c_rate']?.toString() ?? '') ?? (double.tryParse(json['retail_sale_price']?.toString() ?? '') ?? 0.0),
+      minOrderQtyB2B: int.tryParse(json['min_order_qty_b2b']?.toString() ?? '') ?? 1,
     );
   }
 
@@ -146,6 +164,12 @@ class Item {
       'mrp': mrp,
       'product_template_id': productTemplateId,
       'attribute_values': attributeValues.map((e) => e.toJson()).toList(),
+      'is_listed_on_marketplace': isListedOnMarketplace,
+      'is_b2b_enabled': isB2BEnabled,
+      'is_b2c_enabled': isB2CEnabled,
+      'b2b_price': b2bPrice,
+      'b2c_price': b2cPrice,
+      'min_order_qty_b2b': minOrderQtyB2B,
     };
   }
 }

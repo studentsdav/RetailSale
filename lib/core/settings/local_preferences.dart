@@ -489,4 +489,46 @@ class LocalPreferences {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_billingTaxModeKey, value);
   }
+
+  static const _marketplaceVendorConfigKey = 'marketplace_vendor_config';
+  static const _marketplaceItemOverridesKey = 'marketplace_item_rates_overrides';
+
+  static Future<Map<String, dynamic>> getMarketplaceVendorConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_marketplaceVendorConfigKey);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(raw));
+      } catch (_) {}
+    }
+    return {
+      'is_vendor_enabled': true,
+      'min_order_value': 1000.0,
+      'delivery_sla': 'Same Day Dispatch (Order before 2 PM)',
+      'is_b2b_enabled': true,
+      'is_b2c_enabled': true,
+      'list_all_items': true,
+    };
+  }
+
+  static Future<void> setMarketplaceVendorConfig(Map<String, dynamic> config) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_marketplaceVendorConfigKey, jsonEncode(config));
+  }
+
+  static Future<Map<String, dynamic>> getMarketplaceItemOverrides() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_marketplaceItemOverridesKey);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(raw));
+      } catch (_) {}
+    }
+    return {};
+  }
+
+  static Future<void> setMarketplaceItemOverrides(Map<String, dynamic> overrides) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_marketplaceItemOverridesKey, jsonEncode(overrides));
+  }
 }

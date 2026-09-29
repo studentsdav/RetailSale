@@ -44,6 +44,7 @@ import '../auth/user_management_screen.dart';
 import '../inventory/damage_item_screen.dart';
 import '../inventory/stock_issue_screen.dart';
 import '../inventory/item_master_screen.dart';
+import '../inventory/b2b_marketplace_screen.dart';
 import '../inventory/purchase_order_screen.dart';
 import '../inventory/goods_receiving_screen.dart';
 import '../inventory/stock_request_screen.dart';
@@ -2929,6 +2930,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
       {
         'category': 'Operations',
+        'icon': Icons.storefront_rounded,
+        'label': 'B2B Wholesale Marketplace',
+        'permission': 'PURCHASE_ORDER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const B2BMarketplaceScreen())),
+      },
+      {
+        'category': 'Operations',
         'icon': Icons.shopping_cart_checkout,
         'label': 'Vendor Purchase Order (PO)',
         'permission': 'PURCHASE_ORDER',
@@ -3713,6 +3721,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'permission': 'RETAIL_SALES',
         'keywords': ['customer data', 'customer phone', 'customer list', 'customer name', 'customer profile', 'loyalty points', 'customer database'],
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SaleScreen())),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.storefront_rounded,
+        'label': 'B2B Wholesale Marketplace',
+        'subLabel': 'Browse verified vendors, order commodities at wholesale rates & auto-generate PO',
+        'permission': 'PURCHASE_ORDER',
+        'keywords': ['marketplace', 'b2b marketplace', 'vendor supply', 'wholesale', 'buy wholesale', 'distributor marketplace', 'b2b orders', 'auto po'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const B2BMarketplaceScreen())),
       },
       {
         'category': 'Operations',
