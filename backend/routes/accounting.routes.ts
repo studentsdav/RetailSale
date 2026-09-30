@@ -1,0 +1,49 @@
+import express from 'express';
+const router = express.Router();
+const auth = require('../middlewares/auth.middleware');
+const license = require('../middlewares/license.middleware');
+
+const bankCtrl = require('../controllers/finance/bankAccount.controller');
+const voucherCtrl = require('../controllers/finance/accountingVoucher.controller');
+const reportsCtrl = require('../controllers/finance/financialReports.controller');
+const loanCtrl = require('../controllers/finance/loanEmi.controller');
+const coaCtrl = require('../controllers/finance/chartOfAccounts.controller');
+
+router.use(auth, license('REPORTS'));
+
+// Chart of Accounts (COA) Direct Master Endpoints
+router.get('/coa', coaCtrl.getAccounts);
+router.post('/coa', coaCtrl.createAccount);
+router.put('/coa/:id', coaCtrl.updateAccount);
+router.delete('/coa/:id', coaCtrl.deleteAccount);
+router.post('/coa/:id/toggle', coaCtrl.toggleActiveAccount);
+router.post('/coa/seed', coaCtrl.seedDefaultAccounts);
+
+// Bank Accounts Master Endpoints
+router.get('/banks', bankCtrl.getBankAccounts);
+router.post('/banks', bankCtrl.createBankAccount);
+router.put('/banks/:id', bankCtrl.updateBankAccount);
+router.post('/banks/:id/set-primary', bankCtrl.setPrimaryBankAccount);
+router.post('/banks/:id/toggle-active', bankCtrl.toggleBankAccountActive);
+
+// Accounting Vouchers Endpoints
+router.get('/vouchers', voucherCtrl.getVouchers);
+router.get('/vouchers/:id', voucherCtrl.getVoucherById);
+router.post('/vouchers', voucherCtrl.createVoucher);
+
+// Loan, Asset & EMI Endpoints
+router.get('/loans-assets', loanCtrl.getLoansAndAssets);
+router.post('/loans', loanCtrl.createLoan);
+router.delete('/loans/:id', loanCtrl.deleteLoan);
+router.post('/assets', loanCtrl.createCapitalAsset);
+router.delete('/assets/:id', loanCtrl.deleteCapitalAsset);
+router.post('/loans/pay-emi', loanCtrl.payLoanEmi);
+
+// Financial Statements Endpoints
+router.get('/reports/trial-balance', reportsCtrl.getTrialBalance);
+router.get('/reports/profit-loss', reportsCtrl.getProfitAndLoss);
+router.get('/reports/balance-sheet', reportsCtrl.getBalanceSheet);
+router.get('/reports/brs', reportsCtrl.getBankReconciliation);
+
+module.exports = router;
+export default router;

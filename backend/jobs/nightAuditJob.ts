@@ -1,0 +1,101 @@
+import cron from 'node-cron';
+const nightAuditService = require('../services/nightAudit.service');
+const { getOutletTimeZone, toOutletDateYmd } = require('../utils/timezoneHelper');
+
+export async function checkStartupCatchup(propertyDb: any): Promise<void> {
+  try {
+    console.log('🌙 Checking for missed Night Audits (system offline at 02:00 AM)...');
+    const outlets = await propertyDb.models.outlets
+      .findAll({
+        where: { is_active: true },
+        bypassOutletFilter: true
+      })
+      .catch(() => []);
+
+    for (const outlet of outlets) {
+      try {
+        const outletTz = await getOutletTimeZone(outlet.id, propertyDb);
+        const todayStr = toOutletDateYmd(new Date(), outletTz);
+        const currentDay = await nightAuditService.getCurrentBusinessDay(propertyDb, outlet.id, 1);
+        if (currentDay && currentDay.business_date < todayStr) {
+          const settings = await propertyDb.models.system_settings.findOne({
+            where: { outlet_id: outlet.id },
+            bypassOutletFilter: true
+          });
+
+          if (settings && settings.auto_night_audit_enabled) {
+            console.log(
+              `⚠️ Missed Night Audit detected for outlet #${outlet.id} (Date: ${currentDay.business_date} < Today: ${todayStr}). Running catch-up audit...`
+            );
+            const result = await nightAuditService.executeNightAudit(propertyDb, outlet.id, 1, {
+              runType: 'AUTO_CATCHUP',
+              forceRun: true,
+              notes: `System startup catch-up execution for missed 02:00 AM audit (${currentDay.business_date})`
+            });
+            console.log(`✅ Catch-up Night Audit completed for outlet #${outlet.id}:`, result.message);
+          } else {
+            console.log(
+              `⚠️ Overdue business date detected for outlet #${outlet.id} (${currentDay.business_date}). Manual audit recommended via UI.`
+            );
+          }
+        }
+      } catch (err: any) {
+        console.error(`❌ Startup catch-up error for outlet #${outlet.id}:`, err.message);
+      }
+    }
+  } catch (e: any) {
+    console.error('❌ Failed to execute startup catch-up check:', e.message);
+  }
+}
+
+export function startNightAuditJob(propertyDb: any): void {
+  // Schedule cron job to run every night at 02:00 AM
+  cron.schedule(
+    '0 2 * * *',
+    async () => {
+      console.log('🌙 [CRON] Triggering automated Night Audit worker...');
+
+      try {
+        const outlets = await propertyDb.models.outlets
+          .findAll({
+            where: { is_active: true },
+            bypassOutletFilter: true
+          })
+          .catch(() => []);
+
+        for (const outlet of outlets) {
+          try {
+            const settings = await propertyDb.models.system_settings.findOne({
+              where: { outlet_id: outlet.id },
+              bypassOutletFilter: true
+            });
+
+            if (settings && settings.auto_night_audit_enabled) {
+              console.log(`🌙 Running auto Night Audit for outlet #${outlet.id} (${outlet.name || 'Store'})...`);
+              const result = await nightAuditService.executeNightAudit(propertyDb, outlet.id, 1, {
+                runType: 'AUTO',
+                forceRun: true,
+                notes: 'Automated nightly cron execution'
+              });
+              console.log(`✅ Auto Night Audit completed for outlet #${outlet.id}:`, result.message);
+            }
+          } catch (outletErr: any) {
+            console.error(`❌ Error running auto Night Audit for outlet #${outlet.id}:`, outletErr.message);
+          }
+        }
+      } catch (err: any) {
+        console.error('❌ Failed to run Night Audit cron worker:', err.message);
+      }
+    },
+    {
+      timezone: process.env.TZ || 'Asia/Kolkata'
+    }
+  );
+
+  // Run startup catch-up check immediately
+  checkStartupCatchup(propertyDb);
+
+  console.log('🌙 Night Audit cron worker initialized (Scheduled for 02:00 AM daily + Startup Catch-up).');
+}
+
+module.exports = { startNightAuditJob, checkStartupCatchup };

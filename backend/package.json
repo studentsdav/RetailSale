@@ -5,7 +5,14 @@
   "bin": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "start:ts": "tsx server.ts",
+    "dev": "tsx watch server.ts",
+    "dev:ts": "tsx watch server.ts",
+    "dev:js": "node server.js",
+    "dev:nodemon": "nodemon --watch . --ext ts,js --exec tsx server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -31,5 +38,20 @@
     "sequelize": "^6.37.7",
     "unzipper": "^0.12.3",
     "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "@types/archiver": "^8.0.0",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/fs-extra": "^11.0.4",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.6.3",
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

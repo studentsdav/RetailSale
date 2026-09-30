@@ -1,0 +1,97 @@
+const { Op } = require('sequelize');
+const { resolveOutletScope } = require('../../utils/outletScopeHelper');
+
+exports.getDamageReport = async (req, res) => {
+    try {
+        const { from_date, to_date, item_id } = req.query;
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
+
+        if (!from_date || !to_date) {
+            return res.status(400).json({
+                success: false,
+                message: 'from_date and to_date required'
+            });
+        }
+
+        const whereHeader = {
+            ...scope.outletWhere,
+            damage_date: {
+                [Op.between]: [from_date, to_date]
+            }
+        };
+
+        // 🔒 Enforce user isolation if the user is not an ADMIN
+        if (req.user.role !== 'ADMIN') {
+            whereHeader.created_by = req.user.id;
+        } else if (req.query.created_by) {
+            whereHeader.created_by = req.query.created_by;
+        }
+
+        const whereItem = {};
+        if (item_id) {
+            whereItem.item_id = item_id;
+        }
+
+        const damages = await req.propertyDb.models.damage_headers.findAll({
+            where: whereHeader,
+            include: [
+                {
+                    model: req.propertyDb.models.damage_items,
+                    as: 'items',
+                    include: [
+                        {
+                            model: req.propertyDb.models.item_master,
+                            as: 'item',
+                            attributes: ['item_name', 'brand', 'unit']
+                        }
+                    ]
+                }
+            ],
+            order: [['damage_date', 'DESC']]
+        });
+
+        const data = damages.map((damage) => {
+            const items = (damage.items || []).map((i) => {
+                const itemData = i.toJSON ? i.toJSON() : i;
+                const itemMaster = i.item || i.item_master || {};
+                return {
+                    ...itemData,
+                    item_name: itemMaster.item_name || i.item_name || '',
+                    brand: itemMaster.brand || i.brand || '',
+                    unit: itemMaster.unit || i.unit || '',
+                    qty: Number(i.qty || 0),
+                    rate: Number(i.rate || 0),
+                    amount: Number(i.amount || (Number(i.qty || 0) * Number(i.rate || 0)))
+                };
+            });
+
+            return {
+                id: damage.id,
+                damage_no: damage.damage_no,
+                damage_date: damage.damage_date,
+                total_value: Number(damage.total_value || 0),
+                status: damage.status,
+                approval_status: damage.approval_status || 'PENDING',
+                approved_by: damage.approved_by,
+                approved_at: damage.approved_at,
+                rejected_by: damage.rejected_by,
+                rejected_at: damage.rejected_at,
+                rejection_reason: damage.rejection_reason,
+                items
+            };
+        });
+
+        res.json({
+            success: true,
+            data
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to generate damage report'
+        });
+    }
+};

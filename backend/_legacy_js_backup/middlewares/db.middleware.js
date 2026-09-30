@@ -1,0 +1,74 @@
+const propertyDb = require('../db/models');
+
+let selfHealed = false;
+
+module.exports = async (req, res, next) => {
+    try {
+        req.propertyDb = propertyDb;
+        
+        if (!selfHealed) {
+            selfHealed = true;
+            try {
+                // Ensure base tables exist on fresh database
+                await propertyDb.sync().catch(err => {
+                    if (!err.message.includes('foreign key constraint')) {
+                        console.warn('⚠️ Model sync notice:', err.message);
+                    }
+                });
+
+                // Dynamically ensure columns exist
+                await propertyDb.query(`
+                    ALTER TABLE outlets ADD COLUMN IF NOT EXISTS business_module VARCHAR(50) DEFAULT 'ALL';
+                    ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS salesman_id INTEGER NULL;
+                    ALTER TABLE hr_attendance_punches ADD COLUMN IF NOT EXISTS leave_type_id INTEGER NULL;
+                    ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS x_coordinate INTEGER NULL;
+                    ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS y_coordinate INTEGER NULL;
+                    ALTER TABLE item_master ADD COLUMN IF NOT EXISTS is_recipe_based BOOLEAN DEFAULT FALSE;
+                    ALTER TABLE item_master ADD COLUMN IF NOT EXISTS is_tax_inclusive BOOLEAN DEFAULT FALSE;
+                    ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS coupon_discount_amount DECIMAL(12, 2) NULL;
+                    ALTER TABLE sales_schemes ADD COLUMN IF NOT EXISTS free_item_id INTEGER NULL;
+                    ALTER TABLE sales_schemes ADD COLUMN IF NOT EXISTS days_of_week VARCHAR(255) NULL;
+                    ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS original_rate DECIMAL(12, 2) NULL;
+                    ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS scheme_discount_per_unit DECIMAL(12, 2) NULL;
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS time_zone VARCHAR(100) DEFAULT 'Asia/Kolkata';
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS enable_salesperson_tagging BOOLEAN DEFAULT FALSE;
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS bill_copies_count INTEGER DEFAULT 1;
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS enable_token_system BOOLEAN DEFAULT FALSE;
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS token_copies_count INTEGER DEFAULT 1;
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS device_printer_mappings JSONB DEFAULT '{}';
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS base_currency_code VARCHAR(20) DEFAULT 'KES';
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS base_currency_symbol VARCHAR(20) DEFAULT 'KSh';
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS currency_symbol_position VARCHAR(20) DEFAULT 'BEFORE';
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS currency_decimals INTEGER DEFAULT 2;
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS receipt_template_config JSONB DEFAULT '{}';
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS a4_template_config JSONB DEFAULT '{}';
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS kot_template_config JSONB DEFAULT '{}';
+                    ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS token_template_config JSONB DEFAULT '{}';
+                    ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS token_no VARCHAR(50) NULL;
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS provider_type VARCHAR(50) DEFAULT 'SMTP';
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS gmail_client_id TEXT NULL;
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS gmail_client_secret TEXT NULL;
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS gmail_refresh_token TEXT NULL;
+                    ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS resend_api_key TEXT NULL;
+                    ALTER TABLE outlets ADD COLUMN IF NOT EXISTS supervisor_pin VARCHAR(100) DEFAULT '1234';
+                    ALTER TABLE outlets ADD COLUMN IF NOT EXISTS supervisor_pin_type VARCHAR(50) DEFAULT 'STATIC';
+                `);
+                console.log('✅ Self-healed: Checked and added missing columns to tables');
+
+                const runMigrations = require('../utils/migrationRunner');
+                await runMigrations(propertyDb);
+                console.log('✅ Self-healed: Checked and ran database schema migrations');
+            } catch (healErr) {
+                console.warn('⚠️ Self-healing column check warning:', healErr.message);
+            }
+        }
+        
+        next();
+    } catch (err) {
+        console.error('DB Middleware Error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Database connection failed'
+        });
+    }
+};
