@@ -63,4 +63,5 @@ module.exports = (sequelize, DataTypes) => {
     return AccountingVoucher;
 };
 
-export {};
+
+export default module.exports;

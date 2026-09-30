@@ -1,4 +1,3 @@
-export {};
 const crypto = require('crypto');
 
 /**
@@ -165,3 +164,5 @@ module.exports = {
     verifyWebhook,
     receiveWebhook
 };
+
+export default module.exports;

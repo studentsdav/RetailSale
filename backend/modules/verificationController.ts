@@ -77,7 +77,8 @@ export const verifySetupOtp = async (req: any, res: any) => {
     }
 };
 
-export default {
+module.exports = {
     requestSetupOtp,
     verifySetupOtp
 };
+export default module.exports;

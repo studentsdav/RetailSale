@@ -1,2 +1,4 @@
 // Property DB connection configuration placeholder
-export {};
+
+module.exports = exports;
+export default exports;

@@ -45,4 +45,5 @@ module.exports = (sequelize, DataTypes) => {
     return CustomerAdvance;
 };
 
-export {};
+
+export default module.exports;

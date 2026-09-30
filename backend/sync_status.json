@@ -26,5 +26,33 @@
     "config_synced": false,
     "file_created": false,
     "backup_synced": true
+  },
+  "OUTLET202609302217": {
+    "folder_created": true,
+    "sheet_synced": false,
+    "config_synced": false,
+    "file_created": false,
+    "backup_synced": true
+  },
+  "OUTLET202609302221": {
+    "folder_created": true,
+    "sheet_synced": true,
+    "config_synced": false,
+    "file_created": false,
+    "backup_synced": true
+  },
+  "OUTLET202609302238": {
+    "folder_created": true,
+    "sheet_synced": true,
+    "config_synced": false,
+    "file_created": false,
+    "backup_synced": true
+  },
+  "OUTLET202609302244": {
+    "folder_created": true,
+    "sheet_synced": true,
+    "config_synced": false,
+    "file_created": false,
+    "backup_synced": true
   }
 }

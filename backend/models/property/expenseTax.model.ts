@@ -37,4 +37,5 @@ module.exports = (sequelize, DataTypes) => {
     return ExpenseTax;
 };
 
-export {};
+
+export default module.exports;

@@ -1,4 +1,3 @@
-export {};
 const workflowService = require('../services/workflow.service');
 
 function resolveOutletId(req) {
@@ -60,3 +59,7 @@ exports.triggerWorkflow = async (req, res) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

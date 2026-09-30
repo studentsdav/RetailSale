@@ -43,4 +43,5 @@ module.exports = (sequelize, DataTypes) => {
     return SaleSource;
 };
 
-export {};
+
+export default module.exports;

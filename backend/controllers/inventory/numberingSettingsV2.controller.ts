@@ -1,4 +1,3 @@
-export {};
 const audit = require('../../services/audit.service');
 const { Op } = require('sequelize');
 
@@ -330,3 +329,7 @@ exports.getNextNumber = async (req: any, res: any) => {
 exports.getEffectiveSetting = getEffectiveSetting;
 exports.extractNumericPart = extractNumericPart;
 exports.resolveNextNumber = resolveNextNumber;
+
+
+module.exports = exports;
+export default exports;

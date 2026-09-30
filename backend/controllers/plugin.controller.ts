@@ -1,4 +1,3 @@
-export {};
 const pluginService = require('../services/plugin_manager.service');
 
 function resolveOutletId(req) {
@@ -74,3 +73,7 @@ exports.togglePlugin = async (req, res) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

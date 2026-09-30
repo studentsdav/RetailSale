@@ -29,4 +29,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrAttendancePunch;
 };
 
-export {};
+
+export default module.exports;

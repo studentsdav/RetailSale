@@ -46,4 +46,5 @@ module.exports = (sequelize, DataTypes) => {
     return WhatsappCampaign;
 };
 
-export {};
+
+export default module.exports;

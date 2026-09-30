@@ -26,4 +26,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrCashierHandover;
 };
 
-export {};
+
+export default module.exports;

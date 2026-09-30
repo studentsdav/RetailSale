@@ -28,4 +28,5 @@ module.exports = (sequelize, DataTypes) => {
     return IssueHeaders;
 };
 
-export {};
+
+export default module.exports;

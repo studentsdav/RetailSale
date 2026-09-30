@@ -1,4 +1,3 @@
-export {};
 const { Op } = require('sequelize');
 const { toOutletDateYmd, getOutletDateBounds } = require('../../utils/timezoneHelper');
 const { resolveOutletScope } = require('../../utils/outletScopeHelper');
@@ -961,3 +960,7 @@ exports.getSalesReport = async (req: any, res: any) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

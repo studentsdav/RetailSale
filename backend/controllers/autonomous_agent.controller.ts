@@ -1,4 +1,3 @@
-export {};
 const agentService = require('../services/autonomous_agent.service');
 
 function resolveOutletId(req) {
@@ -74,3 +73,7 @@ exports.getAuditLogs = async (req, res) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

@@ -38,4 +38,5 @@ module.exports = (sequelize, DataTypes) => {
     return purchase_order;
 };
 
-export {};
+
+export default module.exports;

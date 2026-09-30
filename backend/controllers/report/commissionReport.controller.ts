@@ -1,4 +1,3 @@
-export {};
 const { Op } = require('sequelize');
 const { getOutletDateBounds } = require('../../utils/timezoneHelper');
 
@@ -125,3 +124,7 @@ exports.getCommissionReport = async (req: any, res: any) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

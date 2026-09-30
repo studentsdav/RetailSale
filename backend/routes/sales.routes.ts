@@ -77,14 +77,16 @@ router.delete('/vouchers/:code', ctrl.deleteVoucher);
 router.post('/validate-voucher', ctrl.validateVoucher);
 router.post('/schemes', ctrl.createScheme);
 router.put('/schemes/:id', ctrl.updateScheme);
+router.delete('/schemes/:id', ctrl.deleteScheme);
 router.put('/:id/payment-mode', ctrl.updateSalePaymentMode);
 router.put('/:id/settle', ctrl.settleRunningBill);
 router.put('/:id', ctrl.modifySale);
-router.delete('/schemes/:id', ctrl.deleteScheme);
 router.get('/refunds', ctrl.listRefunds);
+const { idempotencyMiddleware } = require('../middlewares/idempotency.middleware');
+
 router.post('/refunds/pay', ctrl.payRefund);
 router.post('/return', ctrl.returnSale);
-router.post('/', ctrl.createSale);
+router.post('/', idempotencyMiddleware(120), ctrl.createSale);
 router.get('/', ctrl.listSales);
 router.delete('/drafts/:id', ctrl.deleteDraft);
 router.get('/:id', ctrl.getSaleDetails);

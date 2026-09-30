@@ -1,4 +1,3 @@
-export {};
 const { Op } = require('sequelize');
 
 exports.listCampaigns = async (req, res) => {
@@ -502,3 +501,7 @@ exports.stopCampaign = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

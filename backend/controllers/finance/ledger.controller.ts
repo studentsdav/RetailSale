@@ -1,4 +1,3 @@
-export {};
 const { Op, Sequelize } = require('sequelize');
 const { createLedgerEntry } = require('../../services/cashLedger.service');
 const { isBankPayment, debitBankBalance } = require('../../services/bankAccount.service');
@@ -257,3 +256,6 @@ exports.getPaymentFlowReport = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+module.exports = exports;
+export default exports;

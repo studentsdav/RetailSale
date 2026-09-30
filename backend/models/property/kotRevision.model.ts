@@ -46,4 +46,5 @@ module.exports = (sequelize, DataTypes) => {
     return KotRevision;
 };
 
-export {};
+
+export default module.exports;

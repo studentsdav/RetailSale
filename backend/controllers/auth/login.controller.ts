@@ -1,5 +1,4 @@
 
-export {};
 const bcrypt = require("bcryptjs");
 const jwt = require('../../utils/jwt.util');
 const audit = require('../../services/audit.service');
@@ -60,12 +59,30 @@ exports.login = async (req, res, next) => {
             return res.status(401).json({ success: false, message: 'Invalid or inactive outlet code.' });
         }
 
-        const user = await db.models.users.findOne({
+        let user = await db.models.users.findOne({
             where: {
                 username: username,
                 outlet_id: currentOutlet.id
             }
         });
+ 
+        if (!user) {
+            if (username === 'admin') {
+                user = await db.models.users.findOne({
+                    where: {
+                        username: `admin_${currentOutlet.outlet_code}`,
+                        outlet_id: currentOutlet.id
+                    }
+                });
+            } else if (username === `admin_${currentOutlet.outlet_code}`) {
+                user = await db.models.users.findOne({
+                    where: {
+                        username: 'admin',
+                        outlet_id: currentOutlet.id
+                    }
+                });
+            }
+        }
 
         if (!user || !user.is_active) {
             return res.status(401).json({ success: false, message: 'Invalid user for this outlet.' });
@@ -510,3 +527,7 @@ exports.switchOutlet = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to complete direct outlet login: ' + error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

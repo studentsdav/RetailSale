@@ -1,4 +1,3 @@
-export {};
 
 exports.getNotifications = async (req: any, res: any) => {
     try {
@@ -107,3 +106,7 @@ exports.deleteNotification = async (req: any, res: any) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

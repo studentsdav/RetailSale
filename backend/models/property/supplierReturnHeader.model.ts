@@ -50,4 +50,5 @@ module.exports = (sequelize, DataTypes) => {
 
     return SupplierReturnHeader;
 };
-export {};
+
+export default module.exports;

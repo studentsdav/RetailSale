@@ -1,4 +1,3 @@
-export {};
 const audit = require('../../services/audit.service');
 
 const TRANSACTION_TABLES = [
@@ -515,3 +514,7 @@ exports.clearTransactionData = async (req, res) => {
         res.status(500).json({ success: false, message: err.message || 'Failed to clear transaction data' });
     }
 };
+
+
+module.exports = exports;
+export default exports;

@@ -45,4 +45,5 @@ module.exports = (sequelize, DataTypes) => {
     return VoucherLine;
 };
 
-export {};
+
+export default module.exports;

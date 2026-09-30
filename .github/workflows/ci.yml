@@ -1,0 +1,34 @@
+name: RetailSale Backend CI Pipeline
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master, dev ]
+
+jobs:
+  typecheck-and-lint:
+    name: TypeScript Verification & Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run TypeScript Typecheck (tsc --noEmit)
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Test Docker Container Build
+        run: docker build -t retailsale-backend:latest ./backend

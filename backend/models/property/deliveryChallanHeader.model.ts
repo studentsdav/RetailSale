@@ -58,4 +58,5 @@ module.exports = (sequelize, DataTypes) => {
     return DeliveryChallanHeader;
 };
 
-export {};
+
+export default module.exports;

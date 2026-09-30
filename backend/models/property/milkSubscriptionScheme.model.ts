@@ -44,4 +44,5 @@ module.exports = (sequelize, DataTypes) => {
     return model;
 };
 
-export {};
+
+export default module.exports;

@@ -114,4 +114,5 @@ module.exports = (sequelize, DataTypes) => {
     return KotHeader;
 };
 
-export {};
+
+export default module.exports;

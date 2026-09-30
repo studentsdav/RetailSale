@@ -90,4 +90,5 @@ module.exports = (sequelize, DataTypes) => {
     return RestaurantTable;
 };
 
-export {};
+
+export default module.exports;

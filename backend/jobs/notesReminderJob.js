@@ -173,12 +173,14 @@ async function processNotesReminders(db) {
 function startNotesReminderJob(db) {
     console.log('▶️ [JOBS] Starting Notes Reminder job...');
 
+    const { withDistributedLock } = require('../utils/distributedLock');
+
     // Run immediately on server boot
-    processNotesReminders(db);
+    withDistributedLock(db, 'notes_reminder_job', () => processNotesReminders(db));
 
     // Run every 15 minutes for load balancing
     cron.schedule('*/15 * * * *', async () => {
-        await processNotesReminders(db);
+        await withDistributedLock(db, 'notes_reminder_job', () => processNotesReminders(db));
     });
 }
 

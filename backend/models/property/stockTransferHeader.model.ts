@@ -64,4 +64,5 @@ module.exports = (sequelize, DataTypes) => {
     return StockTransferHeader;
 };
 
-export {};
+
+export default module.exports;

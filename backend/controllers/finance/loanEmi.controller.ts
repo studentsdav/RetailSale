@@ -1,4 +1,3 @@
-export {};
 const { createLedgerEntry } = require('../../services/cashLedger.service');
 const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
@@ -261,3 +260,7 @@ exports.payLoanEmi = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

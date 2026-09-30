@@ -55,4 +55,5 @@ module.exports = (sequelize, DataTypes) => {
     return BusinessDay;
 };
 
-export {};
+
+export default module.exports;

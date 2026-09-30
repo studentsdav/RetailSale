@@ -99,4 +99,5 @@ module.exports = (sequelize, DataTypes) => {
     return salesHeader;
 };
 
-export {};
+
+export default module.exports;

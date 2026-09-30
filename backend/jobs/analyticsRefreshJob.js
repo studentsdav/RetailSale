@@ -1,18 +1,21 @@
 const cron = require('node-cron');
 const { refreshAllAnalytics } = require('../services/analytics.service');
+const { withDistributedLock } = require('../utils/distributedLock');
 
 function startAnalyticsRefreshJob(db) {
-    if (!db) return;
+  if (!db) return;
 
-    console.log('Initializing analytics refresh cron: 30 2 * * *');
-    cron.schedule('30 2 * * *', async () => {
-        try {
-            await refreshAllAnalytics(db);
-            console.log('[ANALYTICS] Nightly refresh complete');
-        } catch (error) {
-            console.error(`[ANALYTICS] Nightly refresh failed: ${error.message}`);
-        }
+  console.log('Initializing analytics refresh cron: 30 2 * * *');
+  cron.schedule('30 2 * * *', async () => {
+    await withDistributedLock(db, 'analytics_refresh_job', async () => {
+      try {
+        await refreshAllAnalytics(db);
+        console.log('[ANALYTICS] Nightly refresh complete');
+      } catch (error) {
+        console.error(`[ANALYTICS] Nightly refresh failed: ${error.message}`);
+      }
     });
+  });
 }
 
 module.exports = { startAnalyticsRefreshJob };

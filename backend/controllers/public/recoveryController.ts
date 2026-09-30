@@ -1,4 +1,3 @@
-export {};
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs");
@@ -563,5 +562,6 @@ module.exports = {
     triggerAutoReinstall,
     verifyAndRecoverConfig
 };
+export default module.exports;
 
 

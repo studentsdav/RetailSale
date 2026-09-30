@@ -1,4 +1,3 @@
-export {};
 const { Op } = require('sequelize');
 const audit = require('../../services/audit.service');
 const { createLedgerEntry, dateKey } = require('../../services/cashLedger.service');
@@ -413,3 +412,7 @@ exports.getBillPayments = async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

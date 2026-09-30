@@ -1,4 +1,3 @@
-export {};
 const { sendToGoogleScript } = require("../../modules/driveService");
 const sysConfig = require('../../utils/configManager');
 
@@ -58,3 +57,4 @@ async function verifyLicenseOnline(outletCode) {
 }
 
 module.exports = { verifyLicenseOnline };
+export default { verifyLicenseOnline };

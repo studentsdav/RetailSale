@@ -109,4 +109,5 @@ module.exports = (sequelize, DataTypes) => {
     return SalesCreditNote;
 };
 
-export {};
+
+export default module.exports;

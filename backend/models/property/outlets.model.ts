@@ -1,2 +1,3 @@
 
-export {};
+
+export default module.exports;

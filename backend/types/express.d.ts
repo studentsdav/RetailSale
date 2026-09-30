@@ -23,4 +23,7 @@ declare global {
   }
 }
 
-export {};
+
+
+module.exports = exports;
+export default exports;

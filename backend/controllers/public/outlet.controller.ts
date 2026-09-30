@@ -1,4 +1,3 @@
-export {};
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const loadConfig = require("../../utils/decryptConfig");
@@ -81,6 +80,27 @@ exports.checkOutlet = async (req, res) => {
     }
 };
 
+function generateEnterprisePassword() {
+    const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lowers = 'abcdefghijkmnpqrstuvwxyz';
+    const numbers = '23456789';
+    const symbols = '!@#$%&*';
+    const all = uppers + lowers + numbers + symbols;
+
+    const bytes = crypto.randomBytes(12);
+    let pass = '';
+    pass += uppers[bytes[0] % uppers.length];
+    pass += lowers[bytes[1] % lowers.length];
+    pass += numbers[bytes[2] % numbers.length];
+    pass += symbols[bytes[3] % symbols.length];
+
+    for (let i = 4; i < 12; i++) {
+        pass += all[bytes[i] % all.length];
+    }
+
+    return pass.split('').sort(() => 0.5 - Math.random()).join('');
+}
+
 exports.createOutlet = async (req, res) => {
     try {
         const {
@@ -146,14 +166,13 @@ exports.createOutlet = async (req, res) => {
         let adminCredentials = null;
 
         if (userCount === 0) {
-            const uniqueUsername = `admin_${outlet_code}`;
-            const randomHex = crypto.randomBytes(4).toString('hex');
-            const defaultPassword = `${randomHex}@A1`;
-            const hash = await bcrypt.hash(defaultPassword, 10);
+            const adminUsername = req.body.admin_username || `admin_${outlet_code}`;
+            const adminPassword = req.body.admin_password || generateEnterprisePassword();
+            const hash = await bcrypt.hash(adminPassword.toString(), 10);
 
             await req.propertyDb.models.users.create({
                 outlet_id: outlet.id,
-                username: uniqueUsername,
+                username: adminUsername,
                 full_name: 'System Admin',
                 role: 'ADMIN',
                 password_hash: hash,
@@ -163,8 +182,8 @@ exports.createOutlet = async (req, res) => {
             });
 
             adminCredentials = {
-                username: uniqueUsername,
-                password: defaultPassword
+                username: adminUsername,
+                password: adminPassword.toString()
             };
         }
 
@@ -174,10 +193,14 @@ exports.createOutlet = async (req, res) => {
         res.json({
             success: true,
             message: "Outlet configured successfully. Ensure admin credentials are saved securely.",
+            admin_username: adminCredentials ? adminCredentials.username : `admin_${outlet_code}`,
+            admin_password: adminCredentials ? adminCredentials.password : '',
             data: {
                 outlet_id: outlet.id,
                 outlet_code: outlet.outlet_code,
-                admin_credentials: adminCredentials
+                admin_credentials: adminCredentials,
+                admin_username: adminCredentials ? adminCredentials.username : `admin_${outlet_code}`,
+                admin_password: adminCredentials ? adminCredentials.password : ''
             }
         });
 
@@ -315,3 +338,6 @@ exports.startupSystem = async (outletCode) => {
         return false;
     }
 };
+
+module.exports = exports;
+export default exports;

@@ -1,5 +1,4 @@
 'use strict';
-export {};
 const { Op } = require('sequelize');
 const moment = require('moment');
 
@@ -3032,3 +3031,7 @@ exports.togglePayrollDetailHold = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+
+module.exports = exports;
+export default exports;

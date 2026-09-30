@@ -42,4 +42,5 @@ module.exports = (sequelize, DataTypes) => {
     return ItemModifier;
 };
 
-export {};
+
+export default module.exports;

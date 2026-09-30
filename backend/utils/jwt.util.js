@@ -1,21 +1,46 @@
-const jwt = require("jsonwebtoken");
-const loadConfig = require("../utils/decryptConfig");
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const loadConfig = require('./decryptConfig');
 
-try {
+/**
+ * Enterprise JWT Token Manager
+ * Resolves JWT_SECRET from environment variables (Cloud Secrets / .env / config.enc)
+ * Generates secure dynamic keys in production if missing.
+ */
 
-    const config = loadConfig();
+function resolveJwtSecret() {
+    if (process.env.JWT_SECRET && process.env.JWT_SECRET.trim().length >= 16) {
+        return process.env.JWT_SECRET.trim();
+    }
 
-    exports.sign = (payload) => {
-        return jwt.sign(payload, config.JWT_SECRET, {
-            expiresIn: "1d"
-        });
-    };
+    try {
+        const config = loadConfig();
+        if (config && config.JWT_SECRET && config.JWT_SECRET.trim().length >= 16) {
+            return config.JWT_SECRET.trim();
+        }
+    } catch (error) {
+        // config.enc not found on standalone local server
+    }
 
-    exports.verify = (token) => {
-        return jwt.verify(token, config.JWT_SECRET);
-    };
+    if (process.env.NODE_ENV === 'production') {
+        console.warn('⚠️ [SECURITY WARNING] No secure JWT_SECRET environment variable provided. Using ephemeral runtime key.');
+        return crypto.randomBytes(32).toString('hex');
+    }
 
-} catch (error) {
-
-    console.log("⚠️ [JWT] config.enc missing. Running with safe dummy keys for UI recovery.");
+    return 'retailsale_secure_dev_jwt_secret_key_2026';
 }
+
+const jwtSecret = resolveJwtSecret();
+
+const sign = (payload, options = { expiresIn: '1d' }) => {
+    return jwt.sign(payload, jwtSecret, options);
+};
+
+const verify = (token) => {
+    return jwt.verify(token, jwtSecret);
+};
+
+module.exports = {
+    sign,
+    verify
+};

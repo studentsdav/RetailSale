@@ -26,4 +26,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrLeaveApplication;
 };
 
-export {};
+
+export default module.exports;

@@ -1,4 +1,3 @@
-export {};
 const audit = require('../../services/audit.service');
 const { upsertClient } = require("../../modules/driveService");
 const loadConfig = require("../../utils/decryptConfig");
@@ -167,3 +166,6 @@ exports.savePropertyInfo = async (req, res) => {
         console.log(err.message)
     }
 };
+
+module.exports = exports;
+export default exports;

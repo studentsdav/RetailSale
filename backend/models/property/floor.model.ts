@@ -25,4 +25,5 @@ module.exports = (sequelize, DataTypes) => {
     return Floor;
 };
 
-export {};
+
+export default module.exports;

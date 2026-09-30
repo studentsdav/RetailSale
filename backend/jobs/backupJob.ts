@@ -104,18 +104,22 @@ export async function startBackupJob(client: any, config: any): Promise<void> {
         return;
     }
 
+    const { withDistributedLock } = require('../utils/distributedLock');
+    const propertyDb = require('../db/models');
+
     activeBackupJobs.add(outletCode);
     logMessage("Backup scheduler initialized. Running cron: 0 * * * *");
     cron.schedule("0 * * * *", async () => {
-        try {
-            if (!fs.existsSync(BACKUP_DIR)) {
-                fs.mkdirSync(BACKUP_DIR, { recursive: true });
-                logMessage(`Created backup directory at: ${BACKUP_DIR}`);
-            }
+        await withDistributedLock(propertyDb, `backup_job_${outletCode}`, async () => {
+            try {
+                if (!fs.existsSync(BACKUP_DIR)) {
+                    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+                    logMessage(`Created backup directory at: ${BACKUP_DIR}`);
+                }
 
-            logMessage("Hourly backup job started.");
+                logMessage("Hourly backup job started.");
 
-            const tempFile = await retry(() => processBackup(config.db_database));
+                const tempFile = await retry(() => processBackup(config.db_database));
 
             if (!tempFile || !fs.existsSync(tempFile)) {
                 throw new Error(`Backup file missing at temporary path: ${tempFile}`);
@@ -166,6 +170,7 @@ export async function startBackupJob(client: any, config: any): Promise<void> {
         } finally {
             activeBackupJobs.delete(outletCode);
         }
+        });
     });
 }
 

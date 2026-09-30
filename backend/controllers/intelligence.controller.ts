@@ -1,4 +1,3 @@
-export {};
 const recommendationService = require('../services/recommendation.service');
 
 function resolveOutletId(req) {
@@ -58,3 +57,7 @@ exports.getCustomerInsights = async (req, res) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

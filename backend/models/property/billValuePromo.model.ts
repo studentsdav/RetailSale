@@ -58,4 +58,5 @@ module.exports = (sequelize, DataTypes) => {
     return BillValuePromo;
 };
 
-export {};
+
+export default module.exports;

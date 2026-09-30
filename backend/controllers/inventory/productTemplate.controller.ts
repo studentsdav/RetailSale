@@ -1,4 +1,3 @@
-export {};
 const audit = require('../../services/audit.service');
 
 exports.getProductTemplates = async (req: any, res: any) => {
@@ -160,3 +159,7 @@ exports.createProductTemplate = async (req: any, res: any) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

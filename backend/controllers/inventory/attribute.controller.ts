@@ -1,4 +1,3 @@
-export {};
 const { Op } = require('sequelize');
 
 exports.getAttributes = async (req: any, res: any) => {
@@ -87,3 +86,7 @@ exports.createAttributeValue = async (req: any, res: any) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

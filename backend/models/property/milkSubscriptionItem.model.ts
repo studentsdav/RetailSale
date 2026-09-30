@@ -40,4 +40,5 @@ module.exports = (sequelize, DataTypes) => {
     return MilkSubscriptionItem;
 };
 
-export {};
+
+export default module.exports;

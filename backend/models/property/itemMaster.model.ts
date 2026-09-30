@@ -253,4 +253,5 @@ module.exports = (sequelize, DataTypes) => {
     return ItemMaster;
 };
 
-export {};
+
+export default module.exports;

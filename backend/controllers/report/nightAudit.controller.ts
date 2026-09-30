@@ -1,4 +1,3 @@
-export {};
 const nightAuditService = require('../../services/nightAudit.service');
 
 exports.getStatus = async (req: any, res: any) => {
@@ -89,3 +88,7 @@ exports.clearKots = async (req: any, res: any) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

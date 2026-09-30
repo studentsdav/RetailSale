@@ -1,4 +1,3 @@
-export {};
 const { toOutletDateYmd } = require('../../utils/timezoneHelper');
 const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
@@ -152,3 +151,7 @@ exports.getClosingReport = async (req: any, res: any) => {
     });
   }
 };
+
+
+module.exports = exports;
+export default exports;

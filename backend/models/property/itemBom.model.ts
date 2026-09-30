@@ -42,4 +42,5 @@ module.exports = (sequelize, DataTypes) => {
     return ItemBom;
 };
 
-export {};
+
+export default module.exports;

@@ -43,4 +43,5 @@ module.exports = (sequelize, DataTypes) => {
     return AttributeValue;
 };
 
-export {};
+
+export default module.exports;

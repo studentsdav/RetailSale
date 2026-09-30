@@ -65,4 +65,5 @@ module.exports = (sequelize: any, DataTypes: any) => {
     return SupplierMaster;
 };
 
-export {};
+
+export default module.exports;

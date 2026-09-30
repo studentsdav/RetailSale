@@ -106,68 +106,73 @@ async function startBackupJob(client, config) {
 
 
 
+    const { withDistributedLock } = require('../utils/distributedLock');
+    const propertyDb = require('../db/models');
+
     activeBackupJobs.add(outletCode);
     logMessage("Backup scheduler initialized. Running cron: 0 * * * *");
     cron.schedule("0 * * * *", async () => {
-        try {
-            if (!fs.existsSync(BACKUP_DIR)) {
-                fs.mkdirSync(BACKUP_DIR, { recursive: true });
-                logMessage(`Created backup directory at: ${BACKUP_DIR}`);
-            }
-
-            logMessage("Hourly backup job started.");
-
-            const tempFile = await retry(() => processBackup(config.db_database));
-
-            if (!tempFile || !fs.existsSync(tempFile)) {
-                throw new Error(`Backup file missing at temporary path: ${tempFile}`);
-            }
-
-            const stats = fs.statSync(tempFile);
-            const fileSizeMB = (stats.size / 1024 / 1024).toFixed(2);
-            logMessage(`Backup created. File size: ${fileSizeMB} MB`);
-
-            if (stats.size === 0) throw new Error("Backup file size is 0 bytes.");
-            if (fileSizeMB > 35) logMessage("Warning: Backup file size exceeds 35 MB threshold.", true);
-
-            logMessage("Verifying backup integrity before local retention and upload.");
+        await withDistributedLock(propertyDb, `backup_job_${outletCode}`, async () => {
             try {
-                await verifyLocalBackup(tempFile);
-            } catch (verifyErr) {
-                if (fs.existsSync(tempFile)) {
-                    try { fs.unlinkSync(tempFile); } catch (e) { }
+                if (!fs.existsSync(BACKUP_DIR)) {
+                    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+                    logMessage(`Created backup directory at: ${BACKUP_DIR}`);
                 }
-                throw new Error(`Backup integrity verification failed: ${verifyErr.message}`);
+
+                logMessage("Hourly backup job started.");
+
+                const tempFile = await retry(() => processBackup(config.db_database));
+
+                if (!tempFile || !fs.existsSync(tempFile)) {
+                    throw new Error(`Backup file missing at temporary path: ${tempFile}`);
+                }
+
+                const stats = fs.statSync(tempFile);
+                const fileSizeMB = (stats.size / 1024 / 1024).toFixed(2);
+                logMessage(`Backup created. File size: ${fileSizeMB} MB`);
+
+                if (stats.size === 0) throw new Error("Backup file size is 0 bytes.");
+                if (fileSizeMB > 35) logMessage("Warning: Backup file size exceeds 35 MB threshold.", true);
+
+                logMessage("Verifying backup integrity before local retention and upload.");
+                try {
+                    await verifyLocalBackup(tempFile);
+                } catch (verifyErr) {
+                    if (fs.existsSync(tempFile)) {
+                        try { fs.unlinkSync(tempFile); } catch (e) { }
+                    }
+                    throw new Error(`Backup integrity verification failed: ${verifyErr.message}`);
+                }
+
+                const fileName = `backup_${getReadableTimestamp()}.enc`;
+                const finalFilePath = path.join(BACKUP_DIR, fileName);
+
+                fs.renameSync(tempFile, finalFilePath);
+                const currentOutlet = outletCode;
+
+                const status = getBackupStatus(currentOutlet);
+
+                if (status.isCloudEnabled) {
+                    logMessage(`Cloud Sync enabled for outlet [${currentOutlet}]. Initiating upload.`);
+                    await uploadBackupViaScript(finalFilePath, fileName, client.folderId);
+                    await cleanOldBackups(client.folderId);
+
+                    updateSyncSuccess(currentOutlet);
+                    logMessage("Cloud upload sequence completed successfully.");
+                } else {
+                    logMessage(`Cloud Sync disabled for outlet [${currentOutlet}]. Bypassing upload.`);
+                }
+
+                cleanOldLocalBackups(BACKUP_DIR, 500);
+
+                logMessage("Hourly backup job execution finished.");
+
+            } catch (err) {
+                logMessage(`Backup job failed: ${err.message}`, true);
+            } finally {
+                activeBackupJobs.delete(outletCode);
             }
-
-            const fileName = `backup_${getReadableTimestamp()}.enc`;
-            const finalFilePath = path.join(BACKUP_DIR, fileName);
-
-            fs.renameSync(tempFile, finalFilePath);
-            const currentOutlet = outletCode;
-
-            const status = getBackupStatus(currentOutlet);
-
-            if (status.isCloudEnabled) {
-                logMessage(`Cloud Sync enabled for outlet [${currentOutlet}]. Initiating upload.`);
-                await uploadBackupViaScript(finalFilePath, fileName, client.folderId);
-                await cleanOldBackups(client.folderId);
-
-                updateSyncSuccess(currentOutlet);
-                logMessage("Cloud upload sequence completed successfully.");
-            } else {
-                logMessage(`Cloud Sync disabled for outlet [${currentOutlet}]. Bypassing upload.`);
-            }
-
-            cleanOldLocalBackups(BACKUP_DIR, 500);
-
-            logMessage("Hourly backup job execution finished.");
-
-        } catch (err) {
-            logMessage(`Backup job failed: ${err.message}`, true);
-        } finally {
-            activeBackupJobs.delete(outletCode);
-        }
+        });
     });
 }
 

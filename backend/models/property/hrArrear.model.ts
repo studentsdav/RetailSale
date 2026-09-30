@@ -22,4 +22,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrArrear;
 };
 
-export {};
+
+export default module.exports;

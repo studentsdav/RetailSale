@@ -1,4 +1,3 @@
-export {};
 const { getBackupStatus, toggleCloudBackup, updateSyncSuccess } = require("../../utils/backupTracker");
 const { processBackup } = require("../../modules/backupService");
 const { restoreFromEncBuffer } = require("../../modules/restore");
@@ -256,3 +255,6 @@ exports.uploadBackupOnDemand = async (req, res) => {
         });
     }
 };
+
+module.exports = exports;
+export default exports;

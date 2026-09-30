@@ -1,4 +1,3 @@
-export {};
 const { Op } = require('sequelize');
 
 exports.create = async (req: any, res: any) => {
@@ -65,3 +64,7 @@ exports.delete = async (req: any, res: any) => {
 
     res.json({ success: true });
 };
+
+
+module.exports = exports;
+export default exports;

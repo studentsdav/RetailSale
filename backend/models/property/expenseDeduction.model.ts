@@ -37,4 +37,5 @@ module.exports = (sequelize, DataTypes) => {
     return ExpenseDeduction;
 };
 
-export {};
+
+export default module.exports;

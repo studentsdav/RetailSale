@@ -1,4 +1,3 @@
-export {};
 const { encrypt, decrypt } = require('../../utils/crypto.util');
 const { testConnection, syncTemplatesFromMeta, submitTemplateToMeta, deleteTemplateFromMeta } = require('../../services/whatsapp.service');
 
@@ -585,3 +584,5 @@ module.exports = {
     getBillingDashboard,
     deleteTemplate
 };
+
+export default module.exports;

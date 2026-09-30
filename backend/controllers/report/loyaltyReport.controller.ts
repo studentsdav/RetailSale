@@ -1,4 +1,3 @@
-export {};
 const { QueryTypes } = require('sequelize');
 
 function normalizeSearch(value: any) {
@@ -138,3 +137,7 @@ ORDER BY transaction_date ASC, id ASC
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

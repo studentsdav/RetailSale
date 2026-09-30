@@ -25,4 +25,5 @@ module.exports = (sequelize, DataTypes) => {
     return VariantAttributeValue;
 };
 
-export {};
+
+export default module.exports;

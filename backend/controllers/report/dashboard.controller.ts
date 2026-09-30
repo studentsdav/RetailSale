@@ -1,4 +1,3 @@
-export {};
 const dashboardService = require('../../services/dashboard.service');
 
 exports.inventoryDashboard = async (req: any, res: any) => {
@@ -21,3 +20,7 @@ exports.inventoryDashboard = async (req: any, res: any) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

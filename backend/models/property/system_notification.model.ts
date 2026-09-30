@@ -58,4 +58,5 @@ module.exports = (sequelize, DataTypes) => {
 
     return SystemNotification;
 };
-export {};
+
+export default module.exports;

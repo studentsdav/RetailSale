@@ -42,4 +42,5 @@ module.exports = (sequelize, DataTypes) => {
     return ExpenseCategory;
 };
 
-export {};
+
+export default module.exports;

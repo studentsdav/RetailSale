@@ -36,4 +36,5 @@ module.exports = (sequelize, DataTypes) => {
     return KitchenStation;
 };
 
-export {};
+
+export default module.exports;

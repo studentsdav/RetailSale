@@ -59,4 +59,5 @@ module.exports = (sequelize, DataTypes) => {
     return BusinessLoan;
 };
 
-export {};
+
+export default module.exports;

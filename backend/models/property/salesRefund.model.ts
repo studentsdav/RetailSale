@@ -62,4 +62,5 @@ module.exports = (sequelize, DataTypes) => {
     return SalesRefund;
 };
 
-export {};
+
+export default module.exports;

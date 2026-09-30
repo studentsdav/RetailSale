@@ -71,4 +71,5 @@ module.exports = (sequelize, DataTypes) => {
     return EmailConfig;
 };
 
-export {};
+
+export default module.exports;

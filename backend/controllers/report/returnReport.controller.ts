@@ -1,4 +1,3 @@
-export {};
 const { Op, Sequelize } = require('sequelize');
 const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
@@ -96,3 +95,7 @@ exports.getReturnReport = async (req: any, res: any) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

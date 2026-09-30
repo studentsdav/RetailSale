@@ -46,36 +46,39 @@ function startNightAuditJob(propertyDb) {
     // Schedule cron job to run every night at 02:00 AM
     cron.schedule('0 2 * * *', async () => {
         console.log('🌙 [CRON] Triggering automated Night Audit worker...');
+        const { withDistributedLock } = require('../utils/distributedLock');
 
-        try {
-            const outlets = await propertyDb.models.outlets.findAll({
-                where: { is_active: true },
-                bypassOutletFilter: true
-            }).catch(() => []);
+        await withDistributedLock(propertyDb, 'night_audit_job', async () => {
+            try {
+                const outlets = await propertyDb.models.outlets.findAll({
+                    where: { is_active: true },
+                    bypassOutletFilter: true
+                }).catch(() => []);
 
-            for (const outlet of outlets) {
-                try {
-                    const settings = await propertyDb.models.system_settings.findOne({
-                        where: { outlet_id: outlet.id },
-                        bypassOutletFilter: true
-                    });
-
-                    if (settings && settings.auto_night_audit_enabled) {
-                        console.log(`🌙 Running auto Night Audit for outlet #${outlet.id} (${outlet.name || 'Store'})...`);
-                        const result = await nightAuditService.executeNightAudit(propertyDb, outlet.id, 1, {
-                            runType: 'AUTO',
-                            forceRun: true,
-                            notes: 'Automated nightly cron execution'
+                for (const outlet of outlets) {
+                    try {
+                        const settings = await propertyDb.models.system_settings.findOne({
+                            where: { outlet_id: outlet.id },
+                            bypassOutletFilter: true
                         });
-                        console.log(`✅ Auto Night Audit completed for outlet #${outlet.id}:`, result.message);
+
+                        if (settings && settings.auto_night_audit_enabled) {
+                            console.log(`🌙 Running auto Night Audit for outlet #${outlet.id} (${outlet.name || 'Store'})...`);
+                            const result = await nightAuditService.executeNightAudit(propertyDb, outlet.id, 1, {
+                                runType: 'AUTO',
+                                forceRun: true,
+                                notes: 'Automated nightly cron execution'
+                            });
+                            console.log(`✅ Auto Night Audit completed for outlet #${outlet.id}:`, result.message);
+                        }
+                    } catch (outletErr) {
+                        console.error(`❌ Error running auto Night Audit for outlet #${outlet.id}:`, outletErr.message);
                     }
-                } catch (outletErr) {
-                    console.error(`❌ Error running auto Night Audit for outlet #${outlet.id}:`, outletErr.message);
                 }
+            } catch (err) {
+                console.error('❌ Failed to run Night Audit cron worker:', err.message);
             }
-        } catch (err) {
-            console.error('❌ Failed to run Night Audit cron worker:', err.message);
-        }
+        });
     }, {
         timezone: process.env.TZ || 'Asia/Kolkata'
     });

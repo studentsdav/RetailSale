@@ -1,4 +1,3 @@
-export {};
 const { Op, Sequelize } = require('sequelize');
 const { getNextNumber } = require('../../services/numbering.service');
 const { resolveOutletScope } = require('../../utils/outletScopeHelper');
@@ -2893,3 +2892,7 @@ exports.deleteRecurringExpense = async (req, res) => {
     }
 };
 
+
+
+module.exports = exports;
+export default exports;

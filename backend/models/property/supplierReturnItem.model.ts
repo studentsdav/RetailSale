@@ -33,4 +33,5 @@ module.exports = (sequelize, DataTypes) => {
 
     return SupplierReturnItem;
 };
-export {};
+
+export default module.exports;

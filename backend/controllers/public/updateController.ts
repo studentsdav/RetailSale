@@ -1,5 +1,3 @@
-
-export {};
 const { sendToGoogleScript } = require("../../modules/driveService");
 const sysConfig = require('../../utils/configManager');
 const path = require('path');
@@ -52,3 +50,4 @@ async function checkSystemUpdate(req, res) {
 }
 
 module.exports = { checkSystemUpdate };
+export default { checkSystemUpdate };

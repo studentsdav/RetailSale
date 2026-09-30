@@ -1,4 +1,3 @@
-export {};
 const audit = require('../../services/audit.service');
 
 function toWholeNumber(value: any, fallback = 1) {
@@ -129,3 +128,7 @@ exports.getNextNumber = async (req: any, res: any) => {
         }
     });
 };
+
+
+module.exports = exports;
+export default exports;

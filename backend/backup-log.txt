@@ -12965,3 +12965,595 @@ SyntaxError: Identifier 'dbItem' has already been declared
 2026-09-30T14:33:57.354Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-09-30T14:33:57.368Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-09-30T14:33:57.378Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:27.832Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:27.862Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:27.868Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:27.874Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:27.882Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:27.890Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:27.897Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:43.098Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:43.125Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:43.130Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:43.134Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:43.139Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:43.145Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:43.150Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:49.877Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:49.903Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:49.908Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:49.912Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:49.917Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:49.922Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:02:49.927Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:03:02.816Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:03:02.842Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:03:02.851Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:03:02.862Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:03:02.870Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:03:02.874Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:03:02.881Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:25.515Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:25.553Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:25.562Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:25.573Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:25.584Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:25.591Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:25.602Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:37.124Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:37.151Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:37.157Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:37.165Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:37.170Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:37.176Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:37.181Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:48.092Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:48.118Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:48.123Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:48.128Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:48.133Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:48.138Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:06:48.143Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:11.324Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:11.359Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:11.368Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:11.377Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:11.386Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:11.397Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:11.408Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:33.722Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:33.751Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:33.755Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:33.761Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:33.766Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:33.770Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:33.774Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:51.264Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:51.289Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:51.294Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:51.299Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:51.303Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:51.309Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:51.314Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:57.709Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:57.737Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:57.746Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:57.754Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:57.761Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:57.766Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:07:57.776Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:19.951Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:19.992Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:19.999Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:20.009Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:20.015Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:20.023Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:20.028Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:58.134Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:58.163Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:58.173Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:58.182Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:58.191Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:58.199Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:08:58.209Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:05.655Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:05.689Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:05.696Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:05.704Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:05.711Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:05.718Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:05.725Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:30.051Z [ERROR] [FATAL] Uncaught Exception: PORT is not defined
+ReferenceError: PORT is not defined
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\server.js:514:27)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1427:10)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:135:12)
+    at node:internal/main/run_main_module:28:49
+2026-09-30T15:09:55.542Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:55.571Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:55.575Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:55.581Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:55.588Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:55.594Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:09:55.600Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:21:42.165Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:21:42.195Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:21:42.202Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:21:42.208Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:21:42.213Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:21:42.218Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:21:42.225Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:00.256Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:00.282Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:00.287Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:00.293Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:00.298Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:00.305Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:00.309Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:08.601Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:08.631Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:08.637Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:08.644Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:08.651Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:08.659Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:08.668Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:22.721Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:22.754Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:22.761Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:22.771Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:22.783Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:22.791Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:22:22.796Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:13.557Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:13.584Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:13.590Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:13.596Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:13.602Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:13.610Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:13.617Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:18.292Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:18.320Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:18.326Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:18.331Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:18.338Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:18.344Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:18.348Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:34.905Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:34.936Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:34.943Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:34.948Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:34.953Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:34.959Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:34.964Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:53.756Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:53.794Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:53.806Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:53.818Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:53.830Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:53.842Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:23:53.848Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:25:44.075Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:25:44.101Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:25:44.106Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:25:44.112Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:25:44.116Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:25:44.120Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:25:44.125Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:24.881Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:24.909Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:24.917Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:24.931Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:24.941Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:24.949Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:24.958Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:33.104Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:33.139Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:33.145Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:33.151Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:33.156Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:33.161Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:33.170Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:41.193Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:41.239Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:41.251Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:41.262Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:41.272Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:41.283Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:26:41.290Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:30:00.107Z [INFO] Hourly backup job started.
+2026-09-30T15:30:00.236Z [INFO] Hourly backup job started.
+2026-09-30T15:30:00.355Z [INFO] Hourly backup job started.
+2026-09-30T15:30:00.454Z [INFO] Hourly backup job started.
+2026-09-30T15:30:00.561Z [INFO] Hourly backup job started.
+2026-09-30T15:30:00.660Z [INFO] Hourly backup job started.
+2026-09-30T15:30:00.773Z [INFO] Hourly backup job started.
+2026-09-30T15:30:01.008Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T15:30:01.009Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T15:30:01.102Z [INFO] Cloud Sync enabled for outlet [OUTLET202605102056]. Initiating upload.
+2026-09-30T15:30:01.331Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T15:30:01.333Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T15:30:01.406Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-09-30T15:30:01.435Z [INFO] Hourly backup job execution finished.
+2026-09-30T15:30:01.441Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T15:30:01.442Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T15:30:01.476Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T15:30:01.477Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T15:30:01.511Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-09-30T15:30:01.523Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T15:30:01.524Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T15:30:01.539Z [INFO] Cloud Sync disabled for outlet [OUTLET202609031129]. Bypassing upload.
+2026-09-30T15:30:01.569Z [INFO] Hourly backup job execution finished.
+2026-09-30T15:30:01.623Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T15:30:01.624Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T15:30:01.641Z [INFO] Cloud Sync disabled for outlet [OUTLET202609051334]. Bypassing upload.
+2026-09-30T15:30:01.665Z [INFO] Hourly backup job execution finished.
+2026-09-30T15:30:01.716Z [INFO] Cloud Sync disabled for outlet [OUTLET202609012318]. Bypassing upload.
+2026-09-30T15:30:01.737Z [INFO] Hourly backup job execution finished.
+2026-09-30T15:30:01.756Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T15:30:01.757Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T15:30:01.806Z [INFO] Cloud Sync disabled for outlet [OUTLET202608311030]. Bypassing upload.
+2026-09-30T15:30:01.830Z [INFO] Hourly backup job execution finished.
+2026-09-30T15:30:13.012Z [INFO] Cloud upload sequence completed successfully.
+2026-09-30T15:30:13.056Z [INFO] Hourly backup job execution finished.
+2026-09-30T15:30:15.171Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:30:15.209Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:30:15.223Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:30:15.235Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:30:15.257Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:30:15.273Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:30:15.292Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:19.164Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:19.206Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:19.211Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:19.216Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:19.220Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:19.225Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:19.230Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:29.090Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:29.139Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:29.146Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:29.158Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:29.168Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:29.178Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:35:29.191Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:40:34.436Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\auth.routes.ts:8:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\auth.routes.ts:14:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:42:04.658Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:21:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:73:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:42:38.392Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:21:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:73:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:43:17.162Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228
+        throw new TypeError('argument handler must be a function')
+        ^
+
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:21:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:73:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:43:29.808Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:21:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:73:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:44:06.992Z [ERROR] [FATAL] Uncaught Exception: require(...) is not a function
+TypeError: require(...) is not a function
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\db\models\index.js:12:59)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at <anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\middlewares\db.middleware.ts:2:20)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\middlewares\db.middleware.ts:78:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-09-30T15:44:14.169Z [ERROR] [FATAL] Uncaught Exception: require(...) is not a function
+TypeError: require(...) is not a function
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\db\models\index.js:12:59)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at <anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\middlewares\db.middleware.ts:2:20)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\middlewares\db.middleware.ts:78:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-09-30T15:44:24.645Z [ERROR] [FATAL] Uncaught Exception: require(...) is not a function
+D:\inventorynew\RetailSale new\RetailSale\backend\db\models\index.js:12
+    require('../../models/property/supplierPayment.model')(propertyDb, DataTypes);
+                                                          ^
+
+TypeError: require(...) is not a function
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\db\models\index.js:12:59)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+    at <anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\middlewares\db.middleware.ts:2:20)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\middlewares\db.middleware.ts:78:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+2026-09-30T15:44:59.913Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:21:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:73:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:45:24.749Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228
+        throw new TypeError('argument handler must be a function')
+        ^
+
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:21:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:73:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:45:57.464Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:21:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\public.routes.ts:73:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:49:10.514Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\inventory.routes.ts:30:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\inventory.routes.ts:193:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:49:31.230Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsappWebhook.routes.ts:6:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsappWebhook.routes.ts:10:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:49:52.799Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsappWebhook.routes.ts:6:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsappWebhook.routes.ts:10:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:50:56.290Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsappWebhook.routes.ts:6:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsappWebhook.routes.ts:10:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:51:55.309Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsappWebhook.routes.ts:6:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsappWebhook.routes.ts:10:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:52:43.167Z [ERROR] [FATAL] Uncaught Exception: argument handler must be a function
+TypeError: argument handler must be a function
+    at Route.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as get] (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\router\index.js:448:19)
+    at express (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsapp.routes.ts:10:8)
+    at Object.<anonymous> (D:\inventorynew\RetailSale new\RetailSale\backend\routes\whatsapp.routes.ts:42:16)
+    at Module._compile (node:internal/modules/cjs/loader:1369:14)
+    at Object.transformer (D:\inventorynew\RetailSale new\RetailSale\backend\node_modules\tsx\dist\register-B1c7OH6V.cjs:22:2188)
+    at Module.load (node:internal/modules/cjs/loader:1206:32)
+    at Module._load (node:internal/modules/cjs/loader:1022:12)
+    at Module.require (node:internal/modules/cjs/loader:1231:19)
+    at require (node:internal/modules/helpers:179:18)
+2026-09-30T15:54:15.854Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:54:15.894Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:54:15.905Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:54:15.915Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:54:15.925Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:54:15.931Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:54:15.942Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:09.577Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:09.612Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:09.619Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:09.626Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:09.632Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:09.639Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:09.644Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:19.696Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:19.723Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:19.735Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:19.741Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:19.751Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:19.760Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T15:55:19.771Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:25:27.486Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:25:27.549Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:25:27.555Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:25:27.565Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:25:27.571Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:25:27.578Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:25:27.584Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:30:00.129Z [INFO] Hourly backup job started.
+2026-09-30T16:30:00.256Z [INFO] Hourly backup job started.
+2026-09-30T16:30:00.361Z [INFO] Hourly backup job started.
+2026-09-30T16:30:00.466Z [INFO] Hourly backup job started.
+2026-09-30T16:30:00.563Z [INFO] Hourly backup job started.
+2026-09-30T16:30:00.669Z [INFO] Hourly backup job started.
+2026-09-30T16:30:00.788Z [INFO] Hourly backup job started.
+2026-09-30T16:30:01.078Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T16:30:01.079Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T16:30:01.089Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T16:30:01.090Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T16:30:01.155Z [INFO] Cloud Sync disabled for outlet [OUTLET202609031129]. Bypassing upload.
+2026-09-30T16:30:01.191Z [INFO] Hourly backup job execution finished.
+2026-09-30T16:30:01.214Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-09-30T16:30:01.242Z [INFO] Hourly backup job execution finished.
+2026-09-30T16:30:01.276Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T16:30:01.277Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T16:30:01.326Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T16:30:01.326Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T16:30:01.337Z [INFO] Cloud Sync disabled for outlet [OUTLET202609051334]. Bypassing upload.
+2026-09-30T16:30:01.355Z [INFO] Hourly backup job execution finished.
+2026-09-30T16:30:01.410Z [INFO] Cloud Sync disabled for outlet [OUTLET202609012318]. Bypassing upload.
+2026-09-30T16:30:01.427Z [INFO] Hourly backup job execution finished.
+2026-09-30T16:30:01.441Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T16:30:01.442Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T16:30:01.497Z [INFO] Cloud Sync disabled for outlet [OUTLET202608311030]. Bypassing upload.
+2026-09-30T16:30:01.513Z [INFO] Hourly backup job execution finished.
+2026-09-30T16:30:01.544Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T16:30:01.545Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T16:30:01.606Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-09-30T16:30:01.789Z [INFO] Backup created. File size: 0.11 MB
+2026-09-30T16:30:01.792Z [INFO] Verifying backup integrity before local retention and upload.
+2026-09-30T16:30:01.875Z [INFO] Cloud Sync enabled for outlet [OUTLET202605102056]. Initiating upload.
+2026-09-30T16:30:09.670Z [INFO] Cloud upload sequence completed successfully.
+2026-09-30T16:30:09.706Z [INFO] Hourly backup job execution finished.
+2026-09-30T16:30:09.998Z [INFO] Cloud upload sequence completed successfully.
+2026-09-30T16:30:10.050Z [INFO] Hourly backup job execution finished.
+2026-09-30T16:30:14.813Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:30:14.908Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:30:14.933Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:30:14.950Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:30:14.978Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:30:14.995Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:30:15.011Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:45:34.633Z [INFO] Backup job already running for outlet [OUTLET202604212159]. Skipping duplicate trigger.
+2026-09-30T16:50:00.259Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:50:05.721Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:50:05.798Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:50:05.814Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:50:05.836Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:50:05.851Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:50:05.866Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:50:05.881Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:50:05.894Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:56:54.504Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:56:54.532Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:56:54.536Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:56:54.543Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:56:54.550Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:56:54.557Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:56:54.563Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:56:54.568Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:57:50.361Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:57:50.387Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:57:50.394Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:57:50.401Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:57:50.412Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:57:50.418Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:57:50.421Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:57:50.425Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T16:58:58.689Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.205Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.231Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.236Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.240Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.244Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.249Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.253Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.256Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:07:46.260Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:09:26.315Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:10:18.738Z [INFO] Backup job already running for outlet [OUTLET202609302238]. Skipping duplicate trigger.
+2026-09-30T17:13:45.952Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:45.977Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:45.981Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:45.986Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:45.989Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:45.993Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:45.998Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:46.002Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:46.006Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:13:46.010Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:17:17.229Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-09-30T17:17:17.259Z [INFO] Backup job already running for outlet [OUTLET202609302244]. Skipping duplicate trigger.

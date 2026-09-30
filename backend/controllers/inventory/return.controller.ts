@@ -1,4 +1,3 @@
-export {};
 const audit = require('../../services/audit.service');
 const { insertLedger } = require('../../services/stockLedger.service');
 const { normalizeDateKey } = require('../../utils/dateQuery');
@@ -314,3 +313,7 @@ exports.cancelReturn = async (req: any, res: any) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

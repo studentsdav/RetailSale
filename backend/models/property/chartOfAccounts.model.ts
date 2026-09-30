@@ -55,4 +55,5 @@ module.exports = (sequelize, DataTypes) => {
     return ChartOfAccounts;
 };
 
-export {};
+
+export default module.exports;

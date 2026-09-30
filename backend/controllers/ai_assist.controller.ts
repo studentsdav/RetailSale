@@ -1,4 +1,3 @@
-export {};
 const aiService = require('../services/ai.service');
 
 async function resolveOutletIdAsync(req) {
@@ -105,3 +104,7 @@ exports.handleVoiceCommand = async (req, res) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

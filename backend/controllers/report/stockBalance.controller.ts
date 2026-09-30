@@ -1,4 +1,3 @@
-export {};
 const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
 exports.getStockBalance = async (req: any, res: any) => {
@@ -60,3 +59,7 @@ exports.getStockBalance = async (req: any, res: any) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

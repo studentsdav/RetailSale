@@ -40,4 +40,5 @@ module.exports = (sequelize, DataTypes) => {
     return TaxesMaster;
 };
 
-export {};
+
+export default module.exports;

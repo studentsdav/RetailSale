@@ -1,4 +1,3 @@
-export {};
 const { Op } = require('sequelize');
 const { createLedgerEntry } = require('../../services/cashLedger.service');
 const { getNextNumber } = require('../../services/numbering.service');
@@ -298,3 +297,7 @@ exports.getVoucherById = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

@@ -26,7 +26,18 @@ import '../../core/settings/local_preferences.dart';
 import '../../core/config/server_check.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String? initialOutletCode;
+  final String? initialUsername;
+  final String? initialPassword;
+  final String? initialRole;
+
+  const LoginScreen({
+    super.key,
+    this.initialOutletCode,
+    this.initialUsername,
+    this.initialPassword,
+    this.initialRole,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -63,9 +74,22 @@ class _LoginScreenState extends State<LoginScreen>
     getVersion();
     _checkServerHealth();
 
-    if (AppConfig.outlets.isNotEmpty) {
+    if (widget.initialOutletCode != null && widget.initialOutletCode!.isNotEmpty) {
+      _selectedOutlet = widget.initialOutletCode;
+    } else if (AppConfig.outlets.isNotEmpty) {
       _selectedOutlet = AppConfig.outlets.first;
     }
+
+    if (widget.initialUsername != null && widget.initialUsername!.isNotEmpty) {
+      _usernameCtrl.text = widget.initialUsername!;
+    }
+    if (widget.initialPassword != null && widget.initialPassword!.isNotEmpty) {
+      _passwordCtrl.text = widget.initialPassword!;
+    }
+    if (widget.initialRole != null && widget.initialRole!.isNotEmpty) {
+      _role = widget.initialRole!;
+    }
+
     _loadOutletLogo();
 
     _logoCtrl = AnimationController(
@@ -413,9 +437,9 @@ class _LoginScreenState extends State<LoginScreen>
                 colors: heroColors.isNotEmpty
                     ? heroColors
                     : const [
-                        Color(0xFF0F172A),
-                        Color(0xFF1E293B),
+                        Color(0xFF0B5CAD),
                         Color(0xFF0F4C81),
+                        Color(0xFF1D4ED8),
                       ],
               ),
               borderRadius:
@@ -442,7 +466,7 @@ class _LoginScreenState extends State<LoginScreen>
                 const Text(
                   'POS, billing, accounting, and multi-outlet reporting in one secure flow.',
                   style: TextStyle(
-                    color: Color(0xFF94A3B8),
+                    color: Color(0xFFE0E7FF),
                     height: 1.5,
                     fontSize: 13.5,
                   ),
@@ -460,7 +484,7 @@ class _LoginScreenState extends State<LoginScreen>
                 const Spacer(),
                 const FamalthWatermark(
                   showVersion: true,
-                  color: Color(0xFF94A3B8),
+                  color: Color(0xFFE0E7FF),
                   fontSize: 11,
                 ),
               ],

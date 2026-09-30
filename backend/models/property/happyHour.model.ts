@@ -70,4 +70,5 @@ module.exports = (sequelize, DataTypes) => {
     return HappyHour;
 };
 
-export {};
+
+export default module.exports;

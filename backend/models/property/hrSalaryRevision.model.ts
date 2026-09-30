@@ -24,4 +24,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrSalaryRevision;
 };
 
-export {};
+
+export default module.exports;

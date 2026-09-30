@@ -4,21 +4,30 @@ const { processQueue } = require('../services/whatsappQueue.service');
  * Initialize WhatsApp background message queue worker
  */
 function startWhatsappQueueJob(db) {
-    if (!db) return;
+  if (!db) return;
 
-    console.log('🛡️ [SYSTEM] Initializing WhatsApp Queue background worker...');
+  console.log('🛡️ [SYSTEM] Initializing WhatsApp Queue background worker...');
 
-    async function runWorker() {
-        try {
-            await processQueue(db);
-        } catch (err) {
-            console.error('[WHATSAPP WORKER SYSTEM CRITICAL ERROR]:', err.message);
-        }
-        // Poll queue every 2 seconds recursively (safe and lightweight)
-        setTimeout(runWorker, 2000);
+  let isRunning = false;
+
+  async function runWorker() {
+    if (isRunning) {
+      setTimeout(runWorker, 2000);
+      return;
     }
 
-    runWorker();
+    isRunning = true;
+    try {
+      await processQueue(db);
+    } catch (err) {
+      console.error('[WHATSAPP WORKER ERROR]:', err.message);
+    } finally {
+      isRunning = false;
+      setTimeout(runWorker, 2000);
+    }
+  }
+
+  runWorker();
 }
 
 module.exports = { startWhatsappQueueJob };

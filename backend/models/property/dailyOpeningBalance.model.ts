@@ -25,4 +25,5 @@ module.exports = (sequelize, DataTypes) => {
 
     return DailyOpeningBalance;
 };
-export {};
+
+export default module.exports;

@@ -257,8 +257,9 @@ export const recoverUsername = async (req: any, res: any) => {
     }
 };
 
-export default {
+module.exports = {
     requestPasswordResetOtp,
     resetPasswordWithOtp,
     recoverUsername
 };
+export default module.exports;

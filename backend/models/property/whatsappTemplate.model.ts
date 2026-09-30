@@ -81,4 +81,5 @@ module.exports = (sequelize, DataTypes) => {
     return WhatsappTemplate;
 };
 
-export {};
+
+export default module.exports;

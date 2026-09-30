@@ -35,7 +35,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
-import { apiLimiter } from './middlewares/rateLimit.middleware';
+import { apiLimiter, ddosBurstLimiter, reportQueryLimiter } from './middlewares/rateLimit.middleware';
 import { contextMiddleware } from './middlewares/context.middleware';
 
 const rootDir = (process as any).pkg ? path.dirname(process.execPath) : process.cwd();
@@ -44,13 +44,20 @@ dotenv.config({
     path: path.join(rootDir, '.env')
 });
 
+import { securityHeadersMiddleware } from './middlewares/security.middleware';
+import { requestIdMiddleware } from './middlewares/requestId.middleware';
+
 const app: any = express();
 app.set('trust proxy', 1);
+app.use(securityHeadersMiddleware);
+app.use(ddosBurstLimiter);
+app.use(requestIdMiddleware);
 app.use(contextMiddleware);
 app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Powered-By', 'Famalth Business Solutions - FAMALTH LYNX');
     res.setHeader('X-Platform-Vendor', 'Famalth Ecosystem');
-    console.log(`[REQUEST] ${req.method} ${req.originalUrl || req.url}`);
+    const reqId = (req as any).id || '-';
+    console.log(`[REQUEST] [${reqId}] ${req.method} ${req.originalUrl || req.url}`);
     next();
 });
 
@@ -461,7 +468,7 @@ app.use('/api/sales', require('./routes/sales.routes'));
 app.use('/api/lucky-draw', require('./routes/luckyDraw.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes'));
 app.use('/api/users', require('./routes/user.routes'));
-app.use('/api/reports', require('./routes/reports.routes'));
+app.use('/api/reports', reportQueryLimiter, require('./routes/reports.routes'));
 app.use('/api/finance', require('./routes/finance.routes'));
 app.use('/api/accounting', require('./routes/accounting.routes'));
 app.use('/api/notifications', require('./routes/notification.routes'));
@@ -511,9 +518,40 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 const PORT = process.env.PORT || 3000;
 const HOST = license.allowed_mode === 'ONLINE' ? '0.0.0.0' : '0.0.0.0';
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
     console.log(`INV API running on http://${HOST}:${PORT}`);
 });
+
+// Anti-DDoS Slowloris Socket Protection
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+server.requestTimeout = 30000;
+
+// Production Graceful Shutdown Handlers (Zero downtime deployment / PM2 / Docker)
+function gracefulShutdown(signal: string): void {
+    console.log(`\n🛑 [SYSTEM] Received ${signal}. Starting graceful shutdown...`);
+    server.close(async () => {
+        console.log('🔒 [SYSTEM] HTTP server stopped accepting connections.');
+        try {
+            if (propertyDb && typeof propertyDb.close === 'function') {
+                await propertyDb.close();
+                console.log('💾 [SYSTEM] PostgreSQL database connection closed cleanly.');
+            }
+        } catch (dbCloseErr: any) {
+            console.error('⚠️ [SYSTEM] Error closing database connection:', dbCloseErr.message);
+        }
+        process.exit(0);
+    });
+
+    // Force exit after 10 seconds if shutdown hangs
+    setTimeout(() => {
+        console.error('⚠️ [SYSTEM] Forced shutdown due to timeout.');
+        process.exit(1);
+    }, 10000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 function initializeAllBackups(): void {
     console.log("🔄 Initializing background backups for all registered outlets...");

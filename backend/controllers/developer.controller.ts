@@ -1,4 +1,3 @@
-export {};
 const developerService = require('../services/developer.service');
 
 function resolveOutletId(req) {
@@ -90,3 +89,7 @@ exports.generateApiKey = async (req, res) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

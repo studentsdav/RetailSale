@@ -25,4 +25,5 @@ module.exports = (sequelize, DataTypes) => {
     return Group;
 };
 
-export {};
+
+export default module.exports;

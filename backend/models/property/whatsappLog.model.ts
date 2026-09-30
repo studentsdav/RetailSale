@@ -70,4 +70,5 @@ module.exports = (sequelize, DataTypes) => {
     return WhatsappLog;
 };
 
-export {};
+
+export default module.exports;

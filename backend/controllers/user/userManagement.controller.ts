@@ -1,4 +1,3 @@
-export {};
 const audit = require('../../services/audit.service');
 const bcrypt = require("bcryptjs");
 
@@ -507,3 +506,7 @@ exports.sendSupervisorOtp = async (req, res) => {
     }
 };
 
+
+
+module.exports = exports;
+export default exports;

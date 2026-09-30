@@ -35,4 +35,5 @@ module.exports = (sequelize, DataTypes) => {
     return EmailTemplate;
 };
 
-export {};
+
+export default module.exports;

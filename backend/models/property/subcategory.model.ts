@@ -30,4 +30,5 @@ module.exports = (sequelize, DataTypes) => {
     return SubCategory;
 };
 
-export {};
+
+export default module.exports;

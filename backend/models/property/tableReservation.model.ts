@@ -62,4 +62,5 @@ module.exports = (sequelize, DataTypes) => {
     return TableReservation;
 };
 
-export {};
+
+export default module.exports;

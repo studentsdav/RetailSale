@@ -1,4 +1,3 @@
-export {};
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const { sendOtpEmail } = require('../../modules/emailService');
@@ -5272,3 +5271,7 @@ exports.resetCustomerPassword = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

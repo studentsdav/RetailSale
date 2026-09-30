@@ -70,4 +70,5 @@ module.exports = (sequelize, DataTypes) => {
     return ProductTemplate;
 };
 
-export {};
+
+export default module.exports;

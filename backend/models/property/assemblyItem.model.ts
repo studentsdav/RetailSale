@@ -53,4 +53,5 @@ module.exports = (sequelize, DataTypes) => {
     return AssemblyItem;
 };
 
-export {};
+
+export default module.exports;

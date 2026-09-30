@@ -40,4 +40,5 @@ module.exports = (sequelize, DataTypes) => {
     return RestaurantAuditTrail;
 };
 
-export {};
+
+export default module.exports;

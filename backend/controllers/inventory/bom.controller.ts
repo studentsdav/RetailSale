@@ -1,4 +1,3 @@
-export {};
 const audit = require('../../services/audit.service');
 
 exports.saveBOM = async (req: any, res: any) => {
@@ -185,3 +184,7 @@ exports.updateParentCost = async (req: any, res: any) => {
         res.status(400).json({ success: false, error: err.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

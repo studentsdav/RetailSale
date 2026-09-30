@@ -47,4 +47,5 @@ module.exports = (sequelize, DataTypes) => {
     return CapitalAsset;
 };
 
-export {};
+
+export default module.exports;

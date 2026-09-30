@@ -38,4 +38,5 @@ module.exports = (sequelize, DataTypes) => {
     return Attribute;
 };
 
-export {};
+
+export default module.exports;

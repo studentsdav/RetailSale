@@ -41,4 +41,5 @@ module.exports = (sequelize, DataTypes) => {
     return NightAuditDetail;
 };
 
-export {};
+
+export default module.exports;

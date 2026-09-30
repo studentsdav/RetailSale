@@ -1,4 +1,3 @@
-export {};
 const analyticsService = require('../../services/analytics.service');
 
 function resolveOutletId(req: any) {
@@ -221,3 +220,7 @@ exports.exportQueryPdf = async (req: any, res: any) => {
         res.status(500).send('Failed to compile PDF document');
     }
 };
+
+
+module.exports = exports;
+export default exports;

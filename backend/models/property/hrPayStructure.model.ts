@@ -26,4 +26,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrPayStructure;
 };
 
-export {};
+
+export default module.exports;

@@ -54,4 +54,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrEmployee;
 };
 
-export {};
+
+export default module.exports;

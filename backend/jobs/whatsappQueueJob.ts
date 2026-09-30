@@ -8,14 +8,23 @@ export function startWhatsappQueueJob(db: any): void {
 
   console.log('🛡️ [SYSTEM] Initializing WhatsApp Queue background worker...');
 
+  let isRunning = false;
+
   async function runWorker(): Promise<void> {
+    if (isRunning) {
+      setTimeout(runWorker, 2000);
+      return;
+    }
+
+    isRunning = true;
     try {
       await processQueue(db);
     } catch (err: any) {
-      console.error('[WHATSAPP WORKER SYSTEM CRITICAL ERROR]:', err.message);
+      console.error('[WHATSAPP WORKER ERROR]:', err.message);
+    } finally {
+      isRunning = false;
+      setTimeout(runWorker, 2000);
     }
-    // Poll queue every 2 seconds recursively (safe and lightweight)
-    setTimeout(runWorker, 2000);
   }
 
   runWorker();

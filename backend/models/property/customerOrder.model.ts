@@ -184,4 +184,5 @@ module.exports = (sequelize, DataTypes) => {
     return CustomerOrder;
 };
 
-export {};
+
+export default module.exports;

@@ -51,4 +51,5 @@ module.exports = (sequelize, DataTypes) => {
     return TaxGroupComponent;
 };
 
-export {};
+
+export default module.exports;

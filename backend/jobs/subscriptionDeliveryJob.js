@@ -501,11 +501,15 @@ async function runSubscriptionDelivery(db) {
     } catch (err) { log('Job failed: ' + err.message, true); }
 }
 
+const { withDistributedLock } = require('../utils/distributedLock');
+
 async function tryRunOnce(db) {
     const today = todayStr();
     if (globalLastRunDate === today) return;
     globalLastRunDate = today;
-    await runSubscriptionDelivery(db);
+    await withDistributedLock(db, `subscription_delivery_job_${today}`, async () => {
+        await runSubscriptionDelivery(db);
+    });
 }
 
 function startSubscriptionDeliveryJob(db) {

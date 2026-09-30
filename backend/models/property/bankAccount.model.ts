@@ -63,4 +63,5 @@ module.exports = (sequelize, DataTypes) => {
     return BankAccount;
 };
 
-export {};
+
+export default module.exports;

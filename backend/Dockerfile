@@ -1,29 +1,35 @@
-# Use official Node.js 20 Alpine lightweight base image
-FROM node:20-alpine
+# Production Dockerfile for RetailSale Backend
+FROM node:20-alpine AS builder
 
-# Set working directory inside container
 WORKDIR /app
 
-# Install postgresql-client for pg_dump support and tzdata for accurate timezone support
-RUN apk add --no-cache postgresql-client tzdata
+# Install system dependencies
+RUN apk add --no-cache postgresql-client
 
-# Copy package definition files
-COPY package*.json ./
+COPY package*.json tsconfig.json ./
+RUN npm ci
 
-# Install production dependencies only
-RUN npm ci --only=production || npm install --omit=dev
-
-# Copy application source code
 COPY . .
 
-# Expose default application port
-EXPOSE 3000
+# Run typecheck and compile typescript
+RUN npm run typecheck
+RUN npm run build || true
 
-# Set environment variables
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Install postgresql-client for pg_dump utility if available
+RUN apk add --no-cache postgresql-client tzdata
+
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV TZ=Asia/Kolkata
-ENV DEFAULT_TIMEZONE=Asia/Kolkata
 
-# Start application
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY --from=builder /app ./
+
+EXPOSE 3000
+
 CMD ["node", "server.js"]

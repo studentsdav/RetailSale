@@ -30,4 +30,5 @@ module.exports = (sequelize, DataTypes) => {
 
     return SupplierReturnRefund;
 };
-export {};
+
+export default module.exports;

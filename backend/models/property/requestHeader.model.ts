@@ -31,4 +31,5 @@ module.exports = (sequelize, DataTypes) => {
     return RequestHeader;
 };
 
-export {};
+
+export default module.exports;

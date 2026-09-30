@@ -75,4 +75,5 @@ module.exports = (sequelize, DataTypes) => {
     return CommissionRule;
 };
 
-export {};
+
+export default module.exports;

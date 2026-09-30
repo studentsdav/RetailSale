@@ -27,4 +27,5 @@ module.exports = (sequelize, DataTypes) => {
 
     return ExpenseEntry;
 };
-export {};
+
+export default module.exports;

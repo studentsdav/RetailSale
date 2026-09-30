@@ -19,4 +19,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrHoliday;
 };
 
-export {};
+
+export default module.exports;

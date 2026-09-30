@@ -46,4 +46,5 @@ module.exports = (sequelize, DataTypes) => {
     return StockTransferItem;
 };
 
-export {};
+
+export default module.exports;

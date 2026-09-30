@@ -1,7 +1,6 @@
 {
-    "ignore": [
-        "data/*",
-        "logs/*",
-        "*.log"
-    ]
+  "watch": ["."],
+  "ext": "ts,js,json",
+  "ignore": ["node_modules", "public", "_legacy_js_backup", "logs", "backups", "scratch"],
+  "exec": "npx tsx server.ts"
 }

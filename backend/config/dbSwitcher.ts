@@ -1,2 +1,4 @@
 // Database Switcher placeholder for dynamic multi-tenant routing
-export {};
+
+module.exports = exports;
+export default exports;

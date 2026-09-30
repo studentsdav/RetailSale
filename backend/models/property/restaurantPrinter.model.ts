@@ -37,4 +37,5 @@ module.exports = (sequelize, DataTypes) => {
     return RestaurantPrinter;
 };
 
-export {};
+
+export default module.exports;

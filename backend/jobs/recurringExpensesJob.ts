@@ -160,12 +160,14 @@ export async function processRecurringExpenses(db: any): Promise<void> {
 export function startRecurringExpensesJob(db: any): void {
   console.log('▶️ [JOBS] Starting Recurring Expenses job...');
 
+  const { withDistributedLock } = require('../utils/distributedLock');
+
   // Run immediately on server boot
-  processRecurringExpenses(db);
+  withDistributedLock(db, 'recurring_expenses_job', () => processRecurringExpenses(db));
 
   // Run every 15 minutes for load balancing
   cron.schedule('*/15 * * * *', async () => {
-    await processRecurringExpenses(db);
+    await withDistributedLock(db, 'recurring_expenses_job', () => processRecurringExpenses(db));
   });
 }
 

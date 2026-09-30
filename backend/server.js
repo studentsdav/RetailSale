@@ -34,15 +34,22 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { apiLimiter } = require('./middlewares/rateLimit.middleware');
+const { apiLimiter, ddosBurstLimiter, reportQueryLimiter } = require('./middlewares/rateLimit.middleware');
 const { contextMiddleware } = require('./middlewares/context.middleware');
 const app = express();
+const { securityHeadersMiddleware } = require('./middlewares/security.middleware');
+const { requestIdMiddleware } = require('./middlewares/requestId.middleware');
+
 app.set('trust proxy', 1);
+app.use(securityHeadersMiddleware);
+app.use(ddosBurstLimiter);
+app.use(requestIdMiddleware);
 app.use(contextMiddleware);
 app.use((req, res, next) => {
     res.setHeader('X-Powered-By', 'Famalth Business Solutions - FAMALTH LYNX');
     res.setHeader('X-Platform-Vendor', 'Famalth Ecosystem');
-    console.log(`[REQUEST] ${req.method} ${req.originalUrl || req.url}`);
+    const reqId = req.id || '-';
+    console.log(`[REQUEST] [${reqId}] ${req.method} ${req.originalUrl || req.url}`);
     next();
 });
 
@@ -465,7 +472,7 @@ app.use('/api/sales', require('./routes/sales.routes'));
 app.use('/api/lucky-draw', require('./routes/luckyDraw.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes'));
 app.use('/api/users', require('./routes/user.routes'));
-app.use('/api/reports', require('./routes/reports.routes'));
+app.use('/api/reports', reportQueryLimiter, require('./routes/reports.routes'));
 app.use('/api/finance', require('./routes/finance.routes'));
 app.use('/api/accounting', require('./routes/accounting.routes'));
 app.use('/api/notifications', require('./routes/notification.routes'));
@@ -515,9 +522,39 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 const HOST = license.allowed_mode === 'ONLINE' ? '0.0.0.0' : '0.0.0.0';
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
     console.log(`INV API running on http://${HOST}:${PORT}`);
 });
+
+// Anti-DDoS Slowloris Socket Protection
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+server.requestTimeout = 30000;
+
+// Production Graceful Shutdown Handlers (Zero downtime deployment / PM2 / Docker)
+function gracefulShutdown(signal) {
+    console.log(`\n🛑 [SYSTEM] Received ${signal}. Starting graceful shutdown...`);
+    server.close(async () => {
+        console.log('🔒 [SYSTEM] HTTP server stopped accepting connections.');
+        try {
+            if (propertyDb && typeof propertyDb.close === 'function') {
+                await propertyDb.close();
+                console.log('💾 [SYSTEM] PostgreSQL database connection closed cleanly.');
+            }
+        } catch (dbCloseErr) {
+            console.error('⚠️ [SYSTEM] Error closing database connection:', dbCloseErr.message);
+        }
+        process.exit(0);
+    });
+
+    setTimeout(() => {
+        console.error('⚠️ [SYSTEM] Forced shutdown due to timeout.');
+        process.exit(1);
+    }, 10000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 
 function initializeAllBackups() {

@@ -67,4 +67,5 @@ module.exports = (sequelize, DataTypes) => {
     return RecurringExpense;
 };
 
-export {};
+
+export default module.exports;

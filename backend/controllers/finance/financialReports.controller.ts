@@ -1,4 +1,3 @@
-export {};
 const { Op, Sequelize } = require('sequelize');
 const { getOutletDateBounds } = require('../../utils/timezoneHelper');
 const { resolveOutletScope } = require('../../utils/outletScopeHelper');
@@ -1103,3 +1102,7 @@ exports.getBankReconciliation = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

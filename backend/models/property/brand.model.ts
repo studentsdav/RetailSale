@@ -25,4 +25,5 @@ module.exports = (sequelize, DataTypes) => {
     return Brand;
 };
 
-export {};
+
+export default module.exports;

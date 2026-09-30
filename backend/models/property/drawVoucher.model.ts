@@ -56,4 +56,5 @@ module.exports = (sequelize, DataTypes) => {
     return DrawVoucher;
 };
 
-export {};
+
+export default module.exports;

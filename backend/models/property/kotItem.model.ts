@@ -68,4 +68,5 @@ module.exports = (sequelize, DataTypes) => {
     return KotItem;
 };
 
-export {};
+
+export default module.exports;

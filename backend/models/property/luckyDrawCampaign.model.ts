@@ -70,4 +70,5 @@ module.exports = (sequelize, DataTypes) => {
     return LuckyDrawCampaign;
 };
 
-export {};
+
+export default module.exports;

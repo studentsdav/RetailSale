@@ -29,4 +29,5 @@ module.exports = (sequelize, DataTypes) => {
     return DamageHeader;
 };
 
-export {};
+
+export default module.exports;

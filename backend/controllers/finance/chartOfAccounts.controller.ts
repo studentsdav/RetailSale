@@ -1,4 +1,3 @@
-export {};
 const { Op, Sequelize } = require('sequelize');
 const { resolveOutletScope } = require('../../utils/outletScopeHelper');
 
@@ -341,3 +340,7 @@ exports.seedDefaultAccounts = async (req, res) => {
         return res.status(500).json({ success: false, message: err.message });
     }
 };
+
+
+module.exports = exports;
+export default exports;

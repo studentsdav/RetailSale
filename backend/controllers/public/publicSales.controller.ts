@@ -1,4 +1,3 @@
-export {};
 const { generateInvoicePdf } = require('../../services/invoicePdf.service');
 
 /**
@@ -45,3 +44,4 @@ async function getInvoicePdfPublic(req, res) {
 module.exports = {
     getInvoicePdfPublic
 };
+export default module.exports;

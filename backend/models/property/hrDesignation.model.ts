@@ -18,4 +18,5 @@ module.exports = (sequelize, DataTypes) => {
     return HrDesignation;
 };
 
-export {};
+
+export default module.exports;

@@ -33,4 +33,5 @@ module.exports = (sequelize, DataTypes) => {
     return purchase_item;
 };
 
-export {};
+
+export default module.exports;

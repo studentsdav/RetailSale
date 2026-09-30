@@ -70,4 +70,5 @@ module.exports = (sequelize, DataTypes) => {
     return AssemblyHeader;
 };
 
-export {};
+
+export default module.exports;

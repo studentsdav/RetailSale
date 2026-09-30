@@ -56,4 +56,5 @@ module.exports = (sequelize, DataTypes) => {
     return TaxProfile;
 };
 
-export {};
+
+export default module.exports;

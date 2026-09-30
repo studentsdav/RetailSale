@@ -1,4 +1,3 @@
-export {};
 const operationsService = require('../services/operations.service');
 
 function resolveOutletId(req) {
@@ -56,3 +55,7 @@ exports.getExpiryAlerts = async (req, res) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;

@@ -1,4 +1,3 @@
-export {};
 const numberingHelper = require('./numberingSettingsV2.controller');
 
 exports.getNextGrnNo = async (req: any, res: any) => {
@@ -38,3 +37,7 @@ exports.getNextGrnNo = async (req: any, res: any) => {
         });
     }
 };
+
+
+module.exports = exports;
+export default exports;
