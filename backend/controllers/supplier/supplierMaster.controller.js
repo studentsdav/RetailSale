@@ -23,6 +23,9 @@ function mapVendorPayload(body = {}) {
 }
 
 function normalizeSupplierPayload(body = {}) {
+    const rawOpening = body.opening_balance !== undefined && body.opening_balance !== null
+        ? parseFloat(body.opening_balance)
+        : 0.00;
     return {
         supplier_code: String(body.supplier_code || body.vendor_code || '').trim(),
         supplier_name: String(body.supplier_name || body.vendor_name || '').trim(),
@@ -33,7 +36,9 @@ function normalizeSupplierPayload(body = {}) {
         gstin: String(body.gstin || body.tax_id_number || '').trim().toUpperCase() || null,
         tax_id_number: String(body.tax_id_number || body.gstin || '').trim().toUpperCase() || null,
         tax_id_type: String(body.tax_id_type || '').trim().toUpperCase() || null,
-        tax_country_code: String(body.tax_country_code || 'IN').trim().toUpperCase() || null
+        tax_country_code: String(body.tax_country_code || 'IN').trim().toUpperCase() || null,
+        opening_balance: isNaN(rawOpening) ? 0.00 : rawOpening,
+        as_of_date: body.as_of_date || null
     };
 }
 
@@ -64,9 +69,51 @@ exports.createSupplier = async (req, res) => {
             tax_id_number: payload.tax_id_number,
             tax_id_type: payload.tax_id_type,
             tax_country_code: payload.tax_country_code,
+            opening_balance: payload.opening_balance,
             is_active: true
         });
 
+        // If an opening balance is specified (> 0), create opening bill and reflect in Chart of Accounts
+        if (payload.opening_balance > 0) {
+            try {
+                if (req.propertyDb.models.supplier_bills) {
+                    await req.propertyDb.models.supplier_bills.create({
+                        outlet_id,
+                        supplier_id: supplier.id,
+                        bill_no: `OPN-${supplier.supplier_code || supplier.id}`,
+                        bill_date: payload.as_of_date || new Date(),
+                        bill_amount: payload.opening_balance,
+                        paid_amount: 0.00,
+                        status: 'UNPAID',
+                        remarks: 'Opening Balance on Vendor Creation'
+                    });
+                }
+
+                if (req.propertyDb.models.chart_of_accounts) {
+                    // Credit Sundry Creditors (Account 2001)
+                    const creditorAcc = await req.propertyDb.models.chart_of_accounts.findOne({
+                        where: { outlet_id, account_code: '2001' }
+                    });
+                    if (creditorAcc) {
+                        await creditorAcc.increment('opening_credit', { by: payload.opening_balance });
+                        await creditorAcc.increment('current_balance', { by: payload.opening_balance });
+                    }
+
+                    // Debit Opening Balance Equity / Capital (Account 3001 or 3100)
+                    const equityAcc = await req.propertyDb.models.chart_of_accounts.findOne({
+                        where: {
+                            outlet_id,
+                            account_code: { [Op.in]: ['3001', '3100', '1200'] }
+                        }
+                    });
+                    if (equityAcc) {
+                        await equityAcc.increment('opening_debit', { by: payload.opening_balance });
+                    }
+                }
+            } catch (coaErr) {
+                console.warn('[COA OPENING BALANCE POST WARN]', coaErr.message);
+            }
+        }
 
         await audit.log({
             req,

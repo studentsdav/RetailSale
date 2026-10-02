@@ -10,6 +10,7 @@ import '../../controllers/reports/ai_query_analytics_controller.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
 import '../../core/api/endpoints.dart';
+import '../../widgets/gemini_api_key_dialog.dart';
 
 class AiQueryAnalyticsScreen extends StatefulWidget {
   const AiQueryAnalyticsScreen({super.key});
@@ -121,6 +122,23 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
     final text = _promptCtrl.text.trim();
     if (text.isEmpty) return;
     _focusNode.unfocus();
+
+    if ((_controller.aiProvider == 'gemini' || _controller.aiProvider == null) &&
+        (_controller.aiApiKey ?? '').trim().isEmpty) {
+      final savedKey = await GeminiApiKeyDialog.show(context);
+      if (savedKey != null && savedKey.trim().isNotEmpty) {
+        await _controller.savePrefs(
+          provider: _controller.aiProvider ?? 'gemini',
+          modelName: _controller.aiModelName ?? 'gemini-3.1-flash-lite',
+          baseUrl: _controller.aiBaseUrl ?? 'https://generativelanguage.googleapis.com',
+          apiKey: savedKey.trim(),
+          maxRowsLimit: _controller.maxRows,
+        );
+      } else {
+        return;
+      }
+    }
+
     await _controller.executeQuery(text);
   }
 
@@ -384,7 +402,7 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
   String _getDefaultModelForProvider(String provider) {
     switch (provider) {
       case 'gemini':
-        return 'gemini-1.5-flash';
+        return 'gemini-3.1-flash-lite';
       case 'openai':
         return 'gpt-4o-mini';
       case 'deepseek':
@@ -418,7 +436,7 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
   List<String> _getQuickModelChipsForProvider(String provider) {
     switch (provider) {
       case 'gemini':
-        return ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+        return ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
       case 'openai':
         return ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
       case 'deepseek':
@@ -428,7 +446,7 @@ class _AiQueryAnalyticsScreenState extends State<AiQueryAnalyticsScreen> {
       case 'perplexity':
         return ['sonar-pro', 'sonar', 'sonar-reasoning'];
       default:
-        return ['gpt-4o-mini', 'gpt-4o', 'deepseek-chat', 'gemini-1.5-flash'];
+        return ['gemini-3.1-flash-lite', 'gpt-4o-mini', 'gpt-4o', 'deepseek-chat'];
     }
   }
 

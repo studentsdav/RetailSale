@@ -28,9 +28,12 @@ router.delete('/table-types/:id', tableCtrl.deleteTableType);
 // Tables & Actions
 router.get('/tables', tableCtrl.listTables);
 router.post('/tables', tableCtrl.createTable);
+router.post('/tables/import', tableCtrl.importTables);
 router.put('/tables/:id', tableCtrl.updateTable);
 router.delete('/tables/:id', tableCtrl.deleteTable);
 router.put('/tables/:id/status', tableCtrl.updateTableStatus);
+router.post('/tables/:id/assign-user', tableCtrl.assignTableUser);
+router.get('/tables/:id/transactions', tableCtrl.getTableTransactions);
 router.post('/tables/transfer', tableCtrl.transferTable);
 router.post('/tables/merge', tableCtrl.mergeTables);
 

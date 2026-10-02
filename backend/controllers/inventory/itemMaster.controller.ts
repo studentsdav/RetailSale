@@ -984,7 +984,7 @@ export const bulkUpdateLocation = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const itemMasterController = {
     createItem,
     canImportItems,
     canResetAndImportItems,
@@ -1001,3 +1001,6 @@ export default {
     deleteItemImage,
     bulkUpdateLocation
 };
+
+module.exports = itemMasterController;
+export default itemMasterController;

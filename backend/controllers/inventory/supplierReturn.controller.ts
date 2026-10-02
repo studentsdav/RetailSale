@@ -334,7 +334,7 @@ export const receiveRefund = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const supplierReturnController = {
     getGrnsByDate,
     getReceivedItems,
     getReturnedQty,
@@ -343,3 +343,6 @@ export default {
     getRefunds,
     receiveRefund
 };
+
+module.exports = supplierReturnController;
+export default supplierReturnController;

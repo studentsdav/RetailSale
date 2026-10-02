@@ -1,7 +1,13 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
+import 'package:excel/excel.dart' as exc;
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
 import '../../controllers/restaurant/restaurant_controller.dart';
 import '../../controllers/settings/system_settings_controller.dart';
 import '../../models/inventory/settings/system_settings_model.dart';
@@ -317,17 +323,54 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
           const SizedBox(height: 24),
           _buildSectionHeader(
             title: 'Dining Tables List',
-            subtitle: 'Configure physical layout and seat count',
+            subtitle: 'Configure physical layout, seat count, and staff assignments',
             icon: Icons.table_restaurant_outlined,
-            action: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryBlue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () => _showAddTableDialog(context, ctrl),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add Table'),
+            action: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: primaryBlue,
+                    side: const BorderSide(color: primaryBlue),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () => _exportTablesToExcel(ctrl),
+                  icon: const Icon(Icons.file_download_outlined, size: 16),
+                  label: const Text('Export Excel'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.teal.shade800,
+                    side: BorderSide(color: Colors.teal.shade600),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () => _downloadSampleTableExcel(),
+                  icon: const Icon(Icons.description_outlined, size: 16),
+                  label: const Text('Sample Template'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal.shade700,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () => _showImportTablesDialog(context, ctrl),
+                  icon: const Icon(Icons.upload_file, size: 16),
+                  label: const Text('Import Excel / CSV'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () => _showAddTableDialog(context, ctrl),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Table'),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -344,6 +387,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                     separatorBuilder: (_, __) => const Divider(height: 1, color: borderGray),
                     itemBuilder: (context, index) {
                       final table = ctrl.tables[index];
+                      final waiterName = table['waiter']?['employee_name'] ?? table['waiter_name'];
                       return ListTile(
                         title: Text(
                           'Table: ${table['table_name']}',
@@ -386,11 +430,28 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                                 style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
                               ),
                             ),
+                            if (waiterName != null && waiterName.toString().isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Waiter: $waiterName',
+                                  style: TextStyle(color: Colors.green.shade800, fontSize: 11, fontWeight: FontWeight.w600),
+                                ),
+                              ),
                           ],
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            IconButton(
+                              icon: const Icon(Icons.person_pin_outlined, color: Colors.teal, size: 20),
+                              tooltip: 'Assign Staff / Waiter',
+                              onPressed: () => _showAssignTableStaffDialog(context, ctrl, table),
+                            ),
                             IconButton(
                               icon: const Icon(Icons.edit_outlined, color: primaryBlue, size: 18),
                               onPressed: () => _showAddTableDialog(context, ctrl, table: table),
@@ -1396,6 +1457,718 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
           },
         );
       },
+    );
+  }
+
+  Future<void> _exportTablesToExcel(RestaurantController ctrl) async {
+    try {
+      if (ctrl.tables.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No dining tables found to export.')),
+        );
+        return;
+      }
+
+      final excel = exc.Excel.createExcel();
+      final defaultSheet = excel.getDefaultSheet();
+      if (defaultSheet != null) {
+        excel.rename(defaultSheet, 'Dining Tables');
+      }
+
+      final sheet = excel['Dining Tables'];
+
+      sheet.appendRow([
+        exc.TextCellValue('Table Name'),
+        exc.TextCellValue('Capacity (Seats)'),
+        exc.TextCellValue('Floor Name'),
+        exc.TextCellValue('Dining Area'),
+        exc.TextCellValue('Table Type'),
+        exc.TextCellValue('Status'),
+        exc.TextCellValue('Assigned Waiter'),
+        exc.TextCellValue('Assigned Captain'),
+      ]);
+
+      for (final table in ctrl.tables) {
+        final tableName = (table['table_name'] ?? '').toString();
+        final capacity = (table['capacity'] ?? 4).toString();
+        final floorName = (table['floor']?['name'] ?? table['floor_name'] ?? '').toString();
+        final areaName = (table['dining_area']?['name'] ?? table['dining_area_name'] ?? '').toString();
+        final typeName = (table['table_type']?['name'] ?? table['table_type_name'] ?? '').toString();
+        final status = (table['status'] ?? 'Available').toString();
+        final waiter = (table['waiter']?['employee_name'] ?? table['waiter_name'] ?? '').toString();
+        final captain = (table['captain']?['employee_name'] ?? table['captain_name'] ?? '').toString();
+
+        sheet.appendRow([
+          exc.TextCellValue(tableName),
+          exc.TextCellValue(capacity),
+          exc.TextCellValue(floorName),
+          exc.TextCellValue(areaName),
+          exc.TextCellValue(typeName),
+          exc.TextCellValue(status),
+          exc.TextCellValue(waiter),
+          exc.TextCellValue(captain),
+        ]);
+      }
+
+      final bytes = excel.encode();
+      if (bytes == null) return;
+
+      final fileName = 'dining_tables_export_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+
+      if (kIsWeb) {
+        await Printing.sharePdf(
+          bytes: Uint8List.fromList(bytes),
+          filename: fileName,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Exported Successfully! File downloaded.')),
+          );
+        }
+        return;
+      }
+
+      String? targetPath;
+      try {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null && Directory('$userProfile\\Downloads').existsSync()) {
+          targetPath = '$userProfile\\Downloads\\$fileName';
+        } else {
+          final dir = await getApplicationDocumentsDirectory();
+          targetPath = '${dir.path}\\$fileName';
+        }
+      } catch (_) {
+        final dir = await getApplicationDocumentsDirectory();
+        targetPath = '${dir.path}\\$fileName';
+      }
+
+      final file = File(targetPath);
+      await file.writeAsBytes(bytes, flush: true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported ${ctrl.tables.length} tables successfully!\nSaved to: $targetPath'),
+            backgroundColor: Colors.green.shade700,
+            action: SnackBarAction(
+              label: 'Open',
+              textColor: Colors.white,
+              onPressed: () => OpenFile.open(targetPath!),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadSampleTableExcel() async {
+    try {
+      final excel = exc.Excel.createExcel();
+      final defaultSheet = excel.getDefaultSheet();
+      if (defaultSheet != null) {
+        excel.rename(defaultSheet, 'Dining Tables Template');
+      }
+
+      final sheet = excel['Dining Tables Template'];
+
+      sheet.appendRow([
+        exc.TextCellValue('Table Name'),
+        exc.TextCellValue('Capacity (Seats)'),
+        exc.TextCellValue('Floor Name'),
+        exc.TextCellValue('Dining Area'),
+        exc.TextCellValue('Table Type'),
+        exc.TextCellValue('Assigned Waiter'),
+        exc.TextCellValue('Assigned Captain'),
+      ]);
+
+      final sampleRows = [
+        ['Table 1', '4', 'Ground Floor', 'AC Section', 'Standard', 'John Doe', ''],
+        ['Table 2', '4', 'Ground Floor', 'AC Section', 'Standard', '', ''],
+        ['Table 3', '6', 'Ground Floor', 'Family Hall', 'Standard', '', ''],
+        ['VIP 1', '8', 'First Floor', 'VIP Lounge', 'VIP Table', '', 'Captain Alex'],
+        ['Bar 1', '2', 'Ground Floor', 'Bar Lounge', 'High Chair', '', ''],
+      ];
+
+      for (final r in sampleRows) {
+        sheet.appendRow(r.map((c) => exc.TextCellValue(c)).toList());
+      }
+
+      final bytes = excel.encode();
+      if (bytes == null) return;
+
+      final fileName = 'sample_dining_tables_template.xlsx';
+
+      if (kIsWeb) {
+        await Printing.sharePdf(
+          bytes: Uint8List.fromList(bytes),
+          filename: fileName,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sample Template downloaded.')),
+          );
+        }
+        return;
+      }
+
+      String? targetPath;
+      try {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null && Directory('$userProfile\\Downloads').existsSync()) {
+          targetPath = '$userProfile\\Downloads\\$fileName';
+        } else {
+          final dir = await getApplicationDocumentsDirectory();
+          targetPath = '${dir.path}\\$fileName';
+        }
+      } catch (_) {
+        final dir = await getApplicationDocumentsDirectory();
+        targetPath = '${dir.path}\\$fileName';
+      }
+
+      final file = File(targetPath);
+      await file.writeAsBytes(bytes, flush: true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sample Template created!\nSaved to: $targetPath'),
+            backgroundColor: Colors.teal.shade700,
+            action: SnackBarAction(
+              label: 'Open',
+              textColor: Colors.white,
+              onPressed: () => OpenFile.open(targetPath!),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to generate template: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _showImportTablesDialog(BuildContext context, RestaurantController ctrl) {
+    int activeTab = 0; // 0: File Upload, 1: Text Paste
+    String? pickedFileName;
+    List<Map<String, dynamic>> parsedFileRows = [];
+    final textCtrl = TextEditingController(
+      text: 'Table 1, 4, Ground Floor, AC Section, Standard\n'
+            'Table 2, 4, Ground Floor, AC Section, Standard\n'
+            'Table 3, 6, Ground Floor, Family Hall, Standard\n'
+            'VIP 1, 8, First Floor, VIP Lounge, VIP Table\n'
+            'Bar 1, 2, Ground Floor, Bar Lounge, High Chair',
+    );
+    bool isImporting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.table_view_rounded, color: primaryBlue),
+              const SizedBox(width: 8),
+              const Text('Import Dining Tables', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => _downloadSampleTableExcel(),
+                icon: const Icon(Icons.download_rounded, size: 16),
+                label: const Text('Template (.xlsx)', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 580,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    padding: const EdgeInsets.all(10),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, color: primaryBlue, size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '• Floors, Dining Areas & Table Types will be auto-created & linked automatically.\n• Duplicate Table Names are safely updated (upserted) without duplicate records.\n• Strict outlet isolation is enforced.',
+                            style: TextStyle(fontSize: 11.5, color: Color(0xFF1E3A8A), height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Tab switcher
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setDlgState(() => activeTab = 0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: activeTab == 0 ? primaryBlue : Colors.transparent,
+                                  width: 2.5,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.upload_file, size: 16, color: activeTab == 0 ? primaryBlue : Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Upload Excel (.xlsx/.csv)',
+                                  style: TextStyle(
+                                    fontWeight: activeTab == 0 ? FontWeight.bold : FontWeight.normal,
+                                    color: activeTab == 0 ? primaryBlue : Colors.grey.shade700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setDlgState(() => activeTab = 1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: activeTab == 1 ? primaryBlue : Colors.transparent,
+                                  width: 2.5,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.edit_note, size: 18, color: activeTab == 1 ? primaryBlue : Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Paste CSV Text',
+                                  style: TextStyle(
+                                    fontWeight: activeTab == 1 ? FontWeight.bold : FontWeight.normal,
+                                    color: activeTab == 1 ? primaryBlue : Colors.grey.shade700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
+
+                  if (activeTab == 0) ...[
+                    Center(
+                      child: InkWell(
+                        onTap: isImporting
+                            ? null
+                            : () async {
+                                final result = await FilePicker.pickFiles(
+                                  type: FileType.custom,
+                                  allowedExtensions: ['xlsx', 'xls', 'csv'],
+                                  withData: true,
+                                );
+
+                                if (result == null || result.files.isEmpty) return;
+                                final file = result.files.single;
+                                final fileName = file.name;
+                                final bytes = file.bytes ?? (file.path != null ? File(file.path!).readAsBytesSync() : null);
+
+                                if (bytes == null) {
+                                  ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                                    const SnackBar(content: Text('Could not read file bytes'), backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                final parsed = <Map<String, dynamic>>[];
+
+                                if (fileName.toLowerCase().endsWith('.csv')) {
+                                  final content = String.fromCharCodes(bytes);
+                                  final lines = content.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty).toList();
+                                  bool isFirstRow = true;
+                                  int nameCol = 0, capCol = 1, floorCol = 2, areaCol = 3, typeCol = 4, waiterCol = -1, captainCol = -1;
+
+                                  for (final line in lines) {
+                                    final parts = line.split(',').map((p) => p.trim().replaceAll('"', '')).toList();
+                                    if (parts.isEmpty || parts[0].isEmpty) continue;
+
+                                    if (isFirstRow) {
+                                      isFirstRow = false;
+                                      final lower = parts.map((p) => p.toLowerCase()).toList();
+                                      if (lower.any((h) => h.contains('table') || h.contains('capacity') || h.contains('floor') || h.contains('name'))) {
+                                        for (int i = 0; i < lower.length; i++) {
+                                          if (lower[i].contains('table') || lower[i] == 'name') {
+                                            nameCol = i;
+                                          } else if (lower[i].contains('cap') || lower[i].contains('seat')) {
+                                            capCol = i;
+                                          } else if (lower[i].contains('floor')) {
+                                            floorCol = i;
+                                          } else if (lower[i].contains('area') || lower[i].contains('section')) {
+                                            areaCol = i;
+                                          } else if (lower[i].contains('type')) {
+                                            typeCol = i;
+                                          } else if (lower[i].contains('waiter')) {
+                                            waiterCol = i;
+                                          } else if (lower[i].contains('captain')) {
+                                            captainCol = i;
+                                          }
+                                        }
+                                        continue;
+                                      }
+                                    }
+
+                                    parsed.add({
+                                      'table_name': nameCol < parts.length ? parts[nameCol] : parts[0],
+                                      'capacity': capCol < parts.length ? int.tryParse(parts[capCol]) ?? 4 : 4,
+                                      'floor': floorCol >= 0 && floorCol < parts.length && parts[floorCol].isNotEmpty ? parts[floorCol] : 'Main Floor',
+                                      'dining_area': areaCol >= 0 && areaCol < parts.length && parts[areaCol].isNotEmpty ? parts[areaCol] : 'General Dining',
+                                      'table_type': typeCol >= 0 && typeCol < parts.length && parts[typeCol].isNotEmpty ? parts[typeCol] : 'Standard',
+                                      if (waiterCol >= 0 && waiterCol < parts.length && parts[waiterCol].isNotEmpty) 'waiter': parts[waiterCol],
+                                      if (captainCol >= 0 && captainCol < parts.length && parts[captainCol].isNotEmpty) 'captain': parts[captainCol],
+                                    });
+                                  }
+                                } else {
+                                  final excelDoc = exc.Excel.decodeBytes(bytes);
+                                  for (final tableKey in excelDoc.tables.keys) {
+                                    final sheet = excelDoc.tables[tableKey]!;
+                                    if (sheet.rows.isEmpty) continue;
+
+                                    int nameCol = 0, capCol = 1, floorCol = 2, areaCol = 3, typeCol = 4, waiterCol = -1, captainCol = -1;
+                                    bool hasHeader = false;
+
+                                    final firstRow = sheet.rows.first;
+                                    final headerVals = firstRow.map((c) => c?.value?.toString().toLowerCase().trim() ?? '').toList();
+                                    if (headerVals.any((h) => h.contains('table') || h.contains('capacity') || h.contains('floor') || h.contains('name'))) {
+                                      hasHeader = true;
+                                      for (int i = 0; i < headerVals.length; i++) {
+                                        final h = headerVals[i];
+                                        if (h.contains('table') || h == 'name') {
+                                          nameCol = i;
+                                        } else if (h.contains('cap') || h.contains('seat')) {
+                                          capCol = i;
+                                        } else if (h.contains('floor')) {
+                                          floorCol = i;
+                                        } else if (h.contains('area') || h.contains('section')) {
+                                          areaCol = i;
+                                        } else if (h.contains('type')) {
+                                          typeCol = i;
+                                        } else if (h.contains('waiter')) {
+                                          waiterCol = i;
+                                        } else if (h.contains('captain')) {
+                                          captainCol = i;
+                                        }
+                                      }
+                                    }
+
+                                    final startIdx = hasHeader ? 1 : 0;
+                                    for (int r = startIdx; r < sheet.rows.length; r++) {
+                                      final row = sheet.rows[r];
+                                      if (row.isEmpty) continue;
+
+                                      String getVal(int idx) => (idx >= 0 && idx < row.length && row[idx]?.value != null) ? row[idx]!.value.toString().trim() : '';
+
+                                      final tName = getVal(nameCol);
+                                      if (tName.isEmpty) continue;
+
+                                      final capStr = getVal(capCol);
+                                      final fName = getVal(floorCol);
+                                      final aName = getVal(areaCol);
+                                      final tType = getVal(typeCol);
+                                      final wName = waiterCol >= 0 ? getVal(waiterCol) : '';
+                                      final cName = captainCol >= 0 ? getVal(captainCol) : '';
+
+                                      parsed.add({
+                                        'table_name': tName,
+                                        'capacity': int.tryParse(capStr) ?? 4,
+                                        'floor': fName.isNotEmpty ? fName : 'Main Floor',
+                                        'dining_area': aName.isNotEmpty ? aName : 'General Dining',
+                                        'table_type': tType.isNotEmpty ? tType : 'Standard',
+                                        if (wName.isNotEmpty) 'waiter': wName,
+                                        if (cName.isNotEmpty) 'captain': cName,
+                                      });
+                                    }
+                                  }
+                                }
+
+                                setDlgState(() {
+                                  pickedFileName = fileName;
+                                  parsedFileRows = parsed;
+                                });
+                              },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: primaryBlue.withOpacity(0.4), style: BorderStyle.solid),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.blue.shade50.withOpacity(0.3),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.cloud_upload_outlined, size: 40, color: primaryBlue),
+                              const SizedBox(height: 8),
+                              Text(
+                                pickedFileName ?? 'Click to choose Excel (.xlsx / .xls) or .CSV file',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: pickedFileName != null ? Colors.green.shade800 : primaryBlue,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                pickedFileName != null
+                                    ? '${parsedFileRows.length} valid dining table rows detected'
+                                    : 'Columns: Table Name, Capacity, Floor Name, Dining Area, Table Type, Waiter, Captain',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (parsedFileRows.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Ready to import ${parsedFileRows.length} tables (Sample: ${parsedFileRows.take(3).map((r) => r['table_name']).join(', ')}...)',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green.shade800),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ] else ...[
+                    const Text(
+                      'Paste your CSV or comma-separated rows below (one table per line).\nFormat: Table Name, Capacity, Floor, Dining Area, Table Type, Waiter, Captain',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: textCtrl,
+                      maxLines: 7,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'Table 1, 4, Ground Floor, AC Section, Standard',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onPressed: isImporting
+                  ? null
+                  : () async {
+                      List<Map<String, dynamic>> toImport = [];
+
+                      if (activeTab == 0) {
+                        if (parsedFileRows.isEmpty) {
+                          ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                            const SnackBar(content: Text('Please select an Excel or CSV file first!'), backgroundColor: Colors.orange),
+                          );
+                          return;
+                        }
+                        toImport = parsedFileRows;
+                      } else {
+                        final raw = textCtrl.text.trim();
+                        if (raw.isEmpty) return;
+                        final lines = raw.split('\n').where((l) => l.trim().isNotEmpty).toList();
+                        for (final line in lines) {
+                          final parts = line.split(',').map((p) => p.trim()).toList();
+                          if (parts.isEmpty || parts[0].isEmpty) continue;
+                          toImport.add({
+                            'table_name': parts[0],
+                            'capacity': parts.length > 1 ? int.tryParse(parts[1]) ?? 4 : 4,
+                            'floor': parts.length > 2 && parts[2].isNotEmpty ? parts[2] : 'Main Floor',
+                            'dining_area': parts.length > 3 && parts[3].isNotEmpty ? parts[3] : 'General Dining',
+                            'table_type': parts.length > 4 && parts[4].isNotEmpty ? parts[4] : 'Standard',
+                            if (parts.length > 5 && parts[5].isNotEmpty) 'waiter': parts[5],
+                            if (parts.length > 6 && parts[6].isNotEmpty) 'captain': parts[6],
+                          });
+                        }
+                      }
+
+                      if (toImport.isEmpty) {
+                        ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                          const SnackBar(content: Text('No table rows found to import.'), backgroundColor: Colors.orange),
+                        );
+                        return;
+                      }
+
+                      setDlgState(() => isImporting = true);
+                      try {
+                        final res = await ApiClient.post('/api/restaurant/tables/import', {'tables': toImport});
+                        if (dialogCtx.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(res['message'] ?? 'Imported ${toImport.length} tables successfully!'),
+                              backgroundColor: Colors.green.shade700,
+                              duration: const Duration(seconds: 4),
+                            ),
+                          );
+                          ctrl.loadFloors();
+                          ctrl.loadDiningAreas();
+                          ctrl.loadTableTypes();
+                          ctrl.loadTables();
+                        }
+                      } catch (e) {
+                        setDlgState(() => isImporting = false);
+                        if (dialogCtx.mounted) {
+                          ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                            SnackBar(content: Text('Import failed: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+              icon: isImporting
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.file_download_done, size: 16),
+              label: Text(
+                activeTab == 0 && parsedFileRows.isNotEmpty
+                    ? 'Import ${parsedFileRows.length} Tables'
+                    : 'Import All Tables',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAssignTableStaffDialog(BuildContext context, RestaurantController ctrl, Map<String, dynamic> table) async {
+    List<Map<String, dynamic>> employees = [];
+    try {
+      final res = await ApiClient.get('/api/hrms/employees');
+      if (res['success'] == true && res['data'] is List) {
+        employees = List<Map<String, dynamic>>.from(res['data']);
+      }
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    int? selectedWaiterId = table['current_waiter_id'] ?? table['waiter_id'];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Assign Waiter: ${table['table_name']}', style: const TextStyle(fontWeight: FontWeight.bold, color: primaryDark)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Select dedicated staff member or waiter assigned to this dining table:'),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int?>(
+                value: selectedWaiterId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Assigned Waiter / Staff',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('-- None / Open Table --', style: TextStyle(color: Colors.grey)),
+                  ),
+                  ...employees.map((emp) {
+                    final id = emp['id'] as int?;
+                    final name = emp['full_name'] ?? emp['employee_name'] ?? 'Staff #$id';
+                    final role = emp['designation']?['title'] ?? 'Staff';
+                    return DropdownMenuItem<int?>(
+                      value: id,
+                      child: Text('$name ($role)', overflow: TextOverflow.ellipsis),
+                    );
+                  }),
+                ],
+                onChanged: (val) => setDlgState(() => selectedWaiterId = val),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: primaryBlue, foregroundColor: Colors.white),
+              onPressed: () async {
+                try {
+                  await ApiClient.post('/api/restaurant/tables/${table['id']}/assign-user', {
+                    'waiter_id': selectedWaiterId,
+                  });
+                  if (dialogCtx.mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Table staff assignment updated!'), backgroundColor: Colors.green),
+                    );
+                    ctrl.loadTables();
+                  }
+                } catch (e) {
+                  if (dialogCtx.mounted) {
+                    ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                      SnackBar(content: Text('Error assigning table: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save Assignment'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -11,6 +11,8 @@ class Supplier {
   final String? taxIdType;
   final String? taxCountryCode;
   final bool? isActive;
+  final double? openingBalance;
+  final String? asOfDate;
 
   Supplier({
     required this.id,
@@ -25,6 +27,8 @@ class Supplier {
     this.taxIdType,
     this.taxCountryCode,
     this.isActive = true,
+    this.openingBalance,
+    this.asOfDate,
   });
 
   factory Supplier.fromJson(Map<String, dynamic> json) {
@@ -41,6 +45,8 @@ class Supplier {
       taxIdType: json['tax_id_type'],
       taxCountryCode: json['tax_country_code'],
       isActive: json['is_active'] == true || json['is_active'] == null,
+      openingBalance: json['opening_balance'] != null ? double.tryParse(json['opening_balance'].toString()) : null,
+      asOfDate: json['as_of_date'],
     );
   }
 
@@ -57,6 +63,8 @@ class Supplier {
       'tax_id_type': taxIdType,
       'tax_country_code': taxCountryCode,
       'is_active': isActive ?? true,
+      if (openingBalance != null) 'opening_balance': openingBalance,
+      if (asOfDate != null) 'as_of_date': asOfDate,
     };
   }
 }

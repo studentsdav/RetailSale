@@ -143,34 +143,28 @@ exports.login = async (req, res, next) => {
             permissions
         });
 
-        await audit.log({
-            req,
-            module: 'AUTH',
-            action: 'LOGIN',
-            table: 'users',
-            recordId: user.id,
-            newData: { username: user.username },
-            outlet_id: currentOutlet.id,
-            user_id: user.id
-        });
+        Promise.all([
+            audit.log({
+                req,
+                module: 'AUTH',
+                action: 'LOGIN',
+                table: 'users',
+                recordId: user.id,
+                newData: { username: user.username },
+                outlet_id: currentOutlet.id,
+                user_id: user.id
+            }).catch(() => {}),
+            user.update({ last_login: new Date() }).catch(() => {})
+        ]);
 
-        await user.update({ last_login: new Date() });
+        touchClient(outlet_code).catch((err) =>
+            console.warn(`[TOUCH] Background sync: ${err?.message || err}`)
+        );
 
         const property = await db.models.property_info.findOne({
             where: { outlet_id: currentOutlet.id },
             attributes: ['property_name']
-        });
-
-        const outletCheck = await internalCheckOutlet(outlet_code, req.propertyDb);
-
-        if (!outletCheck.success) {
-            return res.status(404).json({
-                success: false,
-                message: outletCheck.message
-            });
-        }
-
-        await touchClient(outlet_code);
+        }).catch(() => null);
 
         const ROLE_MAX_DISCOUNTS = {
             ADMIN: 100.0,
@@ -526,5 +520,172 @@ exports.switchOutlet = async (req, res) => {
     } catch (error) {
         console.error('[SWITCH OUTLET ERROR]', error);
         return res.status(500).json({ success: false, message: 'Failed to complete direct outlet login: ' + error.message });
+    }
+};
+
+exports.pinLogin = async (req, res) => {
+    try {
+        const { pin, outlet_code, username, role } = req.body;
+        const db = req.propertyDb;
+
+        if (!outlet_code) {
+            return res.status(400).json({ success: false, message: 'Outlet code is required.' });
+        }
+        if (!pin || !pin.toString().trim()) {
+            return res.status(400).json({ success: false, message: 'PIN is required.' });
+        }
+
+        const currentOutlet = await db.models.outlets.findOne({
+            where: {
+                outlet_code: outlet_code,
+                is_active: true
+            }
+        });
+
+        if (!currentOutlet) {
+            return res.status(401).json({ success: false, message: 'Invalid or inactive outlet code.' });
+        }
+
+        const cleanPin = pin.toString().trim();
+
+        let user = null;
+        if (username && username.trim()) {
+            user = await db.models.users.findOne({
+                where: {
+                    username: username.trim(),
+                    outlet_id: currentOutlet.id,
+                    is_active: true
+                }
+            });
+            if (user && user.pin_code !== cleanPin) {
+                // Also support hashed pin comparison if hashed
+                let pinOk = false;
+                try {
+                    pinOk = await bcrypt.compare(cleanPin, user.pin_code);
+                } catch (_) {}
+                if (!pinOk) {
+                    return res.status(401).json({ success: false, message: 'Incorrect PIN.' });
+                }
+            }
+        } else {
+            // Find active user matching PIN in this outlet
+            const users = await db.models.users.findAll({
+                where: {
+                    outlet_id: currentOutlet.id,
+                    is_active: true
+                }
+            });
+
+            for (const u of users) {
+                if (u.pin_code === cleanPin) {
+                    user = u;
+                    break;
+                }
+                try {
+                    if (u.pin_code && await bcrypt.compare(cleanPin, u.pin_code)) {
+                        user = u;
+                        break;
+                    }
+                } catch (_) {}
+            }
+        }
+
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Invalid PIN or user not found for this outlet.' });
+        }
+
+        if (role && user.role !== role) {
+            return res.status(401).json({ success: false, message: 'Selected role does not match user.' });
+        }
+
+        let licenseState = 'VALID';
+        let daysRemaining = 999;
+        try {
+            const licenseData = await verifyLicenseOnline(outlet_code);
+            daysRemaining = licenseData.days_remaining;
+            licenseState = licenseData.license_status;
+
+            if (licenseState === 'EXPIRED') {
+                return res.status(403).json({
+                    success: false,
+                    license_status: 'EXPIRED',
+                    message: 'System license expired. Please renew to continue.'
+                });
+            }
+        } catch (err) {
+            console.warn(`[PIN AUTH] Cloud license check bypassed: ${err.message}`);
+        }
+
+        let permissions = [];
+        if (user.role === 'ADMIN') {
+            permissions = ['*'];
+        } else {
+            const perms = await db.models.user_permissions.findAll({
+                where: { user_id: user.id }
+            });
+            permissions = perms.map(p => p.perm_key);
+
+            if (permissions.length === 0) {
+                const defaultPerms = DEFAULT_ROLE_PERMISSIONS[user.role] || [];
+                if (defaultPerms.length > 0) {
+                    await db.models.user_permissions.bulkCreate(
+                        defaultPerms.map(p => ({ user_id: user.id, perm_key: p }))
+                    );
+                    permissions = defaultPerms;
+                }
+            }
+        }
+
+        const token = jwt.sign({
+            user_id: user.id,
+            username: user.username,
+            outlet_id: currentOutlet.id,
+            role: user.role,
+            outlet_code: currentOutlet.outlet_code,
+            permissions
+        });
+
+        try {
+            await audit.log({
+                req,
+                module: 'AUTH',
+                action: 'PIN_LOGIN',
+                table: 'users',
+                recordId: user.id,
+                newData: { username: user.username },
+                outlet_id: currentOutlet.id,
+                user_id: user.id
+            });
+        } catch (_) {}
+
+        await user.update({ last_login: new Date() });
+
+        const property = await db.models.property_info.findOne({
+            where: { outlet_id: currentOutlet.id },
+            attributes: ['property_name']
+        });
+
+        return res.json({
+            success: true,
+            license_status: licenseState,
+            days_remaining: daysRemaining,
+            token,
+            user: {
+                username: user.username,
+                name: user.full_name,
+                role: user.role,
+                mobile: user.mobile,
+                max_discount_percent: user.max_discount_percent ? parseFloat(user.max_discount_percent) : 10.0,
+                outlet_id: currentOutlet.id,
+                outlet_code: currentOutlet.outlet_code,
+                property_name: property?.property_name || currentOutlet.outlet_name,
+                outlet_type: currentOutlet.outlet_type || '',
+                business_module: currentOutlet.business_module || 'ALL',
+                permissions
+            }
+        });
+    } catch (error) {
+        console.error('[PIN LOGIN ERROR]', error);
+        return res.status(500).json({ success: false, message: 'PIN login failed: ' + error.message });
     }
 };

@@ -8,6 +8,7 @@ import '../core/api/endpoints.dart';
 import '../core/settings/local_preferences.dart';
 import '../core/auth/token_storage.dart';
 import '../core/config/app_config.dart';
+import 'gemini_api_key_dialog.dart';
 
 class LynxAssistChatMessage {
   final String text;
@@ -92,7 +93,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
 
   // AI Configuration Settings
   String _aiProvider = 'gemini';
-  String _aiModelName = 'gemini-1.5-flash';
+  String _aiModelName = 'gemini-3.1-flash-lite';
   String _aiApiKey = '';
   String _aiBaseUrl = 'https://generativelanguage.googleapis.com';
   int _maxRows = 100;
@@ -312,7 +313,7 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                           setModalState(() {
                             selectedProvider = val;
                             if (val == 'gemini') {
-                              modelCtrl.text = 'gemini-1.5-flash';
+                              modelCtrl.text = 'gemini-3.1-flash-lite';
                               urlCtrl.text = 'https://generativelanguage.googleapis.com';
                             } else if (val == 'openai') {
                               modelCtrl.text = 'gpt-4o';
@@ -498,6 +499,20 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
     final trimmed = text.trim();
     final hasImage = _attachedImageBytes != null;
     if ((trimmed.isEmpty && !hasImage) || _isLoading) return;
+
+    if ((_aiProvider == 'gemini' || _aiProvider.isEmpty) && _aiApiKey.trim().isEmpty) {
+      final savedKey = await GeminiApiKeyDialog.show(
+        context,
+        isDarkMode: _isDarkMode,
+      );
+      if (savedKey != null && savedKey.trim().isNotEmpty) {
+        setState(() {
+          _aiApiKey = savedKey.trim();
+        });
+      } else {
+        return;
+      }
+    }
 
     String? base64Image;
     if (_attachedImageBytes != null) {
@@ -690,18 +705,48 @@ class _LynxAssistModalState extends State<LynxAssistModal> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: (_aiApiKey.isNotEmpty ? Colors.green : Colors.amber).withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _aiApiKey.isNotEmpty ? "AI GEMINI" : "AI ONLINE",
-                              style: TextStyle(
-                                color: _aiApiKey.isNotEmpty ? (_isDarkMode ? Colors.greenAccent : Colors.green.shade800) : (_isDarkMode ? Colors.amberAccent : Colors.amber.shade900),
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
+                          InkWell(
+                            onTap: () async {
+                              final savedKey = await GeminiApiKeyDialog.show(
+                                context,
+                                initialKey: _aiApiKey,
+                                isDarkMode: _isDarkMode,
+                              );
+                              if (savedKey != null) {
+                                setState(() {
+                                  _aiApiKey = savedKey.trim();
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (_aiApiKey.isNotEmpty ? Colors.green : Colors.purple).withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _aiApiKey.isNotEmpty ? Icons.check_circle_rounded : Icons.vpn_key_rounded,
+                                    size: 10,
+                                    color: _aiApiKey.isNotEmpty
+                                        ? (_isDarkMode ? Colors.greenAccent : Colors.green.shade800)
+                                        : (_isDarkMode ? const Color(0xFFC084FC) : const Color(0xFF9333EA)),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _aiApiKey.isNotEmpty ? "AI ACTIVE" : "SET API KEY",
+                                    style: TextStyle(
+                                      color: _aiApiKey.isNotEmpty
+                                          ? (_isDarkMode ? Colors.greenAccent : Colors.green.shade800)
+                                          : (_isDarkMode ? const Color(0xFFC084FC) : const Color(0xFF9333EA)),
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

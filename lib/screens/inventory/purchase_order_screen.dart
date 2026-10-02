@@ -106,7 +106,10 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
   double get totalAmount => _items.fold(0, (s, e) => s + e.amount);
   double get totalGST =>
       _items.fold(0, (s, e) => s + ((e.qty * e.rate) * (e.tax / 100)));
-  double get netAmount => totalAmount + totalGST;
+  double get netAmount {
+    final raw = totalAmount + totalGST;
+    return _rateInclusive ? raw.roundToDouble() : raw;
+  }
 
   String _fmtNumber(num value) {
     return value % 1 == 0 ? value.toDouble().toString() : value.toString();
@@ -1235,7 +1238,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     try {
       final totalGST = _items.fold<double>(
           0, (sum, item) => sum + ((item.qty * item.rate) * (item.tax / 100)));
-      final grandTotal = totalAmount + totalGST;
+      final grandTotal = _rateInclusive ? (totalAmount + totalGST).roundToDouble() : (totalAmount + totalGST);
 
       String? pdfBase64;
       try {
@@ -1301,7 +1304,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     final totalGST = _items.fold<double>(
         0, (sum, item) => sum + ((item.qty * item.rate) * (item.tax / 100)));
 
-    final grandTotal = totalAmount + totalGST;
+    final grandTotal = _rateInclusive ? (totalAmount + totalGST).roundToDouble() : (totalAmount + totalGST);
 
     final property = propertyInfo;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);

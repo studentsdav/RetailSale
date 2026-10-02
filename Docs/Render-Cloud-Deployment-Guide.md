@@ -65,7 +65,37 @@ In your Web Service, go to the **Environment** tab and add the following key-val
 
 ---
 
-### 2. SMTP Email Service & OTP Delivery (Primary & Add-On)
+### 2. Redis Cache & Distributed Performance (Recommended for Multi-Instance)
+
+| Variable | Example Value | Description |
+| :--- | :--- | :--- |
+| `REDIS_URL` | `rediss://default:password@redis-cloud-host:6379` | Redis / Upstash / Redis Enterprise URI for distributed caching, session storage & rate limiting |
+| `REDIS_HOST` | `redis-cloud-host` | Redis host name (fallback if `REDIS_URL` is omitted) |
+
+---
+
+### 3. Cloud Object Storage / S3 / Cloudflare R2 (For Backups & Large Files >50MB)
+
+| Variable | Example Value | Description |
+| :--- | :--- | :--- |
+| `S3_BUCKET` *(or `R2_BUCKET`)* | `retail-pos-backups` | Cloud object storage bucket name for direct database backup archives |
+| `S3_ENDPOINT` *(or `R2_ENDPOINT`)* | `https://<account_id>.r2.cloudflarestorage.com` | Custom S3/R2/MinIO endpoint URL (bypasses Google Apps Script payload limits) |
+| `S3_REGION` *(or `AWS_REGION`)* | `auto` / `us-east-1` / `ap-south-1` | S3 or Cloudflare R2 bucket region |
+| `S3_ACCESS_KEY_ID` | `AKIAIOSFODNN7EXAMPLE` | S3 / Cloudflare R2 / MinIO Access Key ID |
+| `S3_SECRET_ACCESS_KEY` | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` | S3 / Cloudflare R2 / MinIO Secret Access Key |
+
+---
+
+### 4. Security & Field-Level Token Encryption
+
+| Variable | Example Value | Description |
+| :--- | :--- | :--- |
+| `ENCRYPTION_SECRET` | `aes-256-gcm-secret-key-32-chars!` | Custom AES-256-GCM secret key for field-level encryption (WhatsApp tokens, store credentials) |
+| `BACKUP_SECRET` | `enterprise-backup-encryption-key-123` | Passphrase used to encrypt automated database backup zip archives |
+
+---
+
+### 5. SMTP Email Service & OTP Delivery (Primary & Add-On)
 
 > [!IMPORTANT]
 > Render Web Services block outbound TCP port 587 (`ETIMEDOUT`). For Zoho Mail or custom SMTP on Render, set **`EMAIL_PORT=465`** and **`EMAIL_SECURITY=SSL`** (or use **`RESEND_API_KEY`** over HTTPS port 443).
@@ -88,7 +118,7 @@ In your Web Service, go to the **Environment** tab and add the following key-val
 
 ---
 
-### 3. Google Drive Cloud Backups & Sheet Sync (Add-On)
+### 6. Google Drive Cloud Backups & Sheet Sync (Add-On)
 
 | Variable | Example Value | Description |
 | :--- | :--- | :--- |

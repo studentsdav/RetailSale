@@ -38,6 +38,7 @@ import '../../utils/branding_storage.dart';
 import '../../models/inventory/billing_charge_model.dart';
 import '../../models/inventory/item_model.dart';
 import '../../models/inventory/sale_customer_model.dart';
+import '../../core/services/state_service.dart';
 import '../../models/inventory/sale_item_model.dart';
 import '../../models/inventory/sale_order_model.dart';
 import '../../models/inventory/sale_scheme_model.dart';
@@ -4657,7 +4658,7 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   Future<void> _showTaxModeDialog() async {
-    String selectedMode = _taxMode;
+    String selectedMode = _taxMode == 'IGST' ? 'IGST' : (_taxMode == 'NONE' ? 'NONE' : 'CGST_SGST');
     String? tempIgstState = _selectedIgstState;
 
     final knownModes = <String>{};
@@ -4673,43 +4674,16 @@ class _SaleScreenState extends State<SaleScreen> {
       }
     }
 
-    addOption('CGST_SGST', 'CGST + SGST (India)');
-    addOption('IGST', 'IGST (Interstate India)');
-    addOption('VAT', 'VAT');
-    addOption('SALES_TAX', 'US Sales Tax (State + City)');
-    addOption('US_SALES_TAX', 'US Sales Tax');
-    addOption('CESS', 'CESS');
-    addOption('CUSTOM', 'Custom Tax');
-    addOption('NONE', 'No Tax');
-
-    for (final g in _loadedTaxGroups) {
-      final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
-          ? g.groupCode!.trim().toUpperCase()
-          : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
-      addOption(key, 'Tax Group: ${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)');
-    }
-
-    if (!knownModes.contains(selectedMode)) {
-      final match = _loadedTaxGroups.where((g) =>
-          g.groupName.trim().toLowerCase() == selectedMode.trim().toLowerCase() ||
-          g.id == selectedMode).firstOrNull;
-      if (match != null) {
-        selectedMode = match.groupCode != null && match.groupCode!.trim().isNotEmpty
-            ? match.groupCode!.trim().toUpperCase()
-            : match.groupName;
-      } else if (selectedMode.trim().isNotEmpty) {
-        addOption(selectedMode, selectedMode.replaceAll('_', ' '));
-      } else {
-        selectedMode = 'CGST_SGST';
-      }
-    }
+    addOption('CGST_SGST', 'Intra-State GST (CGST + SGST)');
+    addOption('IGST', 'Interstate GST (IGST)');
+    addOption('NONE', 'No Tax / Zero Rated');
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           return AlertDialog(
-            title: const Text('Select Tax Mode'),
+            title: const Text('Select GST Tax Mode'),
             content: SizedBox(
               width: 380,
               child: Column(
@@ -4733,14 +4707,16 @@ class _SaleScreenState extends State<SaleScreen> {
                     DropdownSearch<String>(
                       selectedItem: tempIgstState,
                       items: (filter, _) async {
-                        if (filter.isEmpty) return _stateCodes.keys.toList();
-                        return _stateCodes.keys
+                        final dynamicStates = await StateService.fetchStates(countryCode: 'IN');
+                        final allStates = <String>{..._stateCodes.keys, ...dynamicStates}.toList()..sort();
+                        if (filter.isEmpty) return allStates;
+                        return allStates
                             .where((state) => state.toLowerCase().contains(filter.toLowerCase()))
                             .toList();
                       },
                       itemAsString: (state) {
                         final code = _stateCodes[state];
-                        return '${_titleCase(state)} ($code)';
+                        return code != null ? '${_titleCase(state)} ($code)' : _titleCase(state);
                       },
                       compareFn: (first, second) => first == second,
                       popupProps: const PopupProps.menu(showSearchBox: true),
@@ -10687,13 +10663,14 @@ class _SaleScreenState extends State<SaleScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _tintedActionButton(
-                          icon: Icons.percent,
-                          onPressed: _showTaxModeDialog,
-                          backgroundColor: const Color(0xFFE0F2FE),
-                          foregroundColor: const Color(0xFF0369A1),
-                          tooltip: 'Select tax mode',
-                        ),
+                        if (CountryTaxHelper.isIndiaCountry(_billingCountry))
+                          _tintedActionButton(
+                            icon: Icons.percent,
+                            onPressed: _showTaxModeDialog,
+                            backgroundColor: const Color(0xFFE0F2FE),
+                            foregroundColor: const Color(0xFF0369A1),
+                            tooltip: 'IGST / Interstate Tax Selection',
+                          ),
                         _tintedActionButton(
                           icon: Icons.add_card_rounded,
                           onPressed: _showDiscountDialog,
@@ -13464,59 +13441,75 @@ class _SaleScreenState extends State<SaleScreen> {
                         final chargeTaxItems = <DropdownMenuItem<String>>[];
                         final knownTaxTypes = <String>{};
 
-                        void addTaxOption(String value, String label) {
-                          if (!knownTaxTypes.contains(value)) {
-                            knownTaxTypes.add(value);
-                            chargeTaxItems.add(DropdownMenuItem(
-                              value: value,
-                              child: Text(label, overflow: TextOverflow.ellipsis),
-                            ));
-                          }
-                        }
+                        // Always include None / Tax Exempt (0%)
+                        knownTaxTypes.add('NONE');
+                        chargeTaxItems.add(const DropdownMenuItem(
+                          value: 'NONE',
+                          child: Text('None / Tax Exempt (0%)'),
+                        ));
 
+                        // Strictly show only created Tax Groups from Settings!
                         for (final g in _loadedTaxGroups) {
                           final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
                               ? g.groupCode!.trim().toUpperCase()
                               : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
-                          addTaxOption(key, 'Tax Group: ${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)');
+                          if (!knownTaxTypes.contains(key)) {
+                            knownTaxTypes.add(key);
+                            chargeTaxItems.add(DropdownMenuItem(
+                              value: key,
+                              child: Text(
+                                '${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ));
+                          }
                         }
 
-                        addTaxOption('GST', 'GST');
-                        addTaxOption('VAT', 'VAT');
-                        addTaxOption('SALES_TAX', 'Sales Tax');
-                        addTaxOption('US_SALES_TAX', 'US Sales Tax');
-                        addTaxOption('CESS', 'CESS');
-                        addTaxOption('OTHER', 'Other');
-
-                        if (!knownTaxTypes.contains(taxType)) {
-                          addTaxOption(taxType, taxType.replaceAll('_', ' '));
+                        // Default selected tax type if not matching
+                        String selectedTaxType = taxType;
+                        if (!knownTaxTypes.contains(selectedTaxType)) {
+                          final match = _loadedTaxGroups.where((g) =>
+                              g.groupName.trim().toLowerCase() == selectedTaxType.toLowerCase() ||
+                              g.id == selectedTaxType ||
+                              (g.groupCode != null && g.groupCode!.trim().toUpperCase() == selectedTaxType.toUpperCase())).firstOrNull;
+                          if (match != null) {
+                            selectedTaxType = match.groupCode != null && match.groupCode!.trim().isNotEmpty
+                                ? match.groupCode!.trim().toUpperCase()
+                                : match.groupName;
+                          } else {
+                            selectedTaxType = knownTaxTypes.first;
+                          }
                         }
 
                         return DropdownButtonFormField<String>(
-                          key: ValueKey('customChargeTax-$taxType'),
+                          key: ValueKey('customChargeTax-$selectedTaxType'),
                           isExpanded: true,
-                          value: taxType,
+                          value: selectedTaxType,
                           items: chargeTaxItems,
                           onChanged: (value) {
                             if (value != null) {
                               setDialogState(() {
                                 taxType = value;
-                                final matchGroup = _loadedTaxGroups.where((g) {
-                                  final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
-                                      ? g.groupCode!.trim().toUpperCase()
-                                      : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
-                                  return key == value;
-                                }).firstOrNull;
+                                if (value == 'NONE') {
+                                  taxCtrl.text = '0';
+                                } else {
+                                  final matchGroup = _loadedTaxGroups.where((g) {
+                                    final key = g.groupCode != null && g.groupCode!.trim().isNotEmpty
+                                        ? g.groupCode!.trim().toUpperCase()
+                                        : (g.groupName.trim().isNotEmpty ? g.groupName.trim() : g.id);
+                                    return key == value;
+                                  }).firstOrNull;
 
-                                if (matchGroup != null) {
-                                  taxCtrl.text = matchGroup.totalRate.toStringAsFixed(
-                                    matchGroup.totalRate % 1 == 0 ? 0 : 2,
-                                  );
+                                  if (matchGroup != null) {
+                                    taxCtrl.text = matchGroup.totalRate.toStringAsFixed(
+                                      matchGroup.totalRate % 1 == 0 ? 0 : 2,
+                                    );
+                                  }
                                 }
                               });
                             }
                           },
-                          decoration: const InputDecoration(labelText: 'Tax Selection / Group'),
+                          decoration: const InputDecoration(labelText: 'Charge Tax Selection / Group'),
                         );
                       },
                     ),

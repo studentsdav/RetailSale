@@ -67,6 +67,11 @@ android {
             applicationId "com.retailpos.supplier"
             resValue "string", "app_name", "RetailPOS Supplier"
         }
+        waiter {
+            dimension "default"
+            applicationId "com.retailpos.waiter"
+            resValue "string", "app_name", "RetailPOS Waiter"
+        }
     }
 
     buildTypes {

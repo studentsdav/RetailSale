@@ -858,7 +858,23 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     final remarkCtrl = TextEditingController(text: cartItem['item_remark']);
     List<String> selectedMods = List<String>.from(cartItem['modifier_details'] ?? []);
 
-    final modifiersList = ['Extra Cheese', 'No Onion', 'Extra Spicy', 'Less Salt', 'Gluten Free'];
+    List<String> modifiersList = ['Extra Cheese', 'No Onion', 'Extra Spicy', 'Less Salt', 'Gluten Free'];
+    try {
+      final res = await ApiClient.get('${ApiEndpoints.itemModifiers}?is_active=true');
+      if (res['success'] == true && res['data'] is List) {
+        final List loaded = res['data'];
+        final applicable = loaded.where((m) {
+          final mItemId = int.tryParse(m['item_master_id']?.toString() ?? '0') ?? 0;
+          return mItemId == 0 || mItemId == itemId;
+        }).map((m) => m['modifier_name']?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+
+        if (applicable.isNotEmpty) {
+          modifiersList = applicable;
+        }
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
 
     await showDialog(
       context: context,

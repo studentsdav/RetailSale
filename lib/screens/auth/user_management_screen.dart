@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:retailpos/controllers/security/user_controller.dart';
 
 import '../../controllers/public/outlet_controller.dart' show OutletController;
@@ -652,10 +653,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         ],
                         TextFormField(
                             controller: username,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
+                            ],
                             decoration: const InputDecoration(
-                                labelText: 'Username *',
-                                border: OutlineInputBorder()),
-                            validator: (v) => v!.isEmpty ? 'Required' : null),
+                              labelText: 'Username *',
+                              hintText: 'e.g. cashier_01',
+                              helperText: 'Letters, numbers & underscore only (no spaces)',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Username is required';
+                              final val = v.trim();
+                              if (val.contains(' ')) return 'Username cannot contain spaces';
+                              if (val.length < 3) return 'Must be at least 3 characters';
+                              if (val.length > 30) return 'Cannot exceed 30 characters';
+                              if (!RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_]*$').hasMatch(val)) {
+                                return 'Only letters, numbers, and underscores allowed (must start with letter or number)';
+                              }
+                              return null;
+                            }),
                         const SizedBox(height: 12),
                         TextFormField(
                             controller: name,
@@ -689,8 +706,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         TextFormField(
                           controller: password,
                           obscureText: obscurePass,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                          ],
                           decoration: InputDecoration(
                             labelText: 'Password *',
+                            helperText: 'Minimum 4 characters (no spaces)',
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                                 icon: Icon(obscurePass
@@ -699,8 +720,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                                 onPressed: () => setDialogState(
                                     () => obscurePass = !obscurePass)),
                           ),
-                          validator: (v) =>
-                              v!.length < 4 ? 'Min 4 chars' : null,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Password is required';
+                            if (v.contains(' ')) return 'Password cannot contain spaces';
+                            if (v.length < 4) return 'Minimum 4 characters required';
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
@@ -812,10 +837,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           setDialogState(() => isLoading = true);
                           try {
                             await userCtrl.create(
-                              username: username.text,
-                              fullName: name.text,
-                              mobile: mobile.text,
-                              contact_email: email.text,
+                              username: username.text.trim(),
+                              fullName: name.text.trim(),
+                              mobile: mobile.text.trim(),
+                              contact_email: email.text.trim(),
                               role: role,
                               maxDiscountPercent: double.tryParse(maxDiscount.text.trim()) ?? 100.0,
                               permissions: AppConstants.getDefaultPermissionsForRole(role, _userBusinessModule),
@@ -1283,8 +1308,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   TextField(
                     controller: newPass,
                     obscureText: obscureNew,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                    ],
                     decoration: InputDecoration(
                       labelText: 'New Password',
+                      helperText: 'Minimum 4 characters (no spaces)',
                       suffixIcon: IconButton(
                         icon: Icon(obscureNew
                             ? Icons.visibility
@@ -1301,6 +1330,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   TextField(
                     controller: confirm,
                     obscureText: obscureConfirm,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                    ],
                     decoration: InputDecoration(
                       labelText: 'Confirm Password',
                       suffixIcon: IconButton(
@@ -1323,7 +1355,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   onPressed: loading
                       ? null
                       : () async {
-                          if (newPass.text != confirm.text) {
+                          final p = newPass.text;
+                          if (p.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('New password is required')),
+                            );
+                            return;
+                          }
+                          if (p.contains(' ')) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password cannot contain spaces')),
+                            );
+                            return;
+                          }
+                          if (p.length < 4) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password must be at least 4 characters')),
+                            );
+                            return;
+                          }
+                          if (p != confirm.text) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                   content: Text('Passwords do not match')),
@@ -1388,8 +1439,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   TextField(
                     controller: newPass,
                     obscureText: obscure1,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                    ],
                     decoration: InputDecoration(
                       labelText: 'New Password',
+                      helperText: 'Minimum 4 characters (no spaces)',
                       suffixIcon: IconButton(
                         icon: Icon(
                             obscure1 ? Icons.visibility : Icons.visibility_off),
@@ -1401,6 +1456,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   TextField(
                     controller: confirm,
                     obscureText: obscure2,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                    ],
                     decoration: InputDecoration(
                       labelText: 'Confirm Password',
                       suffixIcon: IconButton(
@@ -1419,7 +1477,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 ),
                 FilledButton(
                   onPressed: () async {
-                    if (newPass.text != confirm.text) {
+                    final p = newPass.text;
+                    if (p.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('New password is required')),
+                      );
+                      return;
+                    }
+                    if (p.contains(' ')) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Password cannot contain spaces')),
+                      );
+                      return;
+                    }
+                    if (p.length < 4) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Password must be at least 4 characters')),
+                      );
+                      return;
+                    }
+                    if (p != confirm.text) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Passwords do not match')),
                       );

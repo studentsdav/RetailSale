@@ -58,6 +58,8 @@ import '../inventory/stock_receive_screen.dart';
 import '../reports/transfer_progress_dashboard_screen.dart';
 import '../inventory/assembly_screen.dart';
 import '../inventory/return_issue_screen.dart';
+import '../inventory/stock_taking_screen.dart';
+import '../inventory/modifier_master_screen.dart';
 import '../inventory/supplier_return_refund_screen.dart';
 import '../inventory/supplier_return_screen.dart';
 import '../hrms/employee_screen.dart';
@@ -66,6 +68,8 @@ import '../hrms/payroll_screen.dart';
 import '../hrms/hrms_masters_screen.dart';
 import '../inventory/supplier_master_screen.dart';
 import '../restaurant/captain_dashboard_screen.dart';
+import '../restaurant/waiter_app_screen.dart';
+import '../settings/mpesa_config_screen.dart';
 import '../restaurant/floor_plan_configurator.dart';
 import '../restaurant/restaurant_setup_screen.dart';
 import '../restaurant/kds_screen.dart';
@@ -2975,13 +2979,6 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
       // Operations
       {
         'category': 'Operations',
-        'icon': Icons.shopping_cart_checkout,
-        'label': 'Purchase Order',
-        'permission': 'PURCHASE_ORDER',
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseOrderScreen())),
-      },
-      {
-        'category': 'Operations',
         'icon': Icons.shopping_bag_outlined,
         'label': 'Customer App (Delivery)',
         'permission': 'CUSTOMER_APP',
@@ -3123,6 +3120,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
       },
       {
         'category': 'Operations',
+        'icon': Icons.fact_check_outlined,
+        'label': 'Stock Taking (Physical Audit)',
+        'subLabel': 'Count physical stock, calculate variance, and reconcile inventory',
+        'permission': 'STOCK_OUT',
+        'keywords': ['stock taking', 'stock take', 'physical count', 'inventory audit', 'stock audit', 'variance', 'stock balance', 'reconcile'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockTakingScreen())),
+      },
+      {
+        'category': 'Operations',
         'icon': Icons.warning_amber,
         'label': 'Damage Items',
         'permission': 'DAMAGE',
@@ -3211,6 +3217,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
       },
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.tune,
+        'label': 'Item Modifiers & Add-ons',
+        'subLabel': 'Configure item-level and global modifiers with custom pricing',
+        'permission': 'ITEM_MASTER',
+        'keywords': ['modifiers', 'modifier', 'add-ons', 'addon', 'customization', 'extra cheese', 'spice level'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ModifierMasterScreen())),
+      },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
         'icon': Icons.store,
         'label': 'Vendor Master',
         'permission': 'SUPPLIER_MASTER',
@@ -3288,6 +3303,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'permission': 'SMTP_SETTINGS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmtpSettingsScreen())),
       },
+      {
+        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
+        'icon': Icons.phone_android,
+        'label': 'Safaricom M-Pesa Integration',
+        'subLabel': 'Configure Daraja API STK Push, Till, & Paybill',
+        'permission': 'PAYMENT_MODES',
+        'keywords': ['mpesa', 'm-pesa', 'daraja', 'safaricom', 'stk push', 'paybill', 'till number', 'kenya payments', 'mobile money'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MpesaConfigScreen())),
+      },
 
       // HR & Payroll
       {
@@ -3326,6 +3350,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'label': 'Captain Console',
         'permission': 'RESTAURANT_CONSOLE',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CaptainDashboardScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.room_service_outlined,
+        'label': 'Waiter Floor Terminal',
+        'subLabel': 'Post kitchen orders, print bills, and track running & settled tickets',
+        'permission': 'RESTAURANT_CONSOLE',
+        'keywords': ['waiter', 'waiter app', 'table order', 'kot', 'kitchen order', 'proforma', 'running orders', 'floor app'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WaiterAppScreen())),
       },
       {
         'category': 'Restaurant (Beta)',

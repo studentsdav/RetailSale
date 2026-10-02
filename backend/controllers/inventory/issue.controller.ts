@@ -557,7 +557,7 @@ export const getNextIssueNo = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const issueController = {
     createIssue,
     modifyIssue,
     getIssueDetails,
@@ -569,3 +569,6 @@ export default {
     getIssue,
     getNextIssueNo
 };
+
+module.exports = issueController;
+export default issueController;

@@ -7,6 +7,10 @@ module.exports = (sequelize, DataTypes) => {
         },
 
         password_hash: DataTypes.TEXT,
+        pin_code: {
+            type: DataTypes.STRING(100),
+            allowNull: true
+        },
         full_name: DataTypes.STRING,
         mobile: DataTypes.STRING,
         contact_email: {

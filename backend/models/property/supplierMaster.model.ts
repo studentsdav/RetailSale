@@ -24,6 +24,10 @@ module.exports = (sequelize: any, DataTypes: any) => {
         tax_id_number: DataTypes.STRING(100),
         tax_id_type: DataTypes.STRING(50),
         tax_country_code: DataTypes.STRING(10),
+        opening_balance: {
+            type: DataTypes.DECIMAL(12, 2),
+            defaultValue: 0.00
+        },
         is_active: {
             type: DataTypes.BOOLEAN,
             defaultValue: true

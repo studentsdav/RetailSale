@@ -9,7 +9,12 @@ import 'package:printing/printing.dart';
 
 import '../../controllers/inventory/supplier_controller.dart';
 import '../../core/api/api_client.dart';
+import '../../core/currency/currency_service.dart';
+import '../../core/services/state_service.dart';
+import '../../core/settings/local_preferences.dart';
+import '../../core/utils/country_tax_helper.dart';
 import '../../models/inventory/supplier_model.dart';
+import '../../widgets/state_dropdown_field.dart';
 
 class SupplierMasterScreen extends StatefulWidget {
   const SupplierMasterScreen({super.key});
@@ -31,64 +36,65 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
   final _state = TextEditingController();
   final _gstin = TextEditingController();
   final _search = TextEditingController();
+  final _openingBalance = TextEditingController();
 
   int? _editIndex;
   final SupplierController supplierCtrl = SupplierController();
 
   List<Supplier> _suppliers = [];
   List<Supplier> _filtered = [];
-  final _taxCountryCode = TextEditingController(text: "IN");
+  final _taxCountryCode = TextEditingController(text: "US");
+  String _storeDefaultCountry = 'US';
   bool _isActive = true;
 
-  // ================= INDIAN STATES LIST =================
-  final List<String> _indianStates = [
-    'Andaman and Nicobar Islands',
-    'Andhra Pradesh',
-    'Arunachal Pradesh',
-    'Assam',
-    'Bihar',
-    'Chandigarh',
-    'Chhattisgarh',
-    'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi',
-    'Goa',
-    'Gujarat',
-    'Haryana',
-    'Himachal Pradesh',
-    'Jammu and Kashmir',
-    'Jharkhand',
-    'Karnataka',
-    'Kerala',
-    'Ladakh',
-    'Lakshadweep',
-    'Madhya Pradesh',
-    'Maharashtra',
-    'Manipur',
-    'Meghalaya',
-    'Mizoram',
-    'Nagaland',
-    'Odisha',
-    'Puducherry',
-    'Punjab',
-    'Rajasthan',
-    'Sikkim',
-    'Tamil Nadu',
-    'Telangana',
-    'Tripura',
-    'Uttar Pradesh',
-    'Uttarakhand',
-    'West Bengal'
-  ];
+  List<String> _availableStates = [];
+  String? _lastLoadedCountry;
 
   @override
   void initState() {
     super.initState();
+    _initStoreCountry();
     _loadSuppliers();
     _generateCode();
+    _taxCountryCode.addListener(_onCountryCodeChanged);
+  }
+
+  Future<void> _initStoreCountry() async {
+    final billingCountry = await LocalPreferences.getBillingCountry();
+    final defaultCode = CountryTaxHelper.getDefaultCountryCode(billingCountry);
+    _storeDefaultCountry = defaultCode;
+    if (mounted) {
+      setState(() {
+        _taxCountryCode.text = defaultCode;
+      });
+      _loadStates();
+    }
+  }
+
+  void _onCountryCodeChanged() {
+    final currentCountry = CountryTaxHelper.normalizeCountryCode(_taxCountryCode.text.trim());
+    if (_lastLoadedCountry != currentCountry) {
+      _loadStates();
+    }
+  }
+
+  Future<void> _loadStates() async {
+    final country = CountryTaxHelper.normalizeCountryCode(_taxCountryCode.text.trim());
+    _lastLoadedCountry = country;
+    final loaded = await StateService.fetchStates(countryCode: country);
+    if (mounted) {
+      setState(() {
+        _availableStates = List.from(loaded);
+        if (_state.text.trim().isNotEmpty && !_availableStates.contains(_state.text.trim())) {
+          _availableStates.insert(0, _state.text.trim());
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _taxCountryCode.removeListener(_onCountryCodeChanged);
     _code.dispose();
     _name.dispose();
     _address.dispose();
@@ -97,6 +103,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     _state.dispose();
     _gstin.dispose();
     _search.dispose();
+    _openingBalance.dispose();
     _taxCountryCode.dispose();
     _verticalController.dispose();
     _horizontalController.dispose();
@@ -132,15 +139,10 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       );
       return;
     }
-    if (_state.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('State is required.')),
-      );
-      return;
-    }
 
     if (!_formKey.currentState!.validate()) return;
 
+    final rawOpening = double.tryParse(_openingBalance.text.trim());
     final model = Supplier(
       id: _editIndex == null ? 0 : _suppliers[_editIndex!].id,
       supplierCode: _code.text,
@@ -151,10 +153,23 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       state: _state.text.trim().isEmpty ? null : _state.text.trim(),
       gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim(),
       taxCountryCode: _taxCountryCode.text.trim().isEmpty
-          ? null
-          : _taxCountryCode.text.trim(),
+          ? 'IN'
+          : _taxCountryCode.text.trim().toUpperCase(),
       isActive: _isActive,
+      openingBalance: rawOpening != null && rawOpening > 0 ? rawOpening : null,
     );
+
+    // Auto-save custom state in database if not already in available list
+    final enteredState = _state.text.trim();
+    if (enteredState.isNotEmpty && !_availableStates.contains(enteredState)) {
+      try {
+        await ApiClient.post('/api/inventory/states', {
+          'state_name': enteredState,
+          'country_code': _taxCountryCode.text.trim().toUpperCase(),
+        });
+        _loadStates();
+      } catch (_) {}
+    }
 
     if (_editIndex == null) {
       await supplierCtrl.create(model);
@@ -179,9 +194,16 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       _email.text = s.email ?? '';
       _state.text = s.state ?? '';
       _gstin.text = s.gstin ?? '';
-      _taxCountryCode.text = s.taxCountryCode ?? '';
+      _taxCountryCode.text = s.taxCountryCode ?? 'IN';
       _isActive = s.isActive ?? true;
+      _openingBalance.text = s.openingBalance != null && s.openingBalance! > 0
+          ? s.openingBalance!.toStringAsFixed(2)
+          : '';
+      if (s.state != null && s.state!.trim().isNotEmpty && !_availableStates.contains(s.state!.trim())) {
+        _availableStates.insert(0, s.state!.trim());
+      }
     });
+    _loadStates();
   }
 
   Future<void> _deleteSupplier(int i) async {
@@ -199,9 +221,11 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
       _editIndex = null;
       _state.clear();
       _gstin.clear();
-      _taxCountryCode.text = "IN";
+      _openingBalance.clear();
+      _taxCountryCode.text = _storeDefaultCountry;
       _isActive = true;
     });
+    _loadStates();
     _generateCode();
   }
 
@@ -478,6 +502,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
 
             _field(_gstin, 'GSTIN', required: false),
             _field(_taxCountryCode, 'Country Code (IN/US/UK)', required: false),
+            _field(_openingBalance, 'Opening Balance (Credit)', isNumber: true, required: false, width: 190),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -531,29 +556,12 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
     );
   }
 
-  // ================= SEARCHABLE STATE DROPDOWN =================
+  // ================= SEARCHABLE STATE / REGION DROPDOWN =================
   Widget _stateDropdown() {
-    return DropdownMenu<String>(
-      width: 220,
+    return StateDropdownField(
       controller: _state,
-      label: const Text('State'),
-      enableFilter: true, // Enables typing to search the list
-      requestFocusOnTap: true,
-      inputDecorationTheme: const InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white,
-      ),
-      dropdownMenuEntries: _indianStates.map((String state) {
-        return DropdownMenuEntry<String>(
-          value: state,
-          label: state,
-        );
-      }).toList(),
-      onSelected: (String? selectedState) {
-        if (selectedState != null) {
-          _state.text = selectedState;
-        }
-      },
+      countryCode: _taxCountryCode.text,
+      width: 220,
     );
   }
 
@@ -624,6 +632,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                   DataColumn(label: Text('State')),
                   DataColumn(label: Text('Country')),
                   DataColumn(label: Text('GSTIN')),
+                  DataColumn(label: Text('Opening Bal')),
                   DataColumn(label: Text('Status')),
                   DataColumn(label: Text('Action')),
                 ],
@@ -642,6 +651,9 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
                       DataCell(Text(s.state ?? '')),
                       DataCell(Text(s.taxCountryCode ?? 'IN')),
                       DataCell(Text(s.gstin ?? '')),
+                      DataCell(Text(s.openingBalance != null && s.openingBalance! > 0
+                          ? CurrencyService.format(s.openingBalance!)
+                          : '-')),
                       DataCell(
                         InkWell(
                           onTap: () async {

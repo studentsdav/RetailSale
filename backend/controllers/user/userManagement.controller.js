@@ -77,6 +77,22 @@ exports.checkUsernameAvailability = async (req, res) => {
         }
 
         const cleanUsername = username.trim();
+
+        if (cleanUsername.includes(' ')) {
+            return res.status(400).json({ success: false, message: 'Username cannot contain spaces' });
+        }
+
+        if (cleanUsername.length < 3 || cleanUsername.length > 30) {
+            return res.status(400).json({ success: false, message: 'Username must be between 3 and 30 characters' });
+        }
+
+        const usernameRegex = /^[a-zA-Z0-9][a-zA-Z0-9_]*$/;
+        if (!usernameRegex.test(cleanUsername)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username can only contain letters, numbers, and underscores, and must start with a letter or number'
+            });
+        }
         const existing = await req.propertyDb.models.users.findOne({
             where: { username: cleanUsername }
         });
@@ -100,7 +116,7 @@ exports.checkUsernameAvailability = async (req, res) => {
 };
 
 exports.createUser = async (req, res) => {
-    const { username, full_name, mobile, role, permissions, password, contact_email, max_discount_percent } = req.body;
+    const { username, full_name, mobile, role, permissions, password, contact_email, max_discount_percent, pin_code } = req.body;
 
     const outlet_id = req.user.outlet_id;
 
@@ -112,6 +128,28 @@ exports.createUser = async (req, res) => {
     }
 
     const cleanUsername = username.trim();
+
+    if (cleanUsername.includes(' ')) {
+        return res.status(400).json({
+            success: false,
+            message: 'Username cannot contain spaces'
+        });
+    }
+
+    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
+        return res.status(400).json({
+            success: false,
+            message: 'Username must be between 3 and 30 characters'
+        });
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9][a-zA-Z0-9_]*$/;
+    if (!usernameRegex.test(cleanUsername)) {
+        return res.status(400).json({
+            success: false,
+            message: 'Username can only contain letters, numbers, and underscores (no spaces or special characters), and must start with a letter or number'
+        });
+    }
 
     // Check if username is already taken globally
     const existing = await req.propertyDb.models.users.findOne({
@@ -125,12 +163,28 @@ exports.createUser = async (req, res) => {
         });
     }
 
-    if (!password || password.length < 4) {
+    if (!password) {
+        return res.status(400).json({
+            success: false,
+            message: 'Password is required'
+        });
+    }
+
+    if (password.includes(' ')) {
+        return res.status(400).json({
+            success: false,
+            message: 'Password cannot contain spaces'
+        });
+    }
+
+    if (password.length < 4) {
         return res.status(400).json({
             success: false,
             message: 'Password must be at least 4 characters'
         });
     }
+
+
 
     const hash = await bcrypt.hash(password, 10);
 
@@ -148,6 +202,7 @@ exports.createUser = async (req, res) => {
         role,
         max_discount_percent: finalMaxDiscount,
         password_hash: hash,
+        pin_code: pin_code ? pin_code.toString().trim() : null,
         is_active: true
     });
 
@@ -180,6 +235,16 @@ exports.changePassword = async (req, res) => {
         if (!oldPassword || !newPassword) {
             return res.status(400).json({ success: false, message: "Old and new passwords are required." });
         }
+
+        if (newPassword.includes(' ')) {
+            return res.status(400).json({ success: false, message: "New password cannot contain spaces." });
+        }
+
+        if (newPassword.length < 4) {
+            return res.status(400).json({ success: false, message: "New password must be at least 4 characters." });
+        }
+
+
         const user = await req.propertyDb.models.users.findOne({
             where: { username: username, is_active: true }
         });
@@ -205,7 +270,7 @@ exports.changePassword = async (req, res) => {
 };
 
 exports.updateUser = async (req, res) => {
-    const { full_name, mobile, role, contact_email, max_discount_percent } = req.body;
+    const { full_name, mobile, role, contact_email, max_discount_percent, pin_code } = req.body;
 
     const user = await req.propertyDb.models.users.findByPk(req.params.id);
     if (!user) {
@@ -218,6 +283,9 @@ exports.updateUser = async (req, res) => {
     const updatePayload = { full_name, mobile, role, contact_email };
     if (max_discount_percent !== undefined) {
         updatePayload.max_discount_percent = max_discount_percent;
+    }
+    if (pin_code !== undefined) {
+        updatePayload.pin_code = pin_code ? pin_code.toString().trim() : null;
     }
 
     await user.update(updatePayload);
@@ -281,6 +349,18 @@ exports.toggleStatus = async (req, res) => {
 exports.resetPassword = async (req, res) => {
 
     const { password } = req.body;
+
+    if (!password) {
+        return res.status(400).json({ success: false, message: "Password is required." });
+    }
+
+    if (password.includes(' ')) {
+        return res.status(400).json({ success: false, message: "Password cannot contain spaces." });
+    }
+
+    if (password.length < 4) {
+        return res.status(400).json({ success: false, message: "Password must be at least 4 characters." });
+    }
 
     const user = await req.propertyDb.models.users.findByPk(req.params.id);
 

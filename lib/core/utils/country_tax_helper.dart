@@ -3,33 +3,41 @@ import '../currency/currency_service.dart';
 class CountryTaxHelper {
   CountryTaxHelper._();
 
-  static bool isIndiaCountry(String? country) {
-    if (CurrencyService.code != 'INR' && CurrencyService.symbol != '₹' && (CurrencyService.code.isNotEmpty || CurrencyService.symbol.isNotEmpty)) {
-      return false;
-    }
+  static String normalizeCountryCode(String? country) {
     if (country == null || country.trim().isEmpty) {
-      return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR';
+      if (CurrencyService.code == 'INR' || CurrencyService.symbol == '₹') return 'IN';
+      if (CurrencyService.code == 'KES' || CurrencyService.symbol == 'KSh') return 'KE';
+      if (CurrencyService.code == 'GBP' || CurrencyService.symbol == '£') return 'GB';
+      if (CurrencyService.code == 'AED') return 'AE';
+      if (CurrencyService.code == 'CAD') return 'CA';
+      if (CurrencyService.code == 'AUD') return 'AU';
+      if (CurrencyService.code == 'EUR' || CurrencyService.symbol == '€') return 'EU';
+      return 'US'; // Global default when USD or other international currencies
     }
-    final c = country.trim().toLowerCase();
-    if (c == 'usa' ||
-        c == 'united states' ||
-        c == 'kenya' ||
-        c == 'uk' ||
-        c == 'united kingdom' ||
-        c == 'uae' ||
-        c == 'euro' ||
-        c == 'europe' ||
-        c == 'germany' ||
-        c == 'france' ||
-        c == 'italy' ||
-        c == 'spain' ||
-        c == 'international') {
-      return false;
-    }
-    if (c == 'india') {
-      return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR' || CurrencyService.code.isEmpty;
-    }
-    return CurrencyService.symbol == '₹' || CurrencyService.code == 'INR';
+    final c = country.trim().toUpperCase();
+    if (c == 'US' || c == 'USA' || c == 'UNITED STATES' || c == 'UNITED STATES OF AMERICA') return 'US';
+    if (c == 'IN' || c == 'IND' || c == 'INDIA') return 'IN';
+    if (c == 'KE' || c == 'KEN' || c == 'KENYA') return 'KE';
+    if (c == 'GB' || c == 'UK' || c == 'UNITED KINGDOM' || c == 'GREAT BRITAIN') return 'GB';
+    if (c == 'AE' || c == 'UAE' || c == 'UNITED ARAB EMIRATES') return 'AE';
+    if (c == 'CA' || c == 'CAN' || c == 'CANADA') return 'CA';
+    if (c == 'AU' || c == 'AUS' || c == 'AUSTRALIA') return 'AU';
+    if (c == 'TZ' || c == 'TZA' || c == 'TANZANIA') return 'TZ';
+    if (c == 'UG' || c == 'UGA' || c == 'UGANDA') return 'UG';
+    if (c == 'RW' || c == 'RWA' || c == 'RWANDA') return 'RW';
+    if (c == 'ZA' || c == 'ZAF' || c == 'SOUTH AFRICA') return 'ZA';
+    if (c == 'NG' || c == 'NGA' || c == 'NIGERIA') return 'NG';
+    if (c.length == 2) return c;
+    return c;
+  }
+
+  static String getDefaultCountryCode([String? country]) {
+    return normalizeCountryCode(country);
+  }
+
+  static bool isIndiaCountry(String? country) {
+    final normalized = normalizeCountryCode(country);
+    return normalized == 'IN';
   }
 
   static String taxName([String? country, String? taxMode]) {
@@ -51,30 +59,22 @@ class CountryTaxHelper {
   }
 
   static String taxIdLabel([String? country]) {
-    final c = (country ?? '').trim().toLowerCase();
-    if (c == 'usa' || c == 'united states') return 'Tax ID';
-    if (c == 'kenya') return 'PIN';
-    if (c == 'uk' || c == 'united kingdom') return 'VAT Reg No';
-    if (c == 'uae') return 'TRN';
-    if (c == 'india' || isIndiaCountry(country)) return 'GSTIN';
-    if (CurrencyService.symbol == '\$') return 'Tax ID';
-    if (CurrencyService.code == 'KES') return 'PIN';
-    if (CurrencyService.symbol == '£') return 'VAT Reg No';
-    if (CurrencyService.code == 'AED') return 'TRN';
+    final norm = normalizeCountryCode(country);
+    if (norm == 'US') return 'Tax ID';
+    if (norm == 'KE') return 'PIN';
+    if (norm == 'GB') return 'VAT Reg No';
+    if (norm == 'AE') return 'TRN';
+    if (norm == 'IN') return 'GSTIN';
     return 'Tax ID';
   }
 
   static String businessRegLabel([String? country]) {
-    final c = (country ?? '').trim().toLowerCase();
-    if (c == 'usa' || c == 'united states') return 'State Tax ID';
-    if (c == 'kenya') return 'Business Reg No';
-    if (c == 'uk' || c == 'united kingdom') return 'CRN';
-    if (c == 'uae') return 'Trade License';
-    if (c == 'india' || isIndiaCountry(country)) return 'PAN';
-    if (CurrencyService.symbol == '\$') return 'State Tax ID';
-    if (CurrencyService.code == 'KES') return 'Business Reg No';
-    if (CurrencyService.symbol == '£') return 'CRN';
-    if (CurrencyService.code == 'AED') return 'Trade License';
+    final norm = normalizeCountryCode(country);
+    if (norm == 'US') return 'State Tax ID';
+    if (norm == 'KE') return 'Business Reg No';
+    if (norm == 'GB') return 'CRN';
+    if (norm == 'AE') return 'Trade License';
+    if (norm == 'IN') return 'PAN';
     return 'State Tax ID';
   }
 }

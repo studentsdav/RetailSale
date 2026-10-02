@@ -3660,11 +3660,30 @@ COMMIT;
         CREATE TABLE IF NOT EXISTS item_modifiers (
           id SERIAL PRIMARY KEY,
           outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
-          item_master_id INTEGER NOT NULL REFERENCES item_master(id) ON DELETE CASCADE,
+          item_master_id INTEGER,
           modifier_name VARCHAR(150) NOT NULL,
           price DECIMAL(12, 2) DEFAULT 0.00,
           is_active BOOLEAN DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS stock_taking (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          audit_no VARCHAR(50) NOT NULL,
+          audit_date DATE NOT NULL,
+          item_code VARCHAR(50) NOT NULL,
+          item_name VARCHAR(200) NOT NULL,
+          unit VARCHAR(30) DEFAULT 'PCS',
+          department VARCHAR(100) DEFAULT 'General',
+          system_balance DECIMAL(12, 2) DEFAULT 0.00,
+          counted_qty DECIMAL(12, 2) DEFAULT 0.00,
+          variance DECIMAL(12, 2) DEFAULT 0.00,
+          reason VARCHAR(255) DEFAULT 'Physical Stock Count',
+          status VARCHAR(30) DEFAULT 'COMPLETED',
+          reconciled_by VARCHAR(100),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS restaurant_audit_trail (
@@ -4093,7 +4112,31 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 109,
+    description: "Create custom_states table for custom and international state/region management",
+    up: async (db: any) => {
+      await db.query(`
+        BEGIN;
+        CREATE TABLE IF NOT EXISTS custom_states (
+          id SERIAL PRIMARY KEY,
+          outlet_id INT NOT NULL,
+          country_code VARCHAR(10) NOT NULL DEFAULT 'IN',
+          state_name VARCHAR(150) NOT NULL,
+          state_code VARCHAR(50) DEFAULT NULL,
+          is_custom BOOLEAN DEFAULT TRUE,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (outlet_id, country_code, state_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_states_outlet_country ON custom_states(outlet_id, country_code);
+        COMMIT;
+      `);
+    }
   }
 ];
 
 export default migrations;
+

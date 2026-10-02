@@ -671,3 +671,348 @@ exports.updateReservationStatus = async (req, res) => {
         res.status(400).json({ success: false, error: err.message });
     }
 };
+
+/* =========================================================================
+   TABLE IMPORT & USER ASSIGNMENT & MULTI-TRANSACTION
+   ========================================================================= */
+
+exports.importTables = async (req, res) => {
+    const t = await req.propertyDb.transaction();
+    try {
+        const outlet_id = req.user?.outlet_id;
+        if (!outlet_id) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'Invalid outlet session' });
+        }
+
+        const { tables } = req.body;
+
+        if (!tables || !Array.isArray(tables) || tables.length === 0) {
+            await t.rollback();
+            return res.status(400).json({ success: false, message: 'No table records provided for import' });
+        }
+
+        let importedCount = 0;
+        let updatedCount = 0;
+
+        // Cache created/found floors, areas, types and employees in memory during this transaction
+        const floorCache = new Map();
+        const areaCache = new Map();
+        const typeCache = new Map();
+        const employeeCache = new Map();
+
+        for (const row of tables) {
+            const tableName = (
+                row.table_name || 
+                row['Table Name'] || 
+                row['Table Number'] || 
+                row['Table No'] || 
+                row.tableName || 
+                row.name || 
+                row.Table || 
+                ''
+            ).toString().trim();
+
+            if (!tableName) continue;
+
+            const capacity = parseInt(
+                row.capacity || 
+                row['Capacity'] || 
+                row['Seats'] || 
+                row['Capacity (Seats)'] || 
+                row.seats || 
+                4, 
+                10
+            ) || 4;
+
+            const floorName = (
+                row.floor || 
+                row['Floor'] || 
+                row['Floor Name'] || 
+                row.floor_name || 
+                'Main Floor'
+            ).toString().trim();
+
+            const areaName = (
+                row.dining_area || 
+                row['Dining Area'] || 
+                row['Area'] || 
+                row.area_name || 
+                row.area || 
+                'General Dining'
+            ).toString().trim();
+
+            const typeName = (
+                row.table_type || 
+                row['Table Type'] || 
+                row['Type'] || 
+                row.type || 
+                row.table_type_name || 
+                'Standard'
+            ).toString().trim();
+
+            const waiterIdentifier = (
+                row.waiter || 
+                row['Waiter'] || 
+                row['Assigned Waiter'] || 
+                row.waiter_name || 
+                row.current_waiter_id || 
+                ''
+            ).toString().trim();
+
+            const captainIdentifier = (
+                row.captain || 
+                row['Captain'] || 
+                row['Assigned Captain'] || 
+                row.captain_name || 
+                row.current_captain_id || 
+                ''
+            ).toString().trim();
+
+            const statusVal = (
+                row.status || 
+                row['Status'] || 
+                'Available'
+            ).toString().trim();
+
+            // 1. Find or auto-create Floor
+            let floor = null;
+            if (floorName) {
+                const floorKey = floorName.toLowerCase();
+                if (floorCache.has(floorKey)) {
+                    floor = floorCache.get(floorKey);
+                } else {
+                    floor = await req.propertyDb.models.floors.findOne({
+                        where: {
+                            outlet_id,
+                            name: { [Op.iLike]: floorName }
+                        },
+                        transaction: t
+                    });
+                    if (!floor) {
+                        floor = await req.propertyDb.models.floors.create({
+                            outlet_id,
+                            name: floorName,
+                            status: 'ACTIVE'
+                        }, { transaction: t });
+                    }
+                    floorCache.set(floorKey, floor);
+                }
+            }
+
+            // 2. Find or auto-create Dining Area
+            let area = null;
+            if (areaName) {
+                const areaKey = areaName.toLowerCase();
+                if (areaCache.has(areaKey)) {
+                    area = areaCache.get(areaKey);
+                } else {
+                    area = await req.propertyDb.models.dining_areas.findOne({
+                        where: {
+                            outlet_id,
+                            name: { [Op.iLike]: areaName }
+                        },
+                        transaction: t
+                    });
+                    if (!area) {
+                        area = await req.propertyDb.models.dining_areas.create({
+                            outlet_id,
+                            name: areaName,
+                            description: 'Auto-created from Excel import',
+                            status: 'ACTIVE'
+                        }, { transaction: t });
+                    }
+                    areaCache.set(areaKey, area);
+                }
+            }
+
+            // 3. Find or auto-create Table Type
+            let tableType = null;
+            if (typeName) {
+                const typeKey = typeName.toLowerCase();
+                if (typeCache.has(typeKey)) {
+                    tableType = typeCache.get(typeKey);
+                } else {
+                    tableType = await req.propertyDb.models.table_types.findOne({
+                        where: {
+                            outlet_id,
+                            name: { [Op.iLike]: typeName }
+                        },
+                        transaction: t
+                    });
+                    if (!tableType) {
+                        tableType = await req.propertyDb.models.table_types.create({
+                            outlet_id,
+                            name: typeName,
+                            charge_type: 'FLAT',
+                            charge_amount: 0.00
+                        }, { transaction: t });
+                    }
+                    typeCache.set(typeKey, tableType);
+                }
+            }
+
+            // 4. Resolve Waiter (optional)
+            let waiterId = null;
+            if (waiterIdentifier) {
+                const wKey = waiterIdentifier.toLowerCase();
+                if (employeeCache.has(wKey)) {
+                    waiterId = employeeCache.get(wKey);
+                } else {
+                    const emp = await req.propertyDb.models.hr_employees.findOne({
+                        where: {
+                            outlet_id,
+                            [Op.or]: [
+                                { full_name: { [Op.iLike]: waiterIdentifier } },
+                                { employee_code: { [Op.iLike]: waiterIdentifier } }
+                            ]
+                        },
+                        transaction: t
+                    });
+                    if (emp) {
+                        waiterId = emp.id;
+                        employeeCache.set(wKey, waiterId);
+                    }
+                }
+            }
+
+            // 5. Resolve Captain (optional)
+            let captainId = null;
+            if (captainIdentifier) {
+                const cKey = captainIdentifier.toLowerCase();
+                if (employeeCache.has(cKey)) {
+                    captainId = employeeCache.get(cKey);
+                } else {
+                    const emp = await req.propertyDb.models.hr_employees.findOne({
+                        where: {
+                            outlet_id,
+                            [Op.or]: [
+                                { full_name: { [Op.iLike]: captainIdentifier } },
+                                { employee_code: { [Op.iLike]: captainIdentifier } }
+                            ]
+                        },
+                        transaction: t
+                    });
+                    if (emp) {
+                        captainId = emp.id;
+                        employeeCache.set(cKey, captainId);
+                    }
+                }
+            }
+
+            // 6. Duplicate Prevention & Upsert on (outlet_id, table_name)
+            let table = await req.propertyDb.models.restaurant_tables.findOne({
+                where: {
+                    outlet_id,
+                    table_name: { [Op.iLike]: tableName }
+                },
+                transaction: t
+            });
+
+            if (table) {
+                const updatePayload = {
+                    capacity,
+                    floor_id: floor ? floor.id : table.floor_id,
+                    dining_area_id: area ? area.id : table.dining_area_id,
+                    table_type_id: tableType ? tableType.id : table.table_type_id,
+                };
+                if (waiterId !== null) updatePayload.current_waiter_id = waiterId;
+                if (captainId !== null) updatePayload.current_captain_id = captainId;
+                if (statusVal && statusVal !== 'Available' && statusVal !== 'Occupied' && statusVal !== 'Reserved') {
+                    updatePayload.status = statusVal;
+                }
+
+                await table.update(updatePayload, { transaction: t });
+                updatedCount++;
+            } else {
+                await req.propertyDb.models.restaurant_tables.create({
+                    outlet_id,
+                    table_name: tableName,
+                    capacity,
+                    status: (statusVal && ['Available', 'Occupied', 'Reserved', 'Billed'].includes(statusVal)) ? statusVal : 'Available',
+                    floor_id: floor ? floor.id : null,
+                    dining_area_id: area ? area.id : null,
+                    table_type_id: tableType ? tableType.id : null,
+                    current_waiter_id: waiterId,
+                    current_captain_id: captainId,
+                }, { transaction: t });
+                importedCount++;
+            }
+        }
+
+        await t.commit();
+        res.json({
+            success: true,
+            message: `Successfully imported ${importedCount} new tables and updated ${updatedCount} existing tables.`,
+            imported: importedCount,
+            updated: updatedCount
+        });
+    } catch (err) {
+        await t.rollback();
+        console.error('Error importing tables:', err);
+        res.status(500).json({ success: false, message: 'Failed to import tables: ' + err.message });
+    }
+};
+
+exports.assignTableUser = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const { id } = req.params;
+        const { waiter_id, captain_id } = req.body;
+
+        const table = await req.propertyDb.models.restaurant_tables.findOne({
+            where: { id, outlet_id }
+        });
+
+        if (!table) {
+            return res.status(404).json({ success: false, message: 'Table not found' });
+        }
+
+        const updateData = {};
+        if (waiter_id !== undefined) updateData.current_waiter_id = waiter_id ? Number(waiter_id) : null;
+        if (captain_id !== undefined) updateData.current_captain_id = captain_id ? Number(captain_id) : null;
+
+        await table.update(updateData);
+
+        res.json({
+            success: true,
+            message: 'Table assigned successfully',
+            data: table
+        });
+    } catch (err) {
+        console.error('Error assigning table:', err);
+        res.status(500).json({ success: false, message: 'Failed to assign table: ' + err.message });
+    }
+};
+
+exports.getTableTransactions = async (req, res) => {
+    try {
+        const outlet_id = req.user.outlet_id;
+        const { id } = req.params;
+
+        // Fetch active KOTs for this table
+        const kots = await req.propertyDb.models.kot_headers.findAll({
+            where: {
+                outlet_id,
+                table_id: id,
+                status: { [Op.ne]: 'c' }
+            },
+            include: [
+                {
+                    model: req.propertyDb.models.kot_items,
+                    as: 'items'
+                }
+            ],
+            order: [['created_at', 'ASC']]
+        });
+
+        res.json({
+            success: true,
+            data: kots
+        });
+    } catch (err) {
+        console.error('Error fetching table transactions:', err);
+        res.status(500).json({ success: false, message: 'Failed to load table transactions' });
+    }
+};
+

@@ -294,10 +294,13 @@ export const stopAssembly = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const assemblyController = {
     getNextAssemblyNo,
     createAssembly,
     listAssemblies,
     getAssemblyDetails,
     stopAssembly
 };
+
+module.exports = assemblyController;
+export default assemblyController;

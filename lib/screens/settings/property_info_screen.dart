@@ -10,6 +10,7 @@ import '../../core/auth/token_storage.dart';
 import '../../core/currency/currency_service.dart';
 import '../../models/common/property_info_model.dart';
 import '../../utils/branding_storage.dart';
+import '../../widgets/state_dropdown_field.dart';
 import 'package:provider/provider.dart';
 
 class PropertyInfoScreen extends StatefulWidget {
@@ -281,7 +282,14 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
                           prefixIcon: Icons.location_on,
                           maxLines: 2),
                       _field(_city, 'City', prefixIcon: Icons.location_city),
-                      _field(_state, 'State / Region', prefixIcon: Icons.map),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: StateDropdownField(
+                          controller: _state,
+                          countryCode: _billingCountry,
+                          width: 320,
+                        ),
+                      ),
                       _field(_pin, 'Postal / PIN Code',
                           prefixIcon: Icons.pin_drop, isNumber: true),
                     ],

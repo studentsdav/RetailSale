@@ -489,7 +489,7 @@ export const rejectDamage = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const damageController = {
     createDamage,
     updateDamageItem,
     getDamage,
@@ -498,3 +498,6 @@ export default {
     approveDamage,
     rejectDamage
 };
+
+module.exports = damageController;
+export default damageController;

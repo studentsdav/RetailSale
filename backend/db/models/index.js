@@ -305,6 +305,10 @@ propertyDb.models.kot_revisions =
     require('../../models/property/kotRevision.model')(propertyDb, DataTypes);
 propertyDb.models.item_modifiers =
     require('../../models/property/itemModifier.model')(propertyDb, DataTypes);
+propertyDb.models.stock_taking =
+    require('../../models/property/stockTaking.model')(propertyDb, DataTypes);
+propertyDb.models.custom_states =
+    require('../../models/property/customState.model')(propertyDb, DataTypes);
 propertyDb.models.restaurant_audit_trail =
     require('../../models/property/restaurantAuditTrail.model')(propertyDb, DataTypes);
 propertyDb.models.delivery_challan_headers =

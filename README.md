@@ -69,8 +69,22 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 | Category | Environment Variable | Example Value | Description |
 | :--- | :--- | :--- | :--- |
 | **Database** | `DATABASE_URL` | `postgresql://user:pass@dpg-xyz.render.com/dbname` | PostgreSQL connection string (Triggers Cloud SaaS mode) |
-| | `DB_SSL` | `true` | Required for SSL connection to Cloud PostgreSQL |
-| **Authentication**| `JWT_SECRET` | `super-secret-jwt-key-2026-prod` | Secret key used to sign JWT tokens |
+| | `DB_HOST` | `localhost` | PostgreSQL host (Used when `DATABASE_URL` is omitted) |
+| | `DB_PORT` | `5432` | PostgreSQL port |
+| | `DB_USER` | `postgres` | PostgreSQL username |
+| | `DB_PASSWORD` | `postgres` | PostgreSQL password |
+| | `DB_NAME` | `retailsale_db` | PostgreSQL database name |
+| | `DB_SSL` | `true` | Required for SSL connection to Cloud PostgreSQL (Render, Neon, RDS) |
+| **Redis Cache & Performance** | `REDIS_URL` | `rediss://default:password@redis-host:6379` | Redis connection URL for distributed caching, rate-limiting & session store |
+| | `REDIS_HOST` | `redis-host` | Redis host (Fallback if `REDIS_URL` is not provided) |
+| **Cloud Object Storage (S3 / R2)** | `S3_BUCKET` *(or `R2_BUCKET`)* | `retail-backups-bucket` | Cloud storage bucket name for direct database backup archives & large media (>50MB) |
+| | `S3_ENDPOINT` *(or `R2_ENDPOINT`)* | `https://<account_id>.r2.cloudflarestorage.com` | Custom S3/R2 Endpoint URL (Cloudflare R2, MinIO, GCP Storage, AWS) |
+| | `S3_REGION` *(or `AWS_REGION`)* | `auto` / `us-east-1` / `ap-south-1` | S3 / R2 storage bucket region |
+| | `S3_ACCESS_KEY_ID` | `AKIAIOSFODNN7EXAMPLE` | S3 / Cloudflare R2 / MinIO Access Key ID |
+| | `S3_SECRET_ACCESS_KEY` | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` | S3 / Cloudflare R2 / MinIO Secret Access Key |
+| **Authentication & Security** | `JWT_SECRET` | `super-secret-jwt-key-2026-prod` | Secret key used to sign and verify user JWT authentication tokens |
+| | `ENCRYPTION_SECRET` | `aes-256-gcm-secret-key-32-chars!` | Encryption key for securing sensitive store credentials & WhatsApp tokens in DB |
+| | `BACKUP_SECRET` | `enterprise-backup-encryption-key-123` | Passphrase used to encrypt automated database backup zip archives |
 | **Email Provider Mode** | `EMAIL_PROVIDER` | `RESEND` | Provider mode: **`RESEND`** (Resend API), **`GMAIL`** (Gmail OAuth2), **`SMTP`** (SMTP only), or **`AUTO`** |
 | **Resend API** | `RESEND_API_KEY` | `re_123456789abcdef` | HTTPS Resend API key for 0.1s instant OTP emails over Port 443 |
 | | `EMAIL_FROM` | `"Retail POS" <help@famalth.com>` | Custom verified sender header name & email address |
@@ -87,6 +101,12 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 | **Google Sync** | `ROOT_FOLDER_ID` | `1A2B3C4D5E6F7G8H` | Google Drive Root Folder ID for automated backups |
 | | `SCRIPT_URL` | `https://script.google.com/macros/s/exec` | Google Apps Script Sync Endpoint URL |
 | | `SHEET_ID` | `1XYZ2ABC3DEF4GHI` | Google Sheets Sync Database Spreadsheet ID |
+| **Server & Cloud** | `PORT` | `3000` | HTTP port for the Express API backend |
+| | `NODE_ENV` | `production` | Environment mode (`development` or `production`) |
+| | `IS_CLOUD` | `true` | Explicitly declares cloud deployment environment |
+
+> [!NOTE]
+> **Global Multi-Tenant Design**: Business-level settings (AI API keys, WhatsApp country rates, currency formats, multi-tax matrices, and local timezones) are configured dynamically inside the application and stored per outlet in the database, requiring no manual environment variable maintenance.
 
 ---
 

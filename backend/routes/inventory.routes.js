@@ -22,6 +22,9 @@ const groupCtrl = require('../controllers/inventory/group.controller');
 const subCtrl = require('../controllers/inventory/subcategory.controller');
 const brandCtrl = require('../controllers/inventory/brand.controller');
 const stockTransferCtrl = require('../controllers/inventory/stockTransfer.controller');
+const stockTakingCtrl = require('../controllers/inventory/stockTaking.controller');
+const modifierCtrl = require('../controllers/inventory/itemModifier.controller');
+const stateCtrl = require('../controllers/system/state.controller');
 const backupController = require('../controllers/public/backup.controller');
 const syncDatabase = require('../modules/sheetService');
 
@@ -37,6 +40,7 @@ console.log({
 
 router.get('/property-info', ctrlprop.getPropertyInfo);
 router.post('/property-info', ctrlprop.savePropertyInfo);
+router.get('/onboarding-status', settingsctrl.getOnboardingStatus);
 
 // ATTRIBUTES & TEMPLATES
 router.get('/attributes', attributeCtrl.getAttributes);
@@ -203,7 +207,21 @@ router.post('/stock-transfers/:id/receive', stockTransferCtrl.receiveTransfer);
 router.get('/stock-transfers/overall-progress', stockTransferCtrl.getOverallProgress);
 router.get('/stock-transfers/outlet-progress', stockTransferCtrl.getIndividualOutletProgress);
 router.get('/stock-transfers/outlet-progress/:outlet_id', stockTransferCtrl.getIndividualOutletProgress);
-router.get('/stock-transfers', stockTransferCtrl.listTransfers);
-router.get('/stock-transfers/:id', stockTransferCtrl.getTransferDetails);
+// STOCK TAKING (PHYSICAL INVENTORY AUDIT)
+router.get('/stock-taking/items', stockTakingCtrl.getStockTakingItems);
+router.post('/stock-taking/save', stockTakingCtrl.saveStockTakingAudit);
+router.get('/stock-taking/reports', stockTakingCtrl.getStockTakingReports);
+
+// ITEM MODIFIERS / ADD-ONS CRUD
+router.get('/modifiers', modifierCtrl.getModifiers);
+router.post('/modifiers', modifierCtrl.createModifier);
+router.put('/modifiers/:id', modifierCtrl.updateModifier);
+router.delete('/modifiers/:id', modifierCtrl.deleteModifier);
+
+// STATES & CUSTOM REGIONS
+router.get('/states', stateCtrl.getStates);
+router.post('/states', stateCtrl.createState);
+router.delete('/states/:id', stateCtrl.deleteState);
 
 module.exports = router;
+

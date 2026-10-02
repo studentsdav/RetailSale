@@ -3,6 +3,7 @@ class ApiEndpoints {
   static const serverTime = '/api/system/server-time';
 
   static const login = '/api/auth/login';
+  static const pinLogin = '/api/auth/pin-login';
 
   static const items = '/api/inventory/items';
   static const stockTransfer = '/api/inventory/stock-transfer';
@@ -202,8 +203,19 @@ class ApiEndpoints {
   static const String agentAuditLogs = '/api/v1/agent/audit-logs';
   static const String developerInfo = '/api/v1/developer/ecosystem/info';
   static const String developerWebhooks = '/api/v1/developer/webhooks';
-  static const String developerApiKeys = '/api/v1/developer/api-keys';
-  static const String pluginsMarketplace = '/api/v1/plugins/marketplace';
+  static const String developerApiKeys = '/api/v1/developer/apikeys';
   static const String pluginsInstalled = '/api/v1/plugins/installed';
+  static const String pluginsMarketplace = '/api/v1/plugins/marketplace';
   static const String pluginInstall = '/api/v1/plugins/install';
+
+  // STOCK TAKING & ITEM MODIFIERS
+  static const String stockTakingItems = '/api/inventory/stock-taking/items';
+  static const String stockTakingSave = '/api/inventory/stock-taking/save';
+  static const String stockTakingReports = '/api/inventory/stock-taking/reports';
+  static const String itemModifiers = '/api/inventory/modifiers';
+
+  // SAFARICOM M-PESA DARAJA
+  static const String mpesaConfig = '/api/payments/mpesa/config';
+  static const String mpesaStkPush = '/api/payments/mpesa/stk-push';
+  static const String mpesaStkQuery = '/api/payments/mpesa/stk-query';
 }

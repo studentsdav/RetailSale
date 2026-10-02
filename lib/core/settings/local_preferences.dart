@@ -201,12 +201,15 @@ class LocalPreferences {
 
   static Future<String> getLynxAiApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_lynxAiApiKeyKey) ?? '';
+    final key = prefs.getString(_lynxAiApiKeyKey);
+    if (key != null && key.trim().isNotEmpty) return key.trim();
+    return (prefs.getString('ai_api_key') ?? '').trim();
   }
 
   static Future<void> setLynxAiApiKey(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lynxAiApiKeyKey, value);
+    await prefs.setString(_lynxAiApiKeyKey, value.trim());
+    await prefs.setString('ai_api_key', value.trim());
   }
 
   static Future<String> getLynxAiProvider() async {
@@ -221,7 +224,7 @@ class LocalPreferences {
 
   static Future<String> getLynxAiModelName() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_lynxAiModelNameKey) ?? 'gemini-1.5-flash';
+    return prefs.getString(_lynxAiModelNameKey) ?? 'gemini-3.1-flash-lite';
   }
 
   static Future<void> setLynxAiModelName(String value) async {
@@ -315,6 +318,18 @@ class LocalPreferences {
   static Future<void> setMachineId(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_machineIdKey, value.trim().toUpperCase());
+  }
+
+  static String _onboardingCompleteKey(int outletId) => 'outlet_onboarding_done_$outletId';
+
+  static Future<bool> isOnboardingCompleted(int outletId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_onboardingCompleteKey(outletId)) ?? false;
+  }
+
+  static Future<void> setOnboardingCompleted(int outletId, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingCompleteKey(outletId), value);
   }
 
   static Future<int> getLynxMaxRows() async {

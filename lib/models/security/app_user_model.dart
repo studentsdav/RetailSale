@@ -46,6 +46,7 @@ class UserProfile {
   final String username;
   final String name;
   final String role;
+  final int outletId;
   final String outletCode;
   final String propertyName;
   final String outletType;
@@ -55,6 +56,7 @@ class UserProfile {
     required this.username,
     required this.name,
     required this.role,
+    this.outletId = 1,
     required this.outletCode,
     required this.propertyName,
     required this.outletType,
@@ -66,6 +68,7 @@ class UserProfile {
       username: json['username'] ?? '',
       name: json['name'] ?? '',
       role: json['role'] ?? '',
+      outletId: int.tryParse((json['outlet_id'] ?? json['outletId'] ?? 1).toString()) ?? 1,
       outletCode: json['outlet_code'] ?? '',
       propertyName: json['property_name'] ?? '',
       outletType: json['outlet_type'] ?? '',

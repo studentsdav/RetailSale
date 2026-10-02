@@ -534,7 +534,7 @@ export const sendPoEmail = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const purchaseOrderController = {
     createPurchaseOrder,
     getPurchaseOrderReport,
     getPurchaseOrderDetails,
@@ -548,3 +548,6 @@ export default {
     cancelPurchaseOrder,
     sendPoEmail
 };
+
+module.exports = purchaseOrderController;
+export default purchaseOrderController;

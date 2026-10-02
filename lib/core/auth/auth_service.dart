@@ -43,11 +43,71 @@ class AuthService {
         permissions: permissions,
       );
 
-      await TokenStorage.save(token);
-      await TokenStorage.saveRole(role);
-      await TokenStorage.savePermissions(permissions);
-      await TokenStorage.saveUser(user);
-      await TokenStorage.saveLoginTime();
+      await Future.wait([
+        TokenStorage.save(token),
+        TokenStorage.saveRole(role),
+        TokenStorage.savePermissions(permissions),
+        TokenStorage.saveUser(user),
+        TokenStorage.saveLoginTime(),
+      ]);
+
+      return LoginResult(
+        success: true,
+        licenseStatus: res['license_status'] ?? 'VALID',
+        daysRemaining: res['days_remaining'] ?? 999,
+        message: 'Success',
+      );
+    } catch (e) {
+      throw Exception(e.toString().replaceAll('Exception:', '').trim());
+    }
+  }
+
+  static Future<LoginResult> pinLogin(
+      String pin, String oltCode, {String? username, String? role}) async {
+    try {
+      final res = await ApiClient.post(
+        ApiEndpoints.pinLogin,
+        {
+          'pin': pin,
+          'outlet_code': oltCode,
+          if (username != null && username.isNotEmpty) 'username': username,
+          if (role != null && role.isNotEmpty) 'role': role,
+        },
+      );
+
+      if (res == null) throw Exception("No response from server");
+
+      if (res['success'] != true) {
+        if (res['license_status'] == 'EXPIRED') {
+          return LoginResult(
+            success: false,
+            licenseStatus: 'EXPIRED',
+            daysRemaining: 0,
+            message: res['message'] ?? 'License expired',
+          );
+        }
+        throw Exception(res['message'] ?? "PIN Login failed");
+      }
+
+      final token = res['token'];
+      if (token == null) throw Exception("Token not received from server");
+
+      final user = res['user'] ?? {};
+      final userRole = user['role'] ?? '';
+      final permissions = List<String>.from(user['permissions'] ?? <String>[]);
+
+      PermissionService.init(
+        role: userRole,
+        permissions: permissions,
+      );
+
+      await Future.wait([
+        TokenStorage.save(token),
+        TokenStorage.saveRole(userRole),
+        TokenStorage.savePermissions(permissions),
+        TokenStorage.saveUser(user),
+        TokenStorage.saveLoginTime(),
+      ]);
 
       return LoginResult(
         success: true,

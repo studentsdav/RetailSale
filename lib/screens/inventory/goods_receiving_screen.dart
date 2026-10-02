@@ -211,7 +211,10 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
   // ================= CALC =================
   double get totalAmount => _items.fold(0, (s, e) => s + e.amount);
   double get totalGST => _items.fold(0, (s, e) => s + e.gst);
-  double get netAmount => totalAmount + totalGST;
+  double get netAmount {
+    final raw = totalAmount + totalGST;
+    return _useInclusiveRates ? raw.roundToDouble() : raw;
+  }
 
   String _fmtNumber(num value) {
     return value % 1 == 0 ? value.toInt().toString() : value.toString();

@@ -856,7 +856,7 @@ export const getNextGrnNo = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const receivingController = {
     createReceiving,
     updateReceivingItem,
     modifyReceiving,
@@ -869,3 +869,6 @@ export default {
     getReceiving,
     getNextGrnNo
 };
+
+module.exports = receivingController;
+export default receivingController;

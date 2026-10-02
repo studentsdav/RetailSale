@@ -48,8 +48,11 @@ class _LoginScreenState extends State<LoginScreen>
   final _formKey = GlobalKey<FormState>();
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
   final _usernameFocus = FocusNode();
   final _passwordFocus = FocusNode();
+  final _pinFocus = FocusNode();
+  bool _isPinMode = false;
 
   String _role = 'STORE';
   String? _selectedOutlet;
@@ -213,9 +216,85 @@ class _LoginScreenState extends State<LoginScreen>
     _logoCtrl.dispose();
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
+    _pinCtrl.dispose();
     _usernameFocus.dispose();
     _passwordFocus.dispose();
+    _pinFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _loginWithPin() async {
+    final pin = _pinCtrl.text.trim();
+    if (pin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your PIN code'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (_selectedOutlet == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select an outlet'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      setState(() {
+        _isloading = true;
+      });
+
+      final result = await AuthService.pinLogin(
+        pin,
+        _selectedOutlet!,
+        username: _usernameCtrl.text.trim().isNotEmpty ? _usernameCtrl.text.trim() : null,
+        role: _role.isNotEmpty ? _role : null,
+      );
+
+      if (!mounted) return;
+
+      if (result.success) {
+        if (_selectedOutlet != null && !AppConfig.outlets.contains(_selectedOutlet)) {
+          final updated = List<String>.from(AppConfig.outlets)..add(_selectedOutlet!);
+          await AppConfig.saveConfig(AppConfig.baseUrl, updated);
+        }
+
+        if (result.licenseStatus == 'WARNING') {
+          await _showExpiryWarningDialog(result.daysRemaining);
+        }
+
+        final targetScreen = await HomeRouteHelper.resolve();
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => targetScreen),
+        );
+      } else if (result.licenseStatus == 'EXPIRED') {
+        _showExpiredDialog(result.message);
+      }
+    } catch (e) {
+      if (e.toString().toLowerCase().contains("expired")) {
+        _showExpiredDialog(e.toString());
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        _isloading = false;
+        setState(() {});
+      }
+    }
   }
 
   Future<void> _login() async {
@@ -253,19 +332,12 @@ class _LoginScreenState extends State<LoginScreen>
           await _showExpiryWarningDialog(result.daysRemaining);
         }
 
+        final targetScreen = await HomeRouteHelper.resolve();
         if (!mounted) return;
 
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => FutureBuilder<Widget>(
-              future: HomeRouteHelper.resolve(),
-              builder: (context, snapshot) =>
-                  snapshot.data ??
-                  const Scaffold(
-                      body: Center(child: CircularProgressIndicator())),
-            ),
-          ),
+          MaterialPageRoute(builder: (_) => targetScreen),
         );
       } else if (result.licenseStatus == 'EXPIRED') {
         _showExpiredDialog(result.message);
@@ -384,16 +456,26 @@ class _LoginScreenState extends State<LoginScreen>
         final isDesktop = constraints.maxWidth >= 900;
 
         return _isloading
-            ? const Center(
+            ? Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(
-                      height: 5,
+                    const SizedBox(
+                      width: 42,
+                      height: 42,
+                      child: CircularProgressIndicator(strokeWidth: 3),
                     ),
-                    Text("Verifying....")
+                    const SizedBox(height: 16),
+                    Text(
+                      "Verifying credentials...",
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.75),
+                        letterSpacing: 0.2,
+                      ),
+                    ),
                   ],
                 ),
               )
@@ -965,136 +1047,312 @@ class _LoginScreenState extends State<LoginScreen>
               validator: (v) => v == null ? 'Required' : null,
             ),
           ),
-          const SizedBox(height: 14),
-          TextFormField(
-            controller: _usernameCtrl,
-            focusNode: _usernameFocus,
-            textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
-            onTapOutside: (_) => FocusScope.of(context).unfocus(),
-            style: TextStyle(color: isDark ? Colors.white : Colors.black),
-            decoration: _enterpriseInputDecoration(
-              labelText: 'Username',
-              prefixIcon: Icons.person_outline_rounded,
-              hintText: 'Enter your operator or cashier ID',
-            ),
-            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-          ),
-          const SizedBox(height: 14),
-          TextFormField(
-            controller: _passwordCtrl,
-            focusNode: _passwordFocus,
-            obscureText: _obscure,
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _login(),
-            onTapOutside: (_) => FocusScope.of(context).unfocus(),
-            style: TextStyle(color: isDark ? Colors.white : Colors.black),
-            decoration: _enterpriseInputDecoration(
-              labelText: 'Password',
-              prefixIcon: Icons.lock_outline_rounded,
-              hintText: 'Enter your password',
-              suffixIcon: IconButton(
-                icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), size: 20),
-                onPressed: () => setState(() => _obscure = !_obscure),
-              ),
-            ),
-            validator: (v) =>
-                v == null || v.length < 4 ? 'Invalid password' : null,
-          ),
+          const SizedBox(height: 12),
 
-          const SizedBox(height: 14),
-          DropdownButtonFormField<String>(
-            initialValue: () {
-              final roles = AppConstants.getRolesForModule(_activeModule);
-              return roles.contains(_role) ? _role : roles.first;
-            }(),
-            decoration: _enterpriseInputDecoration(
-              labelText: 'Workstation Role',
-              prefixIcon: Icons.badge_outlined,
+          // Auth Mode Selector Tabs: Password vs PIN
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
             ),
-            items: (() {
-              final roles = AppConstants.getRolesForModule(_activeModule);
-              final list = roles.contains(_role) ? roles : [...roles, _role];
-              return list
-                  .map((r) => DropdownMenuItem(value: r, child: Text(r, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: isDark ? Colors.white : Colors.black))))
-                  .toList();
-            })(),
-            onChanged: (v) => setState(() => _role = v ?? _role),
-          ),
-
-          const SizedBox(height: 10),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () {
-                  if (_selectedOutlet == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Please select an Outlet Code first.')),
-                    );
-                    return;
-                  }
-                  _showForgotUsernameDialog(context);
-                },
-                style: TextButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                child: Text('Forgot Username?',
-                    style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
-              ),
-              Text('|', style: TextStyle(color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))),
-              TextButton(
-                onPressed: () {
-                  if (_selectedOutlet == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Please select an Outlet Code first.')),
-                    );
-                    return;
-                  }
-                  _showForgotPasswordDialog(context);
-                },
-                style: TextButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                child: Text('Forgot Password?',
-                    style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Enterprise Primary Sign In Button
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? const Color(0xFF2563EB) : primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 2,
-                shadowColor: primaryColor.withOpacity(0.35),
-              ),
-              onPressed: _login,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'SIGN IN TO WORKSTATION',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _isPinMode = false),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: !_isPinMode
+                            ? (isDark ? const Color(0xFF334155) : Colors.white)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: !_isPinMode
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.06),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.lock_outline_rounded,
+                            size: 16,
+                            color: !_isPinMode
+                                ? primaryColor
+                                : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Password',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: !_isPinMode ? FontWeight.bold : FontWeight.w500,
+                              color: !_isPinMode
+                                  ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_forward_rounded, size: 18),
-                ],
-              ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _isPinMode = true),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _isPinMode
+                            ? (isDark ? const Color(0xFF334155) : Colors.white)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: _isPinMode
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.06),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.dialpad_rounded,
+                            size: 16,
+                            color: _isPinMode
+                                ? primaryColor
+                                : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Quick PIN',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: _isPinMode ? FontWeight.bold : FontWeight.w500,
+                              color: _isPinMode
+                                  ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(height: 14),
+
+          if (!_isPinMode) ...[
+            TextFormField(
+              controller: _usernameCtrl,
+              focusNode: _usernameFocus,
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+              onTapOutside: (_) => FocusScope.of(context).unfocus(),
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: _enterpriseInputDecoration(
+                labelText: 'Username',
+                prefixIcon: Icons.person_outline_rounded,
+                hintText: 'Enter your operator or cashier ID',
+              ),
+              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _passwordCtrl,
+              focusNode: _passwordFocus,
+              obscureText: _obscure,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _login(),
+              onTapOutside: (_) => FocusScope.of(context).unfocus(),
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: _enterpriseInputDecoration(
+                labelText: 'Password',
+                prefixIcon: Icons.lock_outline_rounded,
+                hintText: 'Enter your password',
+                suffixIcon: IconButton(
+                  icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), size: 20),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+              validator: (v) =>
+                  v == null || v.length < 4 ? 'Invalid password' : null,
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: () {
+                final roles = AppConstants.getRolesForModule(_activeModule);
+                return roles.contains(_role) ? _role : roles.first;
+              }(),
+              decoration: _enterpriseInputDecoration(
+                labelText: 'Workstation Role',
+                prefixIcon: Icons.badge_outlined,
+              ),
+              items: (() {
+                final roles = AppConstants.getRolesForModule(_activeModule);
+                final list = roles.contains(_role) ? roles : [...roles, _role];
+                return list
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: isDark ? Colors.white : Colors.black))))
+                    .toList();
+              })(),
+              onChanged: (v) => setState(() => _role = v ?? _role),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    if (_selectedOutlet == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Please select an Outlet Code first.')),
+                      );
+                      return;
+                    }
+                    _showForgotUsernameDialog(context);
+                  },
+                  style: TextButton.styleFrom(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                  child: Text('Forgot Username?',
+                      style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                ),
+                Text('|', style: TextStyle(color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))),
+                TextButton(
+                  onPressed: () {
+                    if (_selectedOutlet == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Please select an Outlet Code first.')),
+                      );
+                      return;
+                    }
+                    _showForgotPasswordDialog(context);
+                  },
+                  style: TextButton.styleFrom(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                  child: Text('Forgot Password?',
+                      style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFF2563EB) : primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 2,
+                  shadowColor: primaryColor.withOpacity(0.35),
+                ),
+                onPressed: _login,
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'SIGN IN TO WORKSTATION',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(Icons.arrow_forward_rounded, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ] else ...[
+            // PIN Login Form
+            TextFormField(
+              controller: _usernameCtrl,
+              focusNode: _usernameFocus,
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) => _pinFocus.requestFocus(),
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: _enterpriseInputDecoration(
+                labelText: 'Username (Optional)',
+                prefixIcon: Icons.person_outline_rounded,
+                hintText: 'Enter username or leave blank for PIN matching',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _pinCtrl,
+              focusNode: _pinFocus,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black,
+                fontSize: 22,
+                letterSpacing: 8,
+                fontWeight: FontWeight.bold,
+              ),
+              decoration: _enterpriseInputDecoration(
+                labelText: 'Enter 4-6 Digit Employee PIN',
+                prefixIcon: Icons.dialpad_rounded,
+                hintText: '••••',
+              ),
+              onFieldSubmitted: (_) => _loginWithPin(),
+            ),
+            const SizedBox(height: 12),
+            _buildPinKeypad(isDark),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFF10B981) : const Color(0xFF059669),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 2,
+                  shadowColor: const Color(0xFF059669).withOpacity(0.35),
+                ),
+                onPressed: _loginWithPin,
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'QUICK PIN SIGN IN',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(Icons.arrow_forward_rounded, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           // Register Outlet Button (High-Visibility High-Contrast Tonal Button)
           SizedBox(
@@ -1134,6 +1392,122 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
           const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPinKeypad(bool isDark) {
+    Widget numButton(String label, {VoidCallback? onTap, IconData? icon, Color? color}) {
+      return SizedBox(
+        height: 44,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+            foregroundColor: color ?? (isDark ? Colors.white : const Color(0xFF0F172A)),
+            elevation: 1,
+            padding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(
+                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              ),
+            ),
+          ),
+          onPressed: onTap ??
+              () {
+                if (_pinCtrl.text.length < 8) {
+                  setState(() {
+                    _pinCtrl.text = '${_pinCtrl.text}$label';
+                  });
+                }
+              },
+          child: icon != null
+              ? Icon(icon, size: 20, color: color ?? (isDark ? Colors.white : const Color(0xFF0F172A)))
+              : Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: color ?? (isDark ? Colors.white : const Color(0xFF0F172A)),
+                  ),
+                ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A).withOpacity(0.5) : const Color(0xFFF1F5F9).withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: numButton('1')),
+              const SizedBox(width: 8),
+              Expanded(child: numButton('2')),
+              const SizedBox(width: 8),
+              Expanded(child: numButton('3')),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: numButton('4')),
+              const SizedBox(width: 8),
+              Expanded(child: numButton('5')),
+              const SizedBox(width: 8),
+              Expanded(child: numButton('6')),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: numButton('7')),
+              const SizedBox(width: 8),
+              Expanded(child: numButton('8')),
+              const SizedBox(width: 8),
+              Expanded(child: numButton('9')),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: numButton(
+                  'C',
+                  color: Colors.redAccent,
+                  onTap: () {
+                    setState(() {
+                      _pinCtrl.clear();
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: numButton('0')),
+              const SizedBox(width: 8),
+              Expanded(
+                child: numButton(
+                  'DEL',
+                  icon: Icons.backspace_outlined,
+                  color: Colors.orangeAccent,
+                  onTap: () {
+                    if (_pinCtrl.text.isNotEmpty) {
+                      setState(() {
+                        _pinCtrl.text =
+                            _pinCtrl.text.substring(0, _pinCtrl.text.length - 1);
+                      });
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

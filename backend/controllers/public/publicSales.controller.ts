@@ -41,7 +41,9 @@ async function getInvoicePdfPublic(req, res) {
     }
 }
 
-module.exports = {
+const publicSalesController = {
     getInvoicePdfPublic
 };
-export default module.exports;
+
+module.exports = publicSalesController;
+export default publicSalesController;

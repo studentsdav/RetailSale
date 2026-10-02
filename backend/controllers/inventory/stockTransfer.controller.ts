@@ -798,7 +798,7 @@ export const verifyLinkOtp = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const stockTransferController = {
     createDispatch,
     receiveTransfer,
     getOverallProgress,
@@ -813,3 +813,6 @@ export default {
     requestLinkOtp,
     verifyLinkOtp
 };
+
+module.exports = stockTransferController;
+export default stockTransferController;

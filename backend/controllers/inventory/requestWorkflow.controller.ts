@@ -452,7 +452,7 @@ export const rejectRequest = async (req: Request, res: Response) => {
     }
 };
 
-export default {
+const requestWorkflowController = {
     createRequest,
     getNextRequestNo,
     cancelRequest,
@@ -463,3 +463,6 @@ export default {
     approveRequest,
     rejectRequest
 };
+
+module.exports = requestWorkflowController;
+export default requestWorkflowController;

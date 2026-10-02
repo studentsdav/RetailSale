@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/settings/local_preferences.dart';
 
 class OnboardingStepStatus {
   final String key;
@@ -144,9 +145,36 @@ class OutletOnboardingController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // 1. Try fast single dedicated endpoint first
+      try {
+        final fastRes = await ApiClient.get('/api/inventory/onboarding-status').catchError((_) => null);
+        if (fastRes != null && fastRes['success'] == true && fastRes['data'] is Map<String, dynamic>) {
+          final data = fastRes['data'] as Map<String, dynamic>;
+          businessModule = (data['business_module'] ?? 'ALL').toString().toUpperCase();
+          propertyConfigured = data['property_configured'] == true;
+          settingsConfigured = data['settings_configured'] == true;
+          taxGroupConfigured = data['tax_group_configured'] == true;
+          sequenceConfigured = data['sequence_configured'] == true;
+          locationConfigured = data['location_configured'] == true;
+          itemMasterConfigured = data['item_master_configured'] == true;
+          supplierConfigured = data['supplier_configured'] == true;
+          restaurantConfigured = data['restaurant_configured'] == true;
+          usersConfigured = data['users_configured'] == true;
+          isLoading = false;
+          notifyListeners();
+
+          if (is100PercentComplete) {
+            final userMap = await TokenStorage.getUser();
+            final outletId = int.tryParse((userMap?['outlet_id'] ?? userMap?['outletId'] ?? 1).toString()) ?? 1;
+            await LocalPreferences.setOnboardingCompleted(outletId, true);
+          }
+          return;
+        }
+      } catch (_) {}
+
       final userMap = await TokenStorage.getUser();
 
-      // Parallelize onboarding API checks concurrently
+      // Parallelize onboarding API checks concurrently as fallback
       final results = await Future.wait([
         ApiClient.get(ApiEndpoints.propertyInfo).catchError((_) => null),
         ApiClient.get(ApiEndpoints.documentSequence).catchError((_) => null),

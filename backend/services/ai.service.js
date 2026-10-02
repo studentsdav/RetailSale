@@ -72,7 +72,7 @@ Return ONLY raw JSON with no markdown block code formatting.`;
  */
 function callGemini(prompt, systemInstruction, config = {}) {
     const apiKey = config.aiApiKey || GEMINI_API_KEY;
-    const model = (config.aiModelName && config.aiModelName.trim().length > 0) ? config.aiModelName.trim() : 'gemini-1.5-flash';
+    const model = (config.aiModelName && config.aiModelName.trim().length > 0) ? config.aiModelName.trim() : 'gemini-3.1-flash-lite';
     const baseUrl = (config.aiBaseUrl && config.aiBaseUrl.trim().length > 0) ? config.aiBaseUrl.trim() : 'https://generativelanguage.googleapis.com';
 
     return new Promise((resolve, reject) => {

@@ -11,6 +11,7 @@ import '../../core/api/endpoints.dart';
 import '../../core/auth/token_storage.dart';
 import '../../models/common/property_info_model.dart';
 import '../../utils/branding_storage.dart';
+import '../../widgets/state_dropdown_field.dart';
 
 class OutletDetailModificationScreen extends StatefulWidget {
   final int outletId;
@@ -649,7 +650,14 @@ class _OutletDetailModificationScreenState extends State<OutletDetailModificatio
                             children: [
                               _field(_address, 'Street Address', width: double.infinity, prefixIcon: Icons.location_on, maxLines: 2, enabled: _isEditEnabled),
                               _field(_city, 'City', prefixIcon: Icons.location_city, enabled: _isEditEnabled),
-                              _field(_state, 'State / Region', prefixIcon: Icons.map, enabled: _isEditEnabled),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: StateDropdownField(
+                                  controller: _state,
+                                  enabled: _isEditEnabled,
+                                  width: 320,
+                                ),
+                              ),
                               _field(_pin, 'Postal / PIN Code', prefixIcon: Icons.pin_drop, isNumber: true, enabled: _isEditEnabled),
                               _field(_recoveryPin, 'Manager Recovery PIN (4-Digits)', prefixIcon: Icons.lock_reset_rounded, isNumber: true, enabled: _isEditEnabled, required: false),
                             ],

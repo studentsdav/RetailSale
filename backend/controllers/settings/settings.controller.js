@@ -514,3 +514,137 @@ exports.clearTransactionData = async (req, res) => {
         res.status(500).json({ success: false, message: err.message || 'Failed to clear transaction data' });
     }
 };
+
+exports.getOnboardingStatus = async (req, res) => {
+    try {
+        let outletId = req.user?.outlet_id || req.query?.outlet_id || req.body?.outlet_id;
+        const db = req.propertyDb;
+
+        if (typeof outletId === 'string' && outletId.startsWith('OUTLET') && db.models.outlets) {
+            const outlet = await db.models.outlets.findOne({ where: { outlet_code: outletId } }).catch(() => null);
+            if (outlet) outletId = outlet.id;
+        }
+
+        if (!outletId && db.models.outlets) {
+            const defaultOutlet = await db.models.outlets.findOne({ where: { is_active: true } }).catch(() => null);
+            if (defaultOutlet) outletId = defaultOutlet.id;
+        }
+
+        outletId = parseInt(outletId, 10) || 1;
+
+        const [
+            propInfo,
+            systemSettings,
+            taxGroupsCount,
+            sequencesCount,
+            locationsCount,
+            itemsCount,
+            suppliersCount,
+            tablesCount,
+            usersCount,
+            outletObj
+        ] = await Promise.all([
+            db.models.property_info ? db.models.property_info.findOne({
+                where: { outlet_id: outletId },
+                attributes: ['property_name', 'business_type']
+            }).catch(() => null) : null,
+            db.models.system_settings ? db.models.system_settings.findOne({
+                where: { outlet_id: outletId },
+                attributes: ['base_currency_symbol', 'billing_country']
+            }).catch(() => null) : null,
+            db.models.tax_groups ? db.models.tax_groups.count({ where: { outlet_id: outletId } }).catch(() => 0) : 0,
+            db.models.numbering_settings ? db.models.numbering_settings.count({ where: { outlet_id: outletId } }).catch(() => 0) : 0,
+            db.models.stock_locations ? db.models.stock_locations.count({ where: { outlet_id: outletId } }).catch(() => 0) : 0,
+            db.models.item_master ? db.models.item_master.count({ where: { outlet_id: outletId } }).catch(() => 0) : 0,
+            db.models.supplier_master ? db.models.supplier_master.count({ where: { outlet_id: outletId } }).catch(() => 0) : 0,
+            db.models.restaurant_tables ? db.models.restaurant_tables.count({ where: { outlet_id: outletId } }).catch(() => 0) : 0,
+            db.models.users ? db.models.users.count({ where: { outlet_id: outletId } }).catch(() => 0) : 0,
+            db.models.outlets ? db.models.outlets.findByPk(outletId).catch(() => null) : null
+        ]);
+
+        // Fallback global counts if outlet-specific count is 0
+        let effectiveItemsCount = itemsCount;
+        if (effectiveItemsCount === 0 && db.models.item_master) {
+            effectiveItemsCount = await db.models.item_master.count().catch(() => 0);
+        }
+
+        let effectiveSuppliersCount = suppliersCount;
+        if (effectiveSuppliersCount === 0 && db.models.supplier_master) {
+            effectiveSuppliersCount = await db.models.supplier_master.count().catch(() => 0);
+        }
+
+        let effectiveSequencesCount = sequencesCount;
+        if (effectiveSequencesCount === 0 && db.models.numbering_settings) {
+            effectiveSequencesCount = await db.models.numbering_settings.count().catch(() => 0);
+        }
+
+        let effectiveTaxCount = taxGroupsCount;
+        if (effectiveTaxCount === 0 && db.models.tax_groups) {
+            effectiveTaxCount = await db.models.tax_groups.count().catch(() => 0);
+        }
+
+        let effectiveLocationCount = locationsCount;
+        if (effectiveLocationCount === 0 && db.models.stock_locations) {
+            effectiveLocationCount = await db.models.stock_locations.count().catch(() => 0);
+        }
+
+        let effectiveTablesCount = tablesCount;
+        if (effectiveTablesCount === 0 && db.models.restaurant_tables) {
+            effectiveTablesCount = await db.models.restaurant_tables.count().catch(() => 0);
+        }
+
+        let effectiveUsersCount = usersCount;
+        if (effectiveUsersCount === 0 && db.models.users) {
+            effectiveUsersCount = await db.models.users.count().catch(() => 0);
+        }
+
+        // Global fallback for property_info
+        let effectivePropName = (propInfo?.property_name || outletObj?.outlet_name || '').toString().trim();
+        if (effectivePropName.length === 0 && db.models.property_info) {
+            const firstProp = await db.models.property_info.findOne({ attributes: ['property_name'] }).catch(() => null);
+            if (firstProp?.property_name) effectivePropName = firstProp.property_name.toString().trim();
+        }
+
+        // Global fallback for system_settings
+        let effectiveSettings = systemSettings;
+        if (!effectiveSettings && db.models.system_settings) {
+            effectiveSettings = await db.models.system_settings.findOne({
+                attributes: ['base_currency_symbol', 'billing_country']
+            }).catch(() => null);
+        }
+
+        const propConfigured = effectivePropName.length > 0;
+        const settingsConfigured = !!(effectiveSettings && (effectiveSettings.base_currency_symbol || effectiveSettings.billing_country));
+        const taxGroupConfigured = (effectiveTaxCount > 0);
+        const sequenceConfigured = (effectiveSequencesCount > 0);
+        const locationConfigured = (effectiveLocationCount > 0);
+        const itemMasterConfigured = (effectiveItemsCount > 0);
+        const supplierConfigured = (effectiveSuppliersCount > 0);
+        const restaurantConfigured = (effectiveTablesCount > 0);
+        const usersConfigured = (effectiveUsersCount > 0);
+
+        const businessType = (propInfo?.business_type || outletObj?.business_module || req.user?.business_module || req.user?.outlet_type || 'ALL').toString().toUpperCase();
+
+        res.json({
+            success: true,
+            data: {
+                business_module: businessType,
+                property_configured: propConfigured,
+                settings_configured: settingsConfigured,
+                tax_group_configured: taxGroupConfigured,
+                sequence_configured: sequenceConfigured,
+                location_configured: locationConfigured,
+                item_master_configured: itemMasterConfigured,
+                supplier_configured: supplierConfigured,
+                restaurant_configured: restaurantConfigured,
+                users_configured: usersConfigured
+            }
+        });
+    } catch (err) {
+        console.error('[ONBOARDING STATUS ERROR]', err);
+        res.status(500).json({ success: false, message: 'Failed to fetch onboarding status: ' + err.message });
+    }
+};
+
+module.exports = exports;
+

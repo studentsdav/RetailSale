@@ -17,23 +17,27 @@ class HomeRouteHelper {
   HomeRouteHelper._();
 
   static Future<Widget> resolve() async {
-    // 1. Check if store onboarding setup is incomplete for this outlet
-    try {
+    final user = await dashboard_user.load();
+    final outletId = user?.outletId ?? 1;
+
+    final isDone = await LocalPreferences.isOnboardingCompleted(outletId);
+    if (!isDone) {
       final onboardingCtrl = OutletOnboardingController();
-      await onboardingCtrl.refreshStatus();
+      await onboardingCtrl.refreshStatus().catchError((_) {});
       if (!onboardingCtrl.is100PercentComplete) {
         return const OutletSetupChecklistScreen();
+      } else {
+        await LocalPreferences.setOnboardingCompleted(outletId, true);
       }
-    } catch (_) {}
+    }
 
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       return const RetailerConsoleScreen();
     }
 
     final preference = await LocalPreferences.getDefaultStartupScreen();
-    final user = await dashboard_user.load();
-    final businessType = (user?.outletType ?? '').toUpperCase();
-    final userRole = (user?.role ?? '').toUpperCase();
+    final businessType = (user?.outletType ?? '').toString().toUpperCase();
+    final userRole = (user?.role ?? '').toString().toUpperCase();
 
     final canOpenRetail = PermissionService.can('RETAIL_SALES') ||
         businessType == 'RETAIL' ||

@@ -12,6 +12,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'package:provider/provider.dart';
+
+import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/suppliers/supplier_bill_controller.dart';
 import '../../core/currency/currency_service.dart';
 import '../../core/printing/pos_invoice_printer.dart';
@@ -686,35 +689,56 @@ class _SupplierPaymentScreenState extends State<SupplierPaymentScreen> {
                         ),
                         const SizedBox(height: 14),
                       ],
-                      DropdownButtonFormField<String>(
-                        initialValue: paymentMode,
-                        decoration: InputDecoration(
-                          labelText: 'Payment Mode',
-                          prefixIcon: const Icon(Icons.wallet_outlined, size: 20),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: Colors.blueGrey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: Colors.blueGrey.shade200),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: Colors.blue.shade600, width: 2),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        ),
-                        items: ['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT']
-                            .map((e) => DropdownMenuItem(
-                                  value: e,
-                                  child: Text(e, style: const TextStyle(fontWeight: FontWeight.w500)),
-                                ))
-                            .toList(),
-                        onChanged: (v) {
-                          setDialogState(() {
-                            paymentMode = v!;
-                          });
+                      Builder(
+                        builder: (ctx) {
+                          final settingsModes = ctx.read<SystemSettingsController>().settings?.paymentModes ?? [];
+                          final availableModes = <String>['CASH', 'BANK', 'CHEQUE', 'CARD', 'UPI', 'CREDIT'];
+                          for (final m in settingsModes) {
+                            if (m['enabled'] != false) {
+                              final id = (m['id'] ?? '').toString().trim();
+                              final name = (m['name'] ?? id).toString().trim();
+                              final modeKey = id.isNotEmpty ? id : name;
+                              if (modeKey.isNotEmpty && !availableModes.contains(modeKey)) {
+                                availableModes.add(modeKey);
+                              }
+                            }
+                          }
+
+                          final currentVal = availableModes.contains(paymentMode) ? paymentMode : availableModes.first;
+
+                          return DropdownButtonFormField<String>(
+                            value: currentVal,
+                            decoration: InputDecoration(
+                              labelText: 'Payment Mode',
+                              prefixIcon: const Icon(Icons.wallet_outlined, size: 20),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: Colors.blueGrey.shade300),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: Colors.blueGrey.shade200),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: Colors.blue.shade600, width: 2),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            ),
+                            items: availableModes
+                                .map((e) => DropdownMenuItem(
+                                      value: e,
+                                      child: Text(e, style: const TextStyle(fontWeight: FontWeight.w500)),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v != null) {
+                                setDialogState(() {
+                                  paymentMode = v;
+                                });
+                              }
+                            },
+                          );
                         },
                       ),
                       const SizedBox(height: 14),

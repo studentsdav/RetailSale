@@ -554,7 +554,7 @@ async function triggerAutoReinstall(req, res) {
     });
 }
 
-module.exports = {
+const recoveryController = {
     verifyRecoveryOtp,
     verifyOutletForRecovery,
     executeFullSystemRecovery,
@@ -562,6 +562,8 @@ module.exports = {
     triggerAutoReinstall,
     verifyAndRecoverConfig
 };
-export default module.exports;
+
+module.exports = recoveryController;
+export default recoveryController;
 
 
