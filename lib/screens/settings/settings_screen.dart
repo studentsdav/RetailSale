@@ -38,6 +38,8 @@ import 'tax_group_setup_screen.dart';
 import '../../models/inventory/tax_group_model.dart';
 import '../../controllers/public/outlet_controller.dart';
 import '../../core/auth/token_storage.dart';
+import '../dashboard/server_config_screen.dart';
+import '../dashboard/cloud_migration_screen.dart';
 import 'package:file_picker/file_picker.dart';
 
 class CountryPreset {
@@ -1242,7 +1244,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _settingRow(
                           title: 'Create Manual Backup',
                           description: 'Encrypt your local database and save to Downloads folder.',
-                          isLast: true,
                           control: FilledButton.icon(
                             onPressed: _isCreatingEncBackup
                                 ? null
@@ -1276,12 +1277,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             label: Text(_isCreatingEncBackup ? 'Backing up...' : 'Create .enc Backup'),
                           ),
                         ),
+                        _settingRow(
+                          title: '1-Click Migrate Store to Cloud',
+                          description: 'Seamlessly upload all local store products, customers, and invoices to your online cloud instance.',
+                          isLast: true,
+                          control: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF0284C7),
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const CloudMigrationScreen()),
+                              );
+                            },
+                            icon: const Icon(Icons.rocket_launch_rounded, size: 18),
+                            label: const Text('Start Migration Wizard'),
+                          ),
+                        ),
                       ],
                     ),
                   _customSection(
                     'Payment Gateway & UPI (Beta)',
                     'Configure digital checkout APIs and direct merchant QR billing.',
                     [
+                      if (AppConfig.isLocalServer)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.cloud_sync_rounded, color: Color(0xFF0284C7), size: 24),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text(
+                                  'Online Payment Gateways require an Online Hosted Cloud Server or Cloud Subscription to receive bank webhooks & settle customer app transactions.',
+                                  style: TextStyle(fontSize: 12.5, color: Color(0xFF0369A1), fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0284C7),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const ServerConfigScreen()),
+                                  );
+                                },
+                                icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                                label: const Text('Configure Cloud URL'),
+                              ),
+                            ],
+                          ),
+                        ),
                       _settingRow(
                         title: 'Enable Payment Gateway',
                         description: 'Require online payments for customer app delivery orders',

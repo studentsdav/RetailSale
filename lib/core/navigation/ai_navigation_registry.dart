@@ -302,6 +302,12 @@ class AiNavigationRegistry {
         targetScreen = const CashLedgerScreen();
         break;
 
+      case 'REGULAR_EXPENSES':
+      case 'EXPENSES':
+      case 'EXPENSE_PAYMENT':
+        targetScreen = const CashLedgerScreen(initialIndex: 2);
+        break;
+
       case 'STOCK_LEDGER':
       case 'STOCK_LEDGER_REPORT':
         targetScreen = const StockLedgerReportScreen();

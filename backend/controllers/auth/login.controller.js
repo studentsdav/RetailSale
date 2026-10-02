@@ -203,7 +203,8 @@ exports.login = async (req, res, next) => {
                 max_discount_percent: resolvedMaxDiscount,
                 outlet_id: currentOutlet.id,
                 outlet_code: currentOutlet.outlet_code,
-                property_name: property?.property_name || '',
+                outlet_name: currentOutlet.outlet_name || '',
+                property_name: currentOutlet.outlet_name || property?.property_name || '',
                 outlet_type: currentOutlet.outlet_type || '',
                 business_module: currentOutlet.business_module || 'ALL',
                 permissions

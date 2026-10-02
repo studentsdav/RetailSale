@@ -64,12 +64,16 @@ export async function queueUtilityInvoiceAlert(db: any, saleId: any, outletId: a
     });
 
     console.log(`[WHATSAPP QUEUE] Successfully queued utility invoice alert for sale ID: ${saleId}`);
+    try {
+        const { wakeWhatsappQueue } = require('../jobs/whatsappQueueJob');
+        if (wakeWhatsappQueue) wakeWhatsappQueue();
+    } catch (_) {}
 }
 
 /**
  * Background worker execution logic
  */
-export async function processQueue(db: any): Promise<void> {
+export async function processQueue(db: any): Promise<number> {
     const now = new Date();
 
     // 1. Fetch pending utility messages (High priority, max 10 per cycle)
@@ -95,7 +99,7 @@ export async function processQueue(db: any): Promise<void> {
     });
 
     const pendingLogs = [...utilities, ...marketings];
-    if (pendingLogs.length === 0) return;
+    if (pendingLogs.length === 0) return 0;
 
     console.log(`[WHATSAPP WORKER] Processing ${pendingLogs.length} messages (Utilities: ${utilities.length}, Marketings: ${marketings.length})...`);
 
@@ -230,6 +234,7 @@ export async function processQueue(db: any): Promise<void> {
             }
         }
     }
+    return pendingLogs.length;
 }
 
 export default {

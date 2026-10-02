@@ -23,16 +23,16 @@ class MarketplaceController extends ChangeNotifier {
   String? get selectedCity => _selectedCity;
 
   final List<String> availableCities = [
-    'Indore',
-    'Dehradun',
-    'Bhopal',
-    'Delhi',
-    'Mumbai',
-    'Bangalore',
-    'Hyderabad',
-    'Pune',
-    'Ahmedabad',
-    'Jaipur',
+    'New York',
+    'Los Angeles',
+    'Chicago',
+    'Houston',
+    'Miami',
+    'Dallas',
+    'Austin',
+    'Seattle',
+    'San Francisco',
+    'Boston',
   ];
 
   void setCity(String city) {
@@ -45,7 +45,7 @@ class MarketplaceController extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    final targetCity = city ?? _selectedCity ?? 'Dehradun';
+    final targetCity = city ?? _selectedCity ?? 'New York';
     _selectedCity = targetCity;
 
     final List<MarketplaceVendor> publicVendors = [];
@@ -89,42 +89,44 @@ class MarketplaceController extends ChangeNotifier {
       debugPrint('Error checking local vendor public status: $e');
     }
 
-    // 2. Fetch public marketplace vendors from backend marketplace directory
-    try {
-      final queryParams = <String, String>{
-        'city': targetCity,
-      };
-      if (category != null && category.isNotEmpty && category != 'All') {
-        queryParams['category'] = category;
-      }
-      if (search != null && search.isNotEmpty) {
-        queryParams['search'] = search;
-      }
+    // 2. Fetch public marketplace vendors from backend marketplace directory (only when online)
+    if (!AppConfig.isLocalServer) {
+      try {
+        final queryParams = <String, String>{
+          'city': targetCity,
+        };
+        if (category != null && category.isNotEmpty && category != 'All') {
+          queryParams['category'] = category;
+        }
+        if (search != null && search.isNotEmpty) {
+          queryParams['search'] = search;
+        }
 
-      final queryString = Uri(queryParameters: queryParams).query;
-      final token = await TokenStorage.read();
-      final url = Uri.parse('${AppConfig.baseUrl}/api/marketplace/vendors?$queryString');
-      final response = await http.get(url, headers: {
-        'Content-Type': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      }).timeout(const Duration(seconds: 4));
+        final queryString = Uri(queryParameters: queryParams).query;
+        final token = await TokenStorage.read();
+        final url = Uri.parse('${AppConfig.baseUrl}/api/marketplace/vendors?$queryString');
+        final response = await http.get(url, headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        }).timeout(const Duration(seconds: 4));
 
-      if (response.statusCode == 200 && response.body.isNotEmpty) {
-        final res = jsonDecode(response.body);
-        if (res['success'] == true && res['data'] != null && (res['data'] as List).isNotEmpty) {
-          final remoteVendors = (res['data'] as List)
-              .map((e) => MarketplaceVendor.fromJson(e))
-              .toList();
+        if (response.statusCode == 200 && response.body.isNotEmpty) {
+          final res = jsonDecode(response.body);
+          if (res['success'] == true && res['data'] != null && (res['data'] as List).isNotEmpty) {
+            final remoteVendors = (res['data'] as List)
+                .map((e) => MarketplaceVendor.fromJson(e))
+                .toList();
 
-          for (var rv in remoteVendors) {
-            if (!publicVendors.any((v) => v.vendorCode == rv.vendorCode || (v.gstin.isNotEmpty && v.gstin == rv.gstin))) {
-              publicVendors.add(rv);
+            for (var rv in remoteVendors) {
+              if (!publicVendors.any((v) => v.vendorCode == rv.vendorCode || (v.gstin.isNotEmpty && v.gstin == rv.gstin))) {
+                publicVendors.add(rv);
+              }
             }
           }
         }
+      } catch (e) {
+        debugPrint('Remote marketplace vendors fetch note: $e');
       }
-    } catch (e) {
-      debugPrint('Remote marketplace vendors fetch note: $e');
     }
 
     // Apply search filter if provided

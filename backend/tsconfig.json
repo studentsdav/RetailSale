@@ -26,6 +26,9 @@
     "uploads",
     "backups",
     "build",
-    ".git"
+    ".git",
+    "ts",
+    "js",
+    "_legacy_js_backup"
   ]
 }

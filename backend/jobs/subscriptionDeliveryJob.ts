@@ -448,6 +448,19 @@ export async function runSubscriptionDelivery(db: any): Promise<void> {
     const today = todayStr();
     log('Starting for date: ' + today);
     try {
+        const activeSubCount = await db.models.milk_subscriptions.count({
+            where: {
+                status: 'ACTIVE',
+                active_subscription: true,
+                start_date: { [Op.lte]: today },
+                end_date: { [Op.gte]: today }
+            }
+        });
+        if (activeSubCount === 0) {
+            log('No active subscriptions found system-wide. Skipping execution.');
+            return;
+        }
+
         const outlets = await db.models.system_settings.findAll({ attributes: ['outlet_id'] });
         if (!outlets || outlets.length === 0) { log('No outlets. Skipping.'); return; }
         for (const outletSetting of outlets) {

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:jwt_decode/jwt_decode.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_config.dart';
 
 class TokenStorage {
   static const _key = 'auth_token';
@@ -83,5 +84,34 @@ class TokenStorage {
     if (data == null) return null;
 
     return jsonDecode(data);
+  }
+
+  static Future<String?> getOutletCode() async {
+    final user = await getUser();
+    if (user != null && user['outlet_code'] != null && user['outlet_code'].toString().isNotEmpty) {
+      return user['outlet_code'].toString();
+    }
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('outlet_code') ?? (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : null);
+  }
+
+  static Future<void> saveOutletCode(String code) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('outlet_code', code);
+    final user = await getUser();
+    if (user != null) {
+      user['outlet_code'] = code;
+      await saveUser(user);
+    }
+  }
+
+  static Future<String> getBusinessModule() async {
+    final user = await getUser();
+    return (user?['business_module'] ?? user?['outlet_module'] ?? user?['outlet_type'] ?? 'ALL').toString().toUpperCase();
+  }
+
+  static Future<bool> isRestaurantModuleActive() async {
+    final mod = await getBusinessModule();
+    return mod == 'ALL' || mod == 'RESTAURANT' || mod == 'HOTEL' || mod == 'CAFE' || mod == 'DINE_IN';
   }
 }

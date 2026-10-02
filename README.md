@@ -92,14 +92,29 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 
 ## 📚 Documentation
 
+### 👤 Store User & Cashier Guides (No Coding Required)
+- 🚀 **[1-Click Cloud & Offline Store Migration User Guide](./Docs/User-Guide-1Click-Cloud-Migration.md)**
+- 🛍️ **[B2B Wholesale Marketplace & Vendor Portal User Guide](./Docs/User-Guide-B2B-Marketplace-And-Vendor.md)**
+- 💬 **[B2B Community Hub & Direct Trade Chat User Guide](./Docs/User-Guide-B2B-Community-And-Chat.md)**
+- 🤖 **[Famalth Lynx AI Assistant & Search User Guide](./Docs/User-Guide-Lynx-AI-Assistant.md)**
+- 📝 **[POS Sticky Notes & Shift Checklists User Guide](./Docs/User-Guide-Sticky-Notes.md)**
+- 🌍 **[Currency & Multi-Tax Matrix Setup User Guide](./Docs/User-Guide-Currency-And-Taxes.md)**
+- ☁️ **[Cloud Features & Server Configuration User Guide](./Docs/User-Guide-Cloud-Features-And-Server-Config.md)**
+- 🛡️ **[Security, Anti-Hacker & Data Protection User Guide](./Docs/User-Guide-Security-And-Data-Protection.md)**
+- 📖 **[Master User Guide & Daily Workflow Index](./Docs/User-Guide.md)**
+
+### 🛠️ Developer & Technical Architecture Guides
+- [🛡️ Security, Rate Limiting, Anti-DDoS, Caching & Load Balancers Architecture](./Docs/Developer-Security-Cache-LoadBalancer-Guide.md)
+- [🚀 1-Click Bi-Directional Cloud & Offline Migration Architecture](./Docs/One-Click-Cloud-Migration-Guide.md)
+- [🛍️ B2B Marketplace, Vendor Onboarding & Community Chat Architecture](./Docs/B2B-Marketplace-And-Community-Guide.md)
+- [🤖 Famalth Lynx AI, Sticky Notes, Multi-Currency & Tax Matrix Architecture](./Docs/Lynx-AI-StickyNotes-Currency-Tax-Guide.md)
+- [📜 System Architecture Upgrades & Changelog (Sept–Oct 2026)](./Docs/System-Architecture-And-Changelog.md)
 - [Retailer Installation & Update Guide](./Docs/Retailer-Installation-Guide.md)
 - [Render Cloud Deployment & Environment Guide](./Docs/Render-Cloud-Deployment-Guide.md)
 - [Google Gmail OAuth2 Setup Guide](./Docs/Google-Gmail-OAuth2-Setup-Guide.md)
 - [Own Server Online Deployment Guide](./Docs/Own-Server-Online-Deployment-Guide.md)
-- [User Guide](./Docs/User-Guide.md)
 - [Complete Help File](./Docs/Help-File.md)
 - [Developer Guide](./Docs/Developer-Guide.md)
-- [Init Setup Guide (Dev/Manual)](./Docs/Init-Setup.md)
 - [Frontend Developer Guide](./Docs/Frontend-Guide.md)
 - [Backend Developer Guide](./Docs/Backend-Guide.md)
 - [Endpoint Reference](./Docs/Endpoint-Reference.md)

@@ -34,6 +34,9 @@ import 'screens/reports/cash_ledger_screen.dart';
 import 'screens/reports/stock_balance_screen.dart';
 import 'screens/reports/supplier_payments_report_screen.dart';
 import 'screens/reports/closing_report_screen.dart';
+import 'controllers/community/community_controller.dart';
+import 'controllers/inventory/marketplace_controller.dart';
+import 'controllers/inventory/supplier_controller.dart';
 
 final GlobalKey<ScaffoldMessengerState> globalSnackbarKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -65,6 +68,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => RestaurantController()),
         ChangeNotifierProvider(create: (_) => NightAuditController()),
         ChangeNotifierProvider(create: (_) => PropertyInfoController()..load()),
+        ChangeNotifierProvider(create: (_) => MarketplaceController()),
+        ChangeNotifierProvider(create: (_) => SupplierController()..load()),
+        ChangeNotifierProvider(create: (_) => CommunityController()),
       ],
       child: const MyApp(),
     ),

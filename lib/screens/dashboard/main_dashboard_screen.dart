@@ -45,6 +45,9 @@ import '../inventory/damage_item_screen.dart';
 import '../inventory/stock_issue_screen.dart';
 import '../inventory/item_master_screen.dart';
 import '../inventory/b2b_marketplace_screen.dart';
+import '../community/community_hub_screen.dart';
+import '../../controllers/community/community_controller.dart';
+import '../../widgets/cloud_feature_gate.dart';
 import '../inventory/purchase_order_screen.dart';
 import '../inventory/goods_receiving_screen.dart';
 import '../inventory/stock_request_screen.dart';
@@ -139,7 +142,8 @@ class MainDashboardScreen extends StatefulWidget {
   State<MainDashboardScreen> createState() => _MainDashboardScreenState();
 }
 
-class _MainDashboardScreenState extends State<MainDashboardScreen> {
+class _MainDashboardScreenState extends State<MainDashboardScreen>
+    with WidgetsBindingObserver {
   // OUTLET HIERARCHY & CONTACT DIRECTORY
   int? _selectedDashboardOutletId;
   Map<String, dynamic>? _dashboardHierarchyData;
@@ -422,15 +426,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     DateTimeService.instance.addListener(_onTimeZoneChanged);
     _currentTime = DateTimeService.instance.nowInTimeZone;
-    _appBarTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _currentTime = DateTimeService.instance.nowInTimeZone;
-        });
-      }
-    });
+    _startAppBarTimer();
 
     _loadPropertyInfo();
 
@@ -458,8 +457,36 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     });
   }
 
+  void _startAppBarTimer() {
+    _appBarTimer?.cancel();
+    _appBarTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentTime = DateTimeService.instance.nowInTimeZone;
+        });
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _currentTime = DateTimeService.instance.nowInTimeZone;
+      _startAppBarTimer();
+      _loadNotificationPreference();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _appBarTimer?.cancel();
+      _notificationTimer?.cancel();
+      _appBarTimer = null;
+      _notificationTimer = null;
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     DateTimeService.instance.removeListener(_onTimeZoneChanged);
     _appBarTimer?.cancel();
     _dataProtectionTimer?.cancel();
@@ -1740,6 +1767,55 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // B2B Community & Supplier Chat Floating Button with unread notification badge
+          Consumer<CommunityController>(
+            builder: (context, commCtrl, _) {
+              if (!commCtrl.isMessagingEnabled) {
+                return const SizedBox.shrink();
+              }
+              final unread = commCtrl.totalUnreadCount;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: FloatingActionButton.extended(
+                  heroTag: 'community_chat_fab',
+                  backgroundColor: const Color(0xFF1E40AF), // Deep royal blue
+                  foregroundColor: Colors.white,
+                  elevation: 4,
+                  icon: const Icon(Icons.forum_rounded, size: 20),
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('B2B Chat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      if (unread > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444), // Vibrant Red badge
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$unread',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  onPressed: () {
+                    CloudFeatureGate.navigate(
+                      context,
+                      featureName: 'B2B Merchant Community & Chat',
+                      featureDescription:
+                          'Real-time merchant-to-merchant messaging, wholesale inquiry channels, and direct supplier communication.',
+                      featureIcon: Icons.forum_rounded,
+                      destination: const CommunityHubScreen(),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
           // Sticky Notes & Reminders Floating Button (Positioned right above LYNX ASSIST)
           FloatingActionButton.extended(
             heroTag: 'sticky_notes_fab',
@@ -2910,7 +2986,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'Customer App (Delivery)',
         'permission': 'CUSTOMER_APP',
         'isBeta': true,
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerAppScreen())),
+        'onTap': () => CloudFeatureGate.navigate(
+          context,
+          featureName: 'Customer Ordering App',
+          featureDescription:
+              'Multi-device consumer mobile ordering with real-time checkout and live GPS delivery tracking.',
+          featureIcon: Icons.shopping_bag_outlined,
+          destination: const CustomerAppScreen(),
+        ),
       },
       {
         'category': 'Operations',
@@ -2918,7 +3001,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'Supplier / Retailer Console',
         'permission': 'RETAILER_CONSOLE',
         'isBeta': true,
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RetailerConsoleScreen())),
+        'onTap': () => CloudFeatureGate.navigate(
+          context,
+          featureName: 'Supplier / Retailer Console',
+          featureDescription:
+              'Merchant operations console for managing omnichannel online delivery orders, live catalog, and dispatch.',
+          featureIcon: Icons.admin_panel_settings_outlined,
+          destination: const RetailerConsoleScreen(),
+        ),
       },
       {
         'category': 'Operations',
@@ -2926,14 +3016,43 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'Rider Delivery Portal',
         'permission': 'RIDER_PORTAL',
         'isBeta': true,
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RiderConsoleScreen())),
+        'onTap': () => CloudFeatureGate.navigate(
+          context,
+          featureName: 'Rider Delivery Portal',
+          featureDescription:
+              'Real-time delivery agent portal with live GPS location broadcasts and order fulfillment status.',
+          featureIcon: Icons.delivery_dining_outlined,
+          destination: const RiderConsoleScreen(),
+        ),
       },
       {
         'category': 'Operations',
         'icon': Icons.storefront_rounded,
         'label': 'B2B Wholesale Marketplace',
         'permission': 'PURCHASE_ORDER',
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const B2BMarketplaceScreen())),
+        'onTap': () => CloudFeatureGate.navigate(
+          context,
+          featureName: 'B2B Wholesale Marketplace',
+          featureDescription:
+              'Wholesale merchant marketplace to discover regional verified vendors and place wholesale purchase orders online.',
+          featureIcon: Icons.storefront_rounded,
+          destination: const B2BMarketplaceScreen(),
+        ),
+      },
+      {
+        'category': 'Operations',
+        'icon': Icons.forum_rounded,
+        'label': 'Merchant Community & Chat',
+        'subLabel': 'Regional merchant channels & 1-on-1 private messaging',
+        'keywords': ['community', 'chat', 'direct message', 'regional channel', 'merchant chat', 'whatsapp'],
+        'onTap': () => CloudFeatureGate.navigate(
+          context,
+          featureName: 'B2B Merchant Community & Chat',
+          featureDescription:
+              'Real-time merchant-to-merchant messaging, wholesale inquiry channels, and direct supplier communication.',
+          featureIcon: Icons.forum_rounded,
+          destination: const CommunityHubScreen(),
+        ),
       },
       {
         'category': 'Operations',
@@ -3238,10 +3357,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       },
       {
         'category': 'Finance & Expenses',
-        'icon': Icons.local_shipping_outlined,
-        'label': 'Delivery Challans',
-        'permission': 'DELIVERY_CHALLANS',
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeliveryChallanScreen())),
+        'icon': Icons.payments_outlined,
+        'label': 'Regular Expenses',
+        'permission': 'CASH_LEDGER',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashLedgerScreen(initialIndex: 2))),
       },
       {
         'category': 'Finance & Expenses',
@@ -3249,6 +3368,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'Recurring Expenses',
         'permission': 'RECURRING_EXPENSES',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecurringExpensesScreen())),
+      },
+      {
+        'category': 'Finance & Expenses',
+        'icon': Icons.local_shipping_outlined,
+        'label': 'Delivery Challans',
+        'permission': 'DELIVERY_CHALLANS',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeliveryChallanScreen())),
       },
 
       // Finance & Accounting (Beta) Section
@@ -3728,8 +3854,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         'label': 'B2B Wholesale Marketplace',
         'subLabel': 'Browse verified vendors, order commodities at wholesale rates & auto-generate PO',
         'permission': 'PURCHASE_ORDER',
-        'keywords': ['marketplace', 'b2b marketplace', 'vendor supply', 'wholesale', 'buy wholesale', 'distributor marketplace', 'b2b orders', 'auto po'],
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const B2BMarketplaceScreen())),
+        'onTap': () => CloudFeatureGate.navigate(
+          context,
+          featureName: 'B2B Wholesale Marketplace',
+          featureDescription:
+              'Wholesale merchant marketplace to discover regional verified vendors and place wholesale purchase orders online.',
+          featureIcon: Icons.storefront_rounded,
+          destination: const B2BMarketplaceScreen(),
+        ),
       },
       {
         'category': 'Operations',

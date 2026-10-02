@@ -36,10 +36,12 @@ class RetailerConsoleScreen extends StatefulWidget {
   State<RetailerConsoleScreen> createState() => _RetailerConsoleScreenState();
 }
 
-class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
+class _RetailerConsoleScreenState extends State<RetailerConsoleScreen>
+    with WidgetsBindingObserver {
   UserProfile? _currentUser;
   bool _isLoading = false;
   PropertyInfo? _propertyInfo;
+  bool _isScreenActive = true;
 
   // --- Retailer Tab State ---
   List<dynamic> _retailerOrders = [];
@@ -107,13 +109,33 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadUserAndData();
     _startRefreshTimer();
     _startNotificationTimer();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _isScreenActive = true;
+      if (!_isLoading) _fetchRetailerData(isBackground: true);
+      _startRefreshTimer();
+      _startNotificationTimer();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _isScreenActive = false;
+      _refreshTimer?.cancel();
+      _notificationTimer?.cancel();
+      _refreshTimer = null;
+      _notificationTimer = null;
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _notificationTimer?.cancel();
     _riderNameCtrl.dispose();
@@ -683,7 +705,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                         _buildReceiptRow('Credit Note No:', cnNo),
                       _buildReceiptRow('Customer Name:', '${txn['customer_name'] ?? 'Walk-in'}'),
                       _buildReceiptRow('Customer Phone:', '${txn['customer_phone'] ?? 'N/A'}'),
-                      _buildReceiptRow('Address:', '${txn['customer_address'] ?? 'Dehradun'}'),
+                      _buildReceiptRow('Address:', '${txn['customer_address'] ?? 'N/A'}'),
                       const Divider(),
                       _buildReceiptRow('Original Amount Paid:', '${CurrencyService.symbol}${netAmt.toStringAsFixed(2)}'),
                       _buildReceiptRow(
@@ -6786,7 +6808,7 @@ class _RetailerConsoleScreenState extends State<RetailerConsoleScreen> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              'Address: ${txn['customer_address'] ?? 'Dehradun'}',
+                                              'Address: ${txn['customer_address'] ?? 'N/A'}',
                                               style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                                             ),
                                             const SizedBox(height: 2),

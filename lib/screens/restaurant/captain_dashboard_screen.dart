@@ -28,7 +28,8 @@ class CaptainDashboardScreen extends StatefulWidget {
   State<CaptainDashboardScreen> createState() => _CaptainDashboardScreenState();
 }
 
-class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
+class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
+    with WidgetsBindingObserver {
   int? selectedFloorId;
   int? selectedAreaId;
   Map<String, dynamic>? selectedTable;
@@ -40,10 +41,12 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
   int selectedSidebarTab = 0; // 0: Dine-In Tables, 1: Packing Orders, 2: NC Orders (No Charge)
   List<dynamic> _activeTakeawayKots = [];
   List<dynamic> _activeNcKots = [];
+  bool _isScreenActive = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSavedViewPreference();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctrl = Provider.of<RestaurantController>(context, listen: false);
@@ -52,13 +55,23 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
       _refreshData();
     });
 
+    _startTimers();
+  }
+
+  void _startTimers() {
+    _refreshTimer?.cancel();
+    _liveKdsTickerTimer?.cancel();
+    if (!_isScreenActive) return;
+
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      _refreshData();
+      if (_isScreenActive && mounted) {
+        _refreshData();
+      }
     });
 
     // 1-second Live KDS Timer ticker for occupied table stopwatch cards
     _liveKdsTickerTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
+      if (_isScreenActive && mounted) {
         final ctrl = context.read<RestaurantController>();
         final hasOccupied = ctrl.tables
             .any((t) => t['status'] == 'Occupied' || t['status'] == 'Billing');
@@ -67,6 +80,27 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
         }
       }
     });
+  }
+
+  void _stopTimers() {
+    _refreshTimer?.cancel();
+    _liveKdsTickerTimer?.cancel();
+    _refreshTimer = null;
+    _liveKdsTickerTimer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _isScreenActive = true;
+      _refreshData();
+      _startTimers();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _isScreenActive = false;
+      _stopTimers();
+    }
   }
 
   Future<void> _loadSavedViewPreference() async {
@@ -97,13 +131,13 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen> {
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
-    _liveKdsTickerTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopTimers();
     super.dispose();
   }
 
   void _refreshData() {
-    if (!mounted) return;
+    if (!mounted || !_isScreenActive) return;
     context.read<RestaurantController>().loadTables();
     _fetchActiveKots();
   }

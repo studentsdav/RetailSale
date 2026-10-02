@@ -64,6 +64,10 @@ async function queueUtilityInvoiceAlert(db, saleId, outletId, recipientPhone, pl
     });
 
     console.log(`[WHATSAPP QUEUE] Successfully queued utility invoice alert for sale ID: ${saleId}`);
+    try {
+        const { wakeWhatsappQueue } = require('../jobs/whatsappQueueJob');
+        if (wakeWhatsappQueue) wakeWhatsappQueue();
+    } catch (_) {}
 }
 
 /**
@@ -95,7 +99,7 @@ async function processQueue(db) {
     });
 
     const pendingLogs = [...utilities, ...marketings];
-    if (pendingLogs.length === 0) return;
+    if (pendingLogs.length === 0) return 0;
 
     console.log(`[WHATSAPP WORKER] Processing ${pendingLogs.length} messages (Utilities: ${utilities.length}, Marketings: ${marketings.length})...`);
 
@@ -230,6 +234,7 @@ async function processQueue(db) {
             }
         }
     }
+    return pendingLogs.length;
 }
 
 module.exports = {

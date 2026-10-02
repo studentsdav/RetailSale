@@ -1,0 +1,69 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model CommunityConversation {
+  id                  String             @id @db.VarChar(120)
+  title               String             @db.VarChar(255)
+  description         String?            @default("")
+  regionCity          String             @map("region_city") @db.VarChar(100)
+  regionState         String?            @default("") @map("region_state") @db.VarChar(100)
+  isDirect            Boolean            @default(false) @map("is_direct")
+  directRecipientId   String?            @map("direct_recipient_id") @db.VarChar(100)
+  directRecipientName String?            @map("direct_recipient_name") @db.VarChar(255)
+  directRecipientGstin String?           @map("direct_recipient_gstin") @db.VarChar(30)
+  directRecipientPhone String?           @map("direct_recipient_phone") @db.VarChar(30)
+  directRecipientCity String?            @map("direct_recipient_city") @db.VarChar(100)
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  messages            CommunityMessage[]
+
+  @@map("community_conversations")
+}
+
+model CommunityMessage {
+  id                   String                        @id @db.VarChar(120)
+  conversationId       String                        @map("conversation_id") @db.VarChar(120)
+  conversation         CommunityConversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId             String                        @map("sender_id") @db.VarChar(100)
+  senderName           String                        @map("sender_name") @db.VarChar(255)
+  senderTradeName      String?                       @default("") @map("sender_trade_name") @db.VarChar(255)
+  senderCity           String?                       @default("") @map("sender_city") @db.VarChar(100)
+  senderGstin          String?                       @default("") @map("sender_gstin") @db.VarChar(30)
+  senderPhone          String?                       @default("") @map("sender_phone") @db.VarChar(30)
+  content              String
+  attachment           Json?
+  isDeletedForEveryone Boolean                       @default(false) @map("is_deleted_for_everyone")
+  createdAt            DateTime                      @default(now()) @map("created_at")
+  updatedAt            DateTime                      @updatedAt @map("updated_at")
+  deletedUsers         CommunityMessageDeletedUser[]
+  mentions             CommunityMessageMention[]
+
+  @@map("community_messages")
+}
+
+model CommunityMessageDeletedUser {
+  messageId String           @map("message_id") @db.VarChar(120)
+  message   CommunityMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String           @map("user_id") @db.VarChar(100)
+  deletedAt DateTime         @default(now()) @map("deleted_at")
+
+  @@id([messageId, userId])
+  @@map("community_message_deleted_users")
+}
+
+model CommunityMessageMention {
+  id              Int              @id @default(autoincrement())
+  messageId       String           @map("message_id") @db.VarChar(120)
+  message         CommunityMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  mentionedHandle String           @map("mentioned_handle") @db.VarChar(100)
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@index([mentionedHandle])
+  @@map("community_message_mentions")
+}

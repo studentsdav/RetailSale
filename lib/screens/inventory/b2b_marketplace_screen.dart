@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../controllers/community/community_controller.dart';
 import '../../controllers/inventory/marketplace_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../core/currency/currency_service.dart';
 import '../../models/inventory/marketplace_vendor_model.dart';
+import '../community/chat_conversation_screen.dart';
 import '../dashboard/customer_app_screen.dart';
 import '../settings/vendor_marketplace_settings_screen.dart';
 
@@ -146,7 +149,7 @@ class _B2BMarketplaceScreenState extends State<B2BMarketplaceScreen> {
                   const Icon(Icons.location_pin, size: 16, color: Colors.white),
                   const SizedBox(width: 4),
                   Text(
-                    _marketplaceCtrl.selectedCity ?? 'Dehradun',
+                    _marketplaceCtrl.selectedCity ?? 'New York',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const Icon(Icons.arrow_drop_down, size: 18),
@@ -469,23 +472,53 @@ class _B2BMarketplaceScreenState extends State<B2BMarketplaceScreen> {
                       ),
                     ],
                   ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: const Icon(Icons.shopping_bag_outlined, size: 15),
-                    label: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Open in Customer App', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        SizedBox(width: 4),
-                        Icon(Icons.arrow_forward_ios, size: 11),
-                      ],
-                    ),
-                    onPressed: () => _openVendorStorefront(vendor),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          side: BorderSide(color: Colors.blue.shade300),
+                        ),
+                        icon: const Icon(Icons.chat_bubble_outline, size: 14, color: Colors.blueAccent),
+                        label: const Text('Chat', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                        onPressed: () {
+                          final communityCtrl = context.read<CommunityController>();
+                          final directChat = communityCtrl.getOrCreateDirectChat(
+                            recipientId: vendor.id,
+                            recipientName: vendor.businessName,
+                            recipientGstin: vendor.gstin,
+                            recipientPhone: vendor.phone,
+                            recipientCity: vendor.city,
+                          );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatConversationScreen(conversation: directChat),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.shopping_bag_outlined, size: 15),
+                        label: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Open in Customer App', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            SizedBox(width: 4),
+                            Icon(Icons.arrow_forward_ios, size: 11),
+                          ],
+                        ),
+                        onPressed: () => _openVendorStorefront(vendor),
+                      ),
+                    ],
                   ),
                 ],
               ),

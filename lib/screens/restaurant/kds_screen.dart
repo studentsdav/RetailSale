@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:convert';
 import '../../core/api/api_client.dart';
 
+import '../../core/auth/token_storage.dart';
+
 class KdsScreen extends StatefulWidget {
   const KdsScreen({super.key});
 
@@ -10,30 +12,68 @@ class KdsScreen extends StatefulWidget {
   State<KdsScreen> createState() => _KdsScreenState();
 }
 
-class _KdsScreenState extends State<KdsScreen> {
+class _KdsScreenState extends State<KdsScreen> with WidgetsBindingObserver {
   List<dynamic> activeKotsList = [];
   bool isLoadingKots = false;
   Timer? _timer;
   String selectedLocationFilter = 'All';
   bool _oneOptionMode = false;
   bool _showServedOrders = false;
+  bool _isScreenActive = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _initKdsPolling();
+  }
+
+  Future<void> _initKdsPolling() async {
+    final isRestActive = await TokenStorage.isRestaurantModuleActive();
+    if (!isRestActive || !mounted) return;
+
     _fetchKots();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    if (!_isScreenActive) return;
     _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      _fetchKots();
+      if (_isScreenActive && mounted) {
+        _fetchKots();
+      }
     });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _isScreenActive = true;
+      _fetchKots();
+      _startTimer();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _isScreenActive = false;
+      _stopTimer();
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopTimer();
     super.dispose();
   }
 
   Future<void> _fetchKots() async {
+    if (isLoadingKots || !mounted || !_isScreenActive) return;
     setState(() => isLoadingKots = true);
     try {
       final res = await ApiClient.get('/api/restaurant/kots?active_only=true');

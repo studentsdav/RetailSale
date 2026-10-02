@@ -25,7 +25,8 @@ import '../../utils/branding_storage.dart';
 import '../../utils/pdf_report_builder.dart';
 
 class CashLedgerScreen extends StatefulWidget {
-  const CashLedgerScreen({super.key});
+  final int initialIndex;
+  const CashLedgerScreen({super.key, this.initialIndex = 0});
 
   @override
   State<CashLedgerScreen> createState() => _CashLedgerScreenState();
@@ -78,7 +79,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    _tabController = TabController(
+      length: 8,
+      vsync: this,
+      initialIndex: widget.initialIndex.clamp(0, 7),
+    );
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         _loadCurrentTab();

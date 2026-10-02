@@ -1,20 +1,29 @@
 import 'package:flutter/material.dart';
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../core/config/app_config.dart';
 import '../../core/currency/currency_service.dart';
 import '../../core/settings/local_preferences.dart';
 import '../../models/inventory/item_model.dart';
+import '../dashboard/server_config_screen.dart';
+import '../../widgets/cloud_feature_gate.dart';
 
 class VendorMarketplaceSettingsScreen extends StatelessWidget {
   const VendorMarketplaceSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Vendor & Marketplace Setup'),
+    return CloudFeatureGate(
+      featureName: 'Marketplace Vendor Portal',
+      featureDescription:
+          'Publish your inventory catalog to regional merchants, receive automated purchase orders, and accept online payments.',
+      featureIcon: Icons.store_mall_directory_rounded,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Vendor & Marketplace Setup'),
+        ),
+        body: const VendorMarketplaceSettingsView(),
       ),
-      body: const VendorMarketplaceSettingsView(),
     );
   }
 }
@@ -270,6 +279,69 @@ class _VendorMarketplaceSettingsViewState
             ],
           ),
           const SizedBox(height: 18),
+
+          // Cloud Feature Notice Banner (Local/Offline Mode)
+          if (AppConfig.isLocalServer)
+            Container(
+              margin: const EdgeInsets.only(bottom: 18),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: const Color(0xFF0284C7).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.cloud_sync_rounded, color: Color(0xFF0284C7), size: 30),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Online Hosted Cloud Feature',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0369A1),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Marketplace vendor broadcasting, wholesale ordering, and customer apps require an Online Cloud Server URL (${AppConfig.baseUrl} is local). Deploy backend to your own cloud server or subscribe to Famalth Cloud.',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: Color(0xFF0369A1),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ServerConfigScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.dns_rounded, size: 16),
+                    label: const Text(
+                      'Configure Cloud URL',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Outlet Info Card
           if (buyer != null)

@@ -4,6 +4,7 @@ import 'package:retailpos/screens/splash_screen.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../settings/outlet_setup_screen.dart';
+import 'cloud_migration_screen.dart';
 
 class ServerConfigScreen extends StatefulWidget {
   final Widget? nextScreen;
@@ -193,7 +194,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                   onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: "Outlet Code (Optional)",
-                    hintText: "e.g. MUMBAI_STORE (Leave blank for new store)",
+                    hintText: "e.g. NYC_STORE (Leave blank for new store)",
                     helperText:
                         "Enter your outlet code if you have one, or leave blank to register a new store.",
                     helperMaxLines: 2,
@@ -240,6 +241,57 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                           ),
                   ),
                 ),
+                if (AppConfig.isLocalServer) ...[
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0284C7).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.25)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.rocket_launch_rounded, color: Color(0xFF0284C7), size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "Working Offline? Migrate to Cloud",
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFF0284C7)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          "Transfer all your local products, inventory, customers and billing records to your online server with 1 click.",
+                          style: TextStyle(fontSize: 12, color: Color(0xFF475569), height: 1.35),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF0284C7),
+                            side: const BorderSide(color: Color(0xFF0284C7)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CloudMigrationScreen()),
+                            );
+                          },
+                          icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                          label: const Text("Launch 1-Click Migration Wizard", style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

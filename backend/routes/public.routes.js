@@ -59,4 +59,12 @@ router.post('/settings/tax-groups', taxGroupCtrl.createTaxGroup);
 router.put('/settings/tax-groups/:id', taxGroupCtrl.updateTaxGroup);
 router.delete('/settings/tax-groups/:id', taxGroupCtrl.deleteTaxGroup);
 
+// 1-Click Cloud Migration Gateway
+const migrationCtrl = require('../controllers/public/migration.controller');
+router.get('/migration/ping', migrationCtrl.ping);
+router.post('/migration/ping', migrationCtrl.ping);
+router.post('/migration/export-bundle', migrationCtrl.exportBundle);
+router.post('/migration/import-bundle', migrationCtrl.importBundle);
+router.post('/migration/sync-online-to-offline', migrationCtrl.syncOnlineToOffline);
+
 module.exports = router;
