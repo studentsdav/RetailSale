@@ -6839,16 +6839,6 @@ class _SaleScreenState extends State<SaleScreen> {
       _pendingPreviousAdjustment = 0;
       _pendingAdvanceApplied = 0;
       _pendingAdvanceCreated = 0;
-      if (_preloadedTableId != null) {
-        try {
-          ApiClient.put('${ApiEndpoints.restaurantTables}/$_preloadedTableId/status', {
-            'status': 'Dirty',
-            'guest_count': 0,
-          });
-        } catch (e) {
-          debugPrint('Error updating table status to Dirty after billing: $e');
-        }
-      }
       final customerId = _selectedCustomer?.id;
       for (final scheme in _selectedSchemes) {
         final isOneTime = scheme.repeatMode.toUpperCase() == 'ONCE' ||

@@ -261,7 +261,7 @@ class RestaurantController extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateTableStatus(int id, String status, {int? guestCount, int? waiterId, int? captainId, int? activeSaleId}) async {
+  Future<bool> updateTableStatus(int id, String status, {int? guestCount, int? waiterId, int? captainId, int? activeSaleId, int? assignedUserId, String? assignedUserName}) async {
     try {
       final res = await ApiClient.put('${ApiEndpoints.restaurantTables}/$id/status', {
         'status': status,
@@ -269,11 +269,27 @@ class RestaurantController extends ChangeNotifier {
         if (waiterId != null) 'waiter_id': waiterId,
         if (captainId != null) 'captain_id': captainId,
         if (activeSaleId != null) 'active_sale_id': activeSaleId,
+        if (assignedUserId != null) 'assigned_user_id': assignedUserId,
+        if (assignedUserName != null) 'assigned_user_name': assignedUserName,
       });
       await loadTables();
       return res['success'] == true;
     } catch (e) {
       debugPrint('Error updating table status: $e');
+      return false;
+    }
+  }
+
+  Future<bool> assignTableUser(int tableId, int? userId, String? userName) async {
+    try {
+      final res = await ApiClient.post('${ApiEndpoints.restaurantTables}/$tableId/assign-user', {
+        'assigned_user_id': userId,
+        'assigned_user_name': userName,
+      });
+      await loadTables();
+      return res['success'] == true;
+    } catch (e) {
+      debugPrint('Error assigning user to table: $e');
       return false;
     }
   }

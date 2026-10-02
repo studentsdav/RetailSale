@@ -112,13 +112,7 @@ export const listKots = async (req: Request, res: Response) => {
             resultData = resultData.filter(kot => {
                 if (kot.sales_header_id != null) return false;
                 const s = (kot.status || '').toLowerCase();
-                if (s === 'billed' || s === 'closed' || s === 'cancelled' || s === 'rejected') return false;
-                if (kot.table && !table_id) {
-                    const tableStatus = (kot.table.status || '').toLowerCase();
-                    if (tableStatus === 'billed' || tableStatus === 'available' || tableStatus === 'dirty' || tableStatus === 'cleaning' || tableStatus === 'needs cleaning') {
-                        return false;
-                    }
-                }
+                if (s === 'billed' || s === 'closed' || s === 'cancelled' || s === 'rejected' || s === 'nc cleared' || s === 'nc_cleared') return false;
                 return true;
             });
         }
@@ -165,7 +159,7 @@ export const createKot = async (req: Request, res: Response) => {
     try {
         const outlet_id = (req as any).user?.outlet_id;
         const user_id = (req as any).user?.user_id || (req as any).user?.id;
-        const { table_id: rawTableId, service_type, kottype, waiter_id, captain_id, remarks, items } = req.body;
+        const { table_id: rawTableId, service_type, kottype, waiter_id, captain_id, remarks, items, client_tag, sub_table } = req.body;
 
         if (!items || items.length === 0) throw new Error('Cannot create KOT without items');
 
@@ -282,6 +276,8 @@ export const createKot = async (req: Request, res: Response) => {
             kot_no,
             table_id: validTableId,
             service_type: service_type || 'Dine In',
+            client_tag: client_tag ? String(client_tag).trim() : 'Bill 1',
+            sub_table: sub_table ? String(sub_table).trim() : null,
             kottype: determinedKotType,
             status: req.body.status || 'p',
             waiter_id: validWaiterId,

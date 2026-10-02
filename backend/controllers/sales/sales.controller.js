@@ -4213,43 +4213,12 @@ exports.createSale = async (req, res) => {
 
         const outlet_id = req.user?.outlet_id || req.body.header?.outlet_id || req.body.outlet_id || 1;
         const tableId = req.body.table_id || req.body.header?.table_id || req.body.tableId || req.body.header?.tableId;
-        if (tableId) {
-            try {
-                // 1. Mark table as Available
-                await req.propertyDb.models.restaurant_tables.update({
-                    status: 'Available',
-                    current_guest_count: 0,
-                    current_waiter_id: null,
-                    current_captain_id: null,
-                    active_sale_id: null
-                }, {
-                    where: { id: Number(tableId) },
-                    transaction: t
-                });
-
-                // 2. Mark unbilled KOTs for this table as billed and link to this sale ID
-                await req.propertyDb.models.kot_headers.update({
-                    status: 'billed',
-                    sales_header_id: referenceSale.id,
-                    kds_dismissed: true
-                }, {
-                    where: { 
-                        table_id: Number(tableId), 
-                        sales_header_id: null
-                    },
-                    transaction: t
-                });
-            } catch (tblErr) {
-                console.error('[TABLE CHECKOUT HOOK FAIL]', tblErr.message);
-            }
-        }
-
-        // Also close explicitly passed kot_ids (useful for takeaway/packing orders)
         const rawKotIds = req.body.kot_ids || req.body.kotIds || req.body.header?.kot_ids || req.body.header?.kotIds || (req.body.kot_id ? [req.body.kot_id] : null);
-        if (Array.isArray(rawKotIds) && rawKotIds.length > 0) {
-            const parsedKotIds = rawKotIds.map(id => Number(id)).filter(id => id > 0);
-            if (parsedKotIds.length > 0) {
-                try {
+        const parsedKotIds = (Array.isArray(rawKotIds) && rawKotIds.length > 0) ? rawKotIds.map(id => Number(id)).filter(id => id > 0) : [];
+
+        if (tableId || parsedKotIds.length > 0) {
+            try {
+                if (parsedKotIds.length > 0) {
                     await req.propertyDb.models.kot_headers.update({
                         status: 'billed',
                         sales_header_id: referenceSale.id,
@@ -4258,9 +4227,46 @@ exports.createSale = async (req, res) => {
                         where: { id: { [Op.in]: parsedKotIds } },
                         transaction: t
                     });
-                } catch (kotErr) {
-                    console.error('[KOT CHECKOUT HOOK FAIL]', kotErr.message);
+                } else if (tableId) {
+                    await req.propertyDb.models.kot_headers.update({
+                        status: 'billed',
+                        sales_header_id: referenceSale.id,
+                        kds_dismissed: true
+                    }, {
+                        where: { 
+                            table_id: Number(tableId), 
+                            sales_header_id: null
+                        },
+                        transaction: t
+                    });
                 }
+
+                if (tableId) {
+                    const remainingActiveKots = await req.propertyDb.models.kot_headers.count({
+                        where: {
+                            table_id: Number(tableId),
+                            sales_header_id: null,
+                            status: { [Op.notIn]: ['billed', 'Billed', 'BILLED', 'Closed', 'closed', 'cancelled', 'Cancelled', 'Rejected', 'NC Cleared', 'nc_cleared', 'NC_CLEARED'] }
+                        },
+                        transaction: t
+                    });
+
+                    if (remainingActiveKots === 0) {
+                        await req.propertyDb.models.restaurant_tables.update({
+                            status: 'Available',
+                            current_guest_count: 0,
+                            active_sale_id: null
+                        }, {
+                            where: { id: Number(tableId) },
+                            transaction: t
+                        });
+                        console.log('[TABLE CHECKOUT] Table #' + tableId + ' fully cleared & marked Available.');
+                    } else {
+                        console.log('[MULTI-TRANSACTION BILLING] Table #' + tableId + ' has ' + remainingActiveKots + ' active client KOTs remaining. Keeping table Occupied.');
+                    }
+                }
+            } catch (tblErr) {
+                console.error('[TABLE / KOT CHECKOUT HOOK FAIL]', tblErr.message);
             }
         }
 
@@ -4579,24 +4585,24 @@ exports.modifySale = async (req, res) => {
         const tableId = headerForModify.table_id || headerForModify.tableId || req.body.table_id || req.body.header?.table_id || req.body.tableId || req.body.header?.tableId;
         const outlet_id = req.user?.outlet_id || headerForModify.outlet_id || 1;
         if (status === 'COMPLETED') {
-            if (tableId) {
-                try {
-                    // 1. Mark table as Available
-                    await req.propertyDb.models.restaurant_tables.update({
-                        status: 'Available',
-                        current_guest_count: 0,
-                        current_waiter_id: null,
-                        current_captain_id: null,
-                        active_sale_id: null
-                    }, {
-                        where: { id: Number(tableId) },
-                        transaction: t
-                    });
+            try {
+                const rawKotIds = req.body.kot_ids || req.body.kotIds || req.body.header?.kot_ids || req.body.header?.kotIds || (req.body.kot_id ? [req.body.kot_id] : null);
+                const parsedKotIds = (Array.isArray(rawKotIds) ? rawKotIds : []).map(id => Number(id)).filter(id => id > 0);
 
-                    // 2. Mark unbilled KOTs for this table as billed and link to this sale ID
+                if (parsedKotIds.length > 0) {
                     await req.propertyDb.models.kot_headers.update({
                         status: 'billed',
-                        sales_header_id: newSale.id
+                        sales_header_id: newSale.id,
+                        kds_dismissed: true
+                    }, {
+                        where: { id: { [Op.in]: parsedKotIds } },
+                        transaction: t
+                    });
+                } else if (tableId) {
+                    await req.propertyDb.models.kot_headers.update({
+                        status: 'billed',
+                        sales_header_id: newSale.id,
+                        kds_dismissed: true
                     }, {
                         where: { 
                             table_id: Number(tableId), 
@@ -4604,28 +4610,34 @@ exports.modifySale = async (req, res) => {
                         },
                         transaction: t
                     });
-                } catch (tblErr) {
-                    console.error('[TABLE MODIFY CHECKOUT HOOK FAIL]', tblErr.message);
                 }
-            }
 
-            // Also close explicitly passed kot_ids
-            const rawKotIds = req.body.kot_ids || req.body.kotIds || req.body.header?.kot_ids || req.body.header?.kotIds || (req.body.kot_id ? [req.body.kot_id] : null);
-            if (Array.isArray(rawKotIds) && rawKotIds.length > 0) {
-                const parsedKotIds = rawKotIds.map(id => Number(id)).filter(id => id > 0);
-                if (parsedKotIds.length > 0) {
-                    try {
-                        await req.propertyDb.models.kot_headers.update({
-                            status: 'billed',
-                            sales_header_id: newSale.id
+                if (tableId) {
+                    const remainingActiveKots = await req.propertyDb.models.kot_headers.count({
+                        where: {
+                            table_id: Number(tableId),
+                            sales_header_id: null,
+                            status: { [Op.notIn]: ['billed', 'Billed', 'BILLED', 'Closed', 'closed', 'cancelled', 'Cancelled', 'Rejected', 'NC Cleared', 'nc_cleared', 'NC_CLEARED'] }
+                        },
+                        transaction: t
+                    });
+
+                    if (remainingActiveKots === 0) {
+                        await req.propertyDb.models.restaurant_tables.update({
+                            status: 'Available',
+                            current_guest_count: 0,
+                            active_sale_id: null
                         }, {
-                            where: { id: { [Op.in]: parsedKotIds } },
+                            where: { id: Number(tableId) },
                             transaction: t
                         });
-                    } catch (kotErr) {
-                        console.error('[KOT MODIFY CHECKOUT HOOK FAIL]', kotErr.message);
+                        console.log('[TABLE MODIFY CHECKOUT] Table #' + tableId + ' fully cleared & marked Available.');
+                    } else {
+                        console.log('[MULTI-TRANSACTION BILLING] Table #' + tableId + ' has ' + remainingActiveKots + ' active client KOTs remaining. Keeping table Occupied.');
                     }
                 }
+            } catch (tblErr) {
+                console.error('[TABLE MODIFY CHECKOUT HOOK FAIL]', tblErr.message);
             }
         }
 

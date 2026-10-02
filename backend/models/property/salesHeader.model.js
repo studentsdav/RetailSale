@@ -73,7 +73,10 @@ module.exports = (sequelize, DataTypes) => {
         commission_percentage_amount: DataTypes.DECIMAL(12, 2),
         commission_fixed_amount: DataTypes.DECIMAL(12, 2),
         salesman_id: DataTypes.INTEGER,
-        token_no: DataTypes.STRING
+        token_no: DataTypes.STRING,
+        table_id: DataTypes.INTEGER,
+        client_tag: DataTypes.STRING,
+        sub_table: DataTypes.STRING
     }, {
         tableName: 'sales_headers',
         timestamps: true,

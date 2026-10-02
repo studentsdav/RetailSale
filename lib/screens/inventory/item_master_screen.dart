@@ -25,6 +25,8 @@ import '../../utils/inclusive_rate_helper.dart';
 import '../../widgets/entry_shortcuts.dart';
 import 'item_barcode_manager_screen.dart';
 import 'stock_transfer_screen.dart';
+import 'modifier_master_screen.dart';
+import 'stock_taking_screen.dart';
 import 'bom_setup_dialog.dart';
 import '../../core/currency/currency_service.dart';
 
@@ -1456,6 +1458,30 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               icon: const Icon(Icons.qr_code_2),
               tooltip: 'Generate Barcode Labels',
               onPressed: _openBarcodeManager,
+            ),
+            IconButton(
+              icon: const Icon(Icons.tune),
+              tooltip: 'Item Modifiers & Add-ons',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ModifierMasterScreen(),
+                  ),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.fact_check_outlined),
+              tooltip: 'Stock Taking & Audit',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const StockTakingScreen(),
+                  ),
+                );
+              },
             ),
             IconButton(
               icon: const Icon(Icons.swap_horiz),

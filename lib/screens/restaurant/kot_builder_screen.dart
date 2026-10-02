@@ -33,6 +33,7 @@ class KotBuilderScreen extends StatefulWidget {
   final String? ncDepartment;
   final String? ncGuestName;
   final bool isTakeaway;
+  final String? clientTag;
 
   const KotBuilderScreen({
     super.key,
@@ -44,6 +45,7 @@ class KotBuilderScreen extends StatefulWidget {
     this.ncDepartment,
     this.ncGuestName,
     this.isTakeaway = false,
+    this.clientTag,
   });
 
   @override
@@ -67,6 +69,8 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   DateTime _currentDateTime = DateTime.now();
   String _selectedCaptain = 'N/A';
   final List<String> _captainList = ['N/A'];
+  late String _clientTag;
+  final List<String> _availableClientTags = ['Bill 1', 'Bill 2', 'Bill 3', 'Bill 4'];
 
   // Cart: Map of ItemID -> Map of Cart Item details
   final Map<int, Map<String, dynamic>> _cart = {};
@@ -76,6 +80,10 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   @override
   void initState() {
     super.initState();
+    _clientTag = (widget.clientTag != null && widget.clientTag!.isNotEmpty) ? widget.clientTag! : 'Bill 1';
+    if (!_availableClientTags.contains(_clientTag)) {
+      _availableClientTags.add(_clientTag);
+    }
     settingsCtrl.load().then((_) {
       if (mounted) setState(() {});
     });
@@ -538,7 +546,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         final List kots = (widget.editKotId != null)
             ? rawKots.where((k) => k['id'] == widget.editKotId).toList()
             : (widget.table['id'] != null
-                ? rawKots.where((k) => k['table_id'] == widget.table['id']).toList()
+                ? rawKots.where((k) => k['table_id'] == widget.table['id'] && (_clientTag.isEmpty || (k['client_tag'] ?? 'Bill 1').toString().trim() == _clientTag.trim())).toList()
                 : rawKots);
 
         setState(() {
@@ -1142,6 +1150,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         final kotData = {
           'table_id': widget.isTakeaway ? null : widget.table['id'],
           'service_type': widget.isTakeaway ? 'Takeaway' : 'Dine In',
+          'client_tag': _clientTag,
           'kottype': widget.isNcOrder ? 'nc' : (widget.isTakeaway ? 'packing' : 'g'),
           'status': 'p',
           'waiter_id': widget.table['waiter_id'] ?? 1,
@@ -2384,8 +2393,114 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                 ],
               ),
             ),
+
+            // Separate Client Transaction / Bill Selector
+            if (!widget.isTakeaway) ...[
+              const SizedBox(width: 16),
+              const Icon(Icons.receipt_long_rounded, size: 15, color: Color(0xFFFF7A1A)),
+              const SizedBox(width: 6),
+              const Text('Client / Bill: ', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF7A1A).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFFF7A1A).withValues(alpha: 0.5)),
+                ),
+                child: DropdownButton<String>(
+                  value: _availableClientTags.contains(_clientTag) ? _clientTag : null,
+                  hint: Text(_clientTag, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  dropdownColor: const Color(0xFF1E293B),
+                  underline: const SizedBox(),
+                  isDense: true,
+                  icon: const Icon(Icons.arrow_drop_down, color: Color(0xFFFF7A1A), size: 18),
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  items: [
+                    ..._availableClientTags.map((tag) => DropdownMenuItem<String>(
+                      value: tag,
+                      child: Text(tag, style: const TextStyle(color: Colors.white)),
+                    )),
+                    const DropdownMenuItem<String>(
+                      value: '__NEW_CLIENT_TAG__',
+                      child: Row(
+                        children: [
+                          Icon(Icons.add_circle_outline, color: Color(0xFFFF7A1A), size: 14),
+                          SizedBox(width: 6),
+                          Text('+ New Client / Bill Tag', style: TextStyle(color: Color(0xFFFF7A1A), fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    if (val == '__NEW_CLIENT_TAG__') {
+                      _showNewClientTagDialog();
+                    } else if (val != null) {
+                      setState(() => _clientTag = val);
+                    }
+                  },
+                ),
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  void _showNewClientTagDialog() {
+    final tagCtrl = TextEditingController(text: 'Bill ${_availableClientTags.length + 1}');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.receipt_long, color: Color(0xFFFF7A1A)),
+            SizedBox(width: 8),
+            Text('Separate Client / Bill Tag', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Assign this order to a distinct guest or client bill for split billing:',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: tagCtrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Client / Bill Tag Name',
+                hintText: 'e.g. Bill 2, Client B, Rahul, Seat 3',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7A1A),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              final newTag = tagCtrl.text.trim();
+              if (newTag.isNotEmpty) {
+                setState(() {
+                  if (!_availableClientTags.contains(newTag)) {
+                    _availableClientTags.add(newTag);
+                  }
+                  _clientTag = newTag;
+                });
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Set Bill Tag'),
+          ),
+        ],
       ),
     );
   }
@@ -2423,7 +2538,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         final pdfBytes = await _generateKotPdfForPrint(kot, items);
         await showPdfPreviewDialog(
           context: context,
-          name: 'KOT_Table_${_displayTableName}',
+          name: 'KOT_Table_$_displayTableName',
           pageFormat: const PdfPageFormat(80 * PdfPageFormat.mm, double.infinity, marginAll: 4 * PdfPageFormat.mm),
           buildPdf: (_) async => pdfBytes,
         );

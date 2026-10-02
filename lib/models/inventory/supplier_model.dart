@@ -63,7 +63,7 @@ class Supplier {
       'tax_id_type': taxIdType,
       'tax_country_code': taxCountryCode,
       'is_active': isActive ?? true,
-      if (openingBalance != null) 'opening_balance': openingBalance,
+      'opening_balance': openingBalance ?? 0.0,
       if (asOfDate != null) 'as_of_date': asOfDate,
     };
   }

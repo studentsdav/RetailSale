@@ -64,6 +64,12 @@ class _StockTakingScreenState extends State<StockTakingScreen> with SingleTicker
     super.dispose();
   }
 
+  double _toDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
   Future<void> _fetchItems() async {
     setState(() => _loading = true);
     try {
@@ -74,14 +80,14 @@ class _StockTakingScreenState extends State<StockTakingScreen> with SingleTicker
         setState(() {
           _departments = ['ALL', ...depts.map((d) => d.toString())];
           _allItems = list.map((item) {
-            final double current = (item['current_balance'] as num?)?.toDouble() ?? 0.0;
+            final double current = _toDouble(item['current_balance']);
             return {
               'id': item['id'],
               'item_code': item['item_code']?.toString() ?? '',
               'item_name': item['item_name']?.toString() ?? '',
               'unit': item['unit']?.toString() ?? 'PCS',
               'department': item['department']?.toString() ?? 'General',
-              'rate': (item['rate'] as num?)?.toDouble() ?? 0.0,
+              'rate': _toDouble(item['rate']),
               'current_balance': current,
               'counted_qty': current,
               'variance': 0.0,
@@ -112,7 +118,7 @@ class _StockTakingScreenState extends State<StockTakingScreen> with SingleTicker
         final name = (item['item_name'] ?? '').toString().toLowerCase();
         final code = (item['item_code'] ?? '').toString().toLowerCase();
         final matchSearch = query.isEmpty || name.contains(query) || code.contains(query);
-        final variance = (item['variance'] as double?) ?? 0.0;
+        final variance = _toDouble(item['variance']);
         final matchVariance = !_showVarianceOnly || variance.abs() > 0.001;
         return matchDept && matchSearch && matchVariance;
       }).toList();
@@ -120,8 +126,8 @@ class _StockTakingScreenState extends State<StockTakingScreen> with SingleTicker
   }
 
   void _onCountChanged(Map<String, dynamic> item, String val) {
-    final counted = double.tryParse(val.trim()) ?? (item['current_balance'] as double);
-    final current = (item['current_balance'] as double);
+    final counted = double.tryParse(val.trim()) ?? _toDouble(item['current_balance']);
+    final current = _toDouble(item['current_balance']);
     final variance = counted - current;
     setState(() {
       item['counted_qty'] = counted;
@@ -130,7 +136,7 @@ class _StockTakingScreenState extends State<StockTakingScreen> with SingleTicker
   }
 
   Future<void> _saveAudit() async {
-    final changedItems = _allItems.where((item) => (item['variance'] as double).abs() > 0.001).toList();
+    final changedItems = _allItems.where((item) => _toDouble(item['variance']).abs() > 0.001).toList();
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -615,7 +621,7 @@ class _StockTakingScreenState extends State<StockTakingScreen> with SingleTicker
                             DataColumn(label: Text('Auditor', style: TextStyle(fontWeight: FontWeight.bold))),
                           ],
                           rows: _reports.map((row) {
-                            final variance = (row['variance'] as num?)?.toDouble() ?? 0.0;
+                            final variance = _toDouble(row['variance']);
                             final isShortage = variance < -0.001;
                             final isSurplus = variance > 0.001;
 
@@ -639,8 +645,8 @@ class _StockTakingScreenState extends State<StockTakingScreen> with SingleTicker
                                 DataCell(Text(row['item_name'] ?? '')),
                                 DataCell(Text(row['department'] ?? 'General')),
                                 DataCell(Text(row['unit'] ?? 'PCS')),
-                                DataCell(Text(((row['system_balance'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2))),
-                                DataCell(Text(((row['counted_qty'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2))),
+                                DataCell(Text(_toDouble(row['system_balance']).toStringAsFixed(2))),
+                                DataCell(Text(_toDouble(row['counted_qty']).toStringAsFixed(2))),
                                 DataCell(
                                   Text(
                                     '${variance > 0 ? '+' : ''}${variance.toStringAsFixed(2)}',

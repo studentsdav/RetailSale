@@ -156,7 +156,7 @@ class _SupplierMasterScreenState extends State<SupplierMasterScreen> {
           ? 'IN'
           : _taxCountryCode.text.trim().toUpperCase(),
       isActive: _isActive,
-      openingBalance: rawOpening != null && rawOpening > 0 ? rawOpening : null,
+      openingBalance: rawOpening ?? 0.0,
     );
 
     // Auto-save custom state in database if not already in available list

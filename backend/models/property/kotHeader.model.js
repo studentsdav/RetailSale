@@ -21,6 +21,14 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             defaultValue: 'Dine In'
         },
+        client_tag: {
+            type: DataTypes.STRING(100),
+            defaultValue: 'Bill 1'
+        },
+        sub_table: {
+            type: DataTypes.STRING(50),
+            allowNull: true
+        },
         kottype: {
             type: DataTypes.STRING(30),
             defaultValue: 'g'

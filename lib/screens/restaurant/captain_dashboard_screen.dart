@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import '../../controllers/restaurant/restaurant_controller.dart';
 import '../../core/api/api_client.dart';
+import '../../core/api/endpoints.dart';
 import '../inventory/salescreen.dart';
 import 'kot_builder_screen.dart';
 import 'running_orders_screen.dart';
@@ -41,6 +42,8 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
   int selectedSidebarTab = 0; // 0: Dine-In Tables, 1: Packing Orders, 2: NC Orders (No Charge)
   List<dynamic> _activeTakeawayKots = [];
   List<dynamic> _activeNcKots = [];
+  List<dynamic> _activeKots = [];
+  List<String> _availableStaffList = [];
   bool _isScreenActive = true;
 
   @override
@@ -52,10 +55,44 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
       final ctrl = Provider.of<RestaurantController>(context, listen: false);
       ctrl.loadFloors();
       ctrl.loadDiningAreas();
+      _fetchStaffList();
       _refreshData();
     });
 
     _startTimers();
+  }
+
+  Future<void> _fetchStaffList() async {
+    final List<String> staff = [];
+    try {
+      final empRes = await ApiClient.get(ApiEndpoints.hrmsEmployees);
+      if (empRes['data'] is List) {
+        for (final emp in (empRes['data'] as List)) {
+          final String name = (emp['full_name'] ?? emp['employee_name'] ?? emp['name'] ?? '${emp['first_name'] ?? ''} ${emp['last_name'] ?? ''}').toString().trim();
+          if (name.isNotEmpty && !staff.contains(name)) {
+            staff.add(name);
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final userRes = await ApiClient.get(ApiEndpoints.users);
+      if (userRes['data'] is List) {
+        for (final u in (userRes['data'] as List)) {
+          final String name = (u['full_name'] ?? u['name'] ?? u['username'] ?? '').toString().trim();
+          if (name.isNotEmpty && !staff.contains(name)) {
+            staff.add(name);
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _availableStaffList = staff;
+      });
+    }
   }
 
   void _startTimers() {
@@ -213,29 +250,11 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
 
         if (mounted) {
           setState(() {
+            _activeKots = kots;
             activeKotItemsByTable = tempMap;
             _activeTakeawayKots = takeawayList;
             _activeNcKots = ncList;
           });
-
-          // AUTO-CLEAR TABLES WITH ALL ORDERS CANCELLED
-          // If a table is marked 'Occupied' or 'Billing', but has 0 active running KOT items,
-          // automatically clear table status to 'Available' and reset guest count to 0!
-          final ctrl = context.read<RestaurantController>();
-          bool needsReload = false;
-          for (final t in ctrl.tables) {
-            final int tId = t['id'];
-            final String status = (t['status'] ?? '').toString();
-            final runningItems = tempMap[tId] ?? [];
-            if ((status == 'Occupied' || status == 'Billing') &&
-                runningItems.isEmpty) {
-              ctrl.updateTableStatus(tId, 'Available', guestCount: 0);
-              needsReload = true;
-            }
-          }
-          if (needsReload) {
-            ctrl.loadTables();
-          }
         }
       }
     } catch (e) {
@@ -1053,9 +1072,12 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     }
     if (parts.length == 2) {
       final mins = int.tryParse(parts[0]) ?? 0;
-      if (mins >= 30) return const Color(0xFFFF4D4D); // Red alert for >30m
-      if (mins >= 15)
+      if (mins >= 30) {
+        return const Color(0xFFFF4D4D); // Red alert for >30m
+      }
+      if (mins >= 15) {
         return const Color(0xFFFFB800); // Amber warning for 15-30m
+      }
     }
     return const Color(0xFF00E676); // Bright Emerald Green for <15m
   }
@@ -2170,6 +2192,17 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
             SimpleDialogOption(
               onPressed: () {
                 Navigator.pop(dialogContext);
+                _promptNewClientBill(context, table);
+              },
+              child: const ListTile(
+                leading: Icon(Icons.call_split, color: Colors.indigo),
+                title: Text('New Separate Client Bill / Transaction'),
+                subtitle: Text('Add a distinct guest bill (Bill 2, Bill 3, etc.)'),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(dialogContext);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -2184,6 +2217,17 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                 leading: Icon(Icons.restaurant_menu, color: Colors.deepOrange),
                 title: Text('View / Edit Running Orders (KOT)'),
                 subtitle: Text('View placed orders or modify running KOT'),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _showAssignStaffDialog(context, table, ctrl);
+              },
+              child: const ListTile(
+                leading: Icon(Icons.person_pin, color: Colors.blueAccent),
+                title: Text('Assign Staff / Waiter to Table'),
+                subtitle: Text('Designate a waiter or captain for this table'),
               ),
             ),
             if (MediaQuery.of(context).size.width >= 900)
@@ -2220,6 +2264,159 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
           ],
         );
       },
+    );
+  }
+
+  void _promptNewClientBill(BuildContext parentContext, Map<String, dynamic> table) {
+    final int tableId = int.tryParse((table['id'] ?? 0).toString()) ?? 0;
+    final List<dynamic> tableKots = _activeKots.where((k) => k['table_id'] == tableId).toList();
+    final Set<String> existingTags = {};
+    for (final kot in tableKots) {
+      final tag = (kot['client_tag'] ?? 'Bill 1').toString().trim();
+      if (tag.isNotEmpty) existingTags.add(tag);
+    }
+
+    final int nextBillNum = existingTags.length + 1;
+    final defaultTag = 'Bill $nextBillNum';
+    final customTagCtrl = TextEditingController(text: defaultTag);
+
+    showDialog(
+      context: parentContext,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.call_split, color: Colors.indigo),
+            const SizedBox(width: 8),
+            Text('New Bill on ${table['table_name']}'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Existing active bills: ${existingTags.isEmpty ? 'None (first bill)' : existingTags.join(', ')}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: customTagCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Client / Bill Name or Tag',
+                hintText: 'e.g. Bill 2, Client A, Guest B',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.receipt),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7A1A),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              final chosenTag = customTagCtrl.text.trim().isEmpty ? defaultTag : customTagCtrl.text.trim();
+              Navigator.pop(dialogCtx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => KotBuilderScreen(
+                    table: table,
+                    isFreshOrder: true,
+                    clientTag: chosenTag,
+                  ),
+                ),
+              ).then((_) => _refreshData());
+            },
+            child: const Text('Open Menu for this Bill'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAssignStaffDialog(BuildContext parentContext, Map<String, dynamic> table, RestaurantController ctrl) {
+    String? selectedStaff = table['assigned_user_name']?.toString();
+    if (selectedStaff == null || selectedStaff.isEmpty || selectedStaff == 'null') {
+      selectedStaff = null;
+    }
+
+    final List<String> staffOptions = [];
+    for (final staff in _availableStaffList) {
+      if (!staffOptions.contains(staff)) staffOptions.add(staff);
+    }
+
+    showDialog(
+      context: parentContext,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.person_pin, color: Colors.blueAccent),
+              const SizedBox(width: 8),
+              Text('Assign Staff to ${table['table_name']}'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select a waiter or captain dedicated to this table:', style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String?>(
+                value: selectedStaff,
+                decoration: const InputDecoration(
+                  labelText: 'Assigned Waiter / Captain',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('None (Unassigned)'),
+                  ),
+                  ...staffOptions.map((name) => DropdownMenuItem<String?>(
+                    value: name,
+                    child: Text(name),
+                  )),
+                ],
+                onChanged: (val) => setDlgState(() => selectedStaff = val),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+              onPressed: () async {
+                final int tableId = int.tryParse((table['id'] ?? 0).toString()) ?? 0;
+                if (tableId > 0) {
+                  await ctrl.assignTableUser(tableId, null, selectedStaff);
+                  if (context.mounted) {
+                    Navigator.pop(dialogCtx);
+                    _refreshData();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Table assigned to ${selectedStaff ?? 'Unassigned'}')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save Assignment'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2360,69 +2557,20 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
         return;
       }
 
-      final Map<dynamic, Map<String, dynamic>> grouped = {};
-      final List<int> kotIds = [];
-
+      // Check if there are multiple client bills
+      final Set<String> distinctTags = {};
       for (final kot in kots) {
-        final int kId = int.tryParse((kot['id'] ?? 0).toString()) ?? 0;
-        if (kId > 0 && !kotIds.contains(kId)) {
-          kotIds.add(kId);
-        }
-
-        final List items = kot['items'] as List? ?? [];
-        for (final item in items) {
-          final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
-          if (itemStatus == 'CANCELLED' || itemStatus == 'REJECTED') continue;
-
-          final int itemId = int.tryParse((item['item_id'] ?? item['itemId'] ?? item['id'] ?? 0).toString()) ?? 0;
-          final String itemName = (item['item_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().trim();
-          final double qty = double.tryParse((item['quantity'] ?? item['qty'] ?? 1.0).toString()) ?? 1.0;
-          final double rate = double.tryParse((item['rate'] ?? item['item_rate'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
-
-          final dynamic groupKey = itemId > 0 ? itemId : (itemName.isNotEmpty ? itemName : 'Item_$kId');
-
-          if (grouped.containsKey(groupKey)) {
-            grouped[groupKey]!['qty'] = (grouped[groupKey]!['qty'] as double) + qty;
-          } else {
-            grouped[groupKey] = {
-              'item_id': itemId,
-              'item_name': itemName,
-              'qty': qty,
-              'rate': rate,
-            };
-          }
-        }
+        final tag = (kot['client_tag'] ?? 'Bill 1').toString().trim();
+        if (tag.isNotEmpty) distinctTags.add(tag);
       }
 
-      final consolidatedItems = grouped.values.toList();
-
-      if (consolidatedItems.isEmpty) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('No active items found in the orders on Table ${table['table_name'] ?? tableId} to bill.'),
-              backgroundColor: Colors.orange.shade700,
-            ),
-          );
-        }
+      if (distinctTags.length > 1) {
+        _showSplitBillSettlementDialog(context, table, kots, ctrl, distinctTags.toList());
         return;
       }
 
-      if (context.mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SaleScreen(
-              preloadedTableId: tableId,
-              preloadedItems: consolidatedItems,
-              preloadedKotIds: kotIds,
-            ),
-          ),
-        ).then((_) {
-          ctrl.loadTables();
-          _refreshData();
-        });
-      }
+      // Single bill workflow
+      _proceedTableBilling(tableId, kots, ctrl);
     } else {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2430,6 +2578,244 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
         );
       }
     }
+  }
+
+  void _proceedTableBilling(int tableId, List kots, RestaurantController ctrl, {String? specificClientTag}) {
+    final Map<dynamic, Map<String, dynamic>> grouped = {};
+    final List<int> kotIds = [];
+
+    final targetKots = specificClientTag != null
+        ? kots.where((k) => (k['client_tag'] ?? 'Bill 1').toString().trim() == specificClientTag.trim()).toList()
+        : kots;
+
+    for (final kot in targetKots) {
+      final int kId = int.tryParse((kot['id'] ?? 0).toString()) ?? 0;
+      if (kId > 0 && !kotIds.contains(kId)) {
+        kotIds.add(kId);
+      }
+
+      final List items = kot['items'] as List? ?? [];
+      for (final item in items) {
+        final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
+        if (itemStatus == 'CANCELLED' || itemStatus == 'REJECTED') continue;
+
+        final int itemId = int.tryParse((item['item_id'] ?? item['itemId'] ?? item['id'] ?? 0).toString()) ?? 0;
+        final String itemName = (item['item_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().trim();
+        final double qty = double.tryParse((item['quantity'] ?? item['qty'] ?? 1.0).toString()) ?? 1.0;
+        final double rate = double.tryParse((item['rate'] ?? item['item_rate'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
+
+        final dynamic groupKey = itemId > 0 ? itemId : (itemName.isNotEmpty ? itemName : 'Item_$kId');
+
+        if (grouped.containsKey(groupKey)) {
+          grouped[groupKey]!['qty'] = (grouped[groupKey]!['qty'] as double) + qty;
+        } else {
+          grouped[groupKey] = {
+            'item_id': itemId,
+            'item_name': itemName,
+            'qty': qty,
+            'rate': rate,
+          };
+        }
+      }
+    }
+
+    final consolidatedItems = grouped.values.toList();
+
+    if (consolidatedItems.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No active items found to bill.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SaleScreen(
+            preloadedTableId: tableId,
+            preloadedItems: consolidatedItems,
+            preloadedKotIds: kotIds,
+          ),
+        ),
+      ).then((_) {
+        ctrl.loadTables();
+        _refreshData();
+      });
+    }
+  }
+
+  void _showSplitBillSettlementDialog(BuildContext parentCtx, Map<String, dynamic> table, List kots, RestaurantController ctrl, List<String> distinctTags) {
+    final int tableId = int.tryParse((table['id'] ?? 0).toString()) ?? 0;
+    showDialog(
+      context: parentCtx,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.call_split, color: Colors.teal.shade700, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Split Bill Settlement', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Table ${table['table_name']} has ${distinctTags.length} separate client bills',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Select which client bill to settle, or settle the whole table together:',
+                  style: TextStyle(fontSize: 13, color: Colors.black87),
+                ),
+                const SizedBox(height: 14),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: distinctTags.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, i) {
+                      final tag = distinctTags[i];
+                      final clientKots = kots.where((k) => (k['client_tag'] ?? 'Bill 1').toString().trim() == tag).toList();
+                      int itemCount = 0;
+                      final List<String> itemNames = [];
+
+                      for (final kot in clientKots) {
+                        final items = kot['items'] as List? ?? [];
+                        for (final it in items) {
+                          final String stat = (it['status'] ?? '').toString().toUpperCase();
+                          if (stat == 'CANCELLED' || stat == 'REJECTED') continue;
+                          final double q = double.tryParse((it['quantity'] ?? it['qty'] ?? 1).toString()) ?? 1.0;
+                          itemCount += (q % 1 == 0 ? q.toInt() : q.ceil());
+                          final name = it['item_name'] ?? 'Item';
+                          final qtyStr = (q % 1 == 0) ? q.toInt().toString() : q.toStringAsFixed(1);
+                          if (!itemNames.contains('$name (${qtyStr}x)')) {
+                            itemNames.add('$name (${qtyStr}x)');
+                          }
+                        }
+                      }
+
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE0E7FF),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.receipt_outlined, size: 16, color: Color(0xFF3730A3)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    tag,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3730A3), fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$itemCount items • ${clientKots.length} KOT(s)',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    itemNames.join(', '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade700,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              icon: const Icon(Icons.point_of_sale, size: 16),
+                              label: Text('Settle $tag', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              onPressed: () {
+                                Navigator.pop(dialogContext);
+                                _proceedTableBilling(tableId, kots, ctrl, specificClientTag: tag);
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: Colors.blue.shade700),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: Icon(Icons.receipt_long, color: Colors.blue.shade700),
+                  label: Text(
+                    'Settle All Bills Combined (Whole Table)',
+                    style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    _proceedTableBilling(tableId, kots, ctrl);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _openOrderSheet(Map<String, dynamic> table, {bool isFreshOrder = true}) {

@@ -271,10 +271,23 @@ if (!fs.existsSync(licensePath)) {
                 ADD COLUMN IF NOT EXISTS print_bank_details BOOLEAN DEFAULT false,
                 ADD COLUMN IF NOT EXISTS print_upi_qr BOOLEAN DEFAULT false,
                 ADD COLUMN IF NOT EXISTS print_digital_signature BOOLEAN DEFAULT false;
+
+                ALTER TABLE restaurant_tables 
+                ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER,
+                ADD COLUMN IF NOT EXISTS assigned_user_name VARCHAR(150);
+
+                ALTER TABLE kot_headers
+                ADD COLUMN IF NOT EXISTS client_tag VARCHAR(100) DEFAULT 'Bill 1',
+                ADD COLUMN IF NOT EXISTS sub_table VARCHAR(50);
+
+                ALTER TABLE sales_headers
+                ADD COLUMN IF NOT EXISTS table_id INTEGER,
+                ADD COLUMN IF NOT EXISTS client_tag VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS sub_table VARCHAR(50);
             `);
-            console.log('✅ Verified/added custom columns in property_info table');
+            console.log('✅ Verified/added custom columns in property_info, restaurant_tables, kot_headers, and sales_headers');
         } catch (colErr: any) {
-            console.warn('⚠️ Failed to dynamically alter table property_info:', colErr.message);
+            console.warn('⚠️ Failed to dynamically alter table property_info/restaurant_tables:', colErr.message);
         }
 
         try {

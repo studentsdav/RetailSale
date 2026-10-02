@@ -21,6 +21,20 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(12, 2),
             defaultValue: 0.00
         },
+        tax_percent: {
+            type: DataTypes.DECIMAL(5, 2),
+            allowNull: true,
+            defaultValue: null
+        },
+        inventory_item_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            defaultValue: 0
+        },
+        deduct_qty: {
+            type: DataTypes.DECIMAL(12, 4),
+            defaultValue: 0.0000
+        },
         is_active: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
@@ -36,6 +50,10 @@ module.exports = (sequelize, DataTypes) => {
         ItemModifier.belongsTo(models.item_master, {
             foreignKey: 'item_master_id',
             as: 'item'
+        });
+        ItemModifier.belongsTo(models.item_master, {
+            foreignKey: 'inventory_item_id',
+            as: 'inventory_item'
         });
     };
 

@@ -363,7 +363,7 @@ export const updateTableStatus = async (req: Request, res: Response) => {
     try {
         const outlet_id = (req as any).user?.outlet_id;
         const { id } = req.params;
-        const { status, guest_count, waiter_id, captain_id, active_sale_id } = req.body;
+        const { status, guest_count, waiter_id, captain_id, active_sale_id, assigned_user_id, assigned_user_name } = req.body;
 
         const table = await (req as any).propertyDb.models.restaurant_tables.findOne({ where: { id, outlet_id } });
         if (!table) return res.status(404).json({ success: false, message: 'Table not found' });
@@ -374,6 +374,8 @@ export const updateTableStatus = async (req: Request, res: Response) => {
         if (waiter_id !== undefined) updateData.current_waiter_id = waiter_id;
         if (captain_id !== undefined) updateData.current_captain_id = captain_id;
         if (active_sale_id !== undefined) updateData.active_sale_id = active_sale_id;
+        if (assigned_user_id !== undefined) updateData.assigned_user_id = assigned_user_id ? Number(assigned_user_id) : null;
+        if (assigned_user_name !== undefined) updateData.assigned_user_name = assigned_user_name ? String(assigned_user_name) : null;
 
         await table.update(updateData);
 
@@ -953,7 +955,7 @@ export const assignTableUser = async (req: Request, res: Response) => {
     try {
         const outlet_id = (req as any).user?.outlet_id;
         const { id } = req.params;
-        const { waiter_id, captain_id } = req.body;
+        const { waiter_id, captain_id, assigned_user_id, assigned_user_name } = req.body;
 
         const table = await (req as any).propertyDb.models.restaurant_tables.findOne({
             where: { id, outlet_id }
@@ -966,6 +968,8 @@ export const assignTableUser = async (req: Request, res: Response) => {
         const updateData: any = {};
         if (waiter_id !== undefined) updateData.current_waiter_id = waiter_id ? Number(waiter_id) : null;
         if (captain_id !== undefined) updateData.current_captain_id = captain_id ? Number(captain_id) : null;
+        if (assigned_user_id !== undefined) updateData.assigned_user_id = assigned_user_id ? Number(assigned_user_id) : null;
+        if (assigned_user_name !== undefined) updateData.assigned_user_name = assigned_user_name ? String(assigned_user_name) : null;
 
         await table.update(updateData);
 

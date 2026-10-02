@@ -32,6 +32,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
   List<dynamic> activeKotsList = [];
   bool isLoading = false;
   final settingsCtrl = SystemSettingsController();
+  String _selectedConsolidatedBillTag = 'ALL';
 
   @override
   void initState() {
@@ -46,6 +47,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
   @override
   void dispose() {
     _tabController.dispose();
+    settingsCtrl.dispose();
     super.dispose();
   }
 
@@ -133,112 +135,328 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
     }
   }
 
-  Future<bool> _showPinOverrideDialog() async {
-    String enteredPin = '';
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        bool isAuthorizing = false;
-        bool isSendingOtp = false;
+  List<String> _getDistinctClientTags() {
+    final tags = <String>{};
+    for (final kot in activeKotsList) {
+      final tag = (kot['client_tag'] ?? 'Bill 1').toString().trim();
+      if (tag.isNotEmpty) {
+        tags.add(tag);
+      }
+    }
+    return tags.toList();
+  }
 
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Row(
-                children: [
-                  Icon(Icons.security, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text('Supervisor Override'),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Enter Supervisor PIN or OTP',
-                      hintText: 'xxxx',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (val) => enteredPin = val,
-                  ),
-                  const SizedBox(height: 10),
-                  TextButton.icon(
-                    onPressed: isSendingOtp
-                        ? null
-                        : () async {
-                            setDialogState(() => isSendingOtp = true);
-                            try {
-                              final msg = await context.read<UserController>().sendSupervisorOtp();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(msg), backgroundColor: Colors.teal),
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Failed to send OTP: $e'), backgroundColor: Colors.red),
-                                );
-                              }
-                            } finally {
-                              setDialogState(() => isSendingOtp = false);
-                            }
-                          },
-                    icon: isSendingOtp
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.mark_email_unread_outlined, size: 18),
-                    label: const Text('Send One-Time OTP to Supervisor Email', style: TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isAuthorizing ? null : () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
+  void _proceedToBilling({String? specificClientTag, int? specificKotId}) {
+    final List<int> kotIds = [];
+    final Map<dynamic, Map<String, dynamic>> grouped = {};
+
+    final targetKots = activeKotsList.where((kot) {
+      if (specificKotId != null && kot['id'] != specificKotId) return false;
+      if (specificClientTag != null && (kot['client_tag'] ?? 'Bill 1').toString().trim() != specificClientTag.trim()) return false;
+      return true;
+    }).toList();
+
+    for (final kot in targetKots) {
+      final int kId = int.tryParse((kot['id'] ?? 0).toString()) ?? 0;
+      if (kId > 0 && !kotIds.contains(kId)) {
+        kotIds.add(kId);
+      }
+      final items = kot['items'] as List? ?? [];
+      for (final item in items) {
+        final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
+        if (itemStatus == 'CANCELLED' || itemStatus == 'REJECTED') continue;
+
+        final int itemId = int.tryParse((item['item_id'] ?? item['itemId'] ?? item['id'] ?? 0).toString()) ?? 0;
+        final String itemName = (item['item_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().trim();
+        final double qty = double.tryParse((item['quantity'] ?? item['qty'] ?? 1.0).toString()) ?? 1.0;
+        final double rate = double.tryParse((item['rate'] ?? item['item_rate'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
+
+        final dynamic groupKey = itemId > 0 ? itemId : (itemName.isNotEmpty ? itemName : 'Item_$kId');
+
+        if (grouped.containsKey(groupKey)) {
+          grouped[groupKey]!['qty'] = (grouped[groupKey]!['qty'] as double) + qty;
+        } else {
+          grouped[groupKey] = {
+            'item_id': itemId,
+            'item_name': itemName,
+            'qty': qty,
+            'rate': rate,
+          };
+        }
+      }
+    }
+
+    if (grouped.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active items found to bill.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SaleScreen(
+          preloadedTableId: widget.tableId,
+          preloadedItems: grouped.values.toList(),
+          preloadedKotIds: kotIds,
+        ),
+      ),
+    ).then((_) => _fetchTableKots());
+  }
+
+  void _showBillingOptions() {
+    final distinctTags = _getDistinctClientTags();
+    if (distinctTags.length <= 1) {
+      _proceedToBilling();
+      return;
+    }
+
+    // Multi-client bills detected! Show Split Settlement Dialog
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                ElevatedButton(
-                  onPressed: isAuthorizing
-                      ? null
-                      : () async {
-                          if (enteredPin.trim().isEmpty) return;
-                          setDialogState(() => isAuthorizing = true);
-                          try {
-                            final isAuthorized = await context.read<UserController>().verifySupervisorPin(enteredPin.trim());
-                            if (context.mounted) {
-                              if (isAuthorized) {
-                                Navigator.pop(context, true);
-                              } else {
-                                setDialogState(() => isAuthorizing = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Invalid Security PIN or OTP! Access Denied.'), backgroundColor: Colors.red),
-                                );
-                              }
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              setDialogState(() => isAuthorizing = false);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Verification Error: $e'), backgroundColor: Colors.red),
-                              );
-                            }
+                child: Icon(Icons.call_split, color: Colors.teal.shade700, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Split Bill Settlement', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Table ${widget.tableName} has ${distinctTags.length} separate client bills',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Select which client bill to settle, or settle the whole table together:',
+                  style: TextStyle(fontSize: 13, color: Colors.black87),
+                ),
+                const SizedBox(height: 14),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: distinctTags.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, i) {
+                      final tag = distinctTags[i];
+                      final clientKots = activeKotsList.where((k) => (k['client_tag'] ?? 'Bill 1').toString().trim() == tag).toList();
+                      int itemCount = 0;
+                      final List<String> itemNames = [];
+
+                      for (final kot in clientKots) {
+                        final items = kot['items'] as List? ?? [];
+                        for (final it in items) {
+                          final String stat = (it['status'] ?? '').toString().toUpperCase();
+                          if (stat == 'CANCELLED' || stat == 'REJECTED') continue;
+                          final double q = double.tryParse((it['quantity'] ?? it['qty'] ?? 1).toString()) ?? 1.0;
+                          itemCount += (q % 1 == 0 ? q.toInt() : q.ceil());
+                          final name = it['item_name'] ?? 'Item';
+                          final qtyStr = (q % 1 == 0) ? q.toInt().toString() : q.toStringAsFixed(1);
+                          if (!itemNames.contains('$name (${qtyStr}x)')) {
+                            itemNames.add('$name (${qtyStr}x)');
                           }
-                        },
-                  child: isAuthorizing
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Authorize'),
+                        }
+                      }
+
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE0E7FF),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.receipt_outlined, size: 16, color: Color(0xFF3730A3)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    tag,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3730A3), fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$itemCount items • ${clientKots.length} KOT(s)',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    itemNames.join(', '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade700,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              icon: const Icon(Icons.point_of_sale, size: 16),
+                              label: Text('Settle $tag', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              onPressed: () {
+                                Navigator.pop(dialogContext);
+                                _proceedToBilling(specificClientTag: tag);
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: Colors.blue.shade700),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: Icon(Icons.receipt_long, color: Colors.blue.shade700),
+                  label: Text(
+                    'Settle All Bills Combined (Whole Table)',
+                    style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    _proceedToBilling();
+                  },
                 ),
               ],
-            );
-          },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+          ],
         );
       },
     );
-    return result ?? false;
+  }
+
+  void _openFreshOrderPrompt() {
+    final distinctTags = _getDistinctClientTags();
+    if (distinctTags.isEmpty) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => KotBuilderScreen(
+            table: {
+              'id': widget.tableId,
+              'table_name': widget.tableName,
+            },
+            isFreshOrder: true,
+            clientTag: 'Bill 1',
+          ),
+        ),
+      ).then((_) => _fetchTableKots());
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Add Order to Table ${widget.tableName}'),
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+            child: Text('Choose which client bill to add items to:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          ),
+          ...distinctTags.map((tag) => SimpleDialogOption(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => KotBuilderScreen(
+                    table: {
+                      'id': widget.tableId,
+                      'table_name': widget.tableName,
+                    },
+                    isFreshOrder: true,
+                    clientTag: tag,
+                  ),
+                ),
+              ).then((_) => _fetchTableKots());
+            },
+            child: ListTile(
+              leading: const Icon(Icons.receipt, color: Colors.indigo),
+              title: Text('Add items to $tag', style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          )),
+          SimpleDialogOption(
+            onPressed: () {
+              Navigator.pop(ctx);
+              final nextIndex = distinctTags.length + 1;
+              final nextTag = 'Bill $nextIndex';
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => KotBuilderScreen(
+                    table: {
+                      'id': widget.tableId,
+                      'table_name': widget.tableName,
+                    },
+                    isFreshOrder: true,
+                    clientTag: nextTag,
+                  ),
+                ),
+              ).then((_) => _fetchTableKots());
+            },
+            child: ListTile(
+              leading: const Icon(Icons.add_circle_outline, color: Color(0xFFFF7A1A)),
+              title: Text('New Client Bill (Bill ${distinctTags.length + 1})', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFF7A1A))),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _reprintKot(Map<String, dynamic> kot) async {
@@ -416,6 +634,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
 
     final String nowStr = DateTime.now().toString().substring(0, 16);
     final String kotNo = (kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}').toString();
+    final String clientTag = (kot['client_tag'] ?? 'Bill 1').toString();
     
     pdf.addPage(
       pw.Page(
@@ -461,13 +680,14 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('TABLE: $tableName', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
-                  pw.Text('GUESTS: $guestCount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                  pw.Text('CLIENT: $clientTag', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
                 ],
               ),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('KOT: $kotNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.Text('GUESTS: $guestCount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                 ],
               ),
               pw.Text('Print Time: $nowStr', style: const pw.TextStyle(fontSize: 9)),
@@ -851,10 +1071,29 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final distinctTags = _getDistinctClientTags();
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Running Orders - Table ${widget.tableName}'),
+        title: Row(
+          children: [
+            Text('Running Orders - Table ${widget.tableName}'),
+            if (distinctTags.length > 1) ...[
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${distinctTags.length} Bills',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo.shade900),
+                ),
+              ),
+            ],
+          ],
+        ),
         elevation: 0,
         actions: [
           if (MediaQuery.of(context).size.width >= 900 && activeKotsList.isNotEmpty)
@@ -868,61 +1107,22 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: Icon(
-                  (settingsCtrl.settings?.restaurantSettlementMode ?? 'DIRECT') == 'AFTER_BILL_PRINT'
-                      ? Icons.print_outlined
-                      : Icons.point_of_sale,
+                  distinctTags.length > 1
+                      ? Icons.call_split
+                      : ((settingsCtrl.settings?.restaurantSettlementMode ?? 'DIRECT') == 'AFTER_BILL_PRINT'
+                          ? Icons.print_outlined
+                          : Icons.point_of_sale),
                   size: 16,
                 ),
                 label: Text(
-                  (settingsCtrl.settings?.restaurantSettlementMode ?? 'DIRECT') == 'AFTER_BILL_PRINT'
-                      ? 'Print Bill (Hold for Settle)'
-                      : 'Generate Bill / Settle',
+                  distinctTags.length > 1
+                      ? 'Split Settle / Bill (${distinctTags.length} Bills)'
+                      : ((settingsCtrl.settings?.restaurantSettlementMode ?? 'DIRECT') == 'AFTER_BILL_PRINT'
+                          ? 'Print Bill (Hold for Settle)'
+                          : 'Generate Bill / Settle'),
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
-                onPressed: () {
-                  final List<int> kotIds = [];
-                  final Map<dynamic, Map<String, dynamic>> grouped = {};
-                  for (final kot in activeKotsList) {
-                    final int kId = int.tryParse((kot['id'] ?? 0).toString()) ?? 0;
-                    if (kId > 0 && !kotIds.contains(kId)) {
-                      kotIds.add(kId);
-                    }
-                    final items = kot['items'] as List? ?? [];
-                    for (final item in items) {
-                      final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
-                      if (itemStatus == 'CANCELLED' || itemStatus == 'REJECTED') continue;
-
-                      final int itemId = int.tryParse((item['item_id'] ?? item['itemId'] ?? item['id'] ?? 0).toString()) ?? 0;
-                      final String itemName = (item['item_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().trim();
-                      final double qty = double.tryParse((item['quantity'] ?? item['qty'] ?? 1.0).toString()) ?? 1.0;
-                      final double rate = double.tryParse((item['rate'] ?? item['item_rate'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
-
-                      final dynamic groupKey = itemId > 0 ? itemId : (itemName.isNotEmpty ? itemName : 'Item_$kId');
-
-                      if (grouped.containsKey(groupKey)) {
-                        grouped[groupKey]!['qty'] = (grouped[groupKey]!['qty'] as double) + qty;
-                      } else {
-                        grouped[groupKey] = {
-                          'item_id': itemId,
-                          'item_name': itemName,
-                          'qty': qty,
-                          'rate': rate,
-                        };
-                      }
-                    }
-                  }
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SaleScreen(
-                        preloadedTableId: widget.tableId,
-                        preloadedItems: grouped.values.toList(),
-                        preloadedKotIds: kotIds,
-                      ),
-                    ),
-                  ).then((_) => _fetchTableKots());
-                },
+                onPressed: _showBillingOptions,
               ),
             ),
           Padding(
@@ -936,20 +1136,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
               ),
               icon: const Icon(Icons.add_shopping_cart, size: 16),
               label: const Text('Add Fresh Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => KotBuilderScreen(
-                      table: {
-                        'id': widget.tableId,
-                        'table_name': widget.tableName,
-                      },
-                      isFreshOrder: true,
-                    ),
-                  ),
-                ).then((_) => _fetchTableKots());
-              },
+              onPressed: _openFreshOrderPrompt,
             ),
           ),
           IconButton(
@@ -989,20 +1176,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                         ),
                         icon: const Icon(Icons.add_shopping_cart),
                         label: const Text('Add Fresh Order / Items', style: TextStyle(fontWeight: FontWeight.bold)),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => KotBuilderScreen(
-                                table: {
-                                  'id': widget.tableId,
-                                  'table_name': widget.tableName,
-                                },
-                                isFreshOrder: true,
-                              ),
-                            ),
-                          ).then((_) => _fetchTableKots());
-                        },
+                        onPressed: _openFreshOrderPrompt,
                       ),
                     ],
                   ),
@@ -1038,6 +1212,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
         final items = kot['items'] as List? ?? [];
         final dateCreated = DateTime.tryParse(kot['created_time'] ?? '') ?? DateTime.now();
         final minutesElapsed = DateTime.now().difference(dateCreated).inMinutes;
+        final String clientTag = (kot['client_tag'] ?? 'Bill 1').toString().trim();
 
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
@@ -1052,28 +1227,58 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
             children: [
               // Header
               Container(
-                color: scheme.surfaceVariant,
+                color: scheme.surfaceContainerHighest,
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                     Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('KOT: ${kot['kot_no']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Waiter: ${kot['waiter']?['employee_name'] ?? 'N/A'} | ordered $minutesElapsed min ago',
-                          style: TextStyle(fontSize: 12, color: scheme.outline),
-                        ),
-                        if (kot['status'] == 'Cancelled' || kot['status'] == 'Rejected') ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            '${kot['status'] == 'Rejected' ? 'REJECTED' : 'CANCELLED'}: ${kot['remarks'] ?? 'No reason provided'}',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text('KOT: ${kot['kot_no']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE0E7FF),
+                                  border: Border.all(color: const Color(0xFFC7D2FE)),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.receipt, size: 12, color: Color(0xFF3730A3)),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      clientTag,
+                                      style: const TextStyle(
+                                        color: Color(0xFF3730A3),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Waiter: ${kot['waiter']?['employee_name'] ?? 'N/A'} | ordered $minutesElapsed min ago',
+                            style: TextStyle(fontSize: 12, color: scheme.outline),
+                          ),
+                          if (kot['status'] == 'Cancelled' || kot['status'] == 'Rejected') ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '${kot['status'] == 'Rejected' ? 'REJECTED' : 'CANCELLED'}: ${kot['remarks'] ?? 'No reason provided'}',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                     Row(
                       children: [
@@ -1105,17 +1310,30 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                                       'id': widget.tableId,
                                       'table_name': widget.tableName,
                                     },
-                                    prefilledItems: items,
                                     editKotId: kot['id'],
+                                    isFreshOrder: false,
+                                    clientTag: clientTag,
                                   ),
                                 ),
                               ).then((_) => _fetchTableKots());
                             },
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_forever, color: Colors.redAccent, size: 20),
-                            tooltip: 'Cancel Entire KOT',
-                            onPressed: () => _cancelEntireKot(kot['id'], kot['kot_no']),
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                            tooltip: 'Cancel Entire KOT Ticket',
+                            onPressed: () => _cancelEntireKot(kot['id'], kot['kot_no'] ?? ''),
+                          ),
+                          const SizedBox(width: 6),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            icon: const Icon(Icons.point_of_sale, size: 14),
+                            label: Text('Bill $clientTag', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            onPressed: () => _proceedToBilling(specificClientTag: clientTag),
                           ),
                         ],
                       ],
@@ -1123,28 +1341,26 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                   ],
                 ),
               ),
-              const Divider(height: 1),
+
               // Items List
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: items.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: scheme.outlineVariant),
-                itemBuilder: (context, idx) {
-                  final item = items[idx];
+                separatorBuilder: (context, i) => Divider(height: 1, color: scheme.outlineVariant),
+                itemBuilder: (context, itemIdx) {
+                  final item = items[itemIdx];
                   final isCancelled = item['status'] == 'Cancelled' || item['status'] == 'Rejected';
-                  final hasRemark = item['item_remark'] != null && item['item_remark'].toString().trim().isNotEmpty;
-
-                  final double q = double.tryParse(item['qty'].toString()) ?? 0.0;
+                  final double q = double.tryParse(item['qty']?.toString() ?? '0') ?? 0.0;
                   final String qtyStr = (q % 1 == 0) ? q.toInt().toString() : q.toStringAsFixed(1);
+                  final bool hasRemark = (item['item_remark'] != null && item['item_remark'].toString().trim().isNotEmpty);
 
                   return ListTile(
                     dense: true,
                     title: Text(
                       _displayName(item),
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         decoration: isCancelled ? TextDecoration.lineThrough : null,
                         color: isCancelled ? Colors.grey : scheme.onSurface,
                       ),
@@ -1205,13 +1421,16 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
     );
   }
 
-  Widget _buildSummaryTab(ColorScheme scheme) {
-    return _buildConsolidatedTab(scheme);
-  }
-
   Widget _buildConsolidatedTab(ColorScheme scheme) {
+    final distinctTags = _getDistinctClientTags();
     final Map<String, Map<String, double>> summary = {};
+
     for (final kot in activeKotsList) {
+      final String clientTag = (kot['client_tag'] ?? 'Bill 1').toString().trim();
+      if (_selectedConsolidatedBillTag != 'ALL' && clientTag != _selectedConsolidatedBillTag) {
+        continue;
+      }
+
       final items = kot['items'] as List? ?? [];
       for (final item in items) {
         final name = _displayName(item);
@@ -1243,8 +1462,38 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Filter by Bill Tag (if multiple bills)
+          if (distinctTags.length > 1)
+            Container(
+              color: Colors.grey.shade100,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  const Text('Filter by Client Bill:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('All Bills', style: TextStyle(fontSize: 11)),
+                    selected: _selectedConsolidatedBillTag == 'ALL',
+                    onSelected: (val) {
+                      if (val) setState(() => _selectedConsolidatedBillTag = 'ALL');
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  ...distinctTags.map((tag) => Padding(
+                    padding: const EdgeInsets.only(right: 6.0),
+                    child: ChoiceChip(
+                      label: Text(tag, style: const TextStyle(fontSize: 11)),
+                      selected: _selectedConsolidatedBillTag == tag,
+                      onSelected: (val) {
+                        if (val) setState(() => _selectedConsolidatedBillTag = tag);
+                      },
+                    ),
+                  )),
+                ],
+              ),
+            ),
           Container(
-            color: scheme.surfaceVariant,
+            color: scheme.surfaceContainerHighest,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1314,6 +1563,32 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
               },
             ),
           ),
+          if (keys.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.point_of_sale, size: 18),
+                label: Text(
+                  _selectedConsolidatedBillTag == 'ALL'
+                      ? 'Proceed to Bill Whole Table'
+                      : 'Proceed to Bill $_selectedConsolidatedBillTag',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                onPressed: () {
+                  if (_selectedConsolidatedBillTag == 'ALL') {
+                    _proceedToBilling();
+                  } else {
+                    _proceedToBilling(specificClientTag: _selectedConsolidatedBillTag);
+                  }
+                },
+              ),
+            ),
         ],
       ),
     );

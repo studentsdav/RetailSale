@@ -49,6 +49,14 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             allowNull: true
         },
+        assigned_user_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
+        assigned_user_name: {
+            type: DataTypes.STRING(150),
+            allowNull: true
+        },
         x_coordinate: {
             type: DataTypes.INTEGER,
             allowNull: true

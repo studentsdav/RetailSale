@@ -42,6 +42,140 @@ function normalizeSupplierPayload(body = {}) {
     };
 }
 
+async function syncVendorToCoa(req, outlet_id, supplier, newOpening, oldOpening = 0, asOfDate = null) {
+    if (!req.propertyDb || !req.propertyDb.models) return;
+
+    const diff = Number((newOpening - oldOpening).toFixed(2));
+
+    // 1. Manage supplier_bills (Opening Bill)
+    if (req.propertyDb.models.supplier_bills) {
+        try {
+            const billNo = `OPN-${supplier.supplier_code || supplier.id}`;
+            const existingBill = await req.propertyDb.models.supplier_bills.findOne({
+                where: { outlet_id, supplier_id: supplier.id, bill_no: billNo }
+            });
+
+            if (newOpening > 0) {
+                if (existingBill) {
+                    const paid = Number(existingBill.paid_amount || 0);
+                    const newStatus = paid >= newOpening ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'UNPAID');
+                    await existingBill.update({
+                        bill_amount: newOpening,
+                        status: newStatus,
+                        bill_date: asOfDate || existingBill.bill_date || new Date()
+                    });
+                } else {
+                    await req.propertyDb.models.supplier_bills.create({
+                        outlet_id,
+                        supplier_id: supplier.id,
+                        bill_no: billNo,
+                        bill_date: asOfDate || new Date(),
+                        bill_amount: newOpening,
+                        paid_amount: 0.00,
+                        status: 'UNPAID',
+                        remarks: 'Opening Balance on Vendor Creation'
+                    });
+                }
+            } else if (existingBill && newOpening <= 0) {
+                if (Number(existingBill.paid_amount || 0) === 0) {
+                    await existingBill.destroy();
+                } else {
+                    await existingBill.update({ bill_amount: 0, status: 'PAID' });
+                }
+            }
+        } catch (billErr) {
+            console.warn('[SUPPLIER BILL SYNC WARN]', billErr.message);
+        }
+    }
+
+    // 2. Manage Chart of Accounts
+    if (req.propertyDb.models.chart_of_accounts) {
+        try {
+            // Check if default accounts exist; if none, auto-seed
+            const totalCoaCount = await req.propertyDb.models.chart_of_accounts.count({ where: { outlet_id } });
+            if (totalCoaCount === 0) {
+                const DEFAULT_COA_SEEDS = [
+                    { account_code: '1001', account_name: 'Main Cash Drawer', group_name: 'Current Assets', nature: 'ASSET', is_system: true },
+                    { account_code: '1100', account_name: 'Sundry Debtors (Customer Receivables)', group_name: 'Current Assets', nature: 'ASSET', is_system: true },
+                    { account_code: '1200', account_name: 'Closing Stock (Inventory Asset)', group_name: 'Stock / Inventory', nature: 'ASSET', is_system: true },
+                    { account_code: '2001', account_name: 'Sundry Creditors (Vendor Payables)', group_name: 'Current Liabilities', nature: 'LIABILITY', is_system: true },
+                    { account_code: '3001', account_name: 'Proprietor / Owner Capital', group_name: 'Capital Account', nature: 'EQUITY', is_system: true },
+                    { account_code: '3100', account_name: 'Retained Earnings', group_name: 'Retained Earnings', nature: 'EQUITY', is_system: true },
+                    { account_code: '4001', account_name: 'Retail Sales Revenue', group_name: 'Sales Income', nature: 'REVENUE', is_system: true },
+                    { account_code: '5001', account_name: 'Purchases (Cost of Goods Sold)', group_name: 'Direct Expenses', nature: 'EXPENSE', is_system: true },
+                ];
+                const seeds = DEFAULT_COA_SEEDS.map(s => ({
+                    ...s,
+                    outlet_id,
+                    opening_debit: 0.00,
+                    opening_credit: 0.00,
+                    current_balance: 0.00,
+                    is_active: true
+                }));
+                await req.propertyDb.models.chart_of_accounts.bulkCreate(seeds);
+            }
+
+            // Vendor Sub-Account
+            const vendorAccCode = `2001-${supplier.supplier_code || supplier.id}`;
+            let vendorAcc = await req.propertyDb.models.chart_of_accounts.findOne({
+                where: { outlet_id, account_code: vendorAccCode }
+            });
+
+            if (vendorAcc) {
+                await vendorAcc.update({
+                    account_name: `${supplier.supplier_name} (Vendor)`,
+                    opening_credit: newOpening,
+                    current_balance: Number((Number(vendorAcc.current_balance || 0) + diff).toFixed(2))
+                });
+            } else if (newOpening > 0) {
+                await req.propertyDb.models.chart_of_accounts.create({
+                    outlet_id,
+                    account_code: vendorAccCode,
+                    account_name: `${supplier.supplier_name} (Vendor)`,
+                    group_name: 'Sundry Creditors',
+                    nature: 'LIABILITY',
+                    opening_debit: 0.00,
+                    opening_credit: newOpening,
+                    current_balance: newOpening,
+                    is_system: false,
+                    is_active: true
+                });
+            }
+
+            if (diff !== 0) {
+                // Update Master Sundry Creditors (Account 2001)
+                const creditorAcc = await req.propertyDb.models.chart_of_accounts.findOne({
+                    where: { outlet_id, account_code: '2001' }
+                });
+                if (creditorAcc) {
+                    const newOpeningCredit = Math.max(0, Number((Number(creditorAcc.opening_credit || 0) + diff).toFixed(2)));
+                    const newCurrentBalance = Math.max(0, Number((Number(creditorAcc.current_balance || 0) + diff).toFixed(2)));
+                    await creditorAcc.update({
+                        opening_credit: newOpeningCredit,
+                        current_balance: newCurrentBalance
+                    });
+                }
+
+                // Balance Equity: Account 3001 (Proprietor Capital) / 3100
+                const equityAcc = await req.propertyDb.models.chart_of_accounts.findOne({
+                    where: {
+                        outlet_id,
+                        account_code: { [Op.in]: ['3001', '3100'] }
+                    }
+                });
+                if (equityAcc) {
+                    const newOpeningDebit = Math.max(0, Number((Number(equityAcc.opening_debit || 0) + diff).toFixed(2)));
+                    await equityAcc.update({
+                        opening_debit: newOpeningDebit
+                    });
+                }
+            }
+        } catch (coaErr) {
+            console.warn('[COA SYNC WARN]', coaErr.message);
+        }
+    }
+}
+
 exports.createSupplier = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
@@ -73,46 +207,9 @@ exports.createSupplier = async (req, res) => {
             is_active: true
         });
 
-        // If an opening balance is specified (> 0), create opening bill and reflect in Chart of Accounts
+        // Sync opening balance to supplier_bills and Chart of Accounts
         if (payload.opening_balance > 0) {
-            try {
-                if (req.propertyDb.models.supplier_bills) {
-                    await req.propertyDb.models.supplier_bills.create({
-                        outlet_id,
-                        supplier_id: supplier.id,
-                        bill_no: `OPN-${supplier.supplier_code || supplier.id}`,
-                        bill_date: payload.as_of_date || new Date(),
-                        bill_amount: payload.opening_balance,
-                        paid_amount: 0.00,
-                        status: 'UNPAID',
-                        remarks: 'Opening Balance on Vendor Creation'
-                    });
-                }
-
-                if (req.propertyDb.models.chart_of_accounts) {
-                    // Credit Sundry Creditors (Account 2001)
-                    const creditorAcc = await req.propertyDb.models.chart_of_accounts.findOne({
-                        where: { outlet_id, account_code: '2001' }
-                    });
-                    if (creditorAcc) {
-                        await creditorAcc.increment('opening_credit', { by: payload.opening_balance });
-                        await creditorAcc.increment('current_balance', { by: payload.opening_balance });
-                    }
-
-                    // Debit Opening Balance Equity / Capital (Account 3001 or 3100)
-                    const equityAcc = await req.propertyDb.models.chart_of_accounts.findOne({
-                        where: {
-                            outlet_id,
-                            account_code: { [Op.in]: ['3001', '3100', '1200'] }
-                        }
-                    });
-                    if (equityAcc) {
-                        await equityAcc.increment('opening_debit', { by: payload.opening_balance });
-                    }
-                }
-            } catch (coaErr) {
-                console.warn('[COA OPENING BALANCE POST WARN]', coaErr.message);
-            }
+            await syncVendorToCoa(req, outlet_id, supplier, payload.opening_balance, 0, payload.as_of_date);
         }
 
         await audit.log({
@@ -286,6 +383,9 @@ exports.updateSupplier = async (req, res) => {
 
         const isActiveVal = req.body.is_active !== undefined ? (req.body.is_active === true || req.body.is_active === 'true') : supplier.is_active;
 
+        const oldOpening = parseFloat(oldData.opening_balance || 0) || 0;
+        const newOpening = payload.opening_balance;
+
         await supplier.update({
             supplier_code: payload.supplier_code,
             supplier_name: payload.supplier_name,
@@ -297,8 +397,12 @@ exports.updateSupplier = async (req, res) => {
             tax_id_number: payload.tax_id_number,
             tax_id_type: payload.tax_id_type,
             tax_country_code: payload.tax_country_code,
+            opening_balance: payload.opening_balance,
             is_active: isActiveVal
         });
+
+        // Sync opening balance changes to supplier_bills and Chart of Accounts
+        await syncVendorToCoa(req, outlet_id, supplier, newOpening, oldOpening, payload.as_of_date);
 
         await audit.log({
             req,
