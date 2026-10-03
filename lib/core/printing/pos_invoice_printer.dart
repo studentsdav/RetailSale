@@ -2170,7 +2170,7 @@ class PosInvoicePrinter {
       qtyUnitRate,
       if (item.isSchemeFree || item.isAdvanceFree) 'FREE',
       if (item.taxPercent > 0)
-        '${_taxPrefix(order, item)} ${_formatTaxPercent(item.taxPercent)}%${item.isTaxInclusive ? ' (Incl.)' : ''}'
+        '${_taxPrefix(order, item)}${_taxPrefix(order, item).contains('%') ? '' : ' ${_formatTaxPercent(item.taxPercent)}%'}${item.isTaxInclusive ? ' (Incl.)' : ''}'
             '${item.taxAmount > 0 ? ' = ${_money(item.taxAmount)}' : ''}'
       else
         '${_taxPrefix(order, item)} NILL',
@@ -3064,7 +3064,7 @@ class PosInvoicePrinter {
     }
     final billingMode = order.billingTaxMode.trim().toUpperCase();
 
-    if (isIndia && (normalizedType == 'GST' || normalizedType == 'CGST_SGST')) {
+    if (normalizedType == 'GST' || normalizedType == 'CGST_SGST' || (isIndia && (billingMode == 'CGST_SGST' || billingMode.isEmpty))) {
       final halfRate = taxPercent / 2;
       final halfAmount = taxAmount / 2;
       return [
@@ -3173,18 +3173,39 @@ class PosInvoicePrinter {
   }
 
   static String _taxPrefix(SaleOrder order, SaleItem item) {
-    if (item.taxGroup != null && item.taxGroup!.groupName.isNotEmpty) {
-      return item.taxGroup!.groupName;
+    if (item.taxGroup != null) {
+      final code = (item.taxGroup!.groupCode ?? '').trim();
+      if (code.isNotEmpty) {
+        return code;
+      }
+      final name = item.taxGroup!.groupName.trim();
+      if (name.isNotEmpty) {
+        // Remove duplicate trailing rate/percentage so "GST 5%" doesn't become "GST 5% 5%"
+        final cleaned = name
+            .replaceAll(RegExp(r'\s*\(\s*\d+(\.\d+)?%\s*\)\s*$', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\s*\b\d+(\.\d+)?%\s*$', caseSensitive: false), '')
+            .trim();
+        if (cleaned.isNotEmpty) {
+          return cleaned;
+        }
+        return name;
+      }
     }
     final normType = item.taxType.trim().toUpperCase();
+    if (normType == 'GST' || normType == 'CGST_SGST' || normType == 'IGST' || normType == 'GST_INCLUSIVE') {
+      return 'GST';
+    }
     if (normType == 'US_SALES_TAX' || normType == 'COMPOSITE' || normType == 'SALES_TAX') {
       return 'Sales Tax';
     }
-    if (normType == 'VAT' || normType == 'VAT_ONLY' || normType == 'VAT_CTL' || order.billingTaxMode == 'VAT') {
+    if (normType == 'VAT' || normType == 'VAT_ONLY' || normType == 'VAT_CTL') {
       return 'VAT';
     }
     if (normType == 'CESS') return 'CESS';
     if (normType == 'CUSTOM' || normType == 'OTHER') return 'Tax';
+    if (normType == 'NONE') return 'Tax';
+    if (order.billingTaxMode == 'VAT') return 'VAT';
+    if (order.billingTaxMode == 'SALES_TAX') return 'Sales Tax';
     if (order.billingTaxMode == 'NONE') return 'Tax';
     return 'GST';
   }

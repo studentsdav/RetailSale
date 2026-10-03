@@ -95,8 +95,8 @@ class _TaxGroupSetupScreenState extends State<TaxGroupSetupScreen> {
                             child: TextField(
                               controller: codeCtrl,
                               decoration: const InputDecoration(
-                                labelText: 'Group Code',
-                                hintText: 'e.g. US_TX_RETAIL',
+                                labelText: 'Group Code (Printed on Bill)',
+                                hintText: 'e.g. GST, VAT, SALES_TAX',
                               ),
                             ),
                           ),
@@ -300,7 +300,7 @@ class _TaxGroupSetupScreenState extends State<TaxGroupSetupScreen> {
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
-                          'Components: ${group.components.length} | ${group.isTaxInclusive ? "Inclusive" : "Exclusive"}',
+                          'Code: ${(group.groupCode != null && group.groupCode!.trim().isNotEmpty) ? group.groupCode!.trim() : "Auto"} | Components: ${group.components.length} | ${group.isTaxInclusive ? "Inclusive" : "Exclusive"}',
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,

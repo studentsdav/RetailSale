@@ -439,10 +439,18 @@ class SaleOrder {
           (CurrencyService.code == 'INR' || CurrencyService.symbol == '₹'
               ? 'India'
               : (CurrencyService.code == 'USD' || CurrencyService.symbol == '\$' ? 'USA' : 'International')),
-      billingTaxMode: json['billing_tax_mode']?.toString() ??
-          (CurrencyService.code == 'INR' || CurrencyService.symbol == '₹'
+      billingTaxMode: (json['billing_tax_mode'] != null && json['billing_tax_mode'].toString().trim().isNotEmpty)
+          ? json['billing_tax_mode'].toString()
+          : ((json['items'] is List &&
+                  (json['items'] as List).any((i) =>
+                      i is Map &&
+                      ((i['tax_type']?.toString().toUpperCase() == 'GST') ||
+                          (i['tax_type']?.toString().toUpperCase() == 'CGST_SGST') ||
+                          ((double.tryParse(i['cgst_amount']?.toString() ?? '') ?? 0) > 0))))
               ? 'CGST_SGST'
-              : (CurrencyService.code == 'USD' || CurrencyService.symbol == '\$' ? 'SALES_TAX' : 'VAT')),
+              : (CurrencyService.code == 'INR' || CurrencyService.symbol == '₹'
+                  ? 'CGST_SGST'
+                  : (CurrencyService.code == 'USD' || CurrencyService.symbol == '\$' ? 'SALES_TAX' : 'VAT'))),
       billFormat: json['bill_format']?.toString() ?? 'A4',
       saleSource: json['sale_source']?.toString(),
       customerName: json['customer_name']?.toString(),
