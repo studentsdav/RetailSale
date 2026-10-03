@@ -1,8 +1,14 @@
 module.exports = (sequelize, DataTypes) => {
-
-    console.log({
-        response: "itemamster___"
-    })
+    // Auto ensure modifier columns exist in database table
+    if (sequelize && typeof sequelize.query === 'function') {
+        sequelize.query(`
+            ALTER TABLE item_master
+            ADD COLUMN IF NOT EXISTS is_modifier BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS applicable_item_ids TEXT,
+            ADD COLUMN IF NOT EXISTS deduct_raw_item_id INTEGER,
+            ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0;
+        `).catch(() => {});
+    }
 
     const ItemMaster = sequelize.define(
         'item_master',
@@ -161,6 +167,26 @@ module.exports = (sequelize, DataTypes) => {
                 defaultValue: true
             },
 
+            is_modifier: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false
+            },
+
+            applicable_item_ids: {
+                type: DataTypes.TEXT,
+                allowNull: true
+            },
+
+            deduct_raw_item_id: {
+                type: DataTypes.INTEGER,
+                allowNull: true
+            },
+
+            deduct_qty: {
+                type: DataTypes.DECIMAL(12, 4),
+                defaultValue: 0
+            },
+
             is_active: {
                 type: DataTypes.BOOLEAN,
                 defaultValue: true
@@ -213,6 +239,9 @@ module.exports = (sequelize, DataTypes) => {
                 },
                 {
                     fields: ['is_active']
+                },
+                {
+                    fields: ['is_modifier']
                 }
             ]
         }
@@ -246,12 +275,7 @@ module.exports = (sequelize, DataTypes) => {
         });
     };
 
-
-
-
-
     return ItemMaster;
 };
-
 
 export default module.exports;

@@ -283,10 +283,16 @@ if (!fs.existsSync(licensePath)) {
                 ADD COLUMN IF NOT EXISTS table_id INTEGER,
                 ADD COLUMN IF NOT EXISTS client_tag VARCHAR(100),
                 ADD COLUMN IF NOT EXISTS sub_table VARCHAR(50);
+
+                ALTER TABLE item_master
+                ADD COLUMN IF NOT EXISTS is_modifier BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS applicable_item_ids TEXT,
+                ADD COLUMN IF NOT EXISTS deduct_raw_item_id INTEGER,
+                ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0;
             `);
-            console.log('✅ Verified/added custom columns in property_info, restaurant_tables, kot_headers, and sales_headers');
+            console.log('✅ Verified/added custom columns in property_info, restaurant_tables, kot_headers, sales_headers, and item_master');
         } catch (colErr) {
-            console.warn('⚠️ Failed to dynamically alter table property_info/restaurant_tables:', colErr.message);
+            console.warn('⚠️ Failed to dynamically alter table property_info/restaurant_tables/item_master:', colErr.message);
         }
 
         try {

@@ -83,31 +83,43 @@ class PosInvoicePrinter {
 
   static pw.Font? _cachedRegular;
   static pw.Font? _cachedBold;
+  static pw.Font? _cachedItalic;
+  static pw.Font? _cachedBoldItalic;
 
   /// Loads and caches Unicode-compatible TrueType fonts (Noto Sans / Roboto)
   /// so that currency symbols such as ₹ (Indian Rupee), € (Euro), ₽, etc.
   /// are rendered properly without falling back to broken glyphs or WinAnsi limitations.
-  static Future<({pw.Font regular, pw.Font bold})> getInvoiceFonts() async {
-    if (_cachedRegular != null && _cachedBold != null) {
-      return (regular: _cachedRegular!, bold: _cachedBold!);
+  static Future<({pw.Font regular, pw.Font bold, pw.Font italic, pw.Font boldItalic})> getInvoiceFonts() async {
+    if (_cachedRegular != null && _cachedBold != null && _cachedItalic != null && _cachedBoldItalic != null) {
+      return (regular: _cachedRegular!, bold: _cachedBold!, italic: _cachedItalic!, boldItalic: _cachedBoldItalic!);
     }
     try {
       final reg = await PdfGoogleFonts.notoSansRegular();
       final bld = await PdfGoogleFonts.notoSansBold();
+      final itl = await PdfGoogleFonts.notoSansItalic();
+      final bldItl = await PdfGoogleFonts.notoSansBoldItalic();
       _cachedRegular = reg;
       _cachedBold = bld;
-      return (regular: reg, bold: bld);
+      _cachedItalic = itl;
+      _cachedBoldItalic = bldItl;
+      return (regular: reg, bold: bld, italic: itl, boldItalic: bldItl);
     } catch (_) {
       try {
         final reg = await PdfGoogleFonts.robotoRegular();
         final bld = await PdfGoogleFonts.robotoBold();
+        final itl = await PdfGoogleFonts.robotoItalic();
+        final bldItl = await PdfGoogleFonts.robotoBoldItalic();
         _cachedRegular = reg;
         _cachedBold = bld;
-        return (regular: reg, bold: bld);
+        _cachedItalic = itl;
+        _cachedBoldItalic = bldItl;
+        return (regular: reg, bold: bld, italic: itl, boldItalic: bldItl);
       } catch (_) {
-        final reg = pw.Font.helvetica();
-        final bld = pw.Font.helveticaBold();
-        return (regular: reg, bold: bld);
+        final reg = _cachedRegular ?? pw.Font.helvetica();
+        final bld = _cachedBold ?? pw.Font.helveticaBold();
+        final itl = _cachedItalic ?? pw.Font.helveticaOblique();
+        final bldItl = _cachedBoldItalic ?? pw.Font.helveticaBoldOblique();
+        return (regular: reg, bold: bld, italic: itl, boldItalic: bldItl);
       }
     }
   }
@@ -120,6 +132,8 @@ class PosInvoicePrinter {
       theme: pw.ThemeData.withFont(
         base: fonts.regular,
         bold: fonts.bold,
+        italic: fonts.italic,
+        boldItalic: fonts.boldItalic,
       ),
     );
   }
@@ -221,6 +235,8 @@ class PosInvoicePrinter {
       theme: pw.ThemeData.withFont(
         base: fonts.regular,
         bold: fonts.bold,
+        italic: fonts.italic,
+        boldItalic: fonts.boldItalic,
       ),
     );
     final logo = await BrandingStorage.loadPdfLogo(prop?.logoPath);
@@ -1508,8 +1524,11 @@ class PosInvoicePrinter {
       final brandStr = showBrand && item.brand != null && item.brand!.trim().isNotEmpty
           ? '${item.brand!.trim()} - '
           : '';
+      final List mods = item.modifierDetails ?? [];
+      final String modsStr = mods.isNotEmpty ? '\n* Mods: ${mods.join(", ")}' : '';
+      final String remarkStr = (item.itemRemark != null && item.itemRemark!.trim().isNotEmpty) ? '\n* Note: ${item.itemRemark!.trim()}' : '';
       final name =
-          (item.isSchemeFree || item.isAdvanceFree) ? '$brandStr${item.itemName} (FREE)$suffix' : '$brandStr${item.itemName}$suffix';
+          ((item.isSchemeFree || item.isAdvanceFree) ? '$brandStr${item.itemName} (FREE)$suffix' : '$brandStr${item.itemName}$suffix') + modsStr + remarkStr;
       if (hasTaxData) {
         if (isDualGst) {
           final cgstRate = _taxRate(order, item, 'CGST');
@@ -2206,6 +2225,30 @@ class PosInvoicePrinter {
             ),
             softWrap: true,
           ),
+          if (item.modifierDetails != null && item.modifierDetails!.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 1.5),
+              child: pw.Text(
+                '* Mods: ${item.modifierDetails!.join(", ")}',
+                style: pw.TextStyle(
+                  fontSize: 7.5,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+            ),
+          if (item.itemRemark != null && item.itemRemark!.trim().isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 1),
+              child: pw.Text(
+                '* Note: ${item.itemRemark!.trim()}',
+                style: pw.TextStyle(
+                  fontSize: 7.2,
+                  fontStyle: pw.FontStyle.italic,
+                  color: PdfColors.grey700,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -3468,6 +3511,8 @@ class PosInvoicePrinter {
           theme: pw.ThemeData.withFont(
             base: fonts.regular,
             bold: fonts.bold,
+            italic: fonts.italic,
+            boldItalic: fonts.boldItalic,
           ),
         );
         final bold = fonts.bold;
@@ -3833,6 +3878,8 @@ class PosInvoicePrinter {
       theme: pw.ThemeData.withFont(
         base: fonts.regular,
         bold: fonts.bold,
+        italic: fonts.italic,
+        boldItalic: fonts.boldItalic,
       ),
     );
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
@@ -4448,6 +4495,8 @@ class PosInvoicePrinter {
       theme: pw.ThemeData.withFont(
         base: fonts.regular,
         bold: fonts.bold,
+        italic: fonts.italic,
+        boldItalic: fonts.boldItalic,
       ),
     );
     final pageFormat = _thermalSheetFor('THERMAL_80');
@@ -4845,6 +4894,8 @@ class PosInvoicePrinter {
       theme: pw.ThemeData.withFont(
         base: fonts.regular,
         bold: fonts.bold,
+        italic: fonts.italic,
+        boldItalic: fonts.boldItalic,
       ),
     );
     final regular = fonts.regular;
@@ -5078,8 +5129,10 @@ class PosInvoicePrinter {
                                     '${item.itemName}${(item.brand != null && item.brand!.trim().isNotEmpty) ? " (${item.brand!.trim()})" : ""}',
                                     style: pw.TextStyle(font: bold, fontSize: 9.5 * fontScale),
                                   ),
-                                  if ((item.notes ?? '').trim().isNotEmpty)
-                                    pw.Text('Note: ${item.notes!.trim()}', style: pw.TextStyle(font: regular, fontSize: 8 * fontScale, color: PdfColors.grey700)),
+                                  if (item.modifierDetails != null && item.modifierDetails!.isNotEmpty)
+                                    pw.Text('* Mods: ${item.modifierDetails!.join(", ")}', style: pw.TextStyle(font: bold, fontSize: 8 * fontScale, color: PdfColors.blue800, fontStyle: pw.FontStyle.italic)),
+                                  if ((item.itemRemark ?? item.notes ?? '').trim().isNotEmpty)
+                                    pw.Text('Note: ${(item.itemRemark ?? item.notes)!.trim()}', style: pw.TextStyle(font: regular, fontSize: 8 * fontScale, color: PdfColors.grey700)),
                                 ],
                               ),
                             ),

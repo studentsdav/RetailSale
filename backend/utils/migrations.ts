@@ -4135,8 +4135,39 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 110,
+    description: "Add is_modifier, applicable_item_ids, deduct_raw_item_id, and deduct_qty columns to item_master table for inventory modifier & recipe integration",
+    up: async (db: any) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE item_master 
+          ADD COLUMN IF NOT EXISTS is_modifier BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS applicable_item_ids TEXT,
+          ADD COLUMN IF NOT EXISTS deduct_raw_item_id INTEGER,
+          ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 111,
+    description: "Add modifier_details, modifier_objects, item_remark, and notes columns to sales_items table for modifier persistence",
+    up: async (db: any) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE sales_items 
+          ADD COLUMN IF NOT EXISTS modifier_details JSONB DEFAULT '[]'::jsonb,
+          ADD COLUMN IF NOT EXISTS modifier_objects JSONB DEFAULT '[]'::jsonb,
+          ADD COLUMN IF NOT EXISTS item_remark TEXT,
+          ADD COLUMN IF NOT EXISTS notes TEXT;
+        COMMIT;
+      `);
+    }
   }
 ];
 
 export default migrations;
+
 

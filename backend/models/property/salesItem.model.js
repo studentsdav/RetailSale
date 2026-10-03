@@ -25,7 +25,11 @@ module.exports = (sequelize, DataTypes) => {
         applied_happy_hour_id: DataTypes.INTEGER,
         is_advance_free: DataTypes.BOOLEAN,
         original_rate: DataTypes.DECIMAL(12, 2),
-        scheme_discount_per_unit: DataTypes.DECIMAL(12, 2)
+        scheme_discount_per_unit: DataTypes.DECIMAL(12, 2),
+        modifier_details: DataTypes.JSONB,
+        modifier_objects: DataTypes.JSONB,
+        item_remark: DataTypes.TEXT,
+        notes: DataTypes.TEXT
     }, {
         tableName: 'sales_items',
         timestamps: true,

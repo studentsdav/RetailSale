@@ -713,7 +713,20 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
     setState(() => isLoadingItems = true);
     try {
       final res = await ApiClient.get(ApiEndpoints.items);
-      final List data = res['data'] ?? [];
+      final List rawData = res['data'] ?? [];
+      // Filter out non-saleable items (e.g. raw materials like Mozzarella Cheese Raw) and inactive items
+      final List data = rawData.where((item) {
+        final bool isSaleable = item['is_saleable'] != false &&
+            item['is_saleable'] != 0 &&
+            item['is_saleable'].toString().toLowerCase() != 'false' &&
+            item['is_saleable'].toString().toLowerCase() != 'no' &&
+            item['is_saleable'].toString() != '0';
+        final bool isActive = item['is_active'] != false &&
+            item['is_active'] != 0 &&
+            item['is_active'].toString().toLowerCase() != 'false' &&
+            item['is_active'].toString() != '0';
+        return isSaleable && isActive;
+      }).toList();
 
       List schemesList = [];
       try {
@@ -863,24 +876,71 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
 
   Future<void> _showModifiersDialog(int itemId) async {
     final cartItem = _cart[itemId]!;
-    final remarkCtrl = TextEditingController(text: cartItem['item_remark']);
-    List<String> selectedMods = List<String>.from(cartItem['modifier_details'] ?? []);
+    final remarkCtrl = TextEditingController(text: cartItem['item_remark']?.toString() ?? '');
+    
+    // Existing selected modifiers map: modifier_name -> qty (int)
+    final Map<String, int> selectedModsMap = {};
+    final List existingRawMods = cartItem['modifier_objects'] as List? ?? [];
+    for (final m in existingRawMods) {
+      if (m is Map) {
+        final name = m['name']?.toString() ?? '';
+        final qty = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+        if (name.isNotEmpty) selectedModsMap[name] = qty;
+      }
+    }
 
-    List<String> modifiersList = ['Extra Cheese', 'No Onion', 'Extra Spicy', 'Less Salt', 'Gluten Free'];
-    try {
-      final res = await ApiClient.get('${ApiEndpoints.itemModifiers}?is_active=true');
-      if (res['success'] == true && res['data'] is List) {
-        final List loaded = res['data'];
-        final applicable = loaded.where((m) {
-          final mItemId = int.tryParse(m['item_master_id']?.toString() ?? '0') ?? 0;
-          return mItemId == 0 || mItemId == itemId;
-        }).map((m) => m['modifier_name']?.toString() ?? '').where((s) => s.isNotEmpty).toList();
-
-        if (applicable.isNotEmpty) {
-          modifiersList = applicable;
+    // If modifier_details were simple strings, parse any e.g. "Extra Cheese (x2)"
+    if (selectedModsMap.isEmpty && cartItem['modifier_details'] != null) {
+      for (final modStr in (cartItem['modifier_details'] as List)) {
+        final str = modStr.toString().trim();
+        final match = RegExp(r'^(.*?)\s*\(x(\d+)\)').firstMatch(str);
+        if (match != null) {
+          selectedModsMap[match.group(1)!.trim()] = int.tryParse(match.group(2)!) ?? 1;
+        } else if (str.isNotEmpty) {
+          selectedModsMap[str] = 1;
         }
       }
+    }
+
+    List<Map<String, dynamic>> availableModifiers = [];
+    try {
+      final res = await ApiClient.get('${ApiEndpoints.itemModifiers}?is_active=true&item_id=$itemId');
+      if (res['success'] == true && res['data'] is List) {
+        final List loaded = res['data'];
+        availableModifiers = loaded.map((m) {
+          final String name = (m['modifier_name'] ?? m['item_name'] ?? '').toString().trim();
+          return {
+            'id': m['id'],
+            'name': name,
+            'price': double.tryParse((m['price'] ?? m['retail_sale_price'] ?? m['rate'] ?? 0).toString()) ?? 0.0,
+            'tax_percent': double.tryParse((m['tax_percent'] ?? 0).toString()) ?? 0.0,
+            'inventory_item_id': m['inventory_item_id'] ?? m['deduct_raw_item_id'],
+            'deduct_qty': double.tryParse((m['deduct_qty'] ?? 0).toString()) ?? 0.0,
+          };
+        }).where((m) => (m['name'] as String).isNotEmpty).toList();
+      }
     } catch (_) {}
+
+    // Also fallback to any modifiers present in allItems list if needed
+    if (availableModifiers.isEmpty && allItems.isNotEmpty) {
+      availableModifiers = allItems.where((it) {
+        final bool isMod = it['is_modifier'] == true || it['is_modifier'] == 1 || it['is_modifier'].toString() == 'true';
+        if (!isMod) return false;
+        final String appIds = (it['applicable_item_ids'] ?? '').toString().trim();
+        if (appIds.isEmpty || appIds == 'ALL' || appIds == '*' || appIds == '0') return true;
+        final list = appIds.split(',').map((s) => s.trim()).toList();
+        return list.contains(itemId.toString());
+      }).map((it) {
+        return {
+          'id': it['id'],
+          'name': (it['item_name'] ?? '').toString().trim(),
+          'price': double.tryParse((it['retail_sale_price'] ?? it['rate'] ?? 0).toString()) ?? 0.0,
+          'tax_percent': double.tryParse((it['tax_percent'] ?? 0).toString()) ?? 0.0,
+          'inventory_item_id': it['deduct_raw_item_id'],
+          'deduct_qty': double.tryParse((it['deduct_qty'] ?? 0).toString()) ?? 0.0,
+        };
+      }).where((m) => (m['name'] as String).isNotEmpty).toList();
+    }
 
     if (!mounted) return;
 
@@ -889,53 +949,231 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
+            double extraPriceTotal = 0.0;
+            selectedModsMap.forEach((name, qty) {
+              final mod = availableModifiers.firstWhere((m) => m['name'] == name, orElse: () => {'price': 0.0});
+              extraPriceTotal += (mod['price'] as double) * qty;
+            });
+
             return AlertDialog(
-              title: Text('Modifiers: ${cartItem['item_name']}'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
                 children: [
-                  TextField(
-                    controller: remarkCtrl,
-                    decoration: const InputDecoration(labelText: 'Special Preparation Remarks'),
+                  const Icon(Icons.tune, color: Color(0xFFFF7A1A), size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Customize: ${cartItem['item_name']}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
                   ),
-                  const SizedBox(height: 15),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Add-on Modifiers:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(height: 5),
-                  Wrap(
-                    spacing: 8,
-                    children: modifiersList.map((mod) {
-                      final hasMod = selectedMods.contains(mod);
-                      return FilterChip(
-                        label: Text(mod),
-                        selected: hasMod,
-                        onSelected: (selected) {
-                          setDialogState(() {
-                            if (selected) {
-                              selectedMods.add(mod);
-                            } else {
-                              selectedMods.remove(mod);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-                  )
                 ],
               ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: remarkCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Special Preparation Remarks (Kitchen Note)',
+                          hintText: 'e.g. Less spicy, well cooked, no mayo',
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Row(
+                        children: [
+                          Icon(Icons.add_circle_outline, size: 16, color: Color(0xFF2563EB)),
+                          SizedBox(width: 6),
+                          Text('Add-ons & Modifiers (Item Master):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (availableModifiers.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'No modifiers / add-ons configured for this item in Item Master.',
+                              style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B), fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            children: availableModifiers.map((mod) {
+                              final String name = mod['name'];
+                              final double price = mod['price'];
+                              final int currentQty = selectedModsMap[name] ?? 0;
+                              final bool isSelected = currentQty > 0;
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? const Color(0xFFFFF8F1) : Colors.transparent,
+                                  border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.8)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: TextStyle(
+                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                              color: isSelected ? const Color(0xFFFF7A1A) : const Color(0xFF1E293B),
+                                              fontSize: 13.5,
+                                            ),
+                                          ),
+                                          if (price > 0)
+                                            Text(
+                                              '+ Rs. ${price.toStringAsFixed(2)} each',
+                                              style: const TextStyle(fontSize: 11.5, color: Color(0xFF16A34A), fontWeight: FontWeight.w600),
+                                            )
+                                          else
+                                            const Text('Free customization', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                    // Quantity Stepper: [ - ]  Qty  [ + ]
+                                    Container(
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: isSelected ? Colors.white : const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: isSelected ? const Color(0xFFFF7A1A) : const Color(0xFFCBD5E1)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          InkWell(
+                                            onTap: () {
+                                              setDialogState(() {
+                                                if (currentQty > 1) {
+                                                  selectedModsMap[name] = currentQty - 1;
+                                                } else {
+                                                  selectedModsMap.remove(name);
+                                                }
+                                              });
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              child: Icon(
+                                                Icons.remove,
+                                                size: 14,
+                                                color: isSelected ? const Color(0xFFFF7A1A) : Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            child: Text(
+                                              '$currentQty',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                                color: isSelected ? const Color(0xFFFF7A1A) : const Color(0xFF64748B),
+                                              ),
+                                            ),
+                                          ),
+                                          InkWell(
+                                            onTap: () {
+                                              setDialogState(() {
+                                                selectedModsMap[name] = currentQty + 1;
+                                              });
+                                            },
+                                            child: const Padding(
+                                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              child: Icon(
+                                                Icons.add,
+                                                size: 14,
+                                                color: Color(0xFFFF7A1A),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      if (extraPriceTotal > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            'Additional Modifier Charges: + Rs. ${extraPriceTotal.toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A), fontSize: 13),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
                 ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A1A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                   onPressed: () {
+                    // Build formatted string list and structured objects
+                    final List<String> formattedDetails = [];
+                    final List<Map<String, dynamic>> modifierObjects = [];
+
+                    selectedModsMap.forEach((modName, qty) {
+                      final mod = availableModifiers.firstWhere((m) => m['name'] == modName, orElse: () => {'price': 0.0});
+                      final double price = mod['price'] ?? 0.0;
+                      if (qty > 0) {
+                        final priceStr = price > 0 ? ' @${CurrencyService.format(price)}' : ''; formattedDetails.add(qty > 1 || price > 0 ? '$modName x$qty$priceStr' : modName);
+                        modifierObjects.add({
+                          'id': mod['id'],
+                          'name': modName,
+                          'price': price,
+                          'qty': qty,
+                          'tax_percent': mod['tax_percent'] ?? 0.0,
+                          'inventory_item_id': mod['inventory_item_id'],
+                          'deduct_qty': mod['deduct_qty'] ?? 0.0,
+                        });
+                      }
+                    });
+
                     setState(() {
-                      _cart[itemId]!['item_remark'] = remarkCtrl.text;
-                      _cart[itemId]!['modifier_details'] = selectedMods;
+                      _cart[itemId]!['item_remark'] = remarkCtrl.text.trim();
+                      _cart[itemId]!['modifier_details'] = formattedDetails;
+                      _cart[itemId]!['modifier_objects'] = modifierObjects;
                     });
                     Navigator.pop(dialogContext);
                   },
-                  child: const Text('Apply Customizations'),
+                  child: const Text('Apply Customizations', style: TextStyle(fontWeight: FontWeight.bold)),
                 )
               ],
             );
@@ -2019,7 +2257,14 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                       final item = _cart[key]!;
                       final double qty = double.tryParse(item['qty']?.toString() ?? '0') ?? 0.0;
                       final double rate = double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
-                      final double total = qty * rate;
+                      final List rawModObjs = item['modifier_objects'] as List? ?? [];
+                      final double modExtraPerUnit = rawModObjs.fold(0.0, (sum, m) {
+                        final p = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0;
+                        final mq = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+                        return sum + (p * mq);
+                      });
+                      final double effectiveUnitRate = rate + modExtraPerUnit;
+                      final double total = qty * effectiveUnitRate;
                       final String displayName = _getItemDisplayName(item);
 
                       return Container(
@@ -2071,14 +2316,17 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                             // Rate Breakdown & Subtotal
                             Row(
                               children: [
-                                Text(
-                                  '${CurrencyService.format(rate)} x ${qty % 1 == 0 ? qty.toInt() : qty.toStringAsFixed(1)}',
-                                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w500),
+                                Expanded(
+                                  child: Text(
+                                    modExtraPerUnit > 0
+                                        ? '${CurrencyService.format(rate)} (+${CurrencyService.format(modExtraPerUnit)} mods) x ${qty % 1 == 0 ? qty.toInt() : qty.toStringAsFixed(1)}'
+                                        : '${CurrencyService.format(rate)} x ${qty % 1 == 0 ? qty.toInt() : qty.toStringAsFixed(1)}',
+                                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w500),
+                                  ),
                                 ),
-                                const Spacer(),
                                 Text(
                                   CurrencyService.format(total),
-                                  style: const TextStyle(color: Color(0xFFD67D25), fontSize: 13, fontWeight: FontWeight.w800),
+                                  style: const TextStyle(color: Color(0xFFD67D25), fontSize: 13.5, fontWeight: FontWeight.w800),
                                 ),
                               ],
                             ),
@@ -2107,19 +2355,36 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                             if (item['modifier_details'] != null && (item['modifier_details'] as List).isNotEmpty)
                               Container(
                                 margin: const EdgeInsets.only(top: 6),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFEFF6FF),
                                   borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFBFDBFE), width: 0.8),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     const Icon(Icons.tune, size: 13, color: Color(0xFF2563EB)),
                                     const SizedBox(width: 4),
-                                    Text(
-                                      'Mods: ${(item['modifier_details'] as List).join(", ")}',
-                                      style: const TextStyle(color: Color(0xFF2563EB), fontSize: 11, fontWeight: FontWeight.w600),
+                                    Flexible(
+                                      child: Text(
+                                        (() {
+                                          if (rawModObjs.isNotEmpty) {
+                                            return 'Mods: ' + rawModObjs.map((m) {
+                                              final name = (m['name'] ?? m['modifier_name'] ?? '').toString();
+                                              final mQty = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+                                              final mPrice = (double.tryParse(m['price']?.toString() ?? '0') ?? 0.0) * mQty;
+                                              if (mPrice > 0) {
+                                                final unitP = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0; return '$name x$mQty @${CurrencyService.format(unitP)}';
+                                              }
+                                              return mQty > 1 ? '$name x$mQty' : name;
+                                            }).join(', ');
+                                          }
+                                          return 'Mods: ${(item['modifier_details'] as List).join(", ")}';
+                                        })(),
+                                        style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 11.5, fontWeight: FontWeight.w700),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -2234,8 +2499,14 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                     _cart.forEach((_, item) {
                       final q = double.tryParse(item['qty']?.toString() ?? '0') ?? 0.0;
                       final r = double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
+                      final rawModObjs = item['modifier_objects'] as List? ?? [];
+                      final double modExtra = rawModObjs.fold(0.0, (sum, m) {
+                        final p = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0;
+                        final mq = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+                        return sum + (p * mq);
+                      });
                       totalQty += q;
-                      totalAmount += q * r;
+                      totalAmount += q * (r + modExtra);
                     });
                     return Row(
                       children: [
@@ -2937,14 +3208,28 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                         ),
                       if (showNotes && remark.isNotEmpty)
                         pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 36, top: 1),
-                          child: pw.Text('* Note: $remark', style: pw.TextStyle(fontSize: 9 * fontScale, fontStyle: pw.FontStyle.italic)),
+                          padding: const pw.EdgeInsets.only(left: 36, top: 1.5),
+                          child: pw.Text('* Note: $remark', style: pw.TextStyle(fontSize: 9.5 * fontScale, fontStyle: pw.FontStyle.italic, fontWeight: pw.FontWeight.bold)),
                         ),
-                      if (mods.isNotEmpty)
+                      if (mods.isNotEmpty) ...[
                         pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 36, top: 1),
-                          child: pw.Text('* Mods: ${mods.join(", ")}', style: pw.TextStyle(fontSize: 9 * fontScale, fontStyle: pw.FontStyle.italic)),
+                          padding: const pw.EdgeInsets.only(left: 36, top: 1.5),
+                          child: pw.Text(
+                            (() {
+                              final rawModObjs = item['modifier_objects'] as List? ?? [];
+                              if (rawModObjs.isNotEmpty) {
+                                return '>> [MODS]: ' + rawModObjs.map((m) {
+                                  final name = (m['name'] ?? m['modifier_name'] ?? '').toString();
+                                  final mQty = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+                                  return '$name (x$mQty)';
+                                }).join(', ');
+                              }
+                              return '>> [MODS]: ${mods.join(", ")}';
+                            })(),
+                            style: pw.TextStyle(fontSize: 9.5 * fontScale, fontStyle: pw.FontStyle.italic, fontWeight: pw.FontWeight.bold),
+                          ),
                         ),
+                      ],
                     ],
                   ),
                 );

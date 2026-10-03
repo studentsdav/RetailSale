@@ -368,6 +368,58 @@ function getItemLocationHelper(item: any) {
     return loc ? loc.toLowerCase() : 'main kitchen';
 }
 
+async function releaseTableIfNoActiveKots(db: any, tableId: number | null, outlet_id: number, transaction?: any) {
+    if (!tableId || Number(tableId) <= 0) return;
+    try {
+        const activeKots = await db.models.kot_headers.findAll({
+            where: {
+                table_id: tableId,
+                outlet_id,
+                status: {
+                    [Op.notIn]: ['Cancelled', 'cancelled', 'Rejected', 'rejected', 'Billed', 'billed', 'Closed', 'closed', 'NC Cleared', 'nc_cleared', 'NC_CLEARED', 'Settled', 'settled']
+                }
+            },
+            include: [
+                {
+                    model: db.models.kot_items,
+                    as: 'items',
+                    required: false
+                }
+            ],
+            transaction
+        });
+
+        let hasActiveItems = false;
+        for (const k of activeKots) {
+            const items = k.items || [];
+            const activeItems = items.filter((it: any) => {
+                const s = (it.status || '').toLowerCase();
+                return s !== 'cancelled' && s !== 'rejected';
+            });
+            if (activeItems.length > 0) {
+                hasActiveItems = true;
+                break;
+            }
+        }
+
+        if (!hasActiveItems) {
+            await db.models.restaurant_tables.update(
+                {
+                    status: 'Available',
+                    current_guest_count: 0
+                },
+                {
+                    where: { id: tableId, outlet_id },
+                    transaction
+                }
+            );
+            console.log(`[TABLE AUTO-RELEASED] Table #${tableId} marked as Available (0 active orders/KOTs remaining).`);
+        }
+    } catch (e: any) {
+        console.error(`[RELEASE TABLE ERROR] Failed to check/release table #${tableId}:`, e.message);
+    }
+}
+
 export const updateKotStatus = async (req: Request, res: Response) => {
     try {
         const outlet_id = (req as any).user?.outlet_id;
@@ -416,7 +468,13 @@ export const updateKotStatus = async (req: Request, res: Response) => {
             });
 
             let newHeaderStatus = kot.status;
-            if (allServed) {
+            if (activeItems.length === 0) {
+                newHeaderStatus = 'Cancelled';
+                await kot.update({ status: 'Cancelled' });
+                if (kot.table_id) {
+                    await releaseTableIfNoActiveKots((req as any).propertyDb, kot.table_id, outlet_id);
+                }
+            } else if (allServed) {
                 newHeaderStatus = 'Served';
                 await kot.update({ status: 'Served', served_time: new Date() });
             } else if (allReadyOrServed) {
@@ -486,6 +544,11 @@ export const updateKotStatus = async (req: Request, res: Response) => {
         }
 
         await kot.update(updateData);
+
+        // Auto-release table if KOT is cancelled, rejected, billed, closed or cleared
+        if (kot.table_id) {
+            await releaseTableIfNoActiveKots((req as any).propertyDb, kot.table_id, outlet_id);
+        }
 
         // Handle House KOT stock deduction upon clearance (status becomes Served or Closed)
         if ((status === 'Served' || status === 'Closed') && kot.service_type === 'House KOT') {
@@ -586,7 +649,16 @@ export const updateKotItemStatus = async (req: Request, res: Response) => {
             const allServed = activeItems.length > 0 && activeItems.every((it: any) => it.status === 'Served' || it.status === 'served');
             const allReadyOrServed = activeItems.length > 0 && activeItems.every((it: any) => it.status === 'Served' || it.status === 'served' || it.status === 'Ready' || it.status === 'ready');
 
-            if (allServed) {
+            if (activeItems.length === 0) {
+                await (req as any).propertyDb.models.kot_headers.update(
+                    { status: 'Cancelled' },
+                    { where: { id: item.kot_header_id, outlet_id }, transaction: t }
+                );
+                const parentKot = item.header || await (req as any).propertyDb.models.kot_headers.findByPk(item.kot_header_id, { transaction: t });
+                if (parentKot && parentKot.table_id) {
+                    await releaseTableIfNoActiveKots((req as any).propertyDb, parentKot.table_id, outlet_id, t);
+                }
+            } else if (allServed) {
                 await (req as any).propertyDb.models.kot_headers.update(
                     { status: 'Served', served_time: new Date() },
                     { where: { id: item.kot_header_id, outlet_id }, transaction: t }

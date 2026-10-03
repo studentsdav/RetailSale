@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'tax_breakdown_model.dart';
 import 'tax_group_model.dart';
 
@@ -34,6 +35,9 @@ class SaleItem {
   final double mrp;
   final String? location;
   final String? notes;
+  final List<dynamic>? modifierDetails;
+  final List<dynamic>? modifierObjects;
+  final String? itemRemark;
 
   SaleItem({
     required this.itemId,
@@ -68,6 +72,9 @@ class SaleItem {
     this.mrp = 0.0,
     this.location,
     this.notes,
+    this.modifierDetails,
+    this.modifierObjects,
+    this.itemRemark,
   })  : originalQty = originalQty ?? qty,
         referenceRate = referenceRate ?? rate,
         taxableAmount = taxableAmount ??
@@ -117,7 +124,14 @@ class SaleItem {
     double? mrp,
     String? location,
     String? notes,
+    List<dynamic>? modifierDetails,
+    List<dynamic>? modifierObjects,
+    String? itemRemark,
   }) {
+    final resolvedRate = rate ?? this.rate;
+    final resolvedQty = qty ?? this.qty;
+    final bool rateOrQtyChanged = (rate != null && rate != this.rate) || (qty != null && qty != this.qty);
+
     return SaleItem(
       itemId: itemId,
       itemCode: itemCode,
@@ -125,9 +139,9 @@ class SaleItem {
       hsnSacCode: hsnSacCode ?? this.hsnSacCode,
       barcode: barcode,
       unit: unit,
-      qty: qty ?? this.qty,
+      qty: resolvedQty,
       originalQty: originalQty ?? this.originalQty,
-      rate: rate ?? this.rate,
+      rate: resolvedRate,
       referenceRate: referenceRate ?? this.referenceRate,
       taxType: taxType ?? this.taxType,
       taxPercent: taxPercent ?? this.taxPercent,
@@ -140,10 +154,10 @@ class SaleItem {
       appliedSchemeId: appliedSchemeId ?? this.appliedSchemeId,
       appliedHappyHourId: appliedHappyHourId ?? this.appliedHappyHourId,
       lineDiscount: lineDiscount ?? this.lineDiscount,
-      taxableAmount: taxableAmount ?? this.taxableAmount,
-      taxAmount: taxAmount ?? this.taxAmount,
-      lineTotal: lineTotal ?? this.lineTotal,
-      taxBreakup: taxBreakup ?? this.taxBreakup,
+      taxableAmount: taxableAmount ?? (rateOrQtyChanged ? null : this.taxableAmount),
+      taxAmount: taxAmount ?? (rateOrQtyChanged ? 0 : this.taxAmount),
+      lineTotal: lineTotal ?? (rateOrQtyChanged ? null : this.lineTotal),
+      taxBreakup: taxBreakup ?? (rateOrQtyChanged ? const [] : this.taxBreakup),
       brand: brand ?? this.brand,
       isTaxInclusive: isTaxInclusive ?? this.isTaxInclusive,
       originalRate: originalRate ?? this.originalRate,
@@ -151,6 +165,9 @@ class SaleItem {
       mrp: mrp ?? this.mrp,
       location: location ?? this.location,
       notes: notes ?? this.notes,
+      modifierDetails: modifierDetails ?? this.modifierDetails,
+      modifierObjects: modifierObjects ?? this.modifierObjects,
+      itemRemark: itemRemark ?? this.itemRemark,
     );
   }
 
@@ -190,6 +207,9 @@ class SaleItem {
       'mrp': mrp,
       'location': location,
       'notes': notes,
+      'modifier_details': modifierDetails,
+      'modifier_objects': modifierObjects,
+      'item_remark': itemRemark,
     };
   }
 
@@ -267,6 +287,55 @@ class SaleItem {
       mrp: json['mrp'] != null ? parseNum(json['mrp']) : (json['item'] is Map ? parseNum(json['item']['mrp']) : 0.0),
       location: json['location']?.toString() ?? (json['item'] is Map ? json['item']['location']?.toString() : null),
       notes: json['notes']?.toString() ?? json['remarks']?.toString() ?? json['item_notes']?.toString(),
+      modifierDetails: (() {
+        final raw = json['modifier_details'] ?? json['modifierDetails'] ?? json['modifiers'];
+        if (raw is List) {
+          return raw.map((e) {
+            if (e is Map) {
+              final name = (e['name'] ?? e['modifier_name'] ?? e['item_name'] ?? '').toString().trim();
+              final qty = e['qty'] ?? e['quantity'] ?? 1;
+              final price = double.tryParse(e['price']?.toString() ?? e['extra_price']?.toString() ?? '0') ?? 0.0;
+              if (price > 0) return ' x @';
+              return name;
+            }
+            return e.toString().trim();
+          }).where((e) => e.isNotEmpty).toList();
+        }
+        if (raw is String && raw.trim().isNotEmpty) {
+          final s = raw.trim();
+          if (s.startsWith('[')) {
+            try {
+              final decoded = jsonDecode(s);
+              if (decoded is List) {
+                return decoded.map((e) {
+                  if (e is Map) {
+                    final name = (e['name'] ?? e['modifier_name'] ?? e['item_name'] ?? '').toString().trim();
+                    final qty = e['qty'] ?? e['quantity'] ?? 1;
+                    final price = double.tryParse(e['price']?.toString() ?? e['extra_price']?.toString() ?? '0') ?? 0.0;
+                    if (price > 0) return ' x @';
+                    return name;
+                  }
+                  return e.toString().trim();
+                }).where((e) => e.isNotEmpty).toList();
+              }
+            } catch (_) {}
+          }
+          return [s];
+        }
+        return null;
+      })(),
+      modifierObjects: (() {
+        final raw = json['modifier_objects'] ?? json['modifierObjects'] ?? json['raw_modifiers'];
+        if (raw is List) return raw;
+        if (raw is String && raw.trim().startsWith('[')) {
+          try {
+            final decoded = jsonDecode(raw);
+            if (decoded is List) return decoded;
+          } catch (_) {}
+        }
+        return null;
+      })(),
+      itemRemark: json['item_remark']?.toString() ?? json['itemRemark']?.toString(),
     );
   }
 }

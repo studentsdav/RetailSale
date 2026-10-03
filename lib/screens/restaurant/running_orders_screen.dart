@@ -170,8 +170,33 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
         final String itemName = (item['item_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().trim();
         final double qty = double.tryParse((item['quantity'] ?? item['qty'] ?? 1.0).toString()) ?? 1.0;
         final double rate = double.tryParse((item['rate'] ?? item['item_rate'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
+        final List modDetails = (item['modifier_details'] is List ? item['modifier_details'] : []) as List;
+        final List modObjects = (item['modifier_objects'] is List ? item['modifier_objects'] : []) as List;
+        final String remark = (item['item_remark'] ?? item['remarks'] ?? '').toString().trim();
 
-        final dynamic groupKey = itemId > 0 ? itemId : (itemName.isNotEmpty ? itemName : 'Item_$kId');
+        // Calculate modifier extra price if available
+        double modExtra = 0.0;
+        for (final m in modObjects) {
+          if (m is Map) {
+            final p = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0;
+            final mq = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+            modExtra += p * mq;
+          }
+        }
+        if (modExtra <= 0 && modDetails.isNotEmpty) {
+          for (final d in modDetails) {
+            final str = d.toString().trim();
+            final priceMatch = RegExp(r'@(?:\s*[\$€₹£])?\s*([0-9]+(?:\.[0-9]+)?)').firstMatch(str);
+            final qtyMatch = RegExp(r'(?:x|\(x)(\d+)').firstMatch(str);
+            final mq = qtyMatch != null ? (int.tryParse(qtyMatch.group(1)!) ?? 1) : 1;
+            if (priceMatch != null) {
+              final p = double.tryParse(priceMatch.group(1)!) ?? 0.0;
+              modExtra += p * mq;
+            }
+          }
+        }
+
+        final dynamic groupKey = '${itemId}_${modDetails.join(", ")}_$remark';
 
         if (grouped.containsKey(groupKey)) {
           grouped[groupKey]!['qty'] = (grouped[groupKey]!['qty'] as double) + qty;
@@ -180,7 +205,10 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
             'item_id': itemId,
             'item_name': itemName,
             'qty': qty,
-            'rate': rate,
+            'rate': rate > 0 ? (rate + modExtra) : rate,
+            'modifier_details': modDetails,
+            'modifier_objects': modObjects,
+            'item_remark': remark,
           };
         }
       }
@@ -705,6 +733,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                 final String itemBrand = (item['brand'] ?? item['brand_name'] ?? item['item_brand'] ?? item['item']?['brand'] ?? (item['item'] is Map ? item['item']['brand'] : null) ?? '').toString().trim();
                 final String displayName = itemBrand.isNotEmpty ? '${item['item_name'] ?? ''} ($itemBrand)' : (item['item_name'] ?? '');
                 final String remark = (item['item_remark'] ?? item['notes'] ?? '').toString();
+                final List mods = (item['modifier_details'] is List ? item['modifier_details'] : []) as List;
                 
                 return pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(vertical: 3),
@@ -729,6 +758,11 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                           ),
                         ],
                       ),
+                      if (mods.isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(left: 32, top: 1),
+                          child: pw.Text('* Mods: ${mods.join(", ")}', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, fontWeight: pw.FontWeight.bold)),
+                        ),
                       if (remark.isNotEmpty)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(left: 32, top: 1),
@@ -1370,10 +1404,33 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                             '${item['status'] == 'Rejected' ? 'Rejected' : 'Cancelled'}: ${item['cancel_reason']}',
                             style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
                           )
-                        : (hasRemark
-                            ? Text(
-                                'Remark: ${item['item_remark']}',
-                                style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                        : ((item['modifier_details'] != null && (item['modifier_details'] as List).isNotEmpty) || hasRemark
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (item['modifier_details'] != null && (item['modifier_details'] as List).isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        '• Mods: ${(item['modifier_details'] as List).join(", ")}',
+                                        style: const TextStyle(
+                                          color: Color(0xFF2563EB),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ),
+                                  if (hasRemark)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        '• Note: ${item['item_remark']}',
+                                        style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                                      ),
+                                    ),
+                                ],
                               )
                             : null),
                     leading: Container(
@@ -1433,7 +1490,9 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
 
       final items = kot['items'] as List? ?? [];
       for (final item in items) {
-        final name = _displayName(item);
+        final List mods = (item['modifier_details'] is List ? item['modifier_details'] : []) as List;
+        final String baseName = _displayName(item);
+        final String name = mods.isNotEmpty ? '$baseName [Mods: ${mods.join(", ")}]' : baseName;
         final isCancelled = item['status'] == 'Cancelled' || item['status'] == 'Rejected';
         final double q = double.tryParse(item['qty'].toString()) ?? 0.0;
 

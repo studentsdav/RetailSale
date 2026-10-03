@@ -19,13 +19,11 @@ import '../../models/inventory/item_model.dart';
 import '../../models/inventory/tax_group_model.dart';
 import '../../core/api/endpoints.dart';
 import '../../models/inventory/attribute_model.dart';
-import '../../models/inventory/product_template_model.dart';
 import '../../models/inventory/settings/master_model.dart';
 import '../../utils/inclusive_rate_helper.dart';
 import '../../widgets/entry_shortcuts.dart';
 import 'item_barcode_manager_screen.dart';
 import 'stock_transfer_screen.dart';
-import 'modifier_master_screen.dart';
 import 'stock_taking_screen.dart';
 import 'bom_setup_dialog.dart';
 import '../../core/currency/currency_service.dart';
@@ -104,6 +102,13 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   // NEW: Double-submit prevention shield
   bool _isSaving = false;
   bool _canResetAndImport = false;
+
+  // Modifier / Add-on state in Item Master
+  bool _isModifier = false;
+  List<int> _applicableItemIds = [];
+  Item? _selectedDeductRawItem;
+  int? _deductRawItemId;
+  final TextEditingController _deductQtyCtrl = TextEditingController(text: '0.0');
 
   // NEW: ================= FOCUS NODES =================
   final FocusNode _nameFocus = FocusNode();
@@ -242,6 +247,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _max.dispose();
     _search.dispose();
     _taxPercent.dispose();
+    _deductQtyCtrl.dispose();
     _tableVerticalController.dispose();
     _tableHorizontalController.dispose();
     _searchNode.dispose();
@@ -375,6 +381,11 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _taxType = 'GST';
     _stockable = true;
     _isSaleable = true;
+    _isModifier = false;
+    _applicableItemIds = [];
+    _selectedDeductRawItem = null;
+    _deductRawItemId = null;
+    _deductQtyCtrl.text = '0.0';
     _discountApplicable = true;
     _schemeApplicable = true;
     _isHappyHour = false;
@@ -485,6 +496,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         maxLevel: int.parse(_max.text.isEmpty ? "0" : _max.text),
         stockable: _stockable,
         isSaleable: _isSaleable,
+        isModifier: _isModifier,
+        applicableItemIds: _applicableItemIds.isEmpty ? null : _applicableItemIds.join(','),
+        deductRawItemId: _deductRawItemId,
+        deductQty: double.tryParse(_deductQtyCtrl.text.trim()) ?? 0.0,
         isTaxInclusive: _useInclusiveRates,
         isHappyHour: _isHappyHour,
       );
@@ -674,6 +689,25 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _max.text = it.maxLevel.toString();
     _stockable = it.stockable;
     _isSaleable = it.isSaleable;
+    _isModifier = it.isModifier;
+    _deductQtyCtrl.text = it.deductQty.toString();
+    _deductRawItemId = it.deductRawItemId;
+    if (_deductRawItemId != null && _items.isNotEmpty) {
+      final matches = _items.where((x) => x.id == _deductRawItemId);
+      _selectedDeductRawItem = matches.isNotEmpty ? matches.first : null;
+    } else {
+      _selectedDeductRawItem = null;
+    }
+    if (it.applicableItemIds != null && it.applicableItemIds!.isNotEmpty) {
+      _applicableItemIds = it.applicableItemIds!
+          .split(',')
+          .map((s) => int.tryParse(s.trim()))
+          .where((id) => id != null)
+          .cast<int>()
+          .toList();
+    } else {
+      _applicableItemIds = [];
+    }
     _useInclusiveRates = it.isTaxInclusive;
     _inclusiveRateScope = 'BOTH';
 
@@ -857,6 +891,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       TextCellValue('Max'),
       TextCellValue('Stockable'),
       TextCellValue('Saleable'),
+      TextCellValue('Is Modifier'),
+      TextCellValue('Applicable Item IDs'),
+      TextCellValue('Deduct Raw Item ID'),
+      TextCellValue('Deduct Qty'),
     ]);
     for (var item in _items) {
       sheet.appendRow([
@@ -883,6 +921,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         IntCellValue(item.maxLevel),
         TextCellValue(item.stockable ? 'true' : 'false'),
         TextCellValue(item.isSaleable ? 'true' : 'false'),
+        TextCellValue(item.isModifier ? 'true' : 'false'),
+        TextCellValue(item.applicableItemIds ?? ''),
+        IntCellValue(item.deductRawItemId ?? 0),
+        DoubleCellValue(item.deductQty),
       ]);
     }
 
@@ -1103,6 +1145,26 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
             "is_saleable": _toBool(
                 cellByHeader(row, headers, 'Saleable', fallbackIndex: 21),
                 defaultValue: true),
+            "is_modifier": _toBool(
+                cellByHeader(row, headers, 'Is Modifier', fallbackIndex: 22) ??
+                cellByHeader(row, headers, 'Modifier'),
+                defaultValue: false),
+            "applicable_item_ids": cellByHeader(row, headers, 'Applicable Item IDs',
+                    fallbackIndex: 23)
+                ?.toString() ??
+                cellByHeader(row, headers, 'Applicable Items')?.toString() ??
+                '',
+            "deduct_raw_item_id": int.tryParse(cellByHeader(row, headers,
+                        'Deduct Raw Item ID', fallbackIndex: 24)
+                    ?.toString() ??
+                cellByHeader(row, headers, 'Deduct Raw Item')?.toString() ??
+                ''),
+            "deduct_qty": double.tryParse(cellByHeader(row, headers,
+                        'Deduct Qty', fallbackIndex: 25)
+                    ?.toString() ??
+                cellByHeader(row, headers, 'Deduct Quantity')?.toString() ??
+                '0') ??
+                0,
           });
         }
       }
@@ -1460,18 +1522,6 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               onPressed: _openBarcodeManager,
             ),
             IconButton(
-              icon: const Icon(Icons.tune),
-              tooltip: 'Item Modifiers & Add-ons',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ModifierMasterScreen(),
-                  ),
-                );
-              },
-            ),
-            IconButton(
               icon: const Icon(Icons.fact_check_outlined),
               tooltip: 'Stock Taking & Audit',
               onPressed: () {
@@ -1532,47 +1582,74 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Row 1: Code, Name, HSN, Location, Barcode, Image
-            Wrap(
-              spacing: 14,
-              runSpacing: 14,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            // Row 1: Identification & Location & Image
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _text(_code, 'Item Code', readOnly: true, width: 130),
-                _text(_name, 'Item Name',
+                SizedBox(
+                  width: 120,
+                  child: _text(_code, 'Item Code', readOnly: true),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: _text(
+                    _name,
+                    'Item Name',
                     focusNode: _nameFocus,
                     onSubmit: () => _hsnSacFocus.requestFocus(),
-                    width: 210),
-                _text(_hsnSac, 'HSN / SAC Code',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (!_hasVariants) ...[
+                  Expanded(
+                    flex: 2,
+                    child: _text(
+                      _barcode,
+                      'Barcode / Scan',
+                      focusNode: _barcodeFocus,
+                      prevNode: _hsnSacFocus,
+                      onSubmit: () => _groupFocus.requestFocus(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  flex: 2,
+                  child: _text(
+                    _hsnSac,
+                    'HSN / SAC',
                     focusNode: _hsnSacFocus,
                     prevNode: _nameFocus,
                     onSubmit: () => _hasVariants
                         ? _groupFocus.requestFocus()
                         : _barcodeFocus.requestFocus(),
-                    width: 140),
-                (() {
-                  final Set<String> locOptions = {};
-                  for (final l in _locations) {
-                    if (l.locationName.trim().isNotEmpty) locOptions.add(l.locationName.trim());
-                  }
-                  if (_location.text.trim().isNotEmpty) {
-                    locOptions.add(_location.text.trim());
-                  }
-                  final List<String> dbLocations = locOptions.toList();
-                  if (dbLocations.isEmpty) dbLocations.add('-');
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: (() {
+                    final Set<String> locOptions = {};
+                    for (final l in _locations) {
+                      if (l.locationName.trim().isNotEmpty) locOptions.add(l.locationName.trim());
+                    }
+                    if (_location.text.trim().isNotEmpty) {
+                      locOptions.add(_location.text.trim());
+                    }
+                    final List<String> dbLocations = locOptions.toList();
+                    if (dbLocations.isEmpty) dbLocations.add('-');
 
-                  final String selectedVal = dbLocations.contains(_location.text.trim())
-                      ? _location.text.trim()
-                      : dbLocations.first;
+                    final String selectedVal = dbLocations.contains(_location.text.trim())
+                        ? _location.text.trim()
+                        : dbLocations.first;
 
-                  return SizedBox(
-                    width: 210,
-                    child: Row(
+                    return Row(
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: selectedVal,
-                            style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                            initialValue: selectedVal,
+                            style: const TextStyle(fontSize: 12.5, color: Color(0xFF0F172A)),
                             decoration: _compactDecoration('Location / Station'),
                             items: dbLocations.map((locStr) {
                               return DropdownMenuItem<String>(
@@ -1585,72 +1662,64 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                             },
                           ),
                         ),
+                        const SizedBox(width: 2),
                         IconButton(
-                          icon: const Icon(Icons.add_circle_outline, color: Colors.blue, size: 20),
+                          icon: const Icon(Icons.add_circle_outline, color: Color(0xFF008060), size: 20),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
-                          tooltip: 'Add Location to Database',
+                          tooltip: 'Add Location',
                           onPressed: _showAddLocationDialog,
                         ),
                       ],
-                    ),
-                  );
-                })(),
-                if (!_hasVariants)
-                  _text(_barcode, 'Barcode / Scan Code',
-                      focusNode: _barcodeFocus,
-                      prevNode: _hsnSacFocus,
-                      onSubmit: () => _groupFocus.requestFocus(),
-                      width: 160),
-                SizedBox(
-                  width: 180,
+                    );
+                  })(),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
                   child: TextFormField(
                     readOnly: true,
                     controller: _imagePath,
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                    style: const TextStyle(fontSize: 12.5, color: Color(0xFF0F172A)),
                     decoration: _compactDecoration(
                       'Item Image',
                       suffixIcon: IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        icon: const Icon(Icons.image_outlined, size: 20),
+                        icon: const Icon(Icons.image_outlined, size: 18, color: Color(0xFF008060)),
                         tooltip: 'Select Image File',
                         onPressed: _pickItemImage,
                       ),
                     ),
                   ),
                 ),
-                if ((_pickedImagePath ?? _currentImagePath) != null)
-                  Column(
-                    children: [
-                      SizedBox(
-                        width: 140,
-                        height: 140,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: _imageWidget((_pickedImagePath ?? _currentImagePath)!),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        onPressed: _removeItemImage,
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Remove Image'),
-                      ),
-                    ],
+                if ((_pickedImagePath ?? _currentImagePath) != null) ...[
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: _imageWidget((_pickedImagePath ?? _currentImagePath)!),
+                    ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 16),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Remove Image',
+                    onPressed: _removeItemImage,
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
-            // Row 2: Group, Sub Category, Brand, Unit, Buy Rate, Sale Rate, MRP, Tax Type, Tax %, Balances
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            // Row 2: Categorization & Measurement (4 equal columns)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 180,
+                Expanded(
                   child: Focus(
                     focusNode: _groupFocus,
                     onKeyEvent: (node, event) {
@@ -1685,7 +1754,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                           prefixIcon: _selectedGroup == null
                               ? null
                               : IconButton(
-                                  icon: const Icon(Icons.edit, size: 16),
+                                  icon: const Icon(Icons.edit, size: 14),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
                                   tooltip: 'Edit Group',
@@ -1708,9 +1777,8 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     ),
                   ),
                 ),
-
-                SizedBox(
-                  width: 180,
+                const SizedBox(width: 8),
+                Expanded(
                   child: Focus(
                     focusNode: _subCategoryFocus,
                     onKeyEvent: (node, event) {
@@ -1751,7 +1819,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                           prefixIcon: _selectedSubCategory == null
                               ? null
                               : IconButton(
-                                  icon: const Icon(Icons.edit, size: 16),
+                                  icon: const Icon(Icons.edit, size: 14),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
                                   tooltip: 'Edit SubCategory',
@@ -1773,9 +1841,8 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     ),
                   ),
                 ),
-
-                SizedBox(
-                  width: 180,
+                const SizedBox(width: 8),
+                Expanded(
                   child: Focus(
                     focusNode: _brandFocus,
                     onKeyEvent: (node, event) {
@@ -1810,7 +1877,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                           prefixIcon: _selectedBrand == null
                               ? null
                               : IconButton(
-                                  icon: const Icon(Icons.edit, size: 16),
+                                  icon: const Icon(Icons.edit, size: 14),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
                                   tooltip: 'Edit Brand',
@@ -1832,9 +1899,8 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     ),
                   ),
                 ),
-
-                SizedBox(
-                  width: 130,
+                const SizedBox(width: 8),
+                Expanded(
                   child: Focus(
                     focusNode: _unitFocus,
                     onKeyEvent: (node, event) {
@@ -1861,6 +1927,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                         searchFieldProps: TextFieldProps(
                           decoration: InputDecoration(
                             hintText: "Search unit...",
+                            isDense: true,
                           ),
                         ),
                       ),
@@ -1880,77 +1947,72 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     ),
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 10),
 
+            // Row 3: Rates, Taxes & Inventory
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 if (!_hasVariants) ...[
-                  _text(
-                    _rate,
-                    _useInclusiveRates &&
-                            (_inclusiveRateScope == 'BOTH' ||
-                                _inclusiveRateScope == 'BUY_ONLY')
-                        ? 'Buy Rate (Inclusive)'
-                        : 'Buy Rate',
-                    isDouble: true,
-                    focusNode: _rateFocus,
-                    prevNode: _unitFocus,
-                    onSubmit: () => _saleRateFocus.requestFocus(),
-                    width: 140,
-                    helperText: _useInclusiveRates &&
-                            (_inclusiveRateScope == 'BOTH' ||
-                                _inclusiveRateScope == 'BUY_ONLY') &&
-                            _rate.text.trim().isNotEmpty
-                        ? InclusiveRateHelper.previewText(
-                            label: 'Buy',
-                            inclusiveAmount: double.tryParse(_rate.text.trim()) ?? 0,
-                            taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
-                          )
-                        : null,
+                  Expanded(
+                    flex: 2,
+                    child: _text(
+                      _rate,
+                      _useInclusiveRates &&
+                              (_inclusiveRateScope == 'BOTH' ||
+                                  _inclusiveRateScope == 'BUY_ONLY')
+                          ? 'Buy Rate (Inc)'
+                          : 'Buy Rate',
+                      isDouble: true,
+                      focusNode: _rateFocus,
+                      prevNode: _unitFocus,
+                      onSubmit: () => _saleRateFocus.requestFocus(),
+                    ),
                   ),
-                  _text(
-                    _retailSalePrice,
-                    _useInclusiveRates &&
-                            (_inclusiveRateScope == 'BOTH' ||
-                                _inclusiveRateScope == 'SALE_ONLY')
-                        ? 'Sale Rate (Inclusive)'
-                        : 'Sale Rate',
-                    isDouble: true,
-                    focusNode: _saleRateFocus,
-                    prevNode: _rateFocus,
-                    onSubmit: () => _mrpFocus.requestFocus(),
-                    width: 140,
-                    helperText: _useInclusiveRates &&
-                            (_inclusiveRateScope == 'BOTH' ||
-                                _inclusiveRateScope == 'SALE_ONLY') &&
-                            _retailSalePrice.text.trim().isNotEmpty
-                        ? InclusiveRateHelper.previewText(
-                            label: 'Sale',
-                            inclusiveAmount:
-                                double.tryParse(_retailSalePrice.text.trim()) ?? 0,
-                            taxPercent: double.tryParse(_taxPercent.text.trim()) ?? 0,
-                          )
-                        : null,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: _text(
+                      _retailSalePrice,
+                      _useInclusiveRates &&
+                              (_inclusiveRateScope == 'BOTH' ||
+                                  _inclusiveRateScope == 'SALE_ONLY')
+                          ? 'Sale Rate (Inc)'
+                          : 'Sale Rate',
+                      isDouble: true,
+                      focusNode: _saleRateFocus,
+                      prevNode: _rateFocus,
+                      onSubmit: () => _mrpFocus.requestFocus(),
+                    ),
                   ),
-                  _text(
-                    _mrp,
-                    'MRP (Crossed Price)',
-                    isDouble: true,
-                    focusNode: _mrpFocus,
-                    prevNode: _saleRateFocus,
-                    onSubmit: () => _taxTypeFocus.requestFocus(),
-                    width: 150,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: _text(
+                      _mrp,
+                      'MRP (Crossed)',
+                      isDouble: true,
+                      focusNode: _mrpFocus,
+                      prevNode: _saleRateFocus,
+                      onSubmit: () => _taxTypeFocus.requestFocus(),
+                    ),
                   ),
+                  const SizedBox(width: 8),
                 ],
-                if (_taxGroups.isNotEmpty)
-                  SizedBox(
-                    width: 240,
+                if (_taxGroups.isNotEmpty) ...[
+                  Expanded(
+                    flex: 3,
                     child: DropdownButtonFormField<TaxGroup?>(
-                      value: _selectedTaxGroup,
+                      initialValue: _selectedTaxGroup,
                       isExpanded: true,
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
+                      style: const TextStyle(fontSize: 12.5, color: Color(0xFF0F172A)),
                       decoration: _compactDecoration('Tax Group (Created)'),
                       items: [
                         const DropdownMenuItem<TaxGroup?>(
                           value: null,
-                          child: Text('None (Standalone Tax)', style: TextStyle(color: Colors.grey)),
+                          child: Text('None (Standalone)', style: TextStyle(color: Colors.grey, fontSize: 12)),
                         ),
                         ..._taxGroups.map((g) {
                           return DropdownMenuItem<TaxGroup?>(
@@ -1958,6 +2020,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                             child: Text(
                               '${g.groupName} (${g.totalRate.toStringAsFixed(2)}%)',
                               overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
                             ),
                           );
                         }),
@@ -1982,8 +2045,10 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                       },
                     ),
                   ),
-                SizedBox(
-                  width: 140,
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  flex: 2,
                   child: Focus(
                     onKeyEvent: (node, event) {
                       if (event is KeyDownEvent &&
@@ -2005,17 +2070,14 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
 
                         return DropdownButtonFormField<String>(
                           focusNode: _taxTypeFocus,
-                          value: selectedTaxVal,
-                          style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-                          decoration: _compactDecoration(
-                            'Tax Type',
-                            helperText: _selectedTaxGroup != null ? 'Via Tax Group' : null,
-                          ),
+                          initialValue: selectedTaxVal,
+                          style: const TextStyle(fontSize: 12.5, color: Color(0xFF0F172A)),
+                          decoration: _compactDecoration('Tax Type'),
                           items: availableTaxTypes
                               .map(
                                 (value) => DropdownMenuItem(
                                   value: value,
-                                  child: Text(value),
+                                  child: Text(value, style: const TextStyle(fontSize: 12)),
                                 ),
                               )
                               .toList(),
@@ -2032,68 +2094,65 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                     ),
                   ),
                 ),
-                _text(
-                  _taxPercent,
-                  'Tax %',
-                  isDouble: true,
-                  readOnly: _selectedTaxGroup != null,
-                  helperText: _selectedTaxGroup != null ? 'Locked to Group' : null,
-                  focusNode: _taxPercentFocus,
-                  prevNode: _taxTypeFocus,
-                  onSubmit: () => _hasVariants
-                      ? _discountFocus.requestFocus()
-                      : _openingFocus.requestFocus(),
-                  width: 110,
-                ),
-                if (_selectedTaxGroup != null && _selectedTaxGroup!.components.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFBFDBFE)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.account_tree_outlined, size: 15, color: Color(0xFF2563EB)),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Includes ${_selectedTaxGroup!.components.length} tax types: ' +
-                              _selectedTaxGroup!.components
-                                  .map((c) => '${c.componentName} (${c.rate.toStringAsFixed(c.rate % 1 == 0 ? 0 : 2)}%)')
-                                  .join(' + ') +
-                              ' = Total ${_selectedTaxGroup!.totalRate.toStringAsFixed(2)}%',
-                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF1E40AF)),
-                        ),
-                      ],
-                    ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 1,
+                  child: _text(
+                    _taxPercent,
+                    'Tax %',
+                    isDouble: true,
+                    readOnly: _selectedTaxGroup != null,
+                    focusNode: _taxPercentFocus,
+                    prevNode: _taxTypeFocus,
+                    onSubmit: () => _hasVariants
+                        ? _discountFocus.requestFocus()
+                        : _openingFocus.requestFocus(),
                   ),
+                ),
                 if (!_hasVariants) ...[
-                  _text(_opening, 'Opening Balance',
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: _text(
+                      _opening,
+                      'Opening Stock',
                       isDouble: true,
-                      readOnly: _editIndex == null ? false : true,
+                      readOnly: _editIndex != null,
                       focusNode: _openingFocus,
                       prevNode: _taxPercentFocus,
                       onSubmit: () => _minFocus.requestFocus(),
-                      width: 130),
-                  _text(_min, 'Min Level',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: _text(
+                      _min,
+                      'Min',
                       isInt: true,
                       focusNode: _minFocus,
                       prevNode: _openingFocus,
                       onSubmit: () => _maxFocus.requestFocus(),
-                      width: 110),
-                  _text(_max, 'Max Level',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: _text(
+                      _max,
+                      'Max',
                       isInt: true,
                       focusNode: _maxFocus,
                       prevNode: _minFocus,
                       onSubmit: () => _discountFocus.requestFocus(),
-                      width: 110),
+                    ),
+                  ),
                 ],
               ],
             ),
             _buildOptionsAndActionsBar(),
             if (_hasVariants) _variantBuilderUI(),
+            if (_isModifier) _buildModifierConfigUI(),
           ],
         ),
       ),
@@ -2110,195 +2169,204 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     const Color activeBg       = Color(0xFFE6F4EF);
     const Color activeBorder   = Color(0xFF34D399);
     const Color activeLabel    = Color(0xFF065F46);
-    const Color inactiveBg     = Color(0xFFF8FAFC);
-    const Color inactiveBorder = Color(0xFFCBD5E1);
-    const Color inactiveLabel  = Color(0xFF64748B);
+    const Color inactiveBg     = Colors.white;
+    const Color inactiveBorder = Color(0xFFD1D5DB);
+    const Color inactiveLabel  = Color(0xFF4B5563);
 
-    return IntrinsicWidth(
-      child: Container(
-        padding: const EdgeInsets.only(left: 10, right: 4, top: 3, bottom: 3),
-        decoration: BoxDecoration(
-          color: value ? activeBg : inactiveBg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: value ? activeBorder : inactiveBorder,
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.only(left: 10, right: 4),
+      decoration: BoxDecoration(
+        color: value ? activeBg : inactiveBg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: value ? activeBorder : inactiveBorder,
+          width: 1.0,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: value ? FontWeight.w700 : FontWeight.w500,
+              color: value ? activeLabel : inactiveLabel,
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              title,
-              overflow: TextOverflow.visible,
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: value ? activeLabel : inactiveLabel,
-                letterSpacing: 0.1,
-              ),
+          const SizedBox(width: 4),
+          Transform.scale(
+            scale: 0.70,
+            child: Switch(
+              focusNode: focusNode,
+              value: value,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              activeThumbColor: activeGreen,
+              activeTrackColor: const Color(0xFF6EE7B7),
+              inactiveThumbColor: const Color(0xFF9CA3AF),
+              inactiveTrackColor: const Color(0xFFE5E7EB),
+              onChanged: onChanged,
             ),
-            Transform.scale(
-              scale: 0.78,
-              alignment: Alignment.centerRight,
-              child: Switch(
-                focusNode: focusNode,
-                value: value,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                activeColor: activeGreen,
-                activeTrackColor: const Color(0xFF6EE7B7),
-                inactiveThumbColor: const Color(0xFFCBD5E1),
-                inactiveTrackColor: const Color(0xFFE2E8F0),
-                onChanged: onChanged,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildOptionsAndActionsBar() {
     return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 12,
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // All toggle switches aligned in one clean row
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              if (_editIndex == null)
-                _buildToggleChip(
-                  title: 'Has Variants',
-                  value: _hasVariants,
-                  onChanged: (v) {
-                    setState(() => _hasVariants = v);
-                    _generateVariantList();
-                  },
-                ),
-              _buildToggleChip(
-                title: 'Get Inclusive',
-                value: _useInclusiveRates,
-                focusNode: _inclusiveSwitchFocus,
-                onChanged: (v) {
-                  setState(() {
-                    _useInclusiveRates = v;
-                    if (!v) {
-                      _inclusiveRateScope = 'BOTH';
-                    }
-                  });
-                },
-              ),
-              if (_useInclusiveRates)
-                SizedBox(
-                  width: 160,
-                  child: DropdownButtonFormField<String>(
-                    focusNode: _inclusiveScopeFocus,
-                    initialValue: _inclusiveRateScope,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
-                    decoration: _compactDecoration('Apply To'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'BOTH',
-                        child: Text('Buy & Sale Rate'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'SALE_ONLY',
-                        child: Text('Sale Rate Only'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'BUY_ONLY',
-                        child: Text('Buy Rate Only'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _inclusiveRateScope = value);
-                      }
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (_editIndex == null)
+                  _buildToggleChip(
+                    title: 'Has Variants',
+                    value: _hasVariants,
+                    onChanged: (v) {
+                      setState(() => _hasVariants = v);
+                      _generateVariantList();
                     },
                   ),
+                _buildToggleChip(
+                  title: 'Is Modifier / Add-on',
+                  value: _isModifier,
+                  onChanged: (v) {
+                    setState(() {
+                      _isModifier = v;
+                      if (v) {
+                        if (_deductQtyCtrl.text.isEmpty || _deductQtyCtrl.text == '0.0') {
+                          _deductQtyCtrl.text = '1.0';
+                        }
+                      }
+                    });
+                  },
                 ),
-              _buildToggleChip(
-                title: 'Discount Applicable',
-                value: _discountApplicable,
-                focusNode: _discountFocus,
-                onChanged: (v) => setState(() => _discountApplicable = v),
-              ),
-              _buildToggleChip(
-                title: 'Scheme Applicable',
-                value: _schemeApplicable,
-                focusNode: _schemeFocus,
-                onChanged: (v) => setState(() => _schemeApplicable = v),
-              ),
-              _buildToggleChip(
-                title: 'Happy Hour Item',
-                value: _isHappyHour,
-                focusNode: _happyHourFocus,
-                onChanged: (v) => setState(() => _isHappyHour = v),
-              ),
-              _buildToggleChip(
-                title: 'Stockable',
-                value: _stockable,
-                focusNode: _stockableFocus,
-                onChanged: (v) => setState(() => _stockable = v),
-              ),
-              _buildToggleChip(
-                title: 'Item for Sale',
-                value: _isSaleable,
-                focusNode: _isSaleableFocus,
-                onChanged: (v) => setState(() => _isSaleable = v),
-              ),
-            ],
+                _buildToggleChip(
+                  title: 'Get Inclusive',
+                  value: _useInclusiveRates,
+                  focusNode: _inclusiveSwitchFocus,
+                  onChanged: (v) {
+                    setState(() {
+                      _useInclusiveRates = v;
+                      if (!v) {
+                        _inclusiveRateScope = 'BOTH';
+                      }
+                    });
+                  },
+                ),
+                if (_useInclusiveRates)
+                  SizedBox(
+                    width: 140,
+                    height: 32,
+                    child: DropdownButtonFormField<String>(
+                      focusNode: _inclusiveScopeFocus,
+                      initialValue: _inclusiveRateScope,
+                      style: const TextStyle(fontSize: 11.5, color: Color(0xFF0F172A)),
+                      decoration: _compactDecoration('Apply To'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'BOTH',
+                          child: Text('Buy & Sale', style: TextStyle(fontSize: 11.5)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'SALE_ONLY',
+                          child: Text('Sale Only', style: TextStyle(fontSize: 11.5)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'BUY_ONLY',
+                          child: Text('Buy Only', style: TextStyle(fontSize: 11.5)),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _inclusiveRateScope = value);
+                        }
+                      },
+                    ),
+                  ),
+                _buildToggleChip(
+                  title: 'Discount Applicable',
+                  value: _discountApplicable,
+                  focusNode: _discountFocus,
+                  onChanged: (v) => setState(() => _discountApplicable = v),
+                ),
+                _buildToggleChip(
+                  title: 'Scheme Applicable',
+                  value: _schemeApplicable,
+                  focusNode: _schemeFocus,
+                  onChanged: (v) => setState(() => _schemeApplicable = v),
+                ),
+                _buildToggleChip(
+                  title: 'Happy Hour Item',
+                  value: _isHappyHour,
+                  focusNode: _happyHourFocus,
+                  onChanged: (v) => setState(() => _isHappyHour = v),
+                ),
+                _buildToggleChip(
+                  title: 'Stockable',
+                  value: _stockable,
+                  focusNode: _stockableFocus,
+                  onChanged: (v) => setState(() => _stockable = v),
+                ),
+                _buildToggleChip(
+                  title: 'Item for Sale',
+                  value: _isSaleable,
+                  focusNode: _isSaleableFocus,
+                  onChanged: (v) => setState(() => _isSaleable = v),
+                ),
+              ],
+            ),
           ),
-
-          // Prominent Action Buttons
+          const SizedBox(width: 14),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               OutlinedButton.icon(
                 onPressed: _clearForm,
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   side: const BorderSide(color: Color(0xFFCBD5E1)),
                   foregroundColor: const Color(0xFF475569),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               ElevatedButton.icon(
                 focusNode: _saveBtnFocus,
                 onPressed: _isSaving ? null : _saveItem,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF008060),
                   foregroundColor: Colors.white,
-                  elevation: 2,
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 1,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
                 icon: _isSaving
                     ? const SizedBox(
-                        width: 18,
-                        height: 18,
+                        width: 16,
+                        height: 16,
                         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.save, size: 18),
+                    : const Icon(Icons.save, size: 16),
                 label: Text(
                   _isSaving ? 'Saving...' : (_editIndex == null ? 'Save Item' : 'Update Item'),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ),
             ],
@@ -2638,6 +2706,237 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     );
   }
 
+  Widget _buildModifierConfigUI() {
+    final menuItems = _items.where((it) => !it.isModifier && it.isSaleable).toList();
+    final rawItems = _items.where((it) => it.stockable).toList();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF008060).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.tune_outlined, size: 20, color: Color(0xFF008060)),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Modifier & Add-on Recipe / Stock Deduction Linkage',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF065F46),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Specify which menu items this modifier applies to, and link raw materials / BOM recipe for automatic stock ledger deduction on checkout.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF047857)),
+                    ),
+                  ],
+                ),
+              ),
+              if (_editIndex != null && _editIndex! < _items.length)
+                FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFDCFCE7),
+                    foregroundColor: const Color(0xFF166534),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  icon: const Icon(Icons.receipt_long, size: 16),
+                  label: const Text('Multi-Ingredient BOM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => BOMSetupDialog(
+                        parentItem: _items[_editIndex!],
+                        itemCtrl: itemCtrl,
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.start,
+            children: [
+              // 1. Applicable Items selector
+              SizedBox(
+                width: 320,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Applies to Menu Items:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                        TextButton(
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 24), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                          onPressed: () {
+                            setState(() {
+                              if (_applicableItemIds.isEmpty) {
+                                _applicableItemIds = menuItems.map((e) => e.id).toList();
+                              } else {
+                                _applicableItemIds.clear();
+                              }
+                            });
+                          },
+                          child: Text(
+                            _applicableItemIds.isEmpty ? 'Select All' : 'Clear (All Items)',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF008060)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      constraints: const BoxConstraints(maxHeight: 130),
+                      child: menuItems.isEmpty
+                          ? const Center(child: Text('No saleable menu items found', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                          : SingleChildScrollView(
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: menuItems.map((mi) {
+                                  final isSel = _applicableItemIds.contains(mi.id);
+                                  return FilterChip(
+                                    label: Text(mi.itemName, style: TextStyle(fontSize: 11.5, color: isSel ? Colors.white : const Color(0xFF334155))),
+                                    selected: isSel,
+                                    selectedColor: const Color(0xFF008060),
+                                    checkmarkColor: Colors.white,
+                                    backgroundColor: const Color(0xFFF1F5F9),
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    onSelected: (val) {
+                                      setState(() {
+                                        if (val) {
+                                          _applicableItemIds.add(mi.id);
+                                        } else {
+                                          _applicableItemIds.remove(mi.id);
+                                        }
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _applicableItemIds.isEmpty
+                          ? 'Modifier is Universal (Applies to all menu items)'
+                          : 'Applies only to ${_applicableItemIds.length} selected item(s)',
+                      style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 2. Direct Raw Material to Deduct
+              SizedBox(
+                width: 260,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Deduct From Raw Stock Material:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                    const SizedBox(height: 4),
+                    DropdownSearch<Item>(
+                      items: (f, p) => rawItems,
+                      selectedItem: _selectedDeductRawItem,
+                      itemAsString: (i) => '${i.itemName} (${i.unit})',
+                      compareFn: (a, b) => a.id == b.id,
+                      popupProps: const PopupProps.menu(
+                        showSearchBox: true,
+                        searchFieldProps: TextFieldProps(
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: 'Search raw material...',
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                        ),
+                      ),
+                      decoratorProps: DropDownDecoratorProps(
+                        decoration: _compactDecoration(
+                          'Raw Stock Material',
+                          prefixIcon: _selectedDeductRawItem != null
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedDeductRawItem = null;
+                                      _deductRawItemId = null;
+                                    });
+                                  },
+                                )
+                              : null,
+                        ),
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedDeductRawItem = val;
+                          _deductRawItemId = val?.id;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Auto debited from inventory on checkout',
+                      style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 3. Deduct Qty per unit
+              SizedBox(
+                width: 170,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Deduct Qty per Add-on:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      controller: _deductQtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: _compactDecoration(
+                        'Qty to Deduct',
+                        helperText: _selectedDeductRawItem != null ? 'Unit: ${_selectedDeductRawItem!.unit}' : 'e.g. 0.05 for 50g',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _showEditBrandDialog() async {
     if (_selectedBrand == null) return;
@@ -3295,15 +3594,15 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
       filled: true,
       fillColor: readOnly ? const Color(0xFFF1F5F9) : Colors.white,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFF008060), width: 1.5),
       ),
     );
@@ -3321,56 +3620,58 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     TextInputAction textInputAction = TextInputAction.next,
     VoidCallback? onSubmit,
     bool isOptional = false,
-    double width = 175,
+    double? width,
   }) {
-    return SizedBox(
-      width: width,
-      child: Focus(
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            prevNode?.requestFocus();
-            return KeyEventResult.handled;
+    final field = Focus(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          prevNode?.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: TextFormField(
+        focusNode: focusNode,
+        controller: c,
+        readOnly: readOnly,
+        style: const TextStyle(fontSize: 12.5, color: Color(0xFF0F172A)),
+        keyboardType: isInt
+            ? TextInputType.number
+            : isDouble
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : TextInputType.text,
+        inputFormatters: isInt
+            ? [FilteringTextInputFormatter.digitsOnly]
+            : isDouble
+                ? [
+                    FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*\.?\d{0,2}'))
+                  ]
+                : [],
+        textInputAction: textInputAction,
+        onFieldSubmitted: (_) {
+          if (onSubmit != null) {
+            onSubmit();
+          } else if (textInputAction == TextInputAction.next) {
+            FocusScope.of(context).nextFocus();
+          } else {
+            FocusScope.of(context).unfocus();
           }
-          return KeyEventResult.ignored;
         },
-        child: TextFormField(
-          focusNode: focusNode,
-          controller: c,
-          readOnly: readOnly,
-          style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)),
-          keyboardType: isInt
-              ? TextInputType.number
-              : isDouble
-                  ? const TextInputType.numberWithOptions(decimal: true)
-                  : TextInputType.text,
-          inputFormatters: isInt
-              ? [FilteringTextInputFormatter.digitsOnly]
-              : isDouble
-                  ? [
-                      FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d*\.?\d{0,2}'))
-                    ]
-                  : [],
-          textInputAction: textInputAction,
-          onFieldSubmitted: (_) {
-            if (onSubmit != null) {
-              onSubmit();
-            } else if (textInputAction == TextInputAction.next) {
-              FocusScope.of(context).nextFocus();
-            } else {
-              FocusScope.of(context).unfocus();
-            }
-          },
-          onTapOutside: (_) => FocusScope.of(context).unfocus(),
-          decoration: _compactDecoration(l, helperText: helperText, readOnly: readOnly),
-          onChanged: (_) => setState(() {}),
-          validator: (v) {
-            if (isOptional) return null;
-            return v == null || v.isEmpty ? 'Required' : null;
-          },
-        ),
+        onTapOutside: (_) => FocusScope.of(context).unfocus(),
+        decoration: _compactDecoration(l, helperText: helperText, readOnly: readOnly),
+        onChanged: (_) => setState(() {}),
+        validator: (v) {
+          if (isOptional) return null;
+          return v == null || v.isEmpty ? 'Required' : null;
+        },
       ),
     );
+
+    if (width != null) {
+      return SizedBox(width: width, child: field);
+    }
+    return field;
   }
 }

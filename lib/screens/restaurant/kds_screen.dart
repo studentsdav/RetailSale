@@ -669,10 +669,50 @@ class _KdsScreenState extends State<KdsScreen> with WidgetsBindingObserver {
                                                           ),
                                                       ],
                                                     ),
-                                                    if (item['notes'] != null && item['notes'].toString().isNotEmpty)
-                                                      Text(
-                                                        'Note: ${item['notes']}',
-                                                        style: const TextStyle(fontSize: 11, color: Colors.orange, fontStyle: FontStyle.italic),
+                                                    // Modifiers & Add-ons Badges in KDS
+                                                    if (item['modifier_details'] != null &&
+                                                        (item['modifier_details'] is List) &&
+                                                        (item['modifier_details'] as List).isNotEmpty)
+                                                      Padding(
+                                                        padding: const EdgeInsets.only(top: 3),
+                                                        child: Wrap(
+                                                          spacing: 4,
+                                                          runSpacing: 2,
+                                                          children: (item['modifier_details'] as List).map<Widget>((m) {
+                                                            final String mText = (m is Map ? (m['name'] ?? m['modifier_name'] ?? '') : m).toString().trim();
+                                                            return Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                              decoration: BoxDecoration(
+                                                                color: const Color(0xFFEFF6FF),
+                                                                borderRadius: BorderRadius.circular(4),
+                                                                border: Border.all(color: const Color(0xFF93C5FD), width: 0.8),
+                                                              ),
+                                                              child: Row(
+                                                                mainAxisSize: MainAxisSize.min,
+                                                                children: [
+                                                                  const Icon(Icons.add_circle, size: 11, color: Color(0xFF2563EB)),
+                                                                  const SizedBox(width: 3),
+                                                                  Text(
+                                                                    mText,
+                                                                    style: const TextStyle(
+                                                                      color: Color(0xFF1D4ED8),
+                                                                      fontSize: 11,
+                                                                      fontWeight: FontWeight.bold,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            );
+                                                          }).toList(),
+                                                        ),
+                                                      ),
+                                                    if ((item['item_remark'] ?? item['notes'] ?? '').toString().trim().isNotEmpty)
+                                                      Padding(
+                                                        padding: const EdgeInsets.only(top: 2),
+                                                        child: Text(
+                                                          'Note: ${(item['item_remark'] ?? item['notes']).toString().trim()}',
+                                                          style: const TextStyle(fontSize: 11, color: Colors.orange, fontStyle: FontStyle.italic, fontWeight: FontWeight.w600),
+                                                        ),
                                                       ),
                                                     if (isCancelled && (item['cancel_reason'] ?? '').toString().isNotEmpty)
                                                       Text(

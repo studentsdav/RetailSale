@@ -89,6 +89,8 @@ class _SaleScreenState extends State<SaleScreen> {
   Printer? _defaultPrinter;
   int? _preloadedTableId;
   List<int>? _preloadedKotIds;
+  bool _isRestaurantModule = false;
+  bool get _isRestaurantActive => _isRestaurantModule || _isKotOrderLocked;
 
   List<Map<String, dynamic>> _salespersons = [];
   Map<String, dynamic>? _selectedSalesperson;
@@ -279,6 +281,7 @@ class _SaleScreenState extends State<SaleScreen> {
         _fetchSalespersons().catchError((_) => null),
         _fetchHappyHours().catchError((_) => null),
         _fetchBillValuePromos().catchError((_) => null),
+        _checkRestaurantModule().catchError((_) => null),
       ]);
 
       // Pre-warm the PDF logo cache in the background so printing is instant
@@ -366,12 +369,101 @@ class _SaleScreenState extends State<SaleScreen> {
           }
 
           final finalItemId = matched?.id ?? (itemId > 0 ? itemId : (ctrl.items.isNotEmpty ? ctrl.items.first.id : 0));
-          double resolvedRate = rate;
-          if (matched != null) {
-            final baseRate = matched.retailSalePrice > 0
-                ? matched.retailSalePrice
-                : (matched.rate > 0 ? matched.rate : matched.mrp);
-            resolvedRate = (rate > 0) ? rate : baseRate;
+
+          List<dynamic> modDetails = [];
+          if (preload['modifier_details'] is List) {
+            modDetails = List<dynamic>.from(preload['modifier_details']);
+          } else if (preload['modifier_details'] is String && preload['modifier_details'].toString().trim().startsWith('[')) {
+            try {
+              modDetails = jsonDecode(preload['modifier_details']);
+            } catch (_) {}
+          }
+
+          List<dynamic> modObjects = [];
+          if (preload['modifier_objects'] is List) {
+            modObjects = List<dynamic>.from(preload['modifier_objects']);
+          } else if (preload['modifier_objects'] is String && preload['modifier_objects'].toString().trim().startsWith('[')) {
+            try {
+              modObjects = jsonDecode(preload['modifier_objects']);
+            } catch (_) {}
+          }
+
+          double extraModifierPrice = 0.0;
+          if (modObjects.isNotEmpty) {
+            for (final m in modObjects) {
+              if (m is Map) {
+                final p = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0;
+                final mq = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+                extraModifierPrice += p * mq;
+              }
+            }
+          }
+
+          // If modObjects didn't have price, try to resolve from modDetails or catalog items
+          if (extraModifierPrice <= 0 && modDetails.isNotEmpty) {
+            final List<Map<String, dynamic>> reconstructedModObjs = [];
+            for (final d in modDetails) {
+              final str = d.toString().trim();
+              if (str.isEmpty) continue;
+              
+              // 1. Check if price is in string e.g. "extra cheese x1 @€100.00" or "@100"
+              final priceMatch = RegExp(r'@(?:\s*[\$€₹£])?\s*([0-9]+(?:\.[0-9]+)?)').firstMatch(str);
+              final qtyMatch = RegExp(r'(?:x|\(x)(\d+)').firstMatch(str);
+              final mq = qtyMatch != null ? (int.tryParse(qtyMatch.group(1)!) ?? 1) : 1;
+              
+              double parsedPrice = 0.0;
+              if (priceMatch != null) {
+                parsedPrice = double.tryParse(priceMatch.group(1)!) ?? 0.0;
+              }
+              
+              // Extract clean modifier name
+              final cleanName = str.split(RegExp(r'\s*(?:x\d+|\(x\d+\)|@)'))[0].trim();
+              
+              // 2. If no price in string, look up in ctrl.items
+              if (parsedPrice <= 0 && cleanName.isNotEmpty && ctrl.items.isNotEmpty) {
+                final modItem = ctrl.items.cast<Item?>().firstWhere(
+                  (it) => it != null && it.itemName.trim().toLowerCase() == cleanName.toLowerCase(),
+                  orElse: () => null,
+                );
+                if (modItem != null) {
+                  parsedPrice = modItem.retailSalePrice > 0 ? modItem.retailSalePrice : modItem.rate;
+                }
+              }
+              
+              if (cleanName.isNotEmpty) {
+                reconstructedModObjs.add({
+                  'name': cleanName,
+                  'price': parsedPrice,
+                  'qty': mq,
+                });
+                extraModifierPrice += parsedPrice * mq;
+              }
+            }
+            if (modObjects.isEmpty && reconstructedModObjs.isNotEmpty) {
+              modObjects = reconstructedModObjs;
+            }
+          }
+
+          final baseRate = matched != null
+              ? (matched.retailSalePrice > 0 ? matched.retailSalePrice : (matched.rate > 0 ? matched.rate : matched.mrp))
+              : (rate > 0 ? rate : 0.0);
+          
+          double resolvedRate = baseRate + extraModifierPrice;
+          if (resolvedRate <= 0 && rate > 0) {
+            resolvedRate = rate;
+          }
+
+          if (modDetails.isEmpty && modObjects.isNotEmpty) {
+            modDetails = modObjects.map((m) {
+              if (m is Map) {
+                final name = (m['name'] ?? m['modifier_name'] ?? '').toString();
+                final q = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+                final p = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0;
+                final priceStr = p > 0 ? ' @${CurrencyService.format(p)}' : '';
+                return q > 1 || p > 0 ? '$name x$q$priceStr' : name;
+              }
+              return m.toString();
+            }).toList();
           }
 
           final saleItem = SaleItem(
@@ -386,6 +478,10 @@ class _SaleScreenState extends State<SaleScreen> {
             taxPercent: (matched?.taxPercent ?? 0.0).toDouble(),
             brand: matched?.brand,
             isTaxInclusive: matched?.isTaxInclusive ?? false,
+            notes: (preload['notes'] ?? preload['remarks'])?.toString(),
+            modifierDetails: modDetails.isNotEmpty ? modDetails : null,
+            modifierObjects: modObjects.isNotEmpty ? modObjects : null,
+            itemRemark: (preload['item_remark'] ?? preload['itemRemark'])?.toString().trim(),
           );
 
           _items.add(saleItem);
@@ -443,6 +539,17 @@ class _SaleScreenState extends State<SaleScreen> {
       if (res['success'] == true && res['data'] != null) {
         setState(() {
           _billValuePromos = List<dynamic>.from(res['data']);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _checkRestaurantModule() async {
+    try {
+      final isRestActive = await TokenStorage.isRestaurantModuleActive();
+      if (mounted) {
+        setState(() {
+          _isRestaurantModule = isRestActive;
         });
       }
     } catch (_) {}
@@ -1937,6 +2044,10 @@ class _SaleScreenState extends State<SaleScreen> {
     for (var i = 0; i < _items.length; i++) {
       final line = _items[i];
       if (line.isAdvanceFree || line.isSchemeFree) continue;
+      if ((line.modifierDetails != null && line.modifierDetails!.isNotEmpty) ||
+          (line.modifierObjects != null && line.modifierObjects!.isNotEmpty)) {
+        continue;
+      }
       final latestRate = _defaultRateForItemId(line.itemId);
       if ((line.rate - latestRate).abs() < 0.0001) continue;
       _items[i] = line.copyWith(rate: latestRate, referenceRate: latestRate);
@@ -1975,6 +2086,9 @@ class _SaleScreenState extends State<SaleScreen> {
       brand: seed?.brand ?? item.brand,
       isTaxInclusive: item.isTaxInclusive,
       location: seed?.location ?? (item.location.trim() != '-' ? item.location.trim() : null),
+      modifierDetails: seed?.modifierDetails,
+      modifierObjects: seed?.modifierObjects,
+      itemRemark: seed?.itemRemark,
     );
   }
 
@@ -2470,6 +2584,428 @@ class _SaleScreenState extends State<SaleScreen> {
                   icon: const Icon(Icons.add_shopping_cart),
                   label: const Text('Add to Cart'),
                 ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _formatModifierLabel(SaleItem line) {
+    if (line.modifierObjects != null && line.modifierObjects!.isNotEmpty) {
+      final formattedList = <String>[];
+      for (final m in line.modifierObjects!) {
+        if (m is Map) {
+          final name = (m['name'] ?? m['modifier_name'] ?? '').toString().trim();
+          final mQty = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+          final unitPrice = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0;
+          if (unitPrice > 0) {
+            formattedList.add('$name x$mQty @${CurrencyService.format(unitPrice)}');
+          } else if (mQty > 1) {
+            formattedList.add('$name x$mQty');
+          } else if (name.isNotEmpty) {
+            formattedList.add(name);
+          }
+        } else if (m != null) {
+          formattedList.add(m.toString());
+        }
+      }
+      if (formattedList.isNotEmpty) {
+        return formattedList.join(', ');
+      }
+    }
+    if (line.modifierDetails != null && line.modifierDetails!.isNotEmpty) {
+      return line.modifierDetails!.join(', ');
+    }
+    return '+ Add-on / Customize';
+  }
+
+  Future<void> _showModifiersDialog(int cartIndex) async {
+    if (cartIndex < 0 || cartIndex >= _items.length) return;
+    final line = _items[cartIndex];
+    if (!_isRestaurantActive && (line.modifierDetails == null || line.modifierDetails!.isEmpty)) return;
+    final itemId = line.itemId;
+    final remarkCtrl = TextEditingController(text: line.itemRemark ?? '');
+
+    // Existing selected modifiers map: modifier_name -> qty (int)
+    final Map<String, int> selectedModsMap = {};
+    final List existingRawMods = line.modifierObjects ?? [];
+    for (final m in existingRawMods) {
+      if (m is Map) {
+        final name = m['name']?.toString() ?? '';
+        final qty = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+        if (name.isNotEmpty) selectedModsMap[name] = qty;
+      }
+    }
+
+    if (selectedModsMap.isEmpty && line.modifierDetails != null) {
+      for (final modStr in line.modifierDetails!) {
+        final str = modStr.toString().trim();
+        final match = RegExp(r'^(.*?)(?:\s*(?:\(x(\d+)\)|x(\d+)))?(?:\s*@.*)?$').firstMatch(str);
+        if (match != null) {
+          final modName = match.group(1)!.trim();
+          final q = int.tryParse(match.group(2) ?? match.group(3) ?? '1') ?? 1;
+          if (modName.isNotEmpty) {
+            selectedModsMap[modName] = q;
+          }
+        } else if (str.isNotEmpty) {
+          selectedModsMap[str] = 1;
+        }
+      }
+    }
+
+    List<Map<String, dynamic>> availableModifiers = [];
+    try {
+      final res = await ApiClient.get(
+          '${ApiEndpoints.itemModifiers}?is_active=true&item_id=$itemId');
+      if (res['success'] == true && res['data'] is List) {
+        final List loaded = res['data'];
+        availableModifiers = loaded.map((m) {
+          final String name =
+              (m['modifier_name'] ?? m['item_name'] ?? '').toString().trim();
+          return {
+            'id': m['id'],
+            'name': name,
+            'price': double.tryParse((m['price'] ??
+                        m['retail_sale_price'] ??
+                        m['rate'] ??
+                        0)
+                    .toString()) ??
+                0.0,
+            'tax_percent':
+                double.tryParse((m['tax_percent'] ?? 0).toString()) ?? 0.0,
+            'inventory_item_id':
+                m['inventory_item_id'] ?? m['deduct_raw_item_id'],
+            'deduct_qty':
+                double.tryParse((m['deduct_qty'] ?? 0).toString()) ?? 0.0,
+          };
+        }).where((m) => (m['name'] as String).isNotEmpty).toList();
+      }
+    } catch (_) {}
+
+    // Also fallback to any modifiers present in ctrl.items list
+    if (availableModifiers.isEmpty && ctrl.items.isNotEmpty) {
+      availableModifiers = ctrl.items.where((it) {
+        final bool isMod = it.isModifier;
+        if (!isMod) return false;
+        final String appIds = (it.applicableItemIds ?? '').trim();
+        if (appIds.isEmpty || appIds == 'ALL' || appIds == '*' || appIds == '0') return true;
+        final list = appIds.split(',').map((s) => s.trim()).toList();
+        return list.contains(itemId.toString());
+      }).map((it) {
+        return {
+          'id': it.id,
+          'name': it.itemName.trim(),
+          'price': it.retailSalePrice > 0 ? it.retailSalePrice : it.rate,
+          'tax_percent': it.taxPercent,
+          'inventory_item_id': it.deductRawItemId,
+          'deduct_qty': it.deductQty,
+        };
+      }).where((m) => (m['name'] as String).isNotEmpty).toList();
+    }
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            double extraPriceTotal = 0.0;
+            selectedModsMap.forEach((name, qty) {
+              final mod = availableModifiers.firstWhere(
+                  (m) => m['name'].toString().trim().toLowerCase() == name.trim().toLowerCase(),
+                  orElse: () => {'price': 0.0});
+              final double p = (mod['price'] is num ? (mod['price'] as num).toDouble() : (double.tryParse(mod['price']?.toString() ?? '0') ?? 0.0));
+              extraPriceTotal += p * qty;
+            });
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.tune, color: Color(0xFFFF7A1A), size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Customize: ${line.itemName}',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: remarkCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText:
+                              'Special Preparation Remarks (Kitchen Note)',
+                          hintText: 'e.g. Extra hot, no onions, less spicy',
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Row(
+                        children: [
+                          Icon(Icons.add_circle_outline,
+                              size: 16, color: Color(0xFF2563EB)),
+                          SizedBox(width: 6),
+                          Text('Add-ons & Modifiers (Item Master):',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (availableModifiers.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'No modifiers / add-ons configured for this item in Item Master.',
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Color(0xFF64748B),
+                                  fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            children: availableModifiers.map((mod) {
+                              final String name = mod['name'];
+                              final double price = mod['price'];
+                              final int currentQty =
+                                  selectedModsMap[name] ?? 0;
+                              final bool isSelected = currentQty > 0;
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? const Color(0xFFFFF8F1)
+                                      : Colors.transparent,
+                                  border: Border(
+                                      bottom: BorderSide(
+                                          color: Colors.grey.shade200,
+                                          width: 0.8)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: TextStyle(
+                                              fontWeight: isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w600,
+                                              color: isSelected
+                                                  ? const Color(0xFFFF7A1A)
+                                                  : const Color(0xFF1E293B),
+                                              fontSize: 13.5,
+                                            ),
+                                          ),
+                                          if (price > 0)
+                                            Text(
+                                              '+ ${CurrencyService.format(price)} each',
+                                              style: const TextStyle(
+                                                  fontSize: 11.5,
+                                                  color: Color(0xFF16A34A),
+                                                  fontWeight:
+                                                      FontWeight.w600),
+                                            )
+                                          else
+                                            const Text('Free customization',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                    // Quantity Stepper: [ - ]  Qty  [ + ]
+                                    Container(
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? Colors.white
+                                            : const Color(0xFFF1F5F9),
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                        border: Border.all(
+                                            color: isSelected
+                                                ? const Color(0xFFFF7A1A)
+                                                : const Color(0xFFCBD5E1)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          InkWell(
+                                            onTap: () {
+                                              setDialogState(() {
+                                                if (currentQty > 1) {
+                                                  selectedModsMap[name] =
+                                                      currentQty - 1;
+                                                } else {
+                                                  selectedModsMap
+                                                      .remove(name);
+                                                }
+                                              });
+                                            },
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4),
+                                              child: Icon(
+                                                Icons.remove,
+                                                size: 14,
+                                                color: isSelected
+                                                    ? const Color(0xFFFF7A1A)
+                                                    : Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8),
+                                            child: Text(
+                                              '$currentQty',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                                color: isSelected
+                                                    ? const Color(0xFFFF7A1A)
+                                                    : const Color(0xFF64748B),
+                                              ),
+                                            ),
+                                          ),
+                                          InkWell(
+                                            onTap: () {
+                                              setDialogState(() {
+                                                selectedModsMap[name] =
+                                                    currentQty + 1;
+                                              });
+                                            },
+                                            child: const Padding(
+                                              padding: EdgeInsets.symmetric(
+                                                  horizontal: 8, vertical: 4),
+                                              child: Icon(
+                                                Icons.add,
+                                                size: 14,
+                                                color: Color(0xFFFF7A1A),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      if (extraPriceTotal > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            'Additional Modifier Charges: + ${CurrencyService.format(extraPriceTotal)}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF16A34A),
+                                fontSize: 13),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A1A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () {
+                    final List<String> formattedDetails = [];
+                    final List<Map<String, dynamic>> modifierObjects = [];
+
+                    selectedModsMap.forEach((modName, qty) {
+                      final mod = availableModifiers.firstWhere(
+                          (m) => m['name'].toString().trim().toLowerCase() == modName.trim().toLowerCase(),
+                          orElse: () => {'price': 0.0});
+                      final double price = (mod['price'] is num ? (mod['price'] as num).toDouble() : (double.tryParse(mod['price']?.toString() ?? '0') ?? 0.0));
+                      if (qty > 0) {
+                        final priceStr = price > 0 ? ' @${CurrencyService.format(price)}' : '';
+                        formattedDetails
+                            .add(qty > 1 || price > 0 ? '$modName x$qty$priceStr' : modName);
+                        modifierObjects.add({
+                          'id': mod['id'],
+                          'name': modName,
+                          'price': price,
+                          'qty': qty,
+                          'tax_percent': mod['tax_percent'] ?? 0.0,
+                          'inventory_item_id': mod['inventory_item_id'],
+                          'deduct_qty': mod['deduct_qty'] ?? 0.0,
+                        });
+                      }
+                    });
+
+                    final baseRate = _defaultRateForItemId(line.itemId);
+                    final newRate = baseRate + extraPriceTotal;
+
+                    setState(() {
+                      _items[cartIndex] = line.copyWith(
+                        rate: newRate,
+                        referenceRate: newRate,
+                        modifierDetails: formattedDetails,
+                        modifierObjects: modifierObjects,
+                        itemRemark: remarkCtrl.text.trim(),
+                      );
+                      _syncAmountPaidWithInvoice();
+                    });
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Apply Customizations',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                )
               ],
             );
           },
@@ -7051,33 +7587,7 @@ class _SaleScreenState extends State<SaleScreen> {
       double.tryParse(value?.toString() ?? '') ?? 0;
 
   SaleItem _saleItemFromJson(Map<String, dynamic> json) {
-    return SaleItem(
-      itemId: json['item_id'] ?? 0,
-      itemCode: json['item_code'] ?? '',
-      itemName: json['item_name'] ?? '',
-      hsnSacCode: json['hsn_sac_code'] ?? '',
-      barcode: json['barcode'] ?? '',
-      unit: json['unit'] ?? '',
-      qty: _jsonDouble(json['qty']),
-      originalQty: _jsonDouble(json['original_qty'] ?? json['qty']),
-      rate: _jsonDouble(json['rate']),
-      taxType: json['tax_type'] ?? 'GST',
-      taxPercent: _jsonDouble(json['tax_percent']),
-      discountApplicable: json['discount_applicable'] ?? true,
-      schemeApplicable: json['scheme_applicable'] ?? true,
-      isSchemeFree: json['is_scheme_free'] ?? false,
-      isAdvanceFree: json['is_advance_free'] ?? false,
-      lineDiscount: _jsonDouble(json['line_discount']),
-      taxableAmount: _jsonDouble(json['taxable_amount']),
-      taxAmount: _jsonDouble(json['tax_amount']),
-      lineTotal: _jsonDouble(json['line_total']),
-      isTaxInclusive: json['is_tax_inclusive'] == true ||
-          json['is_tax_inclusive'] == 1 ||
-          (json['item'] is Map &&
-              (json['item']['is_tax_inclusive'] == true ||
-                  json['item']['is_tax_inclusive'] == 1)),
-      brand: json['brand'] ?? (json['item'] is Map ? json['item']['brand']?.toString() : null),
-    );
+    return SaleItem.fromJson(json);
   }
 
   Future<void> _loadDraft(Map<String, dynamic> sale) async {
@@ -10423,14 +10933,90 @@ class _SaleScreenState extends State<SaleScreen> {
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(fontSize: 8),
                                   ),
-                                  // const SizedBox(height: 4),
-                                  // Text(
-                                  //   'Rs. ${line.rate.toStringAsFixed(2)}',
-                                  //   style: const TextStyle(
-                                  //     color: Color(0xFF64748B),
-                                  //     fontWeight: FontWeight.w600,
-                                  //   ),
-                                  // ),
+                                  if (_isRestaurantActive ||
+                                      (line.modifierDetails != null &&
+                                          line.modifierDetails!.isNotEmpty) ||
+                                      (line.modifierObjects != null &&
+                                          line.modifierObjects!.isNotEmpty))
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 3),
+                                      child: InkWell(
+                                        onTap: () => _showModifiersDialog(index),
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2.5),
+                                          decoration: BoxDecoration(
+                                            color: ((line.modifierDetails != null &&
+                                                        line.modifierDetails!.isNotEmpty) ||
+                                                    (line.modifierObjects != null &&
+                                                        line.modifierObjects!.isNotEmpty))
+                                                ? const Color(0xFFEFF6FF)
+                                                : const Color(0xFFF1F5F9),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: ((line.modifierDetails != null &&
+                                                          line.modifierDetails!.isNotEmpty) ||
+                                                      (line.modifierObjects != null &&
+                                                          line.modifierObjects!.isNotEmpty))
+                                                  ? const Color(0xFFBFDBFE)
+                                                  : const Color(0xFFE2E8F0),
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.tune,
+                                                size: 11,
+                                                color: ((line.modifierDetails != null &&
+                                                            line.modifierDetails!.isNotEmpty) ||
+                                                        (line.modifierObjects != null &&
+                                                            line.modifierObjects!.isNotEmpty))
+                                                    ? const Color(0xFF2563EB)
+                                                    : const Color(0xFF64748B),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  _formatModifierLabel(line),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: ((line.modifierDetails != null &&
+                                                                line.modifierDetails!.isNotEmpty) ||
+                                                            (line.modifierObjects != null &&
+                                                                line.modifierObjects!.isNotEmpty))
+                                                        ? const Color(0xFF2563EB)
+                                                        : const Color(0xFF64748B),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  if (line.itemRemark != null &&
+                                      line.itemRemark!.trim().isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 1.5),
+                                      child: Text(
+                                        '• Note: ${line.itemRemark}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFFDC2626),
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
@@ -11683,6 +12269,91 @@ class _SaleScreenState extends State<SaleScreen> {
                     style:
                         const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                   ),
+                  if (_isRestaurantActive ||
+                      (line.modifierDetails != null &&
+                          line.modifierDetails!.isNotEmpty) ||
+                      (line.modifierObjects != null &&
+                          line.modifierObjects!.isNotEmpty))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: InkWell(
+                        onTap: () => _showModifiersDialog(index),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: ((line.modifierDetails != null &&
+                                        line.modifierDetails!.isNotEmpty) ||
+                                    (line.modifierObjects != null &&
+                                        line.modifierObjects!.isNotEmpty))
+                                ? const Color(0xFFEFF6FF)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: ((line.modifierDetails != null &&
+                                          line.modifierDetails!.isNotEmpty) ||
+                                      (line.modifierObjects != null &&
+                                          line.modifierObjects!.isNotEmpty))
+                                  ? const Color(0xFFBFDBFE)
+                                  : const Color(0xFFE2E8F0),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.tune,
+                                size: 11,
+                                color: ((line.modifierDetails != null &&
+                                            line.modifierDetails!.isNotEmpty) ||
+                                        (line.modifierObjects != null &&
+                                            line.modifierObjects!.isNotEmpty))
+                                    ? const Color(0xFF1D4ED8)
+                                    : const Color(0xFF64748B),
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  ((line.modifierDetails != null &&
+                                              line.modifierDetails!.isNotEmpty) ||
+                                          (line.modifierObjects != null &&
+                                              line.modifierObjects!.isNotEmpty))
+                                      ? 'Mods: ${_formatModifierLabel(line)}'
+                                      : '+ Add-on / Customize',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: ((line.modifierDetails != null &&
+                                                line.modifierDetails!.isNotEmpty) ||
+                                            (line.modifierObjects != null &&
+                                                line.modifierObjects!.isNotEmpty))
+                                        ? const Color(0xFF1D4ED8)
+                                        : const Color(0xFF64748B),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (line.itemRemark != null && line.itemRemark!.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        'Note: ${line.itemRemark}',
+                        style: const TextStyle(
+                          color: Color(0xFFDC2626),
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -11707,6 +12378,20 @@ class _SaleScreenState extends State<SaleScreen> {
                         label: const Text('Edit Qty'),
                         onPressed: () => _editQtyDialog(index),
                       ),
+                      if (_isRestaurantActive)
+                        ActionChip(
+                          avatar: const Icon(Icons.tune,
+                              size: 13, color: Color(0xFF1D4ED8)),
+                          label: Text(
+                            ((line.modifierDetails != null &&
+                                    line.modifierDetails!.isNotEmpty) ||
+                                (line.modifierObjects != null &&
+                                    line.modifierObjects!.isNotEmpty))
+                                ? 'Edit Add-ons'
+                                : '+ Add-ons',
+                          ),
+                          onPressed: () => _showModifiersDialog(index),
+                        ),
                     ],
                   ),
                 ],

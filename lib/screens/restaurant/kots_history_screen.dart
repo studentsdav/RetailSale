@@ -510,6 +510,19 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                                 color: isCancelled ? Colors.red : null,
                               ),
                             ),
+                            if (item['modifier_details'] != null && (item['modifier_details'] is List) && (item['modifier_details'] as List).isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '• Mods: ${(item['modifier_details'] as List).join(", ")}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF2563EB),
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
                             if (item['item_remark'] != null && item['item_remark'].toString().isNotEmpty)
                               Text('Note: ${item['item_remark']}', style: const TextStyle(fontSize: 11, color: Colors.orange, fontStyle: FontStyle.italic)),
                              if (isCancelled && item['cancel_reason'] != null && item['cancel_reason'].toString().isNotEmpty)
@@ -798,6 +811,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                 final String qtyStr = (q % 1 == 0) ? q.toInt().toString() : q.toStringAsFixed(1);
                 final String displayName = _displayName(item);
                 final String remark = (item['item_remark'] ?? item['notes'] ?? '').toString();
+                final List mods = (item['modifier_details'] is List ? item['modifier_details'] : []) as List;
                 
                 return pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(vertical: 3),
@@ -822,6 +836,11 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
                           ),
                         ],
                       ),
+                      if (mods.isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(left: 32, top: 1),
+                          child: pw.Text('* Mods: ${mods.join(", ")}', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, fontWeight: pw.FontWeight.bold)),
+                        ),
                       if (remark.isNotEmpty)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(left: 32, top: 1),

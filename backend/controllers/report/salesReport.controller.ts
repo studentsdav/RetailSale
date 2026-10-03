@@ -526,7 +526,10 @@ exports.getSalesReport = async (req: any, res: any) => {
                         cost_rate: itemCostRate,
                         estimated_cost: lineCost,
                         estimated_profit: roundAmount(lineProfit),
-                        tax_breakup: itemTaxBreakup
+                        tax_breakup: itemTaxBreakup,
+                        modifier_details: item.modifier_details || [],
+                        modifier_objects: item.modifier_objects || [],
+                        item_remark: item.item_remark || null
                     };
                 });
 

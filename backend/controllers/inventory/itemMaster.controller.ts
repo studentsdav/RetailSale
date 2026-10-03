@@ -52,6 +52,18 @@ async function ensureMasterData(req: any, { outlet_id, row, transaction }: any) 
     }
 }
 
+async function ensureItemMasterModifierColumns(propertyDb: any) {
+    try {
+        await propertyDb.query(`
+            ALTER TABLE item_master
+            ADD COLUMN IF NOT EXISTS is_modifier BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS applicable_item_ids TEXT,
+            ADD COLUMN IF NOT EXISTS deduct_raw_item_id INTEGER,
+            ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0;
+        `);
+    } catch (_) {}
+}
+
 async function hasAnyInventoryTransactions(req: any, outlet_id: any) {
     const models = req.propertyDb.models;
     const [purchaseOrderCount, salesCount, receiptCount, requestCount, issueCount] = await Promise.all([
@@ -183,6 +195,10 @@ export const createItem = async (req: Request, res: Response) => {
             max_level,
             stockable,
             is_saleable,
+            is_modifier,
+            applicable_item_ids,
+            deduct_raw_item_id,
+            deduct_qty,
             is_tax_inclusive,
             is_happy_hour,
             location,
@@ -190,6 +206,7 @@ export const createItem = async (req: Request, res: Response) => {
         } = req.body;
 
         const outlet_id = (req as any).user.outlet_id;
+        await ensureItemMasterModifierColumns((req as any).propertyDb);
 
         // Item code must always be unique
         const codeConflict = await (req as any).propertyDb.models.item_master.findOne({ where: { outlet_id, item_code } });
@@ -238,6 +255,10 @@ export const createItem = async (req: Request, res: Response) => {
             max_level,
             stockable,
             is_saleable: is_saleable ?? true,
+            is_modifier: is_modifier ?? false,
+            applicable_item_ids: applicable_item_ids ? String(applicable_item_ids) : null,
+            deduct_raw_item_id: deduct_raw_item_id ? Number(deduct_raw_item_id) : null,
+            deduct_qty: Number(deduct_qty) || 0,
             is_tax_inclusive: is_tax_inclusive ?? false,
             is_happy_hour: is_happy_hour ?? false,
             is_active: true
@@ -385,6 +406,10 @@ export const bulkImportItems = async (req: Request, res: Response) => {
                 max_level: parseInt(row.max_level) || 0,
                 stockable: row.stockable === true || row.stockable === 'YES',
                 is_saleable: row.is_saleable !== false && row.is_saleable !== 'NO',
+                is_modifier: row.is_modifier === true || row.is_modifier === 'YES' || row.is_modifier === 'true' || row.is_modifier === 1,
+                applicable_item_ids: row.applicable_item_ids ? String(row.applicable_item_ids) : null,
+                deduct_raw_item_id: row.deduct_raw_item_id ? Number(row.deduct_raw_item_id) : null,
+                deduct_qty: parseFloat(row.deduct_qty) || 0,
                 is_tax_inclusive: row.is_tax_inclusive === true || row.is_tax_inclusive === 'YES' || row.is_tax_inclusive === 'true' || row.is_tax_inclusive === 1,
                 is_happy_hour: row.is_happy_hour === true || row.is_happy_hour === 'YES' || row.is_happy_hour === 'true' || row.is_happy_hour === 1,
                 is_active: true
@@ -420,6 +445,7 @@ export const bulkImportItems = async (req: Request, res: Response) => {
 
 export const getItems = async (req: Request, res: Response) => {
     try {
+        await ensureItemMasterModifierColumns((req as any).propertyDb);
         const { q } = req.query as any;
         const outlet_id = (req as any).user.outlet_id;
 
@@ -537,6 +563,7 @@ export const getItems = async (req: Request, res: Response) => {
 
 export const getItemById = async (req: Request, res: Response) => {
     try {
+        await ensureItemMasterModifierColumns((req as any).propertyDb);
         const { id } = req.params;
         const outlet_id = (req as any).user.outlet_id;
 

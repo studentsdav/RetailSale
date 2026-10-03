@@ -28,6 +28,10 @@ class Item {
   final int maxLevel;
   final bool stockable;
   final bool isSaleable;
+  final bool isModifier;
+  final String? applicableItemIds;
+  final int? deductRawItemId;
+  final double deductQty;
   final bool isTaxInclusive;
   final bool isHappyHour;
   final double mrp;
@@ -67,6 +71,10 @@ class Item {
     required this.maxLevel,
     required this.stockable,
     required this.isSaleable,
+    this.isModifier = false,
+    this.applicableItemIds,
+    this.deductRawItemId,
+    this.deductQty = 0.0,
     this.isTaxInclusive = false,
     this.isHappyHour = false,
     this.mrp = 0.0,
@@ -118,6 +126,10 @@ class Item {
       maxLevel: json['max_level'] ?? 0,
       stockable: json['stockable'] ?? true,
       isSaleable: json['is_saleable'] ?? true,
+      isModifier: json['is_modifier'] == true || json['is_modifier'] == 1 || json['is_modifier'].toString() == 'true',
+      applicableItemIds: json['applicable_item_ids']?.toString(),
+      deductRawItemId: json['deduct_raw_item_id'] != null ? int.tryParse(json['deduct_raw_item_id'].toString()) : null,
+      deductQty: double.tryParse(json['deduct_qty']?.toString() ?? '0') ?? 0.0,
       isTaxInclusive: json['is_tax_inclusive'] == true || json['is_tax_inclusive'] == 1,
       isHappyHour: json['is_happy_hour'] == true || json['is_happy_hour'] == 1,
       mrp: double.tryParse(json['mrp']?.toString() ?? '') ?? 0.0,
@@ -159,6 +171,10 @@ class Item {
       'max_level': maxLevel,
       'stockable': stockable,
       'is_saleable': isSaleable,
+      'is_modifier': isModifier,
+      'applicable_item_ids': applicableItemIds,
+      'deduct_raw_item_id': deductRawItemId,
+      'deduct_qty': deductQty,
       'is_tax_inclusive': isTaxInclusive,
       'is_happy_hour': isHappyHour,
       'mrp': mrp,

@@ -179,6 +179,17 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     _fetchActiveKots();
   }
 
+  String _getEffectiveTableStatus(dynamic table) {
+    if (table == null) return 'Available';
+    final String status = (table['status'] ?? 'Available').toString();
+    final tableId = table['id'];
+    final tableRunning = tableId != null ? (activeKotItemsByTable[tableId] ?? []) : [];
+    if ((status == 'Occupied' || status == 'Billing') && tableRunning.isEmpty) {
+      return 'Available';
+    }
+    return status;
+  }
+
   Future<void> _fetchActiveKots() async {
     try {
       final res = await ApiClient.get('/api/restaurant/kots?active_only=true');
@@ -203,12 +214,11 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
               kotStatus == 'NC CLEARED' ||
               kotStatus == 'NC_CLEARED' ||
               kotStatus == 'CLOSED' ||
-              kotStatus == 'CANCELLED') {
+              kotStatus == 'CANCELLED' ||
+              kotStatus == 'REJECTED') {
             continue;
           }
 
-          final String serviceType = (kot['service_type'] ?? '').toString().toLowerCase();
-          final String kottype = (kot['kottype'] ?? '').toString().toLowerCase();
           final String kottypeLower = (kot['kottype'] ?? '').toString().toLowerCase().trim();
           final String serviceTypeLower = (kot['service_type'] ?? '').toString().toLowerCase().trim();
           final String remarksLower = (kot['remarks'] ?? '').toString().toLowerCase().trim();
@@ -231,7 +241,9 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
             final String itemStatus =
                 (item['status'] ?? '').toString().toUpperCase().trim();
             if (itemStatus != 'BILLED' &&
-                itemStatus != 'COMPLETED') {
+                itemStatus != 'COMPLETED' &&
+                itemStatus != 'CANCELLED' &&
+                itemStatus != 'REJECTED') {
               final Map<String, dynamic> itemMap =
                   Map<String, dynamic>.from(item is Map ? item : {});
               final kotTime = kot['created_at'] ??
@@ -247,6 +259,9 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
             }
           }
         }
+
+        // Clean up any empty table item arrays
+        tempMap.removeWhere((key, value) => value.isEmpty);
 
         if (mounted) {
           setState(() {
@@ -323,20 +338,25 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
   Widget _buildStatusLegendHeader(
       BuildContext context, RestaurantController ctrl) {
     final availableCount =
-        ctrl.tables.where((t) => t['status'] == 'Available').length;
+        ctrl.tables.where((t) => _getEffectiveTableStatus(t) == 'Available').length;
     final occupiedCount =
-        ctrl.tables.where((t) => t['status'] == 'Occupied').length;
+        ctrl.tables.where((t) => _getEffectiveTableStatus(t) == 'Occupied').length;
     final billedCount = ctrl.tables
-        .where((t) => t['status'] == 'Billed' || t['status'] == 'Billing')
+        .where((t) {
+          final s = _getEffectiveTableStatus(t);
+          return s == 'Billed' || s == 'Billing';
+        })
         .length;
     final dirtyCount = ctrl.tables
-        .where((t) =>
-            t['status'] == 'Dirty' ||
-            t['status'] == 'Cleaning' ||
-            t['status'] == 'Needs Cleaning')
+        .where((t) {
+          final s = _getEffectiveTableStatus(t);
+          return s == 'Dirty' ||
+              s == 'Cleaning' ||
+              s == 'Needs Cleaning';
+        })
         .length;
     final reservedCount =
-        ctrl.tables.where((t) => t['status'] == 'Reserved').length;
+        ctrl.tables.where((t) => _getEffectiveTableStatus(t) == 'Reserved').length;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -534,10 +554,13 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
   }) {
     final int total = areaTables.length;
     final int occupied = areaTables
-        .where((t) => t['status'] == 'Occupied' || t['status'] == 'Billing')
+        .where((t) {
+          final s = _getEffectiveTableStatus(t);
+          return s == 'Occupied' || s == 'Billing';
+        })
         .length;
     final int available =
-        areaTables.where((t) => t['status'] == 'Available').length;
+        areaTables.where((t) => _getEffectiveTableStatus(t) == 'Available').length;
 
     return Container(
       width: width,
@@ -703,7 +726,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
         final double tx = (table['x_coordinate'] ?? 120).toDouble();
         final double ty = (table['y_coordinate'] ?? 120).toDouble();
 
-        final String status = (table['status'] ?? 'Available').toString();
+        final String status = _getEffectiveTableStatus(table);
         final gradient = _getTableGradient(status);
 
         final bool isOccupiedOrBilling =
@@ -1628,9 +1651,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                   itemCount: filteredTables.length,
                                   itemBuilder: (context, index) {
                                     final table = filteredTables[index];
-                                    final String status =
-                                        (table['status'] ?? 'Available')
-                                            .toString();
+                                    final String status = _getEffectiveTableStatus(table);
                                     final gradient = _getTableGradient(status);
 
                                     final int? areaId =
@@ -2016,7 +2037,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
 
   void _handleTableTap(BuildContext context, Map<String, dynamic> table,
       RestaurantController ctrl) {
-    final status = (table['status'] ?? 'Available').toString();
+    final status = _getEffectiveTableStatus(table);
     if (status == 'Available') {
       _showOpenTableDialog(context, table, ctrl);
     } else if (status == 'Dirty' ||
@@ -2604,7 +2625,33 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
         final double qty = double.tryParse((item['quantity'] ?? item['qty'] ?? 1.0).toString()) ?? 1.0;
         final double rate = double.tryParse((item['rate'] ?? item['item_rate'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
 
-        final dynamic groupKey = itemId > 0 ? itemId : (itemName.isNotEmpty ? itemName : 'Item_$kId');
+        final List modDetails = (item['modifier_details'] is List ? item['modifier_details'] : []) as List;
+        final List modObjects = (item['modifier_objects'] is List ? item['modifier_objects'] : []) as List;
+        final String remark = (item['item_remark'] ?? item['remarks'] ?? '').toString().trim();
+
+        // Calculate modifier extra price if available
+        double modExtra = 0.0;
+        for (final m in modObjects) {
+          if (m is Map) {
+            final p = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0;
+            final mq = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+            modExtra += p * mq;
+          }
+        }
+        if (modExtra <= 0 && modDetails.isNotEmpty) {
+          for (final d in modDetails) {
+            final str = d.toString().trim();
+            final priceMatch = RegExp(r'@(?:\s*[\$€₹£])?\s*([0-9]+(?:\.[0-9]+)?)').firstMatch(str);
+            final qtyMatch = RegExp(r'(?:x|\(x)(\d+)').firstMatch(str);
+            final mq = qtyMatch != null ? (int.tryParse(qtyMatch.group(1)!) ?? 1) : 1;
+            if (priceMatch != null) {
+              final p = double.tryParse(priceMatch.group(1)!) ?? 0.0;
+              modExtra += p * mq;
+            }
+          }
+        }
+
+        final dynamic groupKey = '${itemId}_${modDetails.join(", ")}_$remark';
 
         if (grouped.containsKey(groupKey)) {
           grouped[groupKey]!['qty'] = (grouped[groupKey]!['qty'] as double) + qty;
@@ -2613,7 +2660,10 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
             'item_id': itemId,
             'item_name': itemName,
             'qty': qty,
-            'rate': rate,
+            'rate': rate > 0 ? (rate + modExtra) : rate,
+            'modifier_details': modDetails,
+            'modifier_objects': modObjects,
+            'item_remark': remark,
           };
         }
       }
@@ -3311,25 +3361,42 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
 
   void _settlePackingOrder(Map<String, dynamic> kot) {
     final List items = kot['items'] ?? [];
-    final Map<int, Map<String, dynamic>> grouped = {};
+    final Map<dynamic, Map<String, dynamic>> grouped = {};
     for (final item in items) {
       final String itemStatus = (item['status'] ?? '').toString().toUpperCase().trim();
-      if (itemStatus == 'CANCELLED') continue;
+      if (itemStatus == 'CANCELLED' || itemStatus == 'REJECTED') continue;
 
       final int itemId = item['item_id'];
       final double qty = double.tryParse(item['quantity']?.toString() ?? item['qty']?.toString() ?? '1') ?? 1.0;
       final double rate = double.tryParse(item['rate']?.toString() ?? '') ??
           double.tryParse(item['item_rate']?.toString() ?? '') ??
           0.0;
+      final List modDetails = (item['modifier_details'] is List ? item['modifier_details'] : []) as List;
+      final List modObjects = (item['modifier_objects'] is List ? item['modifier_objects'] : []) as List;
+      final String remark = (item['item_remark'] ?? item['remarks'] ?? '').toString().trim();
 
-      if (grouped.containsKey(itemId)) {
-        grouped[itemId]!['qty'] = grouped[itemId]!['qty'] + qty;
+      double modExtra = 0.0;
+      for (final m in modObjects) {
+        if (m is Map) {
+          final p = double.tryParse(m['price']?.toString() ?? '0') ?? 0.0;
+          final mq = int.tryParse(m['qty']?.toString() ?? '1') ?? 1;
+          modExtra += p * mq;
+        }
+      }
+
+      final dynamic groupKey = '${itemId}_${modDetails.join(", ")}_$remark';
+
+      if (grouped.containsKey(groupKey)) {
+        grouped[groupKey]!['qty'] = grouped[groupKey]!['qty'] + qty;
       } else {
-        grouped[itemId] = {
+        grouped[groupKey] = {
           'item_id': itemId,
           'item_name': item['item_name'],
           'qty': qty,
-          'rate': rate,
+          'rate': rate > 0 ? (rate + modExtra) : rate,
+          'modifier_details': modDetails,
+          'modifier_objects': modObjects,
+          'item_remark': remark,
         };
       }
     }

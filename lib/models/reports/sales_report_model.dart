@@ -1,3 +1,4 @@
+import 'dart:convert';
 double _toDouble(dynamic value) => double.tryParse(value.toString()) ?? 0;
 
 class SalesReportCharge {
@@ -76,6 +77,9 @@ class SalesReportItem {
   final double estimatedCost;
   final double estimatedProfit;
   final List<SalesTaxBreakupEntry> taxBreakup;
+  final List<dynamic>? modifierDetails;
+  final List<dynamic>? modifierObjects;
+  final String? itemRemark;
 
   double get taxPercent {
     if (taxableAmount > 0.009 && taxAmount > 0.009) {
@@ -102,6 +106,9 @@ class SalesReportItem {
     required this.estimatedCost,
     required this.estimatedProfit,
     required this.taxBreakup,
+    this.modifierDetails,
+    this.modifierObjects,
+    this.itemRemark,
   });
 
   factory SalesReportItem.fromJson(Map<String, dynamic> json) {
@@ -128,6 +135,33 @@ class SalesReportItem {
                 Map<String, dynamic>.from(e),
               ))
           .toList(),
+      modifierDetails: (() {
+        final raw = json['modifier_details'] ?? json['modifierDetails'] ?? json['modifiers'];
+        if (raw is List) return raw;
+        if (raw is String && raw.trim().isNotEmpty) {
+          final s = raw.trim();
+          if (s.startsWith('[')) {
+            try {
+              final decoded = jsonDecode(s);
+              if (decoded is List) return decoded;
+            } catch (_) {}
+          }
+          return [s];
+        }
+        return null;
+      })(),
+      modifierObjects: (() {
+        final raw = json['modifier_objects'] ?? json['modifierObjects'] ?? json['raw_modifiers'];
+        if (raw is List) return raw;
+        if (raw is String && raw.trim().startsWith('[')) {
+          try {
+            final decoded = jsonDecode(raw);
+            if (decoded is List) return decoded;
+          } catch (_) {}
+        }
+        return null;
+      })(),
+      itemRemark: json['item_remark']?.toString() ?? json['itemRemark']?.toString(),
     );
   }
 }

@@ -3014,7 +3014,11 @@ async function createSaleVersion({
             applied_happy_hour_id: row.applied_happy_hour_id || null,
             is_advance_free: row.is_advance_free === true,
             original_rate: originalRate,
-            scheme_discount_per_unit: schemeDiscountPerUnit
+            scheme_discount_per_unit: schemeDiscountPerUnit,
+            modifier_details: Array.isArray(row.modifier_details) ? row.modifier_details : (Array.isArray(row.modifierDetails) ? row.modifierDetails : (Array.isArray(row.modifiers) ? row.modifiers : [])),
+            modifier_objects: Array.isArray(row.modifier_objects) ? row.modifier_objects : (Array.isArray(row.modifierObjects) ? row.modifierObjects : []),
+            item_remark: row.item_remark || row.itemRemark || null,
+            notes: row.notes || row.remarks || null
         });
 
         if (status === 'COMPLETED' && affectStock) {
@@ -3073,6 +3077,70 @@ async function createSaleVersion({
                             parent_item_name: row.item_name,
                             parent_brand: row.brand || dbItem?.brand
                         });
+                    }
+                }
+            }
+
+            // Auto-debit stock for modifiers / add-ons linked to raw materials
+            if (effectiveQtyForStock > 0) {
+                const rawMods = row.modifier_objects || row.modifiers || [];
+                if (Array.isArray(rawMods) && rawMods.length > 0) {
+                    for (const mod of rawMods) {
+                        const rawItemId = Number(mod.inventory_item_id || mod.raw_item_id || 0);
+                        const deductQty = Number(mod.deduct_qty || mod.quantity || 0);
+                        const modQty = Number(mod.qty || 1);
+                        if (rawItemId > 0 && deductQty > 0) {
+                            const rawDbItem = await req.propertyDb.models.item_master.findOne({
+                                where: { id: rawItemId, outlet_id },
+                                transaction
+                            });
+                            if (rawDbItem) {
+                                stockLedgerLines.push({
+                                    item_code: rawDbItem.item_code,
+                                    item_name: rawDbItem.item_name,
+                                    brand: rawDbItem.brand,
+                                    qty_out: deductQty * modQty * effectiveQtyForStock,
+                                    is_bom_component: true,
+                                    parent_item_code: row.item_code,
+                                    parent_item_name: `${row.item_name} (+ ${mod.name || 'Modifier'})`,
+                                    parent_brand: row.brand || dbItem?.brand
+                                });
+                            }
+                        }
+                    }
+                } else if (Array.isArray(row.modifier_details) && row.modifier_details.length > 0) {
+                    for (const modStr of row.modifier_details) {
+                        const match = String(modStr).trim().match(/^(.*?)(?:\s*\(x(\d+)\))?$/);
+                        const modName = match ? match[1].trim() : String(modStr).trim();
+                        const modQty = match && match[2] ? Number(match[2]) : 1;
+                        if (modName) {
+                            const dbMod = await req.propertyDb.models.item_master.findOne({
+                                where: {
+                                    item_name: modName,
+                                    is_modifier: true,
+                                    outlet_id
+                                },
+                                transaction
+                            });
+                            if (dbMod && dbMod.deduct_raw_item_id && Number(dbMod.deduct_qty) > 0) {
+                                const rawDbItem = await req.propertyDb.models.item_master.findOne({
+                                    where: { id: dbMod.deduct_raw_item_id, outlet_id },
+                                    transaction
+                                });
+                                if (rawDbItem) {
+                                    stockLedgerLines.push({
+                                        item_code: rawDbItem.item_code,
+                                        item_name: rawDbItem.item_name,
+                                        brand: rawDbItem.brand,
+                                        qty_out: Number(dbMod.deduct_qty) * modQty * effectiveQtyForStock,
+                                        is_bom_component: true,
+                                        parent_item_code: row.item_code,
+                                        parent_item_name: `${row.item_name} (+ ${modName})`,
+                                        parent_brand: row.brand || dbItem?.brand
+                                    });
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -5675,8 +5743,18 @@ exports.getSaleDetails = async (req, res) => {
         }
 
         saleJson.items = saleJson.items.map(item => {
+            let modDetails = item.modifier_details;
+            let modObjs = item.modifier_objects;
+            if (typeof modDetails === 'string' && modDetails.trim().startsWith('[')) {
+                try { modDetails = JSON.parse(modDetails); } catch (_) {}
+            }
+            if (typeof modObjs === 'string' && modObjs.trim().startsWith('[')) {
+                try { modObjs = JSON.parse(modObjs); } catch (_) {}
+            }
             return {
                 ...item,
+                modifier_details: Array.isArray(modDetails) ? modDetails : (item.modifier_details || []),
+                modifier_objects: Array.isArray(modObjs) ? modObjs : (item.modifier_objects || []),
                 returned_qty: alreadyReturned[item.item_id] || 0
             };
         });

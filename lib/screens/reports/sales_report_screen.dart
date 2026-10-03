@@ -63,7 +63,64 @@ class PivotedBillPaymentRow {
   });
 }
 
+
+class _ExtractedModifier {
+  final String name;
+  final double qty;
+  final double unitPrice;
+  final double totalPrice;
+
+  const _ExtractedModifier({
+    required this.name,
+    required this.qty,
+    required this.unitPrice,
+    required this.totalPrice,
+  });
+}
+
 class _SalesReportScreenState extends State<SalesReportScreen> {
+  List<_ExtractedModifier> _extractItemModifiers(SalesReportItem item) {
+    final List<_ExtractedModifier> mods = [];
+    if (item.modifierObjects != null && item.modifierObjects!.isNotEmpty) {
+      for (final m in item.modifierObjects!) {
+        if (m is Map) {
+          final name = (m['name'] ?? m['modifier_name'] ?? m['item_name'] ?? '').toString().trim();
+          final q = double.tryParse(m['qty']?.toString() ?? m['quantity']?.toString() ?? '1') ?? 1.0;
+          final p = double.tryParse(m['price']?.toString() ?? m['extra_price']?.toString() ?? '0') ?? 0.0;
+          if (name.isNotEmpty && p > 0) {
+            mods.add(_ExtractedModifier(
+              name: name,
+              qty: q * (item.qty > 0 ? item.qty : 1.0),
+              unitPrice: p,
+              totalPrice: p * q * (item.qty > 0 ? item.qty : 1.0),
+            ));
+          }
+        }
+      }
+    }
+    if (mods.isEmpty && item.modifierDetails != null && item.modifierDetails!.isNotEmpty) {
+      final reg = RegExp(r'^(.*?)(?:\s+x(\d+(?:\.\d+)?))?\s*@\s*[^\d]*([\d,]+(?:\.\d+)?)', caseSensitive: false);
+      for (final d in item.modifierDetails!) {
+        final str = d.toString().trim();
+        final match = reg.firstMatch(str);
+        if (match != null) {
+          final name = (match.group(1) ?? '').trim();
+          final q = double.tryParse(match.group(2) ?? '1') ?? 1.0;
+          final p = double.tryParse((match.group(3) ?? '0').replaceAll(',', '')) ?? 0.0;
+          if (name.isNotEmpty && p > 0) {
+            mods.add(_ExtractedModifier(
+              name: name,
+              qty: q * (item.qty > 0 ? item.qty : 1.0),
+              unitPrice: p,
+              totalPrice: p * q * (item.qty > 0 ? item.qty : 1.0),
+            ));
+          }
+        }
+      }
+    }
+    return mods;
+  }
+
   final ctrl = SalesReportController();
   final purchaseCtrl = StockInReportController();
   final propertyCtrl = PropertyInfoController();
@@ -635,44 +692,133 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             ? (itemTaxable + taxAmount)
             : itemNetVal;
 
-        flattened.add(
-          _GstSalesRow(
-            invoiceDate: sale.saleDate,
-            invoiceNumber: sale.saleNo,
-            customerName: sale.customerName.trim().isEmpty
-                ? 'Walk-in Customer'
-                : sale.customerName.trim(),
-            customerGstin: customerGstin,
-            invoiceValue: sale.netAmount,
-            placeOfSupply: placeOfSupply,
-            itemDescription: item.itemName.trim(),
-            itemGroup: item.itemGroup.trim().isEmpty
-                ? 'Ungrouped'
-                : item.itemGroup.trim(),
-            subCategory: item.subCategory.trim().isEmpty
-                ? 'Uncategorized'
-                : item.subCategory.trim(),
-            brand: item.brand.trim().isEmpty
-                ? 'No Brand'
-                : item.brand.trim(),
-            hsnSacCode: item.hsnSacCode.trim(),
-            quantity: item.qty,
-            unit: item.unit.trim(),
-            taxableValue: itemTaxable,
-            taxSaleValue: _isTaxedItem(item) ? itemNetVal : 0,
-            nonTaxSaleValue: _isTaxedItem(item) ? 0 : itemNetVal,
-            cgstAmount: cgst,
-            sgstAmount: sgst,
-            igstAmount: igst,
-            taxAmount: taxAmount,
-            totalLineValue: lineVal,
-            totalInvoiceValue: itemNetVal,
-            saleDateTime: sale.saleDate,
-            paymentMode: sale.paymentMode,
-            discount: item.lineDiscount,
-            subTotal: item.amount,
-          ),
-        );
+        final mods = _extractItemModifiers(item);
+        final double totalModPrice = mods.fold<double>(0, (sum, m) => sum + m.totalPrice);
+        final bool hasMods = mods.isNotEmpty && totalModPrice > 0 && item.amount >= totalModPrice;
+
+        if (!hasMods) {
+          flattened.add(
+            _GstSalesRow(
+              invoiceDate: sale.saleDate,
+              invoiceNumber: sale.saleNo,
+              customerName: sale.customerName.trim().isEmpty
+                  ? 'Walk-in Customer'
+                  : sale.customerName.trim(),
+              customerGstin: customerGstin,
+              invoiceValue: sale.netAmount,
+              placeOfSupply: placeOfSupply,
+              itemDescription: item.itemName.trim(),
+              itemGroup: item.itemGroup.trim().isEmpty
+                  ? 'Ungrouped'
+                  : item.itemGroup.trim(),
+              subCategory: item.subCategory.trim().isEmpty
+                  ? 'Uncategorized'
+                  : item.subCategory.trim(),
+              brand: item.brand.trim().isEmpty
+                  ? 'No Brand'
+                  : item.brand.trim(),
+              hsnSacCode: item.hsnSacCode.trim(),
+              quantity: item.qty,
+              unit: item.unit.trim(),
+              taxableValue: itemTaxable,
+              taxSaleValue: _isTaxedItem(item) ? itemNetVal : 0,
+              nonTaxSaleValue: _isTaxedItem(item) ? 0 : itemNetVal,
+              cgstAmount: cgst,
+              sgstAmount: sgst,
+              igstAmount: igst,
+              taxAmount: taxAmount,
+              totalLineValue: lineVal,
+              totalInvoiceValue: itemNetVal,
+              saleDateTime: sale.saleDate,
+              paymentMode: sale.paymentMode,
+              discount: item.lineDiscount,
+              subTotal: item.amount,
+            ),
+          );
+        } else {
+          final double baseSubTotal = (item.amount - totalModPrice).clamp(0.0, double.infinity);
+          final double baseRatio = item.amount > 0 ? (baseSubTotal / item.amount) : 1.0;
+
+          flattened.add(
+            _GstSalesRow(
+              invoiceDate: sale.saleDate,
+              invoiceNumber: sale.saleNo,
+              customerName: sale.customerName.trim().isEmpty
+                  ? 'Walk-in Customer'
+                  : sale.customerName.trim(),
+              customerGstin: customerGstin,
+              invoiceValue: sale.netAmount,
+              placeOfSupply: placeOfSupply,
+              itemDescription: item.itemName.trim(),
+              itemGroup: item.itemGroup.trim().isEmpty
+                  ? 'Ungrouped'
+                  : item.itemGroup.trim(),
+              subCategory: item.subCategory.trim().isEmpty
+                  ? 'Uncategorized'
+                  : item.subCategory.trim(),
+              brand: item.brand.trim().isEmpty
+                  ? 'No Brand'
+                  : item.brand.trim(),
+              hsnSacCode: item.hsnSacCode.trim(),
+              quantity: item.qty,
+              unit: item.unit.trim(),
+              taxableValue: itemTaxable * baseRatio,
+              taxSaleValue: _isTaxedItem(item) ? (itemNetVal * baseRatio) : 0,
+              nonTaxSaleValue: _isTaxedItem(item) ? 0 : (itemNetVal * baseRatio),
+              cgstAmount: cgst * baseRatio,
+              sgstAmount: sgst * baseRatio,
+              igstAmount: igst * baseRatio,
+              taxAmount: taxAmount * baseRatio,
+              totalLineValue: lineVal * baseRatio,
+              totalInvoiceValue: itemNetVal * baseRatio,
+              saleDateTime: sale.saleDate,
+              paymentMode: sale.paymentMode,
+              discount: effectiveDiscount * baseRatio,
+              subTotal: baseSubTotal,
+            ),
+          );
+
+          for (final mod in mods) {
+            final double modRatio = item.amount > 0 ? (mod.totalPrice / item.amount) : 0.0;
+            final double modTaxable = itemTaxable * modRatio;
+            final double modTax = taxAmount * modRatio;
+            final double modNet = itemNetVal * modRatio;
+            final double modLineVal = lineVal * modRatio;
+
+            flattened.add(
+              _GstSalesRow(
+                invoiceDate: sale.saleDate,
+                invoiceNumber: sale.saleNo,
+                customerName: sale.customerName.trim().isEmpty
+                    ? 'Walk-in Customer'
+                    : sale.customerName.trim(),
+                customerGstin: customerGstin,
+                invoiceValue: sale.netAmount,
+                placeOfSupply: placeOfSupply,
+                itemDescription: '${mod.name} (Add-on)',
+                itemGroup: 'Modifiers / Add-ons',
+                subCategory: 'Add-ons',
+                brand: item.brand.trim().isNotEmpty ? '${item.brand.trim()} Add-on' : 'Add-on',
+                hsnSacCode: item.hsnSacCode.trim().isNotEmpty ? item.hsnSacCode.trim() : 'NA',
+                quantity: mod.qty,
+                unit: 'Nos',
+                taxableValue: modTaxable,
+                taxSaleValue: _isTaxedItem(item) ? modNet : 0,
+                nonTaxSaleValue: _isTaxedItem(item) ? 0 : modNet,
+                cgstAmount: cgst * modRatio,
+                sgstAmount: sgst * modRatio,
+                igstAmount: igst * modRatio,
+                taxAmount: modTax,
+                totalLineValue: modLineVal,
+                totalInvoiceValue: modNet,
+                saleDateTime: sale.saleDate,
+                paymentMode: sale.paymentMode,
+                discount: effectiveDiscount * modRatio,
+                subTotal: mod.totalPrice,
+              ),
+            );
+          }
+        }
       }
     }
     final query = _itemSearchCtrl.text.trim().toLowerCase();
@@ -827,18 +973,23 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     for (final sale in _billWiseSales) {
       final isIgst = sale.igstAmount > 0.009;
       for (final item in sale.items) {
-        final code =
-            item.hsnSacCode.trim().isEmpty ? 'NA' : item.hsnSacCode.trim();
+        final mods = _extractItemModifiers(item);
+        final double totalModPrice = mods.fold<double>(0, (sum, m) => sum + m.totalPrice);
+        final bool hasMods = mods.isNotEmpty && totalModPrice > 0 && item.amount >= totalModPrice;
+
+        final double baseRatio = hasMods && item.amount > 0 ? ((item.amount - totalModPrice) / item.amount) : 1.0;
+
+        final code = item.hsnSacCode.trim().isEmpty ? 'NA' : item.hsnSacCode.trim();
         final desc = item.itemName.trim();
         final unit = item.unit.trim().isEmpty ? 'NOS' : item.unit.trim();
-        final taxable = _isTaxedItem(item) ? item.taxableAmount : item.netAmount;
-        final tax = _isTaxedItem(item) ? item.taxAmount : 0.0;
+        final taxable = (_isTaxedItem(item) ? item.taxableAmount : item.netAmount) * baseRatio;
+        final tax = (_isTaxedItem(item) ? item.taxAmount : 0.0) * baseRatio;
         final cgst = isIgst ? 0.0 : tax / 2;
         final sgst = isIgst ? 0.0 : tax / 2;
         final igst = isIgst ? tax : 0.0;
         final totalVal = taxable + tax;
 
-        final key = '$code|$unit';
+        final key = '$code|$desc|$unit';
         final current = grouped[key];
         if (current == null) {
           grouped[key] = _Gstr1HsnRow(
@@ -861,6 +1012,45 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             sgst: current.sgst + sgst,
             igst: current.igst + igst,
           );
+        }
+
+        if (hasMods) {
+          for (final mod in mods) {
+            final double modRatio = item.amount > 0 ? (mod.totalPrice / item.amount) : 0.0;
+            final modDesc = '${mod.name} (Add-on)';
+            final modUnit = 'NOS';
+            final modTaxable = (_isTaxedItem(item) ? item.taxableAmount : item.netAmount) * modRatio;
+            final modTax = (_isTaxedItem(item) ? item.taxAmount : 0.0) * modRatio;
+            final modCgst = isIgst ? 0.0 : modTax / 2;
+            final modSgst = isIgst ? 0.0 : modTax / 2;
+            final modIgst = isIgst ? modTax : 0.0;
+            final modTotalVal = modTaxable + modTax;
+
+            final modKey = '$code|$modDesc|$modUnit';
+            final modCurrent = grouped[modKey];
+            if (modCurrent == null) {
+              grouped[modKey] = _Gstr1HsnRow(
+                hsnSacCode: code,
+                description: modDesc,
+                unit: modUnit,
+                totalQty: mod.qty,
+                totalValue: modTotalVal,
+                taxableValue: modTaxable,
+                cgst: modCgst,
+                sgst: modSgst,
+                igst: modIgst,
+              );
+            } else {
+              grouped[modKey] = modCurrent.copyWith(
+                totalQty: modCurrent.totalQty + mod.qty,
+                totalValue: modCurrent.totalValue + modTotalVal,
+                taxableValue: modCurrent.taxableValue + modTaxable,
+                cgst: modCurrent.cgst + modCgst,
+                sgst: modCurrent.sgst + modSgst,
+                igst: modCurrent.igst + modIgst,
+              );
+            }
+          }
         }
       }
       for (final charge in sale.charges) {

@@ -3217,15 +3217,6 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
       },
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
-        'icon': Icons.tune,
-        'label': 'Item Modifiers & Add-ons',
-        'subLabel': 'Configure item-level and global modifiers with custom pricing',
-        'permission': 'ITEM_MASTER',
-        'keywords': ['modifiers', 'modifier', 'add-ons', 'addon', 'customization', 'extra cheese', 'spice level'],
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ModifierMasterScreen())),
-      },
-      {
-        'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
         'icon': Icons.store,
         'label': 'Vendor Master',
         'permission': 'SUPPLIER_MASTER',

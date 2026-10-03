@@ -1946,9 +1946,39 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                               ],
                                             ],
                                           ),
-                                          subtitle: Text(
-                                            '${item.itemCode} • Qty ${item.qty.toStringAsFixed(2)} x ${CurrencyService.format(item.rate)}${retQty > 0 ? " • (Returned: ${retQty.toStringAsFixed(2)})" : ""}',
-                                            style: TextStyle(fontSize: 11, color: isFullyReturned ? Colors.grey : Colors.black54),
+                                          subtitle: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                '${item.itemCode} • Qty ${item.qty.toStringAsFixed(2)} x ${CurrencyService.format(item.rate)}${retQty > 0 ? " • (Returned: ${retQty.toStringAsFixed(2)})" : ""}',
+                                                style: TextStyle(fontSize: 11, color: isFullyReturned ? Colors.grey : Colors.black54),
+                                              ),
+                                              if (item.modifierDetails != null && item.modifierDetails!.isNotEmpty)
+                                                Padding(
+                                                  padding: const EdgeInsets.only(top: 2),
+                                                  child: Text(
+                                                    '• Mods: ${item.modifierDetails!.join(", ")}',
+                                                    style: const TextStyle(
+                                                      fontSize: 10.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Color(0xFF1D4ED8),
+                                                    ),
+                                                  ),
+                                                ),
+                                              if (item.itemRemark != null && item.itemRemark!.trim().isNotEmpty)
+                                                Padding(
+                                                  padding: const EdgeInsets.only(top: 1),
+                                                  child: Text(
+                                                    '• Note: ${item.itemRemark!.trim()}',
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      fontStyle: FontStyle.italic,
+                                                      color: Color(0xFFDC2626),
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                           trailing: Text(
                                             CurrencyService.format(item.netAmount),

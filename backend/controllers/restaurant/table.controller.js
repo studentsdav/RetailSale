@@ -285,11 +285,51 @@ exports.listTables = async (req, res) => {
             }
         }
 
+        const activeKots = await req.propertyDb.models.kot_headers.findAll({
+            where: {
+                outlet_id,
+                status: {
+                    [Op.notIn]: ['Cancelled', 'cancelled', 'Rejected', 'rejected', 'Billed', 'billed', 'Closed', 'closed', 'NC Cleared', 'nc_cleared', 'NC_CLEARED', 'Settled', 'settled']
+                }
+            },
+            include: [
+                {
+                    model: req.propertyDb.models.kot_items,
+                    as: 'items',
+                    required: false
+                }
+            ]
+        });
+
+        const tablesWithActiveKots = new Set();
+        for (const k of activeKots) {
+            if (!k.table_id) continue;
+            const items = k.items || [];
+            const activeItems = items.filter(it => {
+                const s = (it.status || '').toLowerCase();
+                return s !== 'cancelled' && s !== 'rejected';
+            });
+            if (activeItems.length > 0) {
+                tablesWithActiveKots.add(Number(k.table_id));
+            }
+        }
+
         const data = tables.map(t => {
             const plain = t.get({ plain: true });
+            const tableIdNum = Number(plain.id);
+            const hasActiveKot = tablesWithActiveKots.has(tableIdNum);
+
             if (autoSeatedTableIds.has(plain.id)) {
                 plain.status = 'Occupied';
                 plain.current_guest_count = autoSeatedTableIds.get(plain.id);
+            } else if (!hasActiveKot && (plain.status === 'Occupied' || plain.status === 'Billing')) {
+                // Table has 0 active KOT items remaining -> auto heal to Available
+                plain.status = 'Available';
+                plain.current_guest_count = 0;
+                req.propertyDb.models.restaurant_tables.update(
+                    { status: 'Available', current_guest_count: 0 },
+                    { where: { id: plain.id, outlet_id } }
+                ).catch(e => console.error(`[AUTO HEAL TABLE ERR]`, e.message));
             } else if (plain.status === 'Reserved' || plain.status === 'Available') {
                 plain.status = activeTableIds.has(plain.id) ? 'Reserved' : 'Available';
             }

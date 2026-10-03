@@ -367,6 +367,58 @@ function getItemLocationHelper(item) {
     return loc ? loc.toLowerCase() : 'main kitchen';
 }
 
+async function releaseTableIfNoActiveKots(db, tableId, outlet_id, transaction) {
+    if (!tableId || Number(tableId) <= 0) return;
+    try {
+        const activeKots = await db.models.kot_headers.findAll({
+            where: {
+                table_id: tableId,
+                outlet_id,
+                status: {
+                    [Op.notIn]: ['Cancelled', 'cancelled', 'Rejected', 'rejected', 'Billed', 'billed', 'Closed', 'closed', 'NC Cleared', 'nc_cleared', 'NC_CLEARED', 'Settled', 'settled']
+                }
+            },
+            include: [
+                {
+                    model: db.models.kot_items,
+                    as: 'items',
+                    required: false
+                }
+            ],
+            transaction
+        });
+
+        let hasActiveItems = false;
+        for (const k of activeKots) {
+            const items = k.items || [];
+            const activeItems = items.filter(it => {
+                const s = (it.status || '').toLowerCase();
+                return s !== 'cancelled' && s !== 'rejected';
+            });
+            if (activeItems.length > 0) {
+                hasActiveItems = true;
+                break;
+            }
+        }
+
+        if (!hasActiveItems) {
+            await db.models.restaurant_tables.update(
+                {
+                    status: 'Available',
+                    current_guest_count: 0
+                },
+                {
+                    where: { id: tableId, outlet_id },
+                    transaction
+                }
+            );
+            console.log(`[TABLE AUTO-RELEASED] Table #${tableId} marked as Available (0 active orders/KOTs remaining).`);
+        }
+    } catch (e) {
+        console.error(`[RELEASE TABLE ERROR] Failed to check/release table #${tableId}:`, e.message);
+    }
+}
+
 exports.updateKotStatus = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
@@ -485,7 +537,11 @@ exports.updateKotStatus = async (req, res) => {
         }
 
         await kot.update(updateData);
-        res.json({ success: true, data: kot });
+
+        // Auto-release table if KOT is cancelled, rejected, billed, closed or cleared
+        if (kot.table_id) {
+            await releaseTableIfNoActiveKots(req.propertyDb, kot.table_id, outlet_id);
+        }
 
         // Handle House KOT stock deduction upon clearance (status becomes Served or Closed)
         if ((status === 'Served' || status === 'Closed') && kot.service_type === 'House KOT') {
@@ -533,7 +589,6 @@ exports.updateKotStatus = async (req, res) => {
             }
         }
 
-        await kot.update(updateData);
         res.json({ success: true, data: kot });
     } catch (err) {
         res.status(400).json({ success: false, error: err.message });
@@ -587,7 +642,16 @@ exports.updateKotItemStatus = async (req, res) => {
             const allServed = activeItems.length > 0 && activeItems.every(it => it.status === 'Served' || it.status === 'served');
             const allReadyOrServed = activeItems.length > 0 && activeItems.every(it => it.status === 'Served' || it.status === 'served' || it.status === 'Ready' || it.status === 'ready');
 
-            if (allServed) {
+            if (activeItems.length === 0) {
+                await req.propertyDb.models.kot_headers.update(
+                    { status: 'Cancelled' },
+                    { where: { id: item.kot_header_id, outlet_id }, transaction: t }
+                );
+                const parentKot = item.header || await req.propertyDb.models.kot_headers.findByPk(item.kot_header_id, { transaction: t });
+                if (parentKot && parentKot.table_id) {
+                    await releaseTableIfNoActiveKots(req.propertyDb, parentKot.table_id, outlet_id, t);
+                }
+            } else if (allServed) {
                 await req.propertyDb.models.kot_headers.update(
                     { status: 'Served', served_time: new Date() },
                     { where: { id: item.kot_header_id, outlet_id }, transaction: t }
