@@ -11,6 +11,7 @@ import 'controllers/settings/ui_preferences_controller.dart';
 import 'controllers/inventory/bom_controller.dart';
 import 'controllers/restaurant/restaurant_controller.dart';
 import 'core/config/app_config.dart';
+import 'core/config/date_time_service.dart';
 import 'main.dart'; // To reuse MyApp and global keys
 import 'screens/auth/waiter_splash_screen.dart';
 
@@ -18,6 +19,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.init();
   await AppConfig.init();
+  await DateTimeService.instance.init();
 
   runApp(
     MultiProvider(

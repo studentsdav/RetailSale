@@ -101,7 +101,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
 
     if (widget.prefilledItems != null) {
       _prefillCartIfAny();
-    } else if (widget.editKotId != null || !widget.isFreshOrder) {
+    } else if (widget.editKotId != null) {
       _fetchActiveKotItems();
     }
   }
@@ -539,15 +539,12 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
   }
 
   Future<void> _fetchActiveKotItems() async {
+    if (widget.editKotId == null) return;
     try {
       final res = await ApiClient.get('/api/restaurant/kots?active_only=true');
       if (res['success'] == true) {
         final List rawKots = res['data'] ?? [];
-        final List kots = (widget.editKotId != null)
-            ? rawKots.where((k) => k['id'] == widget.editKotId).toList()
-            : (widget.table['id'] != null
-                ? rawKots.where((k) => k['table_id'] == widget.table['id'] && (_clientTag.isEmpty || (k['client_tag'] ?? 'Bill 1').toString().trim() == _clientTag.trim())).toList()
-                : rawKots);
+        final List kots = rawKots.where((k) => k['id'] == widget.editKotId).toList();
 
         setState(() {
           _initialActiveItems.clear();
@@ -1283,7 +1280,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
         final List<Map<String, dynamic>> reducedItems = [];
         final List<Map<String, dynamic>> addedItems = [];
 
-        if (!widget.isFreshOrder) {
+        if (widget.editKotId != null && !widget.isFreshOrder) {
           // Identify deleted items
           for (final entry in _initialActiveItems.entries) {
             final itemId = entry.key;
@@ -1363,7 +1360,7 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
           final int itemId = it['item_id'];
           final double qty = double.tryParse(it['qty'].toString()) ?? 0.0;
 
-          if (!widget.isFreshOrder) {
+          if (widget.editKotId != null && !widget.isFreshOrder) {
             final double initialQty = _initialActiveItems.containsKey(itemId)
                 ? (double.tryParse(_initialActiveItems[itemId]!['qty'].toString()) ?? 0.0)
                 : 0.0;

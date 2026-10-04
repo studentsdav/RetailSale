@@ -226,6 +226,7 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final filtered = _getFilteredKots();
+    final bool isMobile = MediaQuery.of(context).size.width < 768;
 
     return Scaffold(
       appBar: AppBar(
@@ -294,92 +295,154 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
             ),
           ),
           const Divider(height: 1),
-          // Split Pane Layout
+          // Content Area (Split pane on desktop, full list on mobile)
           Expanded(
-            child: Row(
-              children: [
-                // Left master list
-                Expanded(
-                  flex: 2,
-                  child: _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : (filtered.isEmpty
-                          ? const Center(child: Text('No orders found matching filters.'))
-                          : ListView.separated(
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, idx) {
-                                final kot = filtered[idx];
-                                final isSelected = _selectedKot?['id'] == kot['id'];
-                                final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}';
-                                final String table = _getDisplayTableName(kot);
-                                final String serviceType = kot['service_type'] ?? 'Dine In';
-                                final String rawStatus = kot['status'] ?? 'Pending';
-                                final String displayStatus = _formatDisplayStatus(rawStatus);
-                                final String dateStr = kot['created_time'] != null
-                                    ? DateFormat('dd MMM, hh:mm a').format(DateTime.parse(kot['created_time']))
-                                    : '';
-
-                                return ListTile(
-                                  selected: isSelected,
-                                  selectedTileColor: Colors.blue.shade50,
-                                  title: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          kotNo,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(displayStatus,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: (rawStatus.toLowerCase() == 'cancelled' || rawStatus.toLowerCase() == 'rejected')
-                                                ? Colors.red
-                                                : (rawStatus.toLowerCase() == 'closed' ? Colors.grey : Colors.green.shade700),
-                                         )),
-                                    ],
-                                  ),
-                                  subtitle: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'Table: $table • $serviceType',
-                                          style: const TextStyle(fontSize: 12),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(dateStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                    ],
-                                  ),
-                                  onTap: () => setState(() => _selectedKot = kot),
-                                );
-                              },
-                            )),
-                ),
-                const VerticalDivider(width: 1),
-                // Right detail view
-                Expanded(
-                  flex: 3,
-                  child: _selectedKot == null
-                      ? const Center(child: Text('Select an order to view detail & reprint ticket'))
-                      : _buildDetailPanel(colorScheme),
-                ),
-              ],
-            ),
+            child: isMobile
+                ? (_loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : (filtered.isEmpty
+                        ? const Center(child: Text('No orders found matching filters.'))
+                        : ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, idx) {
+                              final kot = filtered[idx];
+                              return _buildKotListTile(kot, colorScheme, isMobile: true);
+                            },
+                          )))
+                : Row(
+                    children: [
+                      // Left master list
+                      Expanded(
+                        flex: 2,
+                        child: _loading
+                            ? const Center(child: CircularProgressIndicator())
+                            : (filtered.isEmpty
+                                ? const Center(child: Text('No orders found matching filters.'))
+                                : ListView.separated(
+                                    itemCount: filtered.length,
+                                    separatorBuilder: (_, __) => const Divider(height: 1),
+                                    itemBuilder: (context, idx) {
+                                      final kot = filtered[idx];
+                                      return _buildKotListTile(kot, colorScheme, isMobile: false);
+                                    },
+                                  )),
+                      ),
+                      const VerticalDivider(width: 1),
+                      // Right detail view
+                      Expanded(
+                        flex: 3,
+                        child: _selectedKot == null
+                            ? const Center(child: Text('Select an order to view detail & reprint ticket'))
+                            : _buildDetailPanel(colorScheme),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDetailPanel(ColorScheme colorScheme) {
+  Widget _buildKotListTile(dynamic kot, ColorScheme colorScheme, {required bool isMobile}) {
+    final isSelected = _selectedKot?['id'] == kot['id'];
+    final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}';
+    final String table = _getDisplayTableName(kot);
+    final String serviceType = kot['service_type'] ?? 'Dine In';
+    final String rawStatus = kot['status'] ?? 'Pending';
+    final String displayStatus = _formatDisplayStatus(rawStatus);
+    final String dateStr = kot['created_time'] != null
+        ? DateFormat('dd MMM, hh:mm a').format(DateTime.parse(kot['created_time']))
+        : '';
+
+    return ListTile(
+      selected: !isMobile && isSelected,
+      selectedTileColor: Colors.blue.shade50,
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              kotNo,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(displayStatus,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: (rawStatus.toLowerCase() == 'cancelled' || rawStatus.toLowerCase() == 'rejected')
+                    ? Colors.red
+                    : (rawStatus.toLowerCase() == 'closed' ? Colors.grey : Colors.green.shade700),
+              )),
+        ],
+      ),
+      subtitle: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              'Table: $table • $serviceType',
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(dateStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        ],
+      ),
+      trailing: isMobile ? const Icon(Icons.chevron_right, size: 18, color: Colors.grey) : null,
+      onTap: () {
+        setState(() => _selectedKot = kot);
+        if (isMobile) {
+          _showKotDetailBottomSheet(context, colorScheme, kot);
+        }
+      },
+    );
+  }
+
+  void _showKotDetailBottomSheet(BuildContext context, ColorScheme colorScheme, dynamic kot) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, __) {
+            return SafeArea(
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildDetailPanel(colorScheme, isModal: true),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailPanel(ColorScheme colorScheme, {bool isModal = false}) {
     final kot = _selectedKot!;
     final String kotNo = kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}';
     final String status = kot['status'] ?? 'Pending';
@@ -625,7 +688,12 @@ class _KotsHistoryScreenState extends State<KotsHistoryScreen> {
         locationGroups.putIfAbsent(targetStation, () => []).add(item);
       }
 
-      final availablePrinters = await Printing.listPrinters();
+      List<Printer> availablePrinters = [];
+      try {
+        availablePrinters = await Printing.listPrinters();
+      } catch (e) {
+        debugPrint('Direct printer listing not available on this platform/device: $e');
+      }
       final String rawKotNo = (kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-${kot['id']}').toString();
 
       for (final entry in locationGroups.entries) {

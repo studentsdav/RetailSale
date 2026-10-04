@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/auth/auth_service.dart';
+import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
 import '../dashboard/server_config_screen.dart';
-import '../restaurant/waiter_app_screen.dart';
+import '../restaurant/captain_dashboard_screen.dart';
 
 class WaiterAuthScreen extends StatefulWidget {
   const WaiterAuthScreen({super.key});
@@ -16,6 +17,7 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
   late TabController _tabController;
   bool _isLoading = false;
   String _pinCode = '';
+  String _selectedRole = 'WAITER'; // 'WAITER' or 'CAPTAIN'
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _outletCtrl = TextEditingController();
@@ -47,8 +49,8 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
       setState(() {
         _pinCode += digit;
       });
-      if (_pinCode.length >= 4) {
-        // Option to auto submit on 4 or 6 digits if desired, or let user press Login
+      if (_pinCode.length == 6) {
+        _loginWithPin();
       }
     }
   }
@@ -69,23 +71,48 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
     });
   }
 
+  bool _isAuthorizedRole(String? role) {
+    final r = (role ?? '').toUpperCase().trim();
+    return r == 'WAITER' ||
+        r == 'CAPTAIN' ||
+        r == 'CAPTION' ||
+        r == 'STEWARD' ||
+        r == 'SERVER' ||
+        r == 'ADMIN' ||
+        r == 'MANAGER';
+  }
+
   Future<void> _loginWithPin() async {
     if (_pinCode.isEmpty) {
-      _showError('Please enter your Waiter PIN code.');
+      _showError('Please enter your $_selectedRole PIN code.');
       return;
     }
 
     setState(() => _isLoading = true);
     try {
       final outlet = _outletCtrl.text.trim().isNotEmpty ? _outletCtrl.text.trim() : 'OUTLET001';
-      final result = await AuthService.pinLogin(_pinCode, outlet);
+      final result = await AuthService.pinLogin(_pinCode, outlet, role: _selectedRole);
 
       if (!mounted) return;
 
       if (result.success) {
+        final user = await TokenStorage.getUser();
+        final userRole = user?['role']?.toString();
+
+        if (!_isAuthorizedRole(userRole)) {
+          await TokenStorage.clear();
+          _showError(
+            'Access Denied: Account is assigned role "$userRole", which is not a Waiter / Captain for outlet "$outlet". Please contact your manager to upgrade role.',
+          );
+          setState(() => _pinCode = '');
+          return;
+        }
+
+        if (!mounted) return;
+
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const WaiterAppScreen()),
+          MaterialPageRoute(builder: (context) => const CaptainDashboardScreen()),
         );
       } else {
         _showError(result.message);
@@ -111,14 +138,27 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
 
     setState(() => _isLoading = true);
     try {
-      final result = await AuthService.login(username, password, 'WAITER', outlet);
+      final result = await AuthService.login(username, password, _selectedRole, outlet);
 
       if (!mounted) return;
 
       if (result.success) {
+        final user = await TokenStorage.getUser();
+        final userRole = user?['role']?.toString();
+
+        if (!_isAuthorizedRole(userRole)) {
+          await TokenStorage.clear();
+          _showError(
+            'Access Denied: User is assigned role "$userRole", not Waiter / Captain for this outlet. Please contact your manager to upgrade role.',
+          );
+          return;
+        }
+
+        if (!mounted) return;
+
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const WaiterAppScreen()),
+          MaterialPageRoute(builder: (context) => const CaptainDashboardScreen()),
         );
       } else {
         _showError(result.message);
@@ -137,6 +177,7 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
         content: Text(message),
         backgroundColor: Colors.red.shade700,
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -162,7 +203,7 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
             children: [
               // Top Bar with Server Config and Brand
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: Row(
                   children: [
                     Container(
@@ -186,7 +227,7 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
                           ),
                         ),
                         Text(
-                          "Kitchen & Captain Console",
+                          "Captain & Waiter Mobile Console",
                           style: TextStyle(
                             fontSize: 12,
                             color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -208,6 +249,32 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
                           ),
                         );
                       },
+                    ),
+                  ],
+                ),
+              ),
+
+              // Role Selector Segment (Waiter vs Captain)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildRoleSelectButton(
+                        label: 'Waiter Floor',
+                        role: 'WAITER',
+                        icon: Icons.person_pin_circle_rounded,
+                        isDark: isDark,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildRoleSelectButton(
+                        label: 'Captain Console',
+                        role: 'CAPTAIN',
+                        icon: Icons.star_rounded,
+                        isDark: isDark,
+                      ),
                     ),
                   ],
                 ),
@@ -253,17 +320,68 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
     );
   }
 
+  Widget _buildRoleSelectButton({
+    required String label,
+    required String role,
+    required IconData icon,
+    required bool isDark,
+  }) {
+    final bool isSelected = _selectedRole == role;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () {
+        setState(() {
+          _selectedRole = role;
+          _pinCode = '';
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? primaryTeal.withOpacity(0.18)
+              : (isDark ? const Color(0xFF1E293B) : Colors.white),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? primaryTeal : (isDark ? Colors.white12 : Colors.grey.shade300),
+            width: isSelected ? 1.8 : 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? primaryTeal : (isDark ? Colors.grey : Colors.black54),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? primaryTeal : (isDark ? Colors.white70 : Colors.black87),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPinLoginTab(bool isDark) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: Column(
         children: [
-          const Text(
-            "Enter Waiter / Staff PIN",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          Text(
+            "Enter $_selectedRole PIN Code",
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
           // PIN Dots Indicator
           Row(
@@ -285,16 +403,16 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
               );
             }),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
           // Numeric Keypad
           _buildNumericKeypad(isDark),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           // Submit PIN Button
           SizedBox(
             width: double.infinity,
-            height: 50,
+            height: 48,
             child: ElevatedButton.icon(
               onPressed: _isLoading ? null : _loginWithPin,
               style: ElevatedButton.styleFrom(
@@ -311,7 +429,7 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
                     )
                   : const Icon(Icons.login_rounded),
               label: Text(
-                _isLoading ? "Verifying..." : "Login to Floor",
+                _isLoading ? "Verifying..." : "Login as $_selectedRole",
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),
@@ -334,7 +452,7 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
       child: Column(
         children: keys.map((row) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: row.map((k) {
@@ -368,7 +486,7 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
   Widget _buildKeyButton({required Widget child, required VoidCallback onTap, required bool isDark}) {
     return SizedBox(
       width: 76,
-      height: 56,
+      height: 52,
       child: Material(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -445,7 +563,7 @@ class _WaiterAuthScreenState extends State<WaiterAuthScreen> with SingleTickerPr
                     )
                   : const Icon(Icons.login_rounded),
               label: Text(
-                _isLoading ? "Signing in..." : "Sign In",
+                _isLoading ? "Signing in..." : "Sign In as $_selectedRole",
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),

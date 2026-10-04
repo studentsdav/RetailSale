@@ -31,14 +31,27 @@ class HomeRouteHelper {
       }
     }
 
-    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-      return const RetailerConsoleScreen();
-    }
-
     final preference = await LocalPreferences.getDefaultStartupScreen();
     final businessType = (user?.outletType ?? '').toString().toUpperCase();
     final userRole = (user?.role ?? '').toString().toUpperCase();
 
+    // 1. Restaurant Captain / Waiter Floor Console
+    if (preference == 'RESTAURANT_CONSOLE' ||
+        preference == 'CAPTAIN_POS' ||
+        userRole == 'CAPTAIN' ||
+        userRole == 'WAITER' ||
+        userRole == 'CAPTION' ||
+        userRole == 'STEWARD' ||
+        userRole == 'SERVER') {
+      return const CaptainDashboardScreen();
+    }
+
+    // 2. Kitchen Display System (KDS)
+    if (userRole == 'KDS') {
+      return const KdsScreen();
+    }
+
+    // 3. Retail POS
     final canOpenRetail = PermissionService.can('RETAIL_SALES') ||
         businessType == 'RETAIL' ||
         const {
@@ -57,17 +70,12 @@ class HomeRouteHelper {
       return const SaleScreen();
     }
 
-    if (userRole == 'KDS') {
-      return const KdsScreen();
+    // 4. Mobile Retailer Console Fallback (for store/owner mobile apps)
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      return const RetailerConsoleScreen();
     }
 
-    if (preference == 'RESTAURANT_CONSOLE' ||
-        preference == 'CAPTAIN_POS' ||
-        userRole == 'CAPTAIN' ||
-        userRole == 'WAITER') {
-      return const CaptainDashboardScreen();
-    }
-
+    // 5. Default Enterprise Dashboard
     return const MainDashboardScreen();
   }
 }

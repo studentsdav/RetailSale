@@ -21,6 +21,7 @@ import '../../core/printing/pos_invoice_printer.dart';
 import '../../core/auth/token_storage.dart';
 import '../../controllers/security/user_controller.dart';
 import '../auth/login_screen.dart';
+import '../auth/waiter_auth_screen.dart';
 
 class CaptainDashboardScreen extends StatefulWidget {
   const CaptainDashboardScreen({super.key});
@@ -110,8 +111,10 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     _liveKdsTickerTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_isScreenActive && mounted) {
         final ctrl = context.read<RestaurantController>();
-        final hasOccupied = ctrl.tables
-            .any((t) => t['status'] == 'Occupied' || t['status'] == 'Billing');
+        final hasOccupied = ctrl.tables.any((t) {
+          final s = _getEffectiveTableStatus(t);
+          return s == 'Occupied' || s == 'Billing' || s == 'Billed' || s == 'Bill Required';
+        });
         if (hasOccupied) {
           setState(() {});
         }
@@ -184,7 +187,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     final String status = (table['status'] ?? 'Available').toString();
     final tableId = table['id'];
     final tableRunning = tableId != null ? (activeKotItemsByTable[tableId] ?? []) : [];
-    if ((status == 'Occupied' || status == 'Billing') && tableRunning.isEmpty) {
+    if (status == 'Occupied' && tableRunning.isEmpty) {
       return 'Available';
     }
     return status;
@@ -335,6 +338,319 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     );
   }
 
+  Widget _buildSidebarContent(BuildContext context, ColorScheme colorScheme, RestaurantController ctrl, {bool isDrawer = false}) {
+    return Column(
+      children: [
+        if (isDrawer)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF7A1A),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.restaurant, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Captain Console',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      Text(
+                        'Order & Table Manager',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            children: [
+              // Main section
+              _buildSidebarTile(
+                title: 'Dine-In Tables',
+                icon: Icons.table_restaurant_rounded,
+                isSelected: selectedSidebarTab == 0,
+                onTap: () {
+                  setState(() {
+                    selectedSidebarTab = 0;
+                  });
+                  if (isDrawer) Navigator.pop(context);
+                },
+              ),
+              _buildSidebarTile(
+                title: 'Takeaway (${_activeTakeawayKots.length})',
+                icon: Icons.takeout_dining_rounded,
+                isSelected: selectedSidebarTab == 1,
+                onTap: () {
+                  setState(() {
+                    selectedSidebarTab = 1;
+                  });
+                  if (isDrawer) Navigator.pop(context);
+                },
+              ),
+              _buildSidebarTile(
+                title: 'NC Orders (${_activeNcKots.length})',
+                icon: Icons.card_giftcard_rounded,
+                isSelected: selectedSidebarTab == 2,
+                onTap: () {
+                  setState(() {
+                    selectedSidebarTab = 2;
+                  });
+                  if (isDrawer) Navigator.pop(context);
+                },
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 6),
+                child: Divider(height: 1),
+              ),
+              // Floor / Area filter (when on Dine-In tables)
+              if (selectedSidebarTab == 0) ...[
+                const Padding(
+                  padding: EdgeInsets.only(left: 8, top: 4, bottom: 4),
+                  child: Text(
+                    'FLOORS & AREAS',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF94A3B8),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                _buildSidebarTile(
+                  title: 'All Floors',
+                  icon: Icons.layers_outlined,
+                  isSelected: selectedFloorId == null && selectedAreaId == null,
+                  onTap: () {
+                    setState(() {
+                      selectedFloorId = null;
+                      selectedAreaId = null;
+                    });
+                    if (isDrawer) Navigator.pop(context);
+                  },
+                ),
+                ...ctrl.floors.map((floor) {
+                  final floorId = floor['id'];
+                  final isFloorSelected = selectedFloorId == floorId && selectedAreaId == null;
+                  return _buildSidebarTile(
+                    title: floor['name'] ?? 'Floor',
+                    icon: Icons.stairs_outlined,
+                    isSelected: isFloorSelected,
+                    onTap: () {
+                      setState(() {
+                        selectedFloorId = floorId;
+                        selectedAreaId = null;
+                      });
+                      if (isDrawer) Navigator.pop(context);
+                    },
+                  );
+                }),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Divider(height: 1),
+                ),
+              ],
+              // Quick Actions
+              const Padding(
+                padding: EdgeInsets.only(left: 8, top: 4, bottom: 4),
+                child: Text(
+                  'QUICK ACTIONS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF94A3B8),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              _buildSidebarTile(
+                title: 'KOTs History',
+                icon: Icons.history_rounded,
+                isSelected: false,
+                onTap: () {
+                  if (isDrawer) Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const KotsHistoryScreen(),
+                    ),
+                  ).then((_) => _fetchActiveKots());
+                },
+              ),
+              _buildSidebarTile(
+                title: 'Refresh Desk',
+                icon: Icons.refresh_rounded,
+                isSelected: false,
+                onTap: () {
+                  if (isDrawer) Navigator.pop(context);
+                  ctrl.loadTables();
+                  ctrl.loadFloors();
+                  ctrl.loadDiningAreas();
+                  _fetchActiveKots();
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileHeaderFilterBar(
+      BuildContext context, RestaurantController ctrl, ColorScheme colorScheme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _buildMobileTabChip(
+              title: 'Dine-In',
+              icon: Icons.table_restaurant_rounded,
+              isSelected: selectedSidebarTab == 0,
+              onTap: () => setState(() => selectedSidebarTab = 0),
+            ),
+            const SizedBox(width: 6),
+            _buildMobileTabChip(
+              title: 'Takeaway (${_activeTakeawayKots.length})',
+              icon: Icons.takeout_dining_rounded,
+              isSelected: selectedSidebarTab == 1,
+              onTap: () => setState(() => selectedSidebarTab = 1),
+            ),
+            const SizedBox(width: 6),
+            _buildMobileTabChip(
+              title: 'NC (${_activeNcKots.length})',
+              icon: Icons.card_giftcard_rounded,
+              isSelected: selectedSidebarTab == 2,
+              onTap: () => setState(() => selectedSidebarTab = 2),
+            ),
+            if (selectedSidebarTab == 0 && ctrl.floors.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Container(height: 20, width: 1, color: const Color(0xFFCBD5E1)),
+              const SizedBox(width: 8),
+              _buildFloorChip(
+                label: 'All Floors',
+                isSelected: selectedFloorId == null,
+                onTap: () => setState(() {
+                  selectedFloorId = null;
+                  selectedAreaId = null;
+                }),
+              ),
+              ...ctrl.floors.map((floor) {
+                final fId = floor['id'];
+                return Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: _buildFloorChip(
+                    label: floor['name'] ?? 'Floor',
+                    isSelected: selectedFloorId == fId,
+                    onTap: () => setState(() {
+                      selectedFloorId = fId;
+                      selectedAreaId = null;
+                    }),
+                  ),
+                );
+              }),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileTabChip({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF7A1A) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFFF7A1A) : const Color(0xFFCBD5E1),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isSelected ? Colors.white : const Color(0xFF475569),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : const Color(0xFF334155),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloorChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF334155) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? Colors.white : const Color(0xFF64748B),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatusLegendHeader(
       BuildContext context, RestaurantController ctrl) {
     final availableCount =
@@ -344,7 +660,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     final billedCount = ctrl.tables
         .where((t) {
           final s = _getEffectiveTableStatus(t);
-          return s == 'Billed' || s == 'Billing';
+          return s == 'Billed' || s == 'Billing' || s == 'Bill Required';
         })
         .length;
     final dirtyCount = ctrl.tables
@@ -384,7 +700,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                 const SizedBox(width: 16),
                 _buildLegendDot(
                   color: Colors.amber.shade700,
-                  label: 'Billed',
+                  label: 'Bill Required',
                   count: billedCount,
                 ),
                 const SizedBox(width: 16),
@@ -730,7 +1046,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
         final gradient = _getTableGradient(status);
 
         final bool isOccupiedOrBilling =
-            status == 'Occupied' || status == 'Billing';
+            status == 'Occupied' || status == 'Billing' || status == 'Billed' || status == 'Bill Required';
         final List runningItems = isOccupiedOrBilling
             ? (activeKotItemsByTable[table['id']] ?? [])
             : [];
@@ -913,7 +1229,9 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                       status == 'Cleaning' ||
                                       status == 'Needs Cleaning'
                                   ? 'Needs Cleaning'
-                                  : status,
+                                  : (status == 'Billed' || status == 'Billing' || status == 'Bill Required'
+                                      ? 'Bill Required'
+                                      : status),
                               style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 10,
@@ -1338,6 +1656,8 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
       return matchesFloor && matchesArea;
     }).toList();
 
+    final bool isMobile = MediaQuery.of(context).size.width < 768;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -1368,186 +1688,33 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
           const SizedBox(width: 8),
         ],
       ),
+      drawer: isMobile
+          ? Drawer(
+              child: SafeArea(
+                child: _buildSidebarContent(context, colorScheme, ctrl, isDrawer: true),
+              ),
+            )
+          : null,
       body: Row(
         children: [
-          // Sidebar with Floor & Dining Area selections
-          Container(
-            width: 190,
-            decoration: BoxDecoration(
-              border: Border(
-                  right: BorderSide(
-                      color: colorScheme.outlineVariant.withOpacity(0.5))),
-              color: const Color(0xFFF8FAFD),
+          // Desktop Persistent Sidebar
+          if (!isMobile)
+            Container(
+              width: 190,
+              decoration: BoxDecoration(
+                border: Border(
+                    right: BorderSide(
+                        color: colorScheme.outlineVariant.withOpacity(0.5))),
+                color: const Color(0xFFF8FAFD),
+              ),
+              child: _buildSidebarContent(context, colorScheme, ctrl),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Floors / Zones ──────────────────────────────────
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                  child: Row(
-                    children: [
-                      Icon(Icons.layers_outlined,
-                          size: 14, color: colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Floors / Zones',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: ListView(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                    children: [
-                      _buildSidebarTile(
-                        title: 'All Floors',
-                        icon: Icons.all_out,
-                        isSelected: selectedFloorId == null,
-                        onTap: () => setState(() => selectedFloorId = null),
-                      ),
-                      ...ctrl.floors.map((floor) {
-                        final isSelected = floor['id'] == selectedFloorId;
-                        return _buildSidebarTile(
-                          title: floor['name'] ?? '',
-                          icon: Icons.layers,
-                          isSelected: isSelected,
-                          onTap: () =>
-                              setState(() => selectedFloorId = floor['id']),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                // ── Dining Areas Filter ──────────────────────────────
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                  child: Row(
-                    children: [
-                      Icon(Icons.room_service_outlined,
-                          size: 14, color: colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Dining Areas Filter',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: ListView(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                    children: [
-                      _buildSidebarTile(
-                        title: 'Show All Areas',
-                        icon: Icons.border_all_outlined,
-                        isSelected: selectedAreaId == null,
-                        onTap: () => setState(() => selectedAreaId = null),
-                      ),
-                      ...ctrl.diningAreas.map((area) {
-                        final isSelected = area['id'] == selectedAreaId;
-                        return _buildSidebarTile(
-                          title: area['name'] ?? '',
-                          icon: Icons.meeting_room_outlined,
-                          isSelected: isSelected,
-                          onTap: () =>
-                              setState(() => selectedAreaId = area['id']),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                // ── Navigation Section ──────────────────────────────
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                  child: Row(
-                    children: [
-                      Icon(Icons.navigation_outlined,
-                          size: 14, color: colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Console Tabs',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                  child: Column(
-                    children: [
-                      _buildSidebarTile(
-                        title: 'Dine-In Tables',
-                        icon: Icons.table_restaurant,
-                        isSelected: selectedSidebarTab == 0,
-                        onTap: () => setState(() {
-                          selectedSidebarTab = 0;
-                          showPackingOrders = false;
-                        }),
-                      ),
-                      _buildSidebarTile(
-                        title: 'Packing Orders',
-                        icon: Icons.backpack,
-                        isSelected: selectedSidebarTab == 1,
-                        onTap: () => setState(() {
-                          selectedSidebarTab = 1;
-                          showPackingOrders = true;
-                        }),
-                      ),
-                      _buildSidebarTile(
-                        title: 'NC Orders (No Charge)',
-                        icon: Icons.card_giftcard,
-                        isSelected: selectedSidebarTab == 2,
-                        onTap: () => setState(() {
-                          selectedSidebarTab = 2;
-                          showPackingOrders = false;
-                        }),
-                      ),
-                      _buildSidebarTile(
-                        title: 'KOT History list',
-                        icon: Icons.history,
-                        isSelected: false,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const KotsHistoryScreen()),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
           // Main table grid with Top Status Legend
           Expanded(
             child: Column(
               children: [
+                if (isMobile)
+                  _buildMobileHeaderFilterBar(context, ctrl, colorScheme),
                 if (selectedSidebarTab == 0) ...[
                   // Top Status Legend & Info Header Bar
                   _buildStatusLegendHeader(context, ctrl),
@@ -1683,9 +1850,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                             floorMatch?['name'] ??
                                             '';
 
-                                    final bool isOccupiedOrBilling =
-                                        status == 'Occupied' ||
-                                            status == 'Billing';
+                                    final bool isOccupiedOrBilling = status == 'Occupied' || status == 'Billing' || status == 'Billed' || status == 'Bill Required';
                                     final List runningItems =
                                         isOccupiedOrBilling
                                             ? (activeKotItemsByTable[
@@ -1904,7 +2069,9 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                                               status ==
                                                                   'Needs Cleaning'
                                                           ? 'Needs Cleaning'
-                                                          : status,
+                                                          : (status == 'Billed' || status == 'Billing' || status == 'Bill Required'
+                                                              ? 'Bill Required'
+                                                              : status),
                                                       style: const TextStyle(
                                                           color: Colors.white70,
                                                           fontSize: 11,
@@ -2044,7 +2211,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
         status == 'Cleaning' ||
         status == 'Needs Cleaning') {
       _showDirtyTableDialog(context, table, ctrl);
-    } else if (status == 'Billed') {
+    } else if (status == 'Billed' && (activeKotItemsByTable[table['id']] ?? []).isEmpty) {
       _showBilledTableDialog(context, table, ctrl);
     } else {
       _showTableOptionsDialog(context, table, ctrl);
@@ -2601,7 +2768,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     }
   }
 
-  void _proceedTableBilling(int tableId, List kots, RestaurantController ctrl, {String? specificClientTag}) {
+  Future<void> _proceedTableBilling(int tableId, List kots, RestaurantController ctrl, {String? specificClientTag}) async {
     final Map<dynamic, Map<String, dynamic>> grouped = {};
     final List<int> kotIds = [];
 
@@ -2677,6 +2844,26 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
           const SnackBar(
             content: Text('No active items found to bill.'),
             backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final role = ((await TokenStorage.getRole()) ?? '').toUpperCase().trim();
+    final permissions = await TokenStorage.getPermissions();
+    final bool isWaiter = role == 'WAITER' || role == 'STEWARD' || role == 'SERVER';
+    final bool canCashierBill = !isWaiter && (permissions.contains('RETAIL_SALES') || role == 'ADMIN' || role == 'MANAGER' || role == 'CASHIER' || role == 'SUPERADMIN') && (MediaQuery.of(context).size.width >= 900);
+
+    if (!canCashierBill) {
+      ctrl.updateTableStatus(tableId, 'Billed');
+      _refreshData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Bill Request sent to Cashier! Table marked as Bill Required.'),
+            backgroundColor: Colors.teal.shade700,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -3100,6 +3287,8 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                   ),
                                 ),
                               ).then((_) => _fetchActiveKots());
+                            } else if (val == 'print') {
+                              _printKotById(kot);
                             } else if (val == 'cancel') {
                               _cancelPackingKot(kotId, kotNo);
                             }
@@ -3112,6 +3301,16 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                   Icon(Icons.edit, size: 16, color: Colors.blue),
                                   SizedBox(width: 8),
                                   Text('Modify / Add Item'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'print',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.print, size: 16, color: Colors.indigo),
+                                  SizedBox(width: 8),
+                                  Text('Print Takeaway KOT'),
                                 ],
                               ),
                             ),
@@ -3142,15 +3341,25 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: (status == 'Ready' || status == 'ready') ? Colors.green.shade100 : Colors.amber.shade100,
+                            color: (status.toLowerCase() == 'ready')
+                                ? Colors.green.shade100
+                                : (status.toLowerCase() == 'billing' || status.toLowerCase() == 'billed'
+                                    ? Colors.orange.shade100
+                                    : Colors.amber.shade100),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            status == 'p' ? 'Pending' : status,
+                            status.toLowerCase() == 'billing' || status.toLowerCase() == 'billed'
+                                ? 'Bill Required'
+                                : (status == 'p' ? 'Pending' : status),
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: (status == 'Ready' || status == 'ready') ? Colors.green.shade800 : Colors.amber.shade800,
+                              color: (status.toLowerCase() == 'ready')
+                                  ? Colors.green.shade800
+                                  : (status.toLowerCase() == 'billing' || status.toLowerCase() == 'billed'
+                                      ? Colors.orange.shade900
+                                      : Colors.amber.shade800),
                             ),
                           ),
                         ),
@@ -3230,30 +3439,28 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                             ).then((_) => _fetchActiveKots());
                           },
                         ),
-                        if (MediaQuery.of(context).size.width >= 900) ...[
-                          Expanded(
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                side: BorderSide(color: Colors.blue.shade700),
-                              ),
-                              onPressed: () => _printKotById(kot),
-                              child: const Text('Print', style: TextStyle(fontSize: 11)),
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                              side: BorderSide(color: Colors.blue.shade700),
                             ),
+                            onPressed: () => _printKotById(kot),
+                            child: const Text('Print', style: TextStyle(fontSize: 11)),
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green.shade700,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                              ),
-                              onPressed: () => _settlePackingOrder(kot),
-                              child: const Text('Settle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                             ),
+                            onPressed: () => _settlePackingOrder(kot),
+                            child: const Text('Settle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
@@ -3359,7 +3566,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     }
   }
 
-  void _settlePackingOrder(Map<String, dynamic> kot) {
+  Future<void> _settlePackingOrder(Map<String, dynamic> kot) async {
     final List items = kot['items'] ?? [];
     final Map<dynamic, Map<String, dynamic>> grouped = {};
     for (final item in items) {
@@ -3402,19 +3609,60 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     }
 
     final consolidatedItems = grouped.values.toList();
+    if (consolidatedItems.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No active items found to bill.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SaleScreen(
-          preloadedTableId: null,
-          preloadedItems: consolidatedItems,
-          preloadedKotIds: [kot['id']],
-        ),
-      ),
-    ).then((_) {
+    final role = ((await TokenStorage.getRole()) ?? '').toUpperCase().trim();
+    final permissions = await TokenStorage.getPermissions();
+    final bool isWaiter = role == 'WAITER' || role == 'STEWARD' || role == 'SERVER';
+    final bool canCashierBill = !isWaiter && (permissions.contains('RETAIL_SALES') || role == 'ADMIN' || role == 'MANAGER' || role == 'CASHIER' || role == 'SUPERADMIN') && (MediaQuery.of(context).size.width >= 900);
+
+    if (!canCashierBill) {
+      final int kotId = int.tryParse((kot['id'] ?? 0).toString()) ?? 0;
+      final String kotNo = (kot['kot_number'] ?? kot['kot_no'] ?? '#KOT-$kotId').toString();
+      if (kotId > 0) {
+        try {
+          await ApiClient.put('/api/restaurant/kots/$kotId/status', {'status': 'Billing'});
+        } catch (e) {
+          debugPrint('Error updating Takeaway KOT status: $e');
+        }
+      }
       _fetchActiveKots();
-    });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bill Request sent to Cashier for Takeaway order $kotNo!'),
+            backgroundColor: Colors.teal.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SaleScreen(
+            preloadedTableId: null,
+            preloadedItems: consolidatedItems,
+            preloadedKotIds: [kot['id']],
+          ),
+        ),
+      ).then((_) {
+        _fetchActiveKots();
+      });
+    }
   }
 
   Future<void> _printKotById(Map<String, dynamic> kot) async {
@@ -4017,11 +4265,21 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     );
 
     if (confirm == true) {
+      final role = ((await TokenStorage.getRole()) ?? '').toUpperCase().trim();
+      final bool isMobileOrWaiter = MediaQuery.of(context).size.width < 900 ||
+          role == 'WAITER' ||
+          role == 'STEWARD' ||
+          role == 'SERVER' ||
+          role == 'CAPTAIN' ||
+          role == 'CAPTION';
+
       await TokenStorage.clear();
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(
+          builder: (_) => isMobileOrWaiter ? const WaiterAuthScreen() : const LoginScreen(),
+        ),
         (route) => false,
       );
     }
@@ -4168,3 +4426,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     );
   }
 }
+
+
+
+

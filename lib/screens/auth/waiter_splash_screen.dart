@@ -40,15 +40,28 @@ class _WaiterAppSplashScreenState extends State<WaiterAppSplashScreen> {
       }
 
       final token = await TokenStorage.read();
+      final user = await TokenStorage.getUser();
+      final role = (user?['role'] ?? '').toString().toUpperCase().trim();
 
       if (!mounted) return;
 
-      if (token != null && token.isNotEmpty) {
+      final bool isAllowed = role == 'WAITER' ||
+          role == 'CAPTAIN' ||
+          role == 'CAPTION' ||
+          role == 'STEWARD' ||
+          role == 'SERVER' ||
+          role == 'ADMIN' ||
+          role == 'MANAGER';
+
+      if (token != null && token.isNotEmpty && isAllowed) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const WaiterAppScreen()),
         );
       } else {
+        if (token != null && token.isNotEmpty && !isAllowed) {
+          await TokenStorage.clear();
+        }
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const WaiterAuthScreen()),
