@@ -1,13 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:retailpos/screens/auth/login_screen.dart';
 
@@ -16,6 +11,7 @@ import '../../controllers/public/recovery_controller.dart';
 import '../../controllers/settings/theme_controller.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/file_download_helper.dart';
 import '../recovery/backup_service.dart';
 
 enum SetupMode { newClient, existingClient, recoverId, restoreLocal }
@@ -2122,6 +2118,29 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.mark_email_read_rounded, color: Color(0xFF2563EB), size: 22),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _contactEmail.text.trim().isNotEmpty
+                                  ? "Login credentials have been sent to: ${_contactEmail.text.trim()}"
+                                  : "Credentials generated. Please save or copy them before logging in.",
+                              style: const TextStyle(color: Color(0xFF1E40AF), fontSize: 12.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
                         color: const Color(0xFFFFFBEB),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFFFDE68A)),
@@ -2139,7 +2158,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
@@ -2185,24 +2204,18 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                         OutlinedButton.icon(
                           onPressed: () async {
                             try {
-                              if (kIsWeb) {
-                                final bytes = Uint8List.fromList(utf8.encode(exportText));
-                                await Printing.sharePdf(
-                                  bytes: bytes,
-                                  filename: 'Admin_Credentials_$outletCode.txt',
-                                );
-                              } else {
-                                final Directory? dir = await getDownloadsDirectory();
-                                final saveDir = dir ?? await getApplicationDocumentsDirectory();
-                                final file = File(p.join(saveDir.path, 'Admin_Credentials_$outletCode.txt'));
-                                await file.writeAsString(exportText);
-                              }
+                              final success = await saveOrDownloadTextFile(
+                                filename: 'Admin_Credentials_$outletCode.txt',
+                                content: exportText,
+                              );
                               setState(() => hasSaved = true);
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Credentials file saved successfully!'),
-                                  backgroundColor: Color(0xFF059669),
+                                SnackBar(
+                                  content: Text(success
+                                      ? 'Credentials file downloaded successfully (.txt)!'
+                                      : 'Credentials copied to clipboard.'),
+                                  backgroundColor: const Color(0xFF059669),
                                 ),
                               );
                             } catch (_) {
@@ -2210,7 +2223,7 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
                             }
                           },
                           icon: const Icon(Icons.download_rounded, size: 18),
-                          label: const Text("Save File"),
+                          label: const Text("Save File (.txt)"),
                         ),
                       ],
                     ),

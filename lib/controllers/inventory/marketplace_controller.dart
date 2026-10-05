@@ -10,6 +10,7 @@ import '../../models/inventory/purchase_order_model.dart';
 import '../../models/inventory/purchase_item_model.dart';
 import '../purchase/purchase_order_controller.dart';
 import '../inventory/supplier_controller.dart';
+import '../../models/inventory/supplier_model.dart';
 import '../settings/property_info_controller.dart';
 
 class MarketplaceController extends ChangeNotifier {
@@ -185,15 +186,42 @@ class MarketplaceController extends ChangeNotifier {
 
     try {
       // 1. Resolve or ensure Supplier exists locally for this vendor
-      int supplierId = int.tryParse(vendor.id) ?? 1;
+      int supplierId = 1;
       try {
         final supplierCtrl = SupplierController();
         await supplierCtrl.load();
         final matched = supplierCtrl.list.where((s) =>
             s.supplierName.toLowerCase() == vendor.businessName.toLowerCase() ||
+            s.supplierCode.toLowerCase() == vendor.vendorCode.toLowerCase() ||
             ((s.gstin ?? '').isNotEmpty && (s.gstin ?? '').toLowerCase() == vendor.gstin.toLowerCase())).firstOrNull;
         if (matched != null) {
           supplierId = matched.id;
+        } else {
+          try {
+            final newSupplier = Supplier(
+              id: 0,
+              supplierCode: vendor.vendorCode.isNotEmpty ? vendor.vendorCode : 'MKT-VEN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+              supplierName: vendor.businessName,
+              address: vendor.address.isNotEmpty ? vendor.address : 'Marketplace Supplier',
+              phone: vendor.phone,
+              gstin: vendor.gstin.isNotEmpty ? vendor.gstin : null,
+              isActive: true,
+            );
+            await supplierCtrl.create(newSupplier);
+            await supplierCtrl.load();
+            final created = supplierCtrl.list.where((s) =>
+                s.supplierName.toLowerCase() == vendor.businessName.toLowerCase() ||
+                s.supplierCode.toLowerCase() == vendor.vendorCode.toLowerCase()).firstOrNull;
+            if (created != null) {
+              supplierId = created.id;
+            } else if (supplierCtrl.list.isNotEmpty) {
+              supplierId = supplierCtrl.list.last.id;
+            }
+          } catch (e) {
+            if (supplierCtrl.list.isNotEmpty) {
+              supplierId = supplierCtrl.list.first.id;
+            }
+          }
         }
       } catch (_) {}
 

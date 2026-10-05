@@ -449,11 +449,67 @@ async function sendOutletRecoveryEmail(to, outlets) {
     return await sendEmail(to, "Your Recovered Outlet Codes", html);
 }
 
+async function sendOutletRegistrationEmail(to, outletCode, outletName, username, password, recoveryPin) {
+    console.log(`📧 [OUTLET REGISTRATION EMAIL] Sending login credentials to ${to} for outlet ${outletCode}...`);
+    const html = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+            <div style="text-align: center; margin-bottom: 24px;">
+                <h1 style="color: #0f172a; font-size: 22px; margin: 0;">🎉 Welcome to RetailPOS Ecosystem!</h1>
+                <p style="color: #64748b; font-size: 14px; margin-top: 6px;">Your outlet registration is complete. Here are your official administrator login credentials.</p>
+            </div>
+
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Business / Outlet Name:</td>
+                        <td style="padding: 8px 0; color: #0f172a; font-size: 14px; font-weight: bold; text-align: right;">${outletName}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Business ID (Outlet Code):</td>
+                        <td style="padding: 8px 0; color: #0284c7; font-size: 15px; font-weight: bold; font-family: monospace; text-align: right;">${outletCode}</td>
+                    </tr>
+                    <tr style="border-top: 1px dashed #cbd5e1;">
+                        <td style="padding: 10px 0 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Admin User ID:</td>
+                        <td style="padding: 10px 0 8px 0; color: #0f172a; font-size: 14px; font-weight: bold; font-family: monospace; text-align: right;">${username}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Admin Password:</td>
+                        <td style="padding: 8px 0; color: #16a34a; font-size: 15px; font-weight: bold; font-family: monospace; text-align: right;">${password}</td>
+                    </tr>
+                    ${recoveryPin ? `
+                    <tr style="border-top: 1px dashed #cbd5e1;">
+                        <td style="padding: 10px 0 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Recovery PIN:</td>
+                        <td style="padding: 10px 0 8px 0; color: #d97706; font-size: 14px; font-weight: bold; font-family: monospace; text-align: right;">${recoveryPin}</td>
+                    </tr>
+                    ` : ''}
+                </table>
+            </div>
+
+            <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px;">
+                <p style="color: #92400e; font-size: 12.5px; margin: 0; line-height: 1.4;">
+                    <b>Security Notice:</b> Please save and store these credentials safely. The password is encrypted and will not be displayed in plain text again.
+                </p>
+            </div>
+
+            <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">
+                Powered by FAMALTH RETAIL LYNX • Automated System Notification
+            </p>
+        </div>
+    `;
+    try {
+        await sendEmail(to, `RetailPOS Admin Credentials - ${outletName} (${outletCode})`, html);
+    } catch (err) {
+        console.warn(`⚠️ [EMAIL NOTICE] Could not send registration email to ${to}: ${err.message}`);
+    }
+    return true;
+}
+
 module.exports = {
     sendEmail,
     sendOtpEmail,
     sendPasswordResetEmail,
     sendSystemAlert,
     sendUsernameRecoveryEmail,
-    sendOutletRecoveryEmail
+    sendOutletRecoveryEmail,
+    sendOutletRegistrationEmail
 };

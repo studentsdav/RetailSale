@@ -185,6 +185,22 @@ exports.createOutlet = async (req, res) => {
                 username: adminUsername,
                 password: adminPassword.toString()
             };
+
+            if (contact_email) {
+                try {
+                    const { sendOutletRegistrationEmail } = require('../../modules/emailService');
+                    await sendOutletRegistrationEmail(
+                        contact_email,
+                        outlet_code,
+                        outlet_name,
+                        adminUsername,
+                        adminPassword.toString(),
+                        recovery_pin
+                    );
+                } catch (emailErr) {
+                    console.warn('[OUTLET REGISTRATION] Could not send credentials email:', emailErr.message);
+                }
+            }
         }
 
         const config = loadConfig();
@@ -192,7 +208,7 @@ exports.createOutlet = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Outlet configured successfully. Ensure admin credentials are saved securely.",
+            message: "Outlet configured successfully. Credentials sent to registered email.",
             admin_username: adminCredentials ? adminCredentials.username : `admin_${outlet_code}`,
             admin_password: adminCredentials ? adminCredentials.password : '',
             data: {

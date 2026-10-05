@@ -32,6 +32,12 @@ import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/currency/currency_service.dart';
 import '../../core/utils/country_tax_helper.dart';
 import '../../core/settings/local_preferences.dart';
+import 'package:collection/collection.dart';
+import '../../models/inventory/purchase_order_model.dart';
+import '../../models/inventory/purchase_item_model.dart';
+import '../../models/inventory/supplier_model.dart';
+import '../../controllers/purchase/purchase_order_controller.dart';
+import '../../controllers/inventory/supplier_controller.dart';
 
 class CustomerAppScreen extends StatefulWidget {
   final String? initialOutletId;
@@ -1668,14 +1674,129 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       final res = await ApiClient.post('/api/delivery/orders', body);
       if (res['success'] == true) {
         final order = res['data'];
+        final dynamic orderId = order['id'];
+
+        String? generatedPoNo;
+        final bool isB2bOrMarketplace = widget.isB2BMode ||
+            _isB2BWholesaleMode ||
+            (widget.initialVendorName != null && widget.initialVendorName!.isNotEmpty) ||
+            widget.buyerPropertyInfo != null;
+
+        if (isB2bOrMarketplace && _cart.isNotEmpty) {
+          try {
+            // 1. Resolve or auto-create Supplier for this Marketplace Vendor
+            int supplierId = 1;
+            final vendorName = widget.initialVendorName?.trim().isNotEmpty == true
+                ? widget.initialVendorName!.trim()
+                : (_loggedInCustomer?['name']?.toString().trim().isNotEmpty == true
+                    ? _loggedInCustomer!['name'].toString().trim()
+                    : 'Marketplace Vendor');
+            final vendorCode = widget.initialOutletId?.trim().isNotEmpty == true
+                ? widget.initialOutletId!.trim()
+                : 'MKT-VEN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+            final supplierCtrl = SupplierController();
+            await supplierCtrl.load();
+
+            final matchedSupplier = supplierCtrl.list.firstWhereOrNull((s) =>
+                s.supplierName.toLowerCase() == vendorName.toLowerCase() ||
+                s.supplierCode.toLowerCase() == vendorCode.toLowerCase() ||
+                ((s.gstin ?? '').isNotEmpty && (s.gstin ?? '').toLowerCase() == _gstin.toLowerCase()));
+
+            if (matchedSupplier != null) {
+              supplierId = matchedSupplier.id;
+            } else {
+              try {
+                final newSupplier = Supplier(
+                  id: 0,
+                  supplierCode: vendorCode,
+                  supplierName: vendorName,
+                  address: _custAddressCtrl.text.trim().isNotEmpty
+                      ? _custAddressCtrl.text.trim()
+                      : 'Marketplace Supplier',
+                  phone: _custPhoneCtrl.text.trim(),
+                  gstin: _gstin.isNotEmpty ? _gstin : null,
+                  isActive: true,
+                );
+                await supplierCtrl.create(newSupplier);
+                await supplierCtrl.load();
+                final created = supplierCtrl.list.firstWhereOrNull((s) =>
+                    s.supplierName.toLowerCase() == vendorName.toLowerCase() ||
+                    s.supplierCode.toLowerCase() == vendorCode.toLowerCase());
+                if (created != null) {
+                  supplierId = created.id;
+                } else if (supplierCtrl.list.isNotEmpty) {
+                  supplierId = supplierCtrl.list.last.id;
+                }
+              } catch (suppErr) {
+                debugPrint('Auto-supplier creation note: $suppErr');
+                if (supplierCtrl.list.isNotEmpty) {
+                  supplierId = supplierCtrl.list.first.id;
+                }
+              }
+            }
+
+            // 2. Build PO Number & Items from the cart
+            final now = DateTime.now();
+            final poNumber = 'PO-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${orderId ?? now.millisecondsSinceEpoch.toString().substring(8)}';
+
+            final List<PurchaseItem> poItems = [];
+            _cart.forEach((itemId, value) {
+              final item = value['item'] as Map<String, dynamic>? ?? {};
+              final double qty = double.tryParse(value['qty']?.toString() ?? '1') ?? 1.0;
+              final double rate = _getItemPrice(item);
+              final double itemTax = double.tryParse(item['tax_percent']?.toString() ?? '0') ?? 0.0;
+
+              poItems.add(PurchaseItem(
+                itemId: itemId,
+                itemCode: (item['item_code'] ?? 'ITEM-$itemId').toString(),
+                itemName: (item['item_name'] ?? 'Product').toString(),
+                brand: (item['brand'] ?? '').toString(),
+                unit: (item['unit'] ?? 'PCS').toString(),
+                qty: qty,
+                rate: rate,
+                tax: itemTax,
+                department: (item['department'] ?? 'GENERAL').toString(),
+                lineStatus: 'OPEN',
+              ));
+            });
+
+            final purchaseOrder = PurchaseOrder(
+              poNo: poNumber,
+              manualNo: 'MKT-ORD-#$orderId',
+              supplierId: supplierId,
+              poDate: now,
+              createdAt: now,
+              items: poItems,
+            );
+
+            // 3. Create PO via PurchaseOrderController
+            final poCtrl = PurchaseOrderController();
+            await poCtrl.create(purchaseOrder);
+            generatedPoNo = poNumber;
+            debugPrint('Marketplace PO created successfully: $poNumber for Order #$orderId');
+          } catch (poErr) {
+            debugPrint('Error generating PO for marketplace order: $poErr');
+          }
+        }
+
         setState(() {
           _activeOrderId = order['id'];
           _cart.clear();
           _appliedCoupon = null;
           _couponCodeCtrl.clear();
         });
+
+        final successMessage = generatedPoNo != null
+            ? 'Order #$orderId placed successfully!\nPurchase Order ($generatedPoNo) has been generated in your Inventory.'
+            : 'Order #$orderId placed successfully!';
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Order #${order['id']} placed successfully!')),
+          SnackBar(
+            content: Text(successMessage),
+            backgroundColor: Colors.green.shade800,
+            duration: const Duration(seconds: 5),
+          ),
         );
         _startTrackingOrder();
         _fetchHistory();
