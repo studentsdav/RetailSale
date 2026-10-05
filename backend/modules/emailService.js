@@ -450,56 +450,190 @@ async function sendOutletRecoveryEmail(to, outlets) {
 }
 
 async function sendOutletRegistrationEmail(to, outletCode, outletName, username, password, recoveryPin) {
-    console.log(`📧 [OUTLET REGISTRATION EMAIL] Sending login credentials to ${to} for outlet ${outletCode}...`);
+    console.log(`[EMAIL] Dispatching outlet provisioning notification to ${to} (${outletCode})...`);
+    
     const html = `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-            <div style="text-align: center; margin-bottom: 24px;">
-                <h1 style="color: #0f172a; font-size: 22px; margin: 0;">🎉 Welcome to RetailPOS Ecosystem!</h1>
-                <p style="color: #64748b; font-size: 14px; margin-top: 6px;">Your outlet registration is complete. Here are your official administrator login credentials.</p>
-            </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Your Famalth POS account is ready</title>
+    <style>
+        body, table, td, p, a, li, blockquote {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background-color: #f8f9fa;
+            font-family: 'Google Sans', Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            color: #202124;
+        }
+        table {
+            border-spacing: 0;
+            border-collapse: collapse;
+        }
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+            height: auto;
+            line-height: 100%;
+            outline: none;
+            text-decoration: none;
+        }
+        .container {
+            max-width: 580px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        @media screen and (max-width: 600px) {
+            .wrapper {
+                padding: 12px 8px !important;
+            }
+            .content-padding {
+                padding: 24px 20px !important;
+            }
+            .mobile-stack {
+                display: block !important;
+                width: 100% !important;
+                text-align: left !important;
+                padding-top: 4px !important;
+            }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8f9fa; font-family: 'Google Sans', Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table class="wrapper" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f8f9fa" style="background-color: #f8f9fa; padding: 40px 10px;">
+        <tr>
+            <td align="center">
+                <table class="container" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #dadce0; border-radius: 8px;">
+                    
+                    <!-- Top Brand Header -->
+                    <tr>
+                        <td style="padding: 24px 32px 20px 32px; border-bottom: 1px solid #f1f3f4; background-color: #ffffff;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td>
+                                        <div style="font-size: 18px; font-weight: 600; color: #202124; letter-spacing: -0.3px;">
+                                            Famalth <span style="color: #1a73e8; font-weight: 600;">Retail</span>
+                                        </div>
+                                    </td>
+                                    <td align="right" style="font-size: 12px; color: #5f6368; font-weight: 500;">
+                                        Point of Sale
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px;">
-                <table style="width: 100%; border-collapse: collapse;">
+                    <!-- Main Body Content -->
                     <tr>
-                        <td style="padding: 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Business / Outlet Name:</td>
-                        <td style="padding: 8px 0; color: #0f172a; font-size: 14px; font-weight: bold; text-align: right;">${outletName}</td>
+                        <td class="content-padding" style="padding: 32px 32px 24px 32px; background-color: #ffffff;">
+                            
+                            <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #202124; line-height: 1.4;">
+                                Your outlet account is ready
+                            </h1>
+                            
+                            <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #3c4043;">
+                                An administrator account has been provisioned for <strong>${outletName}</strong>. You can now sign in to your POS terminal and management dashboard using the credentials below.
+                            </p>
+
+                            <!-- Credentials Box -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8f9fa; border: 1px solid #dadce0; border-radius: 6px; margin: 0 0 24px 0;">
+                                <tr>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #5f6368; font-weight: 500; width: 38%; border-bottom: 1px solid #e8eaed;">
+                                        Outlet Name
+                                    </td>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #202124; font-weight: 600; text-align: right; border-bottom: 1px solid #e8eaed;">
+                                        ${outletName}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #5f6368; font-weight: 500; border-bottom: 1px solid #e8eaed;">
+                                        Outlet Code (Business ID)
+                                    </td>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #1a73e8; font-family: 'Roboto Mono', Consolas, Menlo, monospace; font-weight: 600; text-align: right; border-bottom: 1px solid #e8eaed;">
+                                        ${outletCode}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #5f6368; font-weight: 500; border-bottom: 1px solid #e8eaed;">
+                                        Username
+                                    </td>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #202124; font-family: 'Roboto Mono', Consolas, Menlo, monospace; font-weight: 600; text-align: right; border-bottom: 1px solid #e8eaed;">
+                                        ${username}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #5f6368; font-weight: 500; ${recoveryPin ? 'border-bottom: 1px solid #e8eaed;' : ''}">
+                                        Temporary Password
+                                    </td>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #137333; font-family: 'Roboto Mono', Consolas, Menlo, monospace; font-weight: 600; text-align: right; ${recoveryPin ? 'border-bottom: 1px solid #e8eaed;' : ''}">
+                                        ${password}
+                                    </td>
+                                </tr>
+                                ${recoveryPin ? `
+                                <tr>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #5f6368; font-weight: 500;">
+                                        Master Recovery PIN
+                                    </td>
+                                    <td style="padding: 14px 18px; font-size: 13px; color: #b06000; font-family: 'Roboto Mono', Consolas, Menlo, monospace; font-weight: 600; text-align: right;">
+                                        ${recoveryPin}
+                                    </td>
+                                </tr>
+                                ` : ''}
+                            </table>
+
+                            <!-- Security Advisory -->
+                            <div style="border-left: 3px solid #1a73e8; background-color: #f1f3f4; padding: 12px 16px; border-radius: 0 4px 4px 0; margin-bottom: 24px;">
+                                <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #3c4043;">
+                                    <strong>Security notice:</strong> We recommend changing your temporary password after your initial sign-in. Famalth will never ask for your password or recovery PIN via email.
+                                </p>
+                            </div>
+
+                            <!-- Getting Started Instructions -->
+                            <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #202124;">
+                                Getting started:
+                            </p>
+                            <ol style="margin: 0 0 24px 0; padding-left: 20px; font-size: 13px; color: #3c4043; line-height: 1.6;">
+                                <li style="margin-bottom: 4px;">Launch the POS terminal on your register or browser.</li>
+                                <li style="margin-bottom: 4px;">Enter your Outlet Code (<strong>${outletCode}</strong>) and admin credentials.</li>
+                                <li style="margin-bottom: 0;">Complete tax and inventory settings to begin processing sales.</li>
+                            </ol>
+
+                        </td>
                     </tr>
+
+                    <!-- Footer -->
                     <tr>
-                        <td style="padding: 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Business ID (Outlet Code):</td>
-                        <td style="padding: 8px 0; color: #0284c7; font-size: 15px; font-weight: bold; font-family: monospace; text-align: right;">${outletCode}</td>
+                        <td style="padding: 24px 32px; background-color: #f8f9fa; border-top: 1px solid #dadce0;">
+                            <p style="margin: 0 0 6px 0; font-size: 12px; color: #5f6368; line-height: 1.5;">
+                                You received this notification because an outlet account was registered with this email address (${to}).
+                            </p>
+                            <p style="margin: 0; font-size: 12px; color: #80868b; line-height: 1.5;">
+                                Famalth Retail Lynx &bull; Automated System Notification
+                            </p>
+                        </td>
                     </tr>
-                    <tr style="border-top: 1px dashed #cbd5e1;">
-                        <td style="padding: 10px 0 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Admin User ID:</td>
-                        <td style="padding: 10px 0 8px 0; color: #0f172a; font-size: 14px; font-weight: bold; font-family: monospace; text-align: right;">${username}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Admin Password:</td>
-                        <td style="padding: 8px 0; color: #16a34a; font-size: 15px; font-weight: bold; font-family: monospace; text-align: right;">${password}</td>
-                    </tr>
-                    ${recoveryPin ? `
-                    <tr style="border-top: 1px dashed #cbd5e1;">
-                        <td style="padding: 10px 0 8px 0; color: #64748b; font-size: 13px; font-weight: 600;">Recovery PIN:</td>
-                        <td style="padding: 10px 0 8px 0; color: #d97706; font-size: 14px; font-weight: bold; font-family: monospace; text-align: right;">${recoveryPin}</td>
-                    </tr>
-                    ` : ''}
+
                 </table>
-            </div>
-
-            <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px;">
-                <p style="color: #92400e; font-size: 12.5px; margin: 0; line-height: 1.4;">
-                    <b>Security Notice:</b> Please save and store these credentials safely. The password is encrypted and will not be displayed in plain text again.
-                </p>
-            </div>
-
-            <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">
-                Powered by FAMALTH RETAIL LYNX • Automated System Notification
-            </p>
-        </div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
     `;
+    
     try {
-        await sendEmail(to, `RetailPOS Admin Credentials - ${outletName} (${outletCode})`, html);
+        await sendEmail(to, `Famalth POS credentials for ${outletName} (${outletCode})`, html);
     } catch (err) {
-        console.warn(`⚠️ [EMAIL NOTICE] Could not send registration email to ${to}: ${err.message}`);
+        console.warn(`[EMAIL NOTICE] Could not send registration email to ${to}: ${err.message}`);
     }
     return true;
 }
