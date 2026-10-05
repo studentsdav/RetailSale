@@ -4147,7 +4147,7 @@ COMMIT;
   {
     version: 111,
     description: "Add modifier_details, modifier_objects, item_remark, and notes columns to sales_items table for modifier persistence",
-    up: async (db: any) => {
+    up: async (db) => {
       await db.query(`
         BEGIN;
         ALTER TABLE sales_items 
