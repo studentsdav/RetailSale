@@ -10,6 +10,7 @@ import '../../models/inventory/purchase_order_model.dart';
 import '../../models/inventory/purchase_item_model.dart';
 import '../purchase/purchase_order_controller.dart';
 import '../inventory/supplier_controller.dart';
+import 'document_sequence_controller.dart';
 import '../../models/inventory/supplier_model.dart';
 import '../settings/property_info_controller.dart';
 
@@ -225,9 +226,19 @@ class MarketplaceController extends ChangeNotifier {
         }
       } catch (_) {}
 
-      // 2. Generate Next PO Number
+      // 2. Generate Next PO Number following official document sequence
       final now = DateTime.now();
-      final poNumber = 'PO-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch.toString().substring(8)}';
+      String poNumber = '';
+      try {
+        final docSeqCtrl = DocumentSequenceController();
+        poNumber = await docSeqCtrl.getNextPoNo(now);
+      } catch (e) {
+        debugPrint('Error fetching PO sequence number in marketplace: $e');
+      }
+
+      if (poNumber.isEmpty || poNumber == "0") {
+        poNumber = 'PO-1-${now.year.toString().substring(2)}';
+      }
 
       // 3. Build PurchaseOrder items from cart
       final poItems = cartItems.map((c) {

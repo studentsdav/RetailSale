@@ -50,7 +50,7 @@ function extractNumericPart(value, setting) {
             middle = middle.substring(0, middle.length - postfix.length);
         } else {
             const fyMatch = middle.match(/^(.*?)(-\d{2}\/\d{2}|-\d{4}\/\d{2}|-\d{2}-\d{2}|-\d{2})$/);
-            if (fyMatch) {
+            if (fyMatch && /^\d+$/.test(fyMatch[1])) {
                 middle = fyMatch[1];
             } else {
                 return null;
@@ -58,8 +58,21 @@ function extractNumericPart(value, setting) {
         }
     }
 
+    // Must be pure digits
+    if (!/^\d+$/.test(middle)) {
+        return null;
+    }
+
     const parsed = parseInt(middle, 10);
-    return Number.isNaN(parsed) ? null : parsed;
+    if (Number.isNaN(parsed)) return null;
+
+    // Reject date-formatted or timestamp-derived pseudo sequence numbers (e.g. 20261005) if standard sequence starts small
+    const startNo = Number(setting.start_no) || 1;
+    if (parsed > 1000000 && startNo < 100000) {
+        return null;
+    }
+
+    return parsed;
 }
 
 async function getEffectiveSetting({ db, outlet_id, module, date }) {

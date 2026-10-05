@@ -25,8 +25,24 @@ exports.createPurchaseOrder = async (req, res) => {
         const outlet_id = req.user.outlet_id;
         const user_id = req.user.id;
 
-        const { po_no, manual_no, supplier_id, po_date, items } = req.body;
-        const normalizedItems = items.map(item => ({
+        let { po_no, manual_no, supplier_id, po_date, items = [] } = req.body;
+        if (!po_no || po_no === '0' || String(po_no).trim() === '') {
+            try {
+                const numberingHelper = require('./numberingSettingsV2.controller');
+                const resolved = await numberingHelper.resolveNextNumber({
+                    req,
+                    module: 'PO',
+                    date: po_date || new Date(),
+                    outlet_id
+                });
+                if (resolved && resolved.number) {
+                    po_no = resolved.number;
+                }
+            } catch (seqErr) {
+                console.warn('[PO SEQ] Auto-resolve numbering warning:', seqErr?.message || seqErr);
+            }
+        }
+        const normalizedItems = (items || []).map(item => ({
             ...item,
             line_status: normalizeLineStatus(item.line_status)
         }));

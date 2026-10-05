@@ -38,6 +38,7 @@ import '../../models/inventory/purchase_item_model.dart';
 import '../../models/inventory/supplier_model.dart';
 import '../../controllers/purchase/purchase_order_controller.dart';
 import '../../controllers/inventory/supplier_controller.dart';
+import '../../controllers/inventory/document_sequence_controller.dart';
 
 class CustomerAppScreen extends StatefulWidget {
   final String? initialOutletId;
@@ -1736,9 +1737,19 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
               }
             }
 
-            // 2. Build PO Number & Items from the cart
+            // 2. Build PO Number & Items from the cart following document sequence
             final now = DateTime.now();
-            final poNumber = 'PO-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${orderId ?? now.millisecondsSinceEpoch.toString().substring(8)}';
+            String poNumber = '';
+            try {
+              final docSeqCtrl = DocumentSequenceController();
+              poNumber = await docSeqCtrl.getNextPoNo(now);
+            } catch (e) {
+              debugPrint('Error fetching PO sequence number in customer app: $e');
+            }
+
+            if (poNumber.isEmpty || poNumber == "0") {
+              poNumber = 'PO-1-${now.year.toString().substring(2)}';
+            }
 
             final List<PurchaseItem> poItems = [];
             _cart.forEach((itemId, value) {
