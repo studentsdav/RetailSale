@@ -10,6 +10,8 @@ import 'document_sequence_screen.dart';
 import 'property_info_screen.dart';
 import 'settings_screen.dart';
 import 'stock_location_screen.dart';
+import '../../core/auth/token_storage.dart';
+import '../../core/settings/local_preferences.dart';
 import 'tax_group_setup_screen.dart';
 
 class OutletSetupChecklistScreen extends StatefulWidget {
@@ -250,7 +252,12 @@ class _OutletSetupChecklistScreenState extends State<OutletSetupChecklistScreen>
                                     Align(
                                       alignment: Alignment.centerRight,
                                       child: FilledButton.icon(
-                                        onPressed: () {
+                                        onPressed: () async {
+                                          final userMap = await TokenStorage.getUser();
+                                          final outletCode = (userMap?['outlet_code'] ?? userMap?['outletCode'] ?? '').toString().trim();
+                                          final outletIdentifier = outletCode.isNotEmpty ? outletCode : (userMap?['outlet_id'] ?? userMap?['outletId'] ?? 1).toString();
+                                          await LocalPreferences.setOnboardingCompleted(outletIdentifier, true);
+                                          if (!context.mounted) return;
                                           Navigator.pushReplacement(
                                             context,
                                             MaterialPageRoute(builder: (_) => const MainDashboardScreen()),

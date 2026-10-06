@@ -11,6 +11,7 @@ import '../../controllers/public/recovery_controller.dart';
 import '../../controllers/settings/theme_controller.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/settings/local_preferences.dart';
 import '../../core/utils/file_download_helper.dart';
 import '../recovery/backup_service.dart';
 
@@ -170,6 +171,8 @@ class _OutletSetupScreenState extends State<OutletSetupScreen> {
         currentOutlets.add(code);
         await AppConfig.saveConfig(AppConfig.baseUrl, currentOutlets);
       }
+      // Ensure newly created property triggers onboarding checklist
+      await LocalPreferences.setOnboardingCompleted(code, false);
 
       if (!mounted) return;
 

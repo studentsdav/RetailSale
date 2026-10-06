@@ -320,16 +320,23 @@ class LocalPreferences {
     await prefs.setString(_machineIdKey, value.trim().toUpperCase());
   }
 
-  static String _onboardingCompleteKey(int outletId) => 'outlet_onboarding_done_$outletId';
-
-  static Future<bool> isOnboardingCompleted(int outletId) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_onboardingCompleteKey(outletId)) ?? false;
+  static String _onboardingCompleteKey(dynamic outletIdentifier) {
+    final key = outletIdentifier?.toString().trim().toLowerCase() ?? '';
+    return 'outlet_onboarding_done_$key';
   }
 
-  static Future<void> setOnboardingCompleted(int outletId, bool value) async {
+  static Future<bool> isOnboardingCompleted(dynamic outletIdentifier) async {
+    final key = outletIdentifier?.toString().trim().toLowerCase() ?? '';
+    if (key.isEmpty || key == '0') return false;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_onboardingCompleteKey(outletId), value);
+    return prefs.getBool(_onboardingCompleteKey(key)) ?? false;
+  }
+
+  static Future<void> setOnboardingCompleted(dynamic outletIdentifier, bool value) async {
+    final key = outletIdentifier?.toString().trim().toLowerCase() ?? '';
+    if (key.isEmpty || key == '0') return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingCompleteKey(key), value);
   }
 
   static Future<int> getLynxMaxRows() async {

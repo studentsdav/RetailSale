@@ -163,10 +163,14 @@ class OutletOnboardingController extends ChangeNotifier {
           isLoading = false;
           notifyListeners();
 
+          final userMap = await TokenStorage.getUser();
+          final outletCode = (userMap?['outlet_code'] ?? userMap?['outletCode'] ?? '').toString().trim();
+          final outletIdentifier = outletCode.isNotEmpty ? outletCode : (userMap?['outlet_id'] ?? userMap?['outletId'] ?? 1).toString();
+          
           if (is100PercentComplete) {
-            final userMap = await TokenStorage.getUser();
-            final outletId = int.tryParse((userMap?['outlet_id'] ?? userMap?['outletId'] ?? 1).toString()) ?? 1;
-            await LocalPreferences.setOnboardingCompleted(outletId, true);
+            await LocalPreferences.setOnboardingCompleted(outletIdentifier, true);
+          } else {
+            await LocalPreferences.setOnboardingCompleted(outletIdentifier, false);
           }
           return;
         }

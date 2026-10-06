@@ -18,16 +18,17 @@ class HomeRouteHelper {
 
   static Future<Widget> resolve() async {
     final user = await dashboard_user.load();
-    final outletId = user?.outletId ?? 1;
+    final outletCode = (user?.outletCode ?? '').trim();
+    final outletIdentifier = outletCode.isNotEmpty ? outletCode : (user?.outletId ?? 1).toString();
 
-    final isDone = await LocalPreferences.isOnboardingCompleted(outletId);
+    final isDone = await LocalPreferences.isOnboardingCompleted(outletIdentifier);
     if (!isDone) {
       final onboardingCtrl = OutletOnboardingController();
       await onboardingCtrl.refreshStatus().catchError((_) {});
       if (!onboardingCtrl.is100PercentComplete) {
         return const OutletSetupChecklistScreen();
       } else {
-        await LocalPreferences.setOnboardingCompleted(outletId, true);
+        await LocalPreferences.setOnboardingCompleted(outletIdentifier, true);
       }
     }
 

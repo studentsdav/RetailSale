@@ -562,66 +562,15 @@ exports.getOnboardingStatus = async (req, res) => {
             db.models.outlets ? db.models.outlets.findByPk(outletId).catch(() => null) : null
         ]);
 
-        // Fallback global counts if outlet-specific count is 0
-        let effectiveItemsCount = itemsCount;
-        if (effectiveItemsCount === 0 && db.models.item_master) {
-            effectiveItemsCount = await db.models.item_master.count().catch(() => 0);
-        }
-
-        let effectiveSuppliersCount = suppliersCount;
-        if (effectiveSuppliersCount === 0 && db.models.supplier_master) {
-            effectiveSuppliersCount = await db.models.supplier_master.count().catch(() => 0);
-        }
-
-        let effectiveSequencesCount = sequencesCount;
-        if (effectiveSequencesCount === 0 && db.models.numbering_settings) {
-            effectiveSequencesCount = await db.models.numbering_settings.count().catch(() => 0);
-        }
-
-        let effectiveTaxCount = taxGroupsCount;
-        if (effectiveTaxCount === 0 && db.models.tax_groups) {
-            effectiveTaxCount = await db.models.tax_groups.count().catch(() => 0);
-        }
-
-        let effectiveLocationCount = locationsCount;
-        if (effectiveLocationCount === 0 && db.models.stock_locations) {
-            effectiveLocationCount = await db.models.stock_locations.count().catch(() => 0);
-        }
-
-        let effectiveTablesCount = tablesCount;
-        if (effectiveTablesCount === 0 && db.models.restaurant_tables) {
-            effectiveTablesCount = await db.models.restaurant_tables.count().catch(() => 0);
-        }
-
-        let effectiveUsersCount = usersCount;
-        if (effectiveUsersCount === 0 && db.models.users) {
-            effectiveUsersCount = await db.models.users.count().catch(() => 0);
-        }
-
-        // Global fallback for property_info
-        let effectivePropName = (propInfo?.property_name || outletObj?.outlet_name || '').toString().trim();
-        if (effectivePropName.length === 0 && db.models.property_info) {
-            const firstProp = await db.models.property_info.findOne({ attributes: ['property_name'] }).catch(() => null);
-            if (firstProp?.property_name) effectivePropName = firstProp.property_name.toString().trim();
-        }
-
-        // Global fallback for system_settings
-        let effectiveSettings = systemSettings;
-        if (!effectiveSettings && db.models.system_settings) {
-            effectiveSettings = await db.models.system_settings.findOne({
-                attributes: ['base_currency_symbol', 'billing_country']
-            }).catch(() => null);
-        }
-
-        const propConfigured = effectivePropName.length > 0;
-        const settingsConfigured = !!(effectiveSettings && (effectiveSettings.base_currency_symbol || effectiveSettings.billing_country));
-        const taxGroupConfigured = (effectiveTaxCount > 0);
-        const sequenceConfigured = (effectiveSequencesCount > 0);
-        const locationConfigured = (effectiveLocationCount > 0);
-        const itemMasterConfigured = (effectiveItemsCount > 0);
-        const supplierConfigured = (effectiveSuppliersCount > 0);
-        const restaurantConfigured = (effectiveTablesCount > 0);
-        const usersConfigured = (effectiveUsersCount > 0);
+        const propConfigured = (propInfo?.property_name || '').toString().trim().length > 0;
+        const settingsConfigured = !!(systemSettings && (systemSettings.base_currency_symbol || systemSettings.billing_country));
+        const taxGroupConfigured = (taxGroupsCount > 0);
+        const sequenceConfigured = (sequencesCount > 0);
+        const locationConfigured = (locationsCount > 0);
+        const itemMasterConfigured = (itemsCount > 0);
+        const supplierConfigured = (suppliersCount > 0);
+        const restaurantConfigured = (tablesCount > 0);
+        const usersConfigured = (usersCount > 1);
 
         const businessType = (propInfo?.business_type || outletObj?.business_module || req.user?.business_module || req.user?.outlet_type || 'ALL').toString().toUpperCase();
 
