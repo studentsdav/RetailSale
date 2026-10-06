@@ -83,5 +83,10 @@ router.get('/challans/:id', challanCtrl.getChallanDetails);
 router.post('/challans', challanCtrl.createChallan);
 router.put('/challans/:id/status', challanCtrl.updateChallanStatus);
 
+// Waiter Assistance Notifications
+const diningCtrl = require('../controllers/restaurant/dining.controller');
+router.get('/dining/waiter-calls', diningCtrl.getActiveWaiterCalls);
+router.post('/dining/resolve-waiter-call', diningCtrl.resolveWaiterCall);
+
 module.exports = router;
 export default router;

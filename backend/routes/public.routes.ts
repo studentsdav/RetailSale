@@ -75,5 +75,14 @@ router.post('/migration/export-bundle', migrationCtrl.exportBundle);
 router.post('/migration/import-bundle', migrationCtrl.importBundle);
 router.post('/migration/sync-online-to-offline', migrationCtrl.syncOnlineToOffline);
 
+// Table QR Customer Self-Ordering Dining Endpoints
+const diningCtrl = require('../controllers/restaurant/dining.controller');
+router.get('/dining/table-info', diningCtrl.getTableDiningInfo);
+router.post('/dining/request-otp', diningCtrl.requestCustomerDiningOtp);
+router.post('/dining/verify-otp', diningCtrl.verifyCustomerDiningOtp);
+router.post('/dining/register-profile', diningCtrl.registerCustomerDiningProfile);
+router.post('/dining/place-order', diningCtrl.placeCustomerDiningOrder);
+router.post('/dining/call-waiter', diningCtrl.callTableWaiter);
+
 module.exports = router;
 export default router;

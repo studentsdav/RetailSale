@@ -562,7 +562,10 @@ exports.getOnboardingStatus = async (req, res) => {
             db.models.outlets ? db.models.outlets.findByPk(outletId).catch(() => null) : null
         ]);
 
-        const propConfigured = (propInfo?.property_name || '').toString().trim().length > 0;
+        const propConfigured = !!(
+            (propInfo?.property_name && propInfo.property_name.toString().trim().length > 0) ||
+            (outletObj?.outlet_name && outletObj.outlet_name.toString().trim().length > 0)
+        );
         const settingsConfigured = !!(systemSettings && (systemSettings.base_currency_symbol || systemSettings.billing_country));
         const taxGroupConfigured = (taxGroupsCount > 0);
         const sequenceConfigured = (sequencesCount > 0);

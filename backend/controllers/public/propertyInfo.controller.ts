@@ -2,18 +2,21 @@ const audit = require('../../services/audit.service');
 const { upsertClient } = require("../../modules/driveService");
 const loadConfig = require("../../utils/decryptConfig");
 
-exports.getPropertyInfo = async (req, res) => {
+exports.getPropertyInfo = async (req: any, res: any) => {
     try {
         let actualOutletId = req.user?.outlet_id || req.query?.outlet_id || req.body?.outlet_id;
 
         // If it's a string code (like OUTLET001), resolve it to integer id
-        if (typeof actualOutletId === 'string' && actualOutletId.startsWith('OUTLET')) {
+        if (typeof actualOutletId === 'string' && (actualOutletId.startsWith('OUTLET') || isNaN(Number(actualOutletId)))) {
             const outlet = await req.propertyDb.models.outlets.findOne({
                 where: { outlet_code: actualOutletId }
             });
             if (outlet) {
                 actualOutletId = outlet.id;
             }
+        }
+        if (actualOutletId) {
+            actualOutletId = parseInt(actualOutletId, 10);
         }
 
         // Fallback: if still null/undefined, find the first active outlet
@@ -36,6 +39,21 @@ exports.getPropertyInfo = async (req, res) => {
             if (outletObj) {
                 infoObj.outlet_module = outletObj.business_module || outletObj.outlet_module || 'ALL';
                 infoObj.business_module = outletObj.business_module || outletObj.outlet_module || 'ALL';
+                if (!infoObj.property_name && outletObj.outlet_name) {
+                    infoObj.property_name = outletObj.outlet_name;
+                }
+                if (!infoObj.legal_name && outletObj.outlet_name) {
+                    infoObj.legal_name = outletObj.outlet_name;
+                }
+                if (!infoObj.mobile && outletObj.contact_phone) {
+                    infoObj.mobile = outletObj.contact_phone;
+                }
+                if (!infoObj.email && outletObj.contact_email) {
+                    infoObj.email = outletObj.contact_email;
+                }
+                if (!infoObj.gst_no && outletObj.tax_id) {
+                    infoObj.gst_no = outletObj.tax_id;
+                }
             }
         }
 
@@ -50,16 +68,24 @@ exports.getPropertyInfo = async (req, res) => {
         }
 
         res.json({ success: true, data: infoObj });
-    } catch (err) {
+    } catch (err: any) {
         console.error("GET PROPERTY INFO ERROR STACK:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 };
 
-exports.savePropertyInfo = async (req, res) => {
+exports.savePropertyInfo = async (req: any, res: any) => {
     const t = await req.propertyDb.transaction();
     try {
-        const outlet_id = req.user.outlet_id;
+        let outlet_id = req.body?.outlet_id || req.user?.outlet_id;
+        if (typeof outlet_id === 'string' && (outlet_id.startsWith('OUTLET') || isNaN(Number(outlet_id)))) {
+            const outlet = await req.propertyDb.models.outlets.findOne({
+                where: { outlet_code: outlet_id },
+                transaction: t
+            });
+            if (outlet) outlet_id = outlet.id;
+        }
+        outlet_id = parseInt(outlet_id, 10) || 1;
 
         const Model = req.propertyDb.models.property_info;
 

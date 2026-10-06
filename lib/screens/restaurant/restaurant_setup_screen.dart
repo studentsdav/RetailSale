@@ -17,6 +17,7 @@ import '../../core/settings/local_preferences.dart';
 import '../../core/printing/device_printer_routing.dart';
 import '../../core/utils/country_tax_helper.dart';
 import 'table_reservation_screen.dart';
+import 'table_qr_designer_screen.dart';
 
 class RestaurantSetupScreen extends StatefulWidget {
   const RestaurantSetupScreen({super.key});
@@ -362,6 +363,23 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                 ),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TableQrDesignerScreen(tables: ctrl.tables),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.qr_code_2, size: 16),
+                  label: const Text('Table QR Designer'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
                     backgroundColor: primaryBlue,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -448,6 +466,21 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
+                              icon: const Icon(Icons.qr_code_2, color: Color(0xFFD97706), size: 22),
+                              tooltip: 'View & Print QR Code',
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => TableQrDesignerScreen(
+                                      tables: ctrl.tables,
+                                      initialTableId: table['id']?.toString(),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            IconButton(
                               icon: const Icon(Icons.person_pin_outlined, color: Colors.teal, size: 20),
                               tooltip: 'Assign Staff / Waiter',
                               onPressed: () => _showAssignTableStaffDialog(context, ctrl, table),
@@ -466,6 +499,7 @@ class _RestaurantSetupScreenState extends State<RestaurantSetupScreen> with Sing
                     },
                   ),
           ),
+
         ],
       ),
     );

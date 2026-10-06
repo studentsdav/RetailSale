@@ -37,6 +37,7 @@ import 'screens/reports/closing_report_screen.dart';
 import 'controllers/community/community_controller.dart';
 import 'controllers/inventory/marketplace_controller.dart';
 import 'controllers/inventory/supplier_controller.dart';
+import 'screens/dining/table_dining_screen.dart';
 
 final GlobalKey<ScaffoldMessengerState> globalSnackbarKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -395,6 +396,22 @@ class MyApp extends StatelessWidget {
             child: child ?? const SizedBox.shrink(),
           ),
         );
+      },
+      onGenerateRoute: (settings) {
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri != null && (uri.path == '/dining' || uri.path == '/table' || uri.path.startsWith('/dining') || uri.path.startsWith('/table'))) {
+          final outletId = uri.queryParameters['outlet_id'] ?? uri.queryParameters['outlet'];
+          final tableId = uri.queryParameters['table_id'] ?? uri.queryParameters['table'];
+          final tableName = uri.queryParameters['table_name'];
+          return MaterialPageRoute(
+            builder: (_) => TableDiningScreen(
+              outletId: outletId,
+              tableId: tableId,
+              tableName: tableName,
+            ),
+          );
+        }
+        return null;
       },
       home: AppLifecycleObserver(
         child: homeWidget ?? const SplashScreen(),

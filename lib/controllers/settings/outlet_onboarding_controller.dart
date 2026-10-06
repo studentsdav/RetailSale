@@ -218,10 +218,11 @@ class OutletOnboardingController extends ChangeNotifier {
       // 2. Property Setup Status
       if (propRes != null && propRes['success'] == true && propRes['data'] != null) {
         final data = propRes['data'];
-        final String name = (data['property_name'] ?? data['propertyName'] ?? data['name'] ?? '').toString().trim();
+        final String name = (data['property_name'] ?? data['propertyName'] ?? data['outlet_name'] ?? data['name'] ?? '').toString().trim();
         propertyConfigured = name.isNotEmpty;
       } else {
-        propertyConfigured = false;
+        final String fallbackName = (userMap?['outlet_name'] ?? userMap?['property_name'] ?? userMap?['name'] ?? '').toString().trim();
+        propertyConfigured = fallbackName.isNotEmpty;
       }
 
       // 3. Settings Status (Country, Currency & Timezone)

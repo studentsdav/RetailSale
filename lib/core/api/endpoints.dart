@@ -218,4 +218,14 @@ class ApiEndpoints {
   static const String mpesaConfig = '/api/payments/mpesa/config';
   static const String mpesaStkPush = '/api/payments/mpesa/stk-push';
   static const String mpesaStkQuery = '/api/payments/mpesa/stk-query';
+
+  // TABLE QR & CUSTOMER SELF-ORDERING DINING
+  static const String publicDiningTableInfo = '/api/public/dining/table-info';
+  static const String publicDiningRequestOtp = '/api/public/dining/request-otp';
+  static const String publicDiningVerifyOtp = '/api/public/dining/verify-otp';
+  static const String publicDiningRegisterProfile = '/api/public/dining/register-profile';
+  static const String publicDiningPlaceOrder = '/api/public/dining/place-order';
+  static const String publicDiningCallWaiter = '/api/public/dining/call-waiter';
+  static const String diningWaiterCalls = '/api/restaurant/dining/waiter-calls';
+  static const String resolveWaiterCall = '/api/restaurant/dining/resolve-waiter-call';
 }
