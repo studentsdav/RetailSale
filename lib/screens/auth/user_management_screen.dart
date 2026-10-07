@@ -315,6 +315,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 DataColumn(label: Text('Username')),
                 DataColumn(label: Text('Name')),
                 DataColumn(label: Text('Role')),
+                DataColumn(label: Text('Quick PIN')),
                 DataColumn(label: Text('Mobile')),
                 DataColumn(label: Text('Email')),
                 DataColumn(label: Text('Max Disc %')),
@@ -330,6 +331,33 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     DataCell(Text(u.username)),
                     DataCell(Text(u.fullName)),
                     DataCell(Text(u.role)),
+                    DataCell(
+                      u.pinCode != null && u.pinCode!.trim().isNotEmpty
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.teal.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.teal.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.pin, size: 14, color: Colors.teal),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    u.pinCode!.trim(),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.teal.shade800,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : const Text('Not Set', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic)),
+                    ),
                     DataCell(Text(u.mobile)),
                     DataCell(Text(u.email)),
                     DataCell(Text('${u.maxDiscountPercent.toStringAsFixed(0)}%')),
@@ -552,9 +580,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final mobile = TextEditingController();
     final email = TextEditingController();
     final password = TextEditingController();
+    final pinCode = TextEditingController();
     final maxDiscount = TextEditingController(text: '100');
     final otpCtrl = TextEditingController();
     String role = 'STORE';
+    bool showInQuickLogin = true;
 
     bool isEmailVerified = false;
     bool isOtpSent = false;
@@ -729,6 +759,30 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
+                          controller: pinCode,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Quick Login PIN (4-6 Digits)',
+                            hintText: 'e.g. 123456',
+                            helperText: 'For fast PIN login in Waiter, POS & Floor apps',
+                            prefixIcon: Icon(Icons.pin_rounded),
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (v) {
+                            if (v != null && v.trim().isNotEmpty) {
+                              if (v.trim().length < 4 || v.trim().length > 6) {
+                                return 'PIN must be between 4 and 6 digits';
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
                           controller: maxDiscount,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
@@ -744,6 +798,23 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: SwitchListTile(
+                            value: showInQuickLogin,
+                            onChanged: (v) => setDialogState(() => showInQuickLogin = v),
+                            title: const Text('Show in Quick Login Dropdown', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                            subtitle: const Text('Staff can pick this username on PIN login screen', style: TextStyle(fontSize: 11)),
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         const Divider(),
@@ -842,17 +913,22 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               mobile: mobile.text.trim(),
                               contact_email: email.text.trim(),
                               role: role,
+                              pinCode: pinCode.text.trim().isNotEmpty ? pinCode.text.trim() : null,
+                              showInQuickLogin: showInQuickLogin,
                               maxDiscountPercent: double.tryParse(maxDiscount.text.trim()) ?? 100.0,
                               permissions: AppConstants.getDefaultPermissionsForRole(role, _userBusinessModule),
                               password: password.text,
                             );
                             await _loadUsers();
-                            if (!context.mounted) return;
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('User created'),
-                                    backgroundColor: Colors.green));
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('User created'),
+                                      backgroundColor: Colors.green));
+                            }
                           } catch (e) {
                             final cleanErr = e.toString().replaceAll("Exception: ", "").replaceAll("Exception", "").trim();
                             setDialogState(() => dialogError = cleanErr);
@@ -1007,9 +1083,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final name = TextEditingController(text: u.fullName);
     final mobile = TextEditingController(text: u.mobile);
     final email = TextEditingController(text: u.email);
+    final pinCode = TextEditingController(text: u.pinCode ?? '');
     final maxDiscount = TextEditingController(text: u.maxDiscountPercent.toStringAsFixed(0));
     final otpCtrl = TextEditingController();
     String role = u.role;
+    bool showInQuickLogin = u.showInQuickLogin;
 
     String originalEmail = u.email;
 
@@ -1112,6 +1190,30 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
+                          controller: pinCode,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Quick Login PIN (4-6 Digits)',
+                            hintText: 'e.g. 123456',
+                            helperText: 'For fast PIN login in Waiter, POS & Floor apps',
+                            prefixIcon: Icon(Icons.pin_rounded),
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (v) {
+                            if (v != null && v.trim().isNotEmpty) {
+                              if (v.trim().length < 4 || v.trim().length > 6) {
+                                return 'PIN must be between 4 and 6 digits';
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
                           controller: maxDiscount,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
@@ -1127,6 +1229,23 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: SwitchListTile(
+                            value: showInQuickLogin,
+                            onChanged: (v) => setDialogState(() => showInQuickLogin = v),
+                            title: const Text('Show in Quick Login Dropdown', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                            subtitle: const Text('Staff can pick this username on PIN login screen', style: TextStyle(fontSize: 11)),
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         const Divider(),
@@ -1231,20 +1350,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               mobile: mobile.text,
                               contact_email: email.text,
                               role: role,
+                              pinCode: pinCode.text.trim().isNotEmpty ? pinCode.text.trim() : null,
                               maxDiscountPercent: double.tryParse(maxDiscount.text.trim()) ?? u.maxDiscountPercent,
+                              showInQuickLogin: showInQuickLogin,
                             );
                             await _loadUsers();
-                            if (!context.mounted) return;
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('User updated'),
-                                    backgroundColor: Colors.green));
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('User updated'),
+                                      backgroundColor: Colors.green));
+                            }
                           } catch (e) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text(e.toString().replaceAll("Exception: ", "")),
-                                backgroundColor: Colors.red));
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(e.toString().replaceAll("Exception: ", "")),
+                                  backgroundColor: Colors.red));
+                            }
                           } finally {
                             setDialogState(() => isLoading = false);
                           }

@@ -174,6 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ];
   static const _billFormats = [
     'A4',
+    'A5',
     'THERMAL_58',
     'THERMAL_72',
     'THERMAL_76',
@@ -200,6 +201,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _billFormatLabel(String format) {
     switch (format) {
+      case 'A5':
+        return 'A5 Invoice';
       case 'THERMAL_58':
         return '58mm Thermal';
       case 'THERMAL_72':

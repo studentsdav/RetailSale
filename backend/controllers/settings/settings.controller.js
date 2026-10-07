@@ -278,6 +278,7 @@ exports.saveSettings = async (req, res) => {
             ],
             receipt_template_config: req.body.receipt_template_config || existing?.receipt_template_config || {},
             a4_template_config: req.body.a4_template_config || existing?.a4_template_config || {},
+            a5_template_config: req.body.a5_template_config || existing?.a5_template_config || {},
             kot_template_config: req.body.kot_template_config || existing?.kot_template_config || {},
             token_template_config: req.body.token_template_config || existing?.token_template_config || {},
             restaurant_settlement_mode: req.body.restaurant_settlement_mode || existing?.restaurant_settlement_mode || 'DIRECT',

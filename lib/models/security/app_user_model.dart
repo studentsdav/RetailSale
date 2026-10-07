@@ -7,6 +7,8 @@ class AppUser {
   String email;
   bool isActive;
   double maxDiscountPercent;
+  String? pinCode;
+  bool showInQuickLogin;
   Set<String> permissions;
 
   AppUser({
@@ -18,6 +20,8 @@ class AppUser {
     required this.isActive,
     required this.email,
     this.maxDiscountPercent = 100.0,
+    this.pinCode,
+    this.showInQuickLogin = true,
     Set<String>? permissions,
   }) : permissions = permissions ?? {};
 
@@ -38,6 +42,34 @@ class AppUser {
       isActive: json['is_active'] ?? true,
       email: json['contact_email'] ?? "",
       maxDiscountPercent: parseMaxDisc(json['max_discount_percent']),
+      pinCode: json['pin_code']?.toString(),
+      showInQuickLogin: json['show_in_quick_login'] != false,
+    );
+  }
+}
+
+class QuickUser {
+  final int id;
+  final String username;
+  final String fullName;
+  final String role;
+  final bool hasPin;
+
+  QuickUser({
+    required this.id,
+    required this.username,
+    required this.fullName,
+    required this.role,
+    this.hasPin = false,
+  });
+
+  factory QuickUser.fromJson(Map<String, dynamic> json) {
+    return QuickUser(
+      id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
+      username: json['username'] ?? '',
+      fullName: json['full_name'] ?? json['username'] ?? '',
+      role: json['role'] ?? '',
+      hasPin: json['has_pin'] == true,
     );
   }
 }

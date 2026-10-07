@@ -21,27 +21,58 @@ class UserController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------- FETCH QUICK USERS (PUBLIC/PRE-LOGIN) ----------
+  static Future<List<QuickUser>> fetchQuickUsers({
+    required String outletCode,
+    String? role,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'outlet_code': outletCode.trim(),
+      };
+      if (role != null && role.isNotEmpty) {
+        queryParams['role'] = role.trim();
+      }
+      final uri = Uri.parse(ApiEndpoints.quickUsers).replace(queryParameters: queryParams);
+      final res = await ApiClient.get(uri.toString());
+      if (res['success'] == true && res['data'] is List) {
+        return (res['data'] as List).map((e) => QuickUser.fromJson(e)).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
   // ---------- CREATE ----------
   Future<void> create({
     required String username,
     required String fullName,
     required String mobile,
     required String role,
-    required String contact_email,
+    String? contactEmail,
+    // ignore: non_constant_identifier_names
+    String? contact_email,
     double maxDiscountPercent = 100.0,
+    String? pinCode,
+    bool showInQuickLogin = true,
     List<String>? permissions,
     required String password,
   }) async {
     loading = true;
     notifyListeners();
 
+    final emailToUse = (contactEmail ?? contact_email ?? '').trim();
+
     await ApiClient.post(ApiEndpoints.users, {
       'username': username,
       'full_name': fullName,
       'mobile': mobile,
       'role': role,
-      'contact_email': contact_email,
+      'contact_email': emailToUse,
       'max_discount_percent': maxDiscountPercent,
+      'pin_code': pinCode,
+      'show_in_quick_login': showInQuickLogin,
       'permissions': permissions ?? [],
       'password': password
     });
@@ -55,21 +86,33 @@ class UserController extends ChangeNotifier {
     required String fullName,
     required String mobile,
     required String role,
-    required String contact_email,
+    String? contactEmail,
+    // ignore: non_constant_identifier_names
+    String? contact_email,
     double maxDiscountPercent = 100.0,
+    String? pinCode,
+    bool? showInQuickLogin,
   }) async {
     loading = true;
     notifyListeners();
 
+    final emailToUse = (contactEmail ?? contact_email ?? '').trim();
+
+    final payload = <String, dynamic>{
+      'full_name': fullName,
+      'mobile': mobile,
+      'role': role,
+      'contact_email': emailToUse,
+      'max_discount_percent': maxDiscountPercent,
+      'pin_code': pinCode,
+    };
+    if (showInQuickLogin != null) {
+      payload['show_in_quick_login'] = showInQuickLogin;
+    }
+
     await ApiClient.put(
       '${ApiEndpoints.users}/$id',
-      {
-        'full_name': fullName,
-        'mobile': mobile,
-        'role': role,
-        'contact_email': contact_email,
-        'max_discount_percent': maxDiscountPercent,
-      },
+      payload,
     );
 
     await load();

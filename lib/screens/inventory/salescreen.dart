@@ -982,6 +982,7 @@ class _SaleScreenState extends State<SaleScreen> {
   static const double _cashRoundStep = 0.5;
   static const Map<String, String> _billFormatLabels = {
     'A4': 'A4 Invoice',
+    'A5': 'A5 Invoice',
     'THERMAL_58': '58mm Thermal',
     'THERMAL_72': '72mm Thermal',
     'THERMAL_76': '76mm Thermal',
@@ -1234,9 +1235,9 @@ class _SaleScreenState extends State<SaleScreen> {
     );
   }
 
-  String get _billFormatLabel => _billFormatLabels[_billFormat] ?? 'A4 Invoice';
+  String get _billFormatLabel => _billFormatLabels[_billFormat] ?? (_billFormat.toUpperCase().contains('A5') ? 'A5 Invoice' : 'A4 Invoice');
 
-  bool get _isThermalBillFormat => _billFormat.startsWith('THERMAL_');
+  bool get _isThermalBillFormat => _billFormat.toUpperCase().contains('THERMAL');
 
   List<SaleScheme> get _availableSchemes {
     final unique = <int, SaleScheme>{};

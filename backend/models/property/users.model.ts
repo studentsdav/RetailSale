@@ -11,6 +11,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(100),
             allowNull: true
         },
+        show_in_quick_login: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
         full_name: DataTypes.STRING,
         mobile: DataTypes.STRING,
         contact_email: {
@@ -34,6 +38,5 @@ module.exports = (sequelize, DataTypes) => {
         ]
     });
 };
-
 
 export default module.exports;

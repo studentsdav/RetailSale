@@ -4166,7 +4166,7 @@ COMMIT;
       `);
     }
   },
-  {
+    {
     version: 112,
     description: "Add food_type, dietary_type, and is_veg columns to item_master table for dietary preferences and food tags",
     up: async (db: any) => {
@@ -4179,9 +4179,20 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 113,
+    description: "Add show_in_quick_login and pin_code columns to users table for quick login staff selection",
+    up: async (db: any) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE users 
+          ADD COLUMN IF NOT EXISTS pin_code VARCHAR(100) DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS show_in_quick_login BOOLEAN DEFAULT TRUE;
+        COMMIT;
+      `);
+    }
   }
 ];
 
 export default migrations;
-
-

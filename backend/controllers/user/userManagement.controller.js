@@ -116,7 +116,7 @@ exports.checkUsernameAvailability = async (req, res) => {
 };
 
 exports.createUser = async (req, res) => {
-    const { username, full_name, mobile, role, permissions, password, contact_email, max_discount_percent, pin_code } = req.body;
+    const { username, full_name, mobile, role, permissions, password, contact_email, max_discount_percent, pin_code, show_in_quick_login } = req.body;
 
     const outlet_id = req.user.outlet_id;
 
@@ -203,6 +203,7 @@ exports.createUser = async (req, res) => {
         max_discount_percent: finalMaxDiscount,
         password_hash: hash,
         pin_code: pin_code ? pin_code.toString().trim() : null,
+        show_in_quick_login: show_in_quick_login !== undefined ? Boolean(show_in_quick_login) : true,
         is_active: true
     });
 
@@ -270,7 +271,7 @@ exports.changePassword = async (req, res) => {
 };
 
 exports.updateUser = async (req, res) => {
-    const { full_name, mobile, role, contact_email, max_discount_percent, pin_code } = req.body;
+    const { full_name, mobile, role, contact_email, max_discount_percent, pin_code, show_in_quick_login } = req.body;
 
     const user = await req.propertyDb.models.users.findByPk(req.params.id);
     if (!user) {
@@ -285,7 +286,11 @@ exports.updateUser = async (req, res) => {
         updatePayload.max_discount_percent = max_discount_percent;
     }
     if (pin_code !== undefined) {
-        updatePayload.pin_code = pin_code ? pin_code.toString().trim() : null;
+        const cleanPin = pin_code ? pin_code.toString().trim() : null;
+        updatePayload.pin_code = cleanPin;
+    }
+    if (show_in_quick_login !== undefined) {
+        updatePayload.show_in_quick_login = Boolean(show_in_quick_login);
     }
 
     await user.update(updatePayload);

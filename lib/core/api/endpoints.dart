@@ -4,6 +4,7 @@ class ApiEndpoints {
 
   static const login = '/api/auth/login';
   static const pinLogin = '/api/auth/pin-login';
+  static const quickUsers = '/api/auth/quick-users';
 
   static const items = '/api/inventory/items';
   static const stockTransfer = '/api/inventory/stock-transfer';

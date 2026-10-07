@@ -1,5 +1,333 @@
 import { Request, Response } from 'express';
 
+export function getDefaultTaxGroupsForCountry(country?: string): Array<{
+  group_name: string;
+  group_code: string;
+  is_tax_inclusive: boolean;
+  components: Array<{
+    component_code: string;
+    component_name: string;
+    rate: number;
+    calculation_order: number;
+    calculation_type: string;
+  }>;
+}> {
+  const norm = (country || 'INDIA').toString().trim().toUpperCase();
+
+  if (norm.includes('INDIA') || norm === 'IN' || norm === 'IND') {
+    return [
+      {
+        group_name: 'GST 0% (NIL)',
+        group_code: 'GST_0',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'CGST_0', component_name: 'CGST (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_0', component_name: 'SGST (0%)', rate: 0.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'GST 5%',
+        group_code: 'GST_5',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'CGST_2.5', component_name: 'CGST (2.5%)', rate: 2.5, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_2.5', component_name: 'SGST (2.5%)', rate: 2.5, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'GST 12%',
+        group_code: 'GST_12',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'CGST_6', component_name: 'CGST (6%)', rate: 6.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_6', component_name: 'SGST (6%)', rate: 6.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'GST 18%',
+        group_code: 'GST_18',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'CGST_9', component_name: 'CGST (9%)', rate: 9.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_9', component_name: 'SGST (9%)', rate: 9.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'GST 28%',
+        group_code: 'GST_28',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'CGST_14', component_name: 'CGST (14%)', rate: 14.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_14', component_name: 'SGST (14%)', rate: 14.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'IGST 5%',
+        group_code: 'IGST_5',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'IGST_5', component_name: 'IGST (5%)', rate: 5.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'IGST 12%',
+        group_code: 'IGST_12',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'IGST_12', component_name: 'IGST (12%)', rate: 12.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'IGST 18%',
+        group_code: 'IGST_18',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'IGST_18', component_name: 'IGST (18%)', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'IGST 28%',
+        group_code: 'IGST_28',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'IGST_28', component_name: 'IGST (28%)', rate: 28.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      }
+    ];
+  }
+
+  if (norm.includes('USA') || norm.includes('UNITED STATES') || norm === 'US') {
+    return [
+      {
+        group_name: 'USA Zero / Exempt (0%)',
+        group_code: 'USA_EXEMPT',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'EXEMPT_0', component_name: 'Exempt (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'USA Standard Sales Tax (6.25%)',
+        group_code: 'USA_SALES_6.25',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'STATE_TAX_6.25', component_name: 'State Sales Tax (6.25%)', rate: 6.25, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'USA Retail Sales Tax (7.25%)',
+        group_code: 'USA_SALES_7.25',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'STATE_TAX_6', component_name: 'State Sales Tax (6%)', rate: 6.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'LOCAL_TAX_1.25', component_name: 'Local County Tax (1.25%)', rate: 1.25, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'USA Combined Sales Tax (8.25%)',
+        group_code: 'USA_SALES_8.25',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'STATE_TAX_6.25', component_name: 'State Sales Tax (6.25%)', rate: 6.25, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'CITY_TAX_2', component_name: 'City Sales Tax (2%)', rate: 2.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+        ]
+      }
+    ];
+  }
+
+  if (norm.includes('KENYA') || norm === 'KE') {
+    return [
+      {
+        group_name: 'Kenya Zero-Rated (0%)',
+        group_code: 'KE_VAT_0',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'KE_ZERO_0', component_name: 'Zero-Rated VAT (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'Kenya Standard VAT (16%)',
+        group_code: 'KE_VAT_16',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'KE_VAT_16', component_name: 'VAT (16%)', rate: 16.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'Kenya Hospitality & Catering (18%)',
+        group_code: 'KE_HOSP_18',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'KE_VAT_16', component_name: 'VAT (16%)', rate: 16.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'KE_CTL_2', component_name: 'Catering & Tourism Levy (2%)', rate: 2.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'Kenya Fuel VAT (8%)',
+        group_code: 'KE_VAT_8',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'KE_VAT_8', component_name: 'Fuel VAT (8%)', rate: 8.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      }
+    ];
+  }
+
+  if (norm.includes('UK') || norm.includes('ENGLAND') || norm.includes('BRITAIN') || norm.includes('UNITED KINGDOM') || norm === 'GB') {
+    return [
+      {
+        group_name: 'UK Zero Rate (0%)',
+        group_code: 'UK_VAT_0',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'UK_ZERO_0', component_name: 'Zero Rate VAT (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'UK Reduced VAT (5%)',
+        group_code: 'UK_VAT_5',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'UK_RED_5', component_name: 'Reduced VAT (5%)', rate: 5.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'UK Standard VAT (20%)',
+        group_code: 'UK_VAT_20',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'UK_STD_20', component_name: 'Standard VAT (20%)', rate: 20.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      }
+    ];
+  }
+
+  if (norm.includes('GERMANY') || norm.includes('DEUTSCH') || norm === 'DE') {
+    return [
+      {
+        group_name: 'DE Steuerfrei (0%)',
+        group_code: 'DE_MWST_0',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'DE_ZERO_0', component_name: 'Steuerfrei (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'DE Ermäßigter Satz (7%)',
+        group_code: 'DE_MWST_7',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'DE_RED_7', component_name: 'Ermäßigter MwSt (7%)', rate: 7.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'DE Regelsteuersatz (19%)',
+        group_code: 'DE_MWST_19',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'DE_STD_19', component_name: 'Regelsteuersatz MwSt (19%)', rate: 19.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      }
+    ];
+  }
+
+  if (norm.includes('BRAZIL') || norm.includes('BRASIL') || norm === 'BR') {
+    return [
+      {
+        group_name: 'BR Isento (0%)',
+        group_code: 'BR_ISENTO',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'BR_ISENTO_0', component_name: 'Isento de Impostos (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'BR ICMS Padrão (18%)',
+        group_code: 'BR_ICMS_18',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'BR_ICMS_18', component_name: 'ICMS Estadual (18%)', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'BR Tributação Completa (27.25%)',
+        group_code: 'BR_TRIB_27.25',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'BR_ICMS_18', component_name: 'ICMS (18%)', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'BR_PIS_1.65', component_name: 'PIS (1.65%)', rate: 1.65, calculation_order: 2, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'BR_COFINS_7.6', component_name: 'COFINS (7.6%)', rate: 7.6, calculation_order: 3, calculation_type: 'FLAT_PERCENT' }
+        ]
+      }
+    ];
+  }
+
+  if (norm.includes('EU') || norm.includes('EUROPE')) {
+    return [
+      {
+        group_name: 'EU Zero-Rated (0%)',
+        group_code: 'EU_VAT_0',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'EU_ZERO_0', component_name: 'Zero Rate VAT (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'EU Reduced VAT (10%)',
+        group_code: 'EU_VAT_10',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'EU_RED_10', component_name: 'Reduced VAT (10%)', rate: 10.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      },
+      {
+        group_name: 'EU Standard VAT (21%)',
+        group_code: 'EU_VAT_21',
+        is_tax_inclusive: false,
+        components: [
+          { component_code: 'EU_STD_21', component_name: 'Standard VAT (21%)', rate: 21.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        ]
+      }
+    ];
+  }
+
+  // Default fallback for any other country
+  return [
+    {
+      group_name: 'Zero Tax (0%)',
+      group_code: 'TAX_0',
+      is_tax_inclusive: false,
+      components: [
+        { component_code: 'ZERO_0', component_name: 'Zero Tax (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+      ]
+    },
+    {
+      group_name: 'Standard Tax (10%)',
+      group_code: 'TAX_10',
+      is_tax_inclusive: false,
+      components: [
+        { component_code: 'TAX_10', component_name: 'Standard Tax (10%)', rate: 10.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+      ]
+    },
+    {
+      group_name: 'Standard Tax (15%)',
+      group_code: 'TAX_15',
+      is_tax_inclusive: false,
+      components: [
+        { component_code: 'TAX_15', component_name: 'Standard Tax (15%)', rate: 15.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+      ]
+    },
+    {
+      group_name: 'Standard Tax (18%)',
+      group_code: 'TAX_18',
+      is_tax_inclusive: false,
+      components: [
+        { component_code: 'TAX_18', component_name: 'Standard Tax (18%)', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+      ]
+    }
+  ];
+}
+
 export async function resolveOutletId(req: Request, inputOutletId?: any): Promise<number> {
   let outletId = Number(
     inputOutletId ||
@@ -20,10 +348,96 @@ export async function resolveOutletId(req: Request, inputOutletId?: any): Promis
   return outletId || 1;
 }
 
+export async function resolveBillingCountry(req: Request, outletId: number, queryCountry?: any): Promise<string> {
+  if (queryCountry && String(queryCountry).trim().length > 0) {
+    return String(queryCountry).trim();
+  }
+  if (req.headers && req.headers['x-country']) {
+    return String(req.headers['x-country']).trim();
+  }
+
+  try {
+    if (req.propertyDb.models.system_settings) {
+      const settings = await req.propertyDb.models.system_settings.findOne({
+        where: { outlet_id: outletId },
+        attributes: ['billing_country']
+      });
+      if (settings && settings.billing_country && settings.billing_country.trim().length > 0) {
+        return settings.billing_country.trim();
+      }
+    }
+  } catch (_) {}
+
+  try {
+    if (req.propertyDb.models.outlets) {
+      const outlet = await req.propertyDb.models.outlets.findByPk(outletId, {
+        attributes: ['country']
+      });
+      if (outlet && outlet.country && outlet.country.trim().length > 0) {
+        return outlet.country.trim();
+      }
+    }
+  } catch (_) {}
+
+  return 'India';
+}
+
+export async function autoSeedTaxGroupsInternal(req: Request, outletId: number, country: string): Promise<any[]> {
+  const seedDefs = getDefaultTaxGroupsForCountry(country);
+  const createdGroups: any[] = [];
+
+  for (const def of seedDefs) {
+    const t = await req.propertyDb.transaction();
+    try {
+      let totalRate = 0;
+      for (const c of def.components) {
+        totalRate += Number(c.rate || 0);
+      }
+
+      const group = await req.propertyDb.models.tax_groups.create(
+        {
+          outlet_id: outletId,
+          group_name: def.group_name,
+          group_code: def.group_code,
+          total_rate: totalRate,
+          is_tax_inclusive: def.is_tax_inclusive,
+          is_active: true
+        },
+        { transaction: t }
+      );
+
+      if (Array.isArray(def.components) && def.components.length > 0) {
+        const compRows = def.components.map((c, idx) => ({
+          tax_group_id: group.id,
+          component_code: c.component_code || `TAX_${idx + 1}`,
+          component_name: c.component_name || `Tax Component ${idx + 1}`,
+          rate: Number(c.rate || 0),
+          calculation_order: c.calculation_order || idx + 1,
+          calculation_type: c.calculation_type || 'FLAT_PERCENT',
+          gl_account_code: null
+        }));
+        await req.propertyDb.models.tax_group_components.bulkCreate(compRows, { transaction: t });
+      }
+
+      await t.commit();
+
+      const created = await req.propertyDb.models.tax_groups.findByPk(group.id, {
+        include: [{ model: req.propertyDb.models.tax_group_components, as: 'components' }]
+      });
+      if (created) createdGroups.push(created);
+    } catch (err) {
+      await t.rollback();
+      console.error(`Error auto-seeding group ${def.group_name}:`, err);
+    }
+  }
+
+  return createdGroups;
+}
+
 export async function getTaxGroups(req: Request, res: Response): Promise<any> {
   try {
     const outlet_id = await resolveOutletId(req, req.query.outlet_id);
-    const groups = await req.propertyDb.models.tax_groups.findAll({
+    let groups = await req.propertyDb.models.tax_groups.findAll({
       where: { outlet_id, is_active: true },
       include: [
         {
@@ -31,11 +445,84 @@ export async function getTaxGroups(req: Request, res: Response): Promise<any> {
           as: 'components'
         }
       ],
-      order: [['created_at', 'ASC']]
+      order: [['id', 'ASC']]
     });
+
+    // Auto-seed for this outlet if no tax groups exist yet!
+    if (!groups || groups.length === 0) {
+      const country = await resolveBillingCountry(req, outlet_id, req.query.country);
+      console.log(`[taxGroup] Auto-seeding default tax groups for outlet ${outlet_id} (Country: ${country})...`);
+      await autoSeedTaxGroupsInternal(req, outlet_id, country);
+
+      // Re-query newly created groups
+      groups = await req.propertyDb.models.tax_groups.findAll({
+        where: { outlet_id, is_active: true },
+        include: [
+          {
+            model: req.propertyDb.models.tax_group_components,
+            as: 'components'
+          }
+        ],
+        order: [['id', 'ASC']]
+      });
+    }
+
     return res.json({ success: true, data: groups });
   } catch (err: any) {
     console.error('Error fetching tax groups:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+export async function seedDefaultTaxGroups(req: Request, res: Response): Promise<any> {
+  try {
+    const outlet_id = await resolveOutletId(req, req.body.outlet_id || req.query.outlet_id);
+    const country = req.body.country || req.query.country || (await resolveBillingCountry(req, outlet_id));
+    const overwrite = !!req.body.overwrite;
+    let preservedLinkedCount = 0;
+
+    if (overwrite) {
+      // Find all existing active tax groups for this outlet
+      const existingGroups = await req.propertyDb.models.tax_groups.findAll({
+        where: { outlet_id, is_active: true }
+      });
+
+      const unlinkedGroupIds: any[] = [];
+
+      for (const grp of existingGroups) {
+        let isLinked = false;
+        if (req.propertyDb.models.item_master) {
+          const count = await req.propertyDb.models.item_master.count({
+            where: { tax_group_id: grp.id }
+          });
+          if (count > 0) {
+            isLinked = true;
+          }
+        }
+        if (isLinked) {
+          preservedLinkedCount++;
+        } else {
+          unlinkedGroupIds.push(grp.id);
+        }
+      }
+
+      if (unlinkedGroupIds.length > 0) {
+        await req.propertyDb.models.tax_groups.update(
+          { is_active: false },
+          { where: { id: unlinkedGroupIds } }
+        );
+      }
+    }
+
+    const seeded = await autoSeedTaxGroupsInternal(req, outlet_id, country);
+    const preservedMsg = preservedLinkedCount > 0 ? ` (Preserved ${preservedLinkedCount} tax group(s) linked to items in Item Master)` : '';
+    return res.json({
+      success: true,
+      message: `Successfully configured standard default taxes for ${country}.${preservedMsg}`,
+      data: seeded
+    });
+  } catch (err: any) {
+    console.error('Error seeding default tax groups:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 }
@@ -155,8 +642,21 @@ export async function deleteTaxGroup(req: Request, res: Response): Promise<any> 
     const group = await req.propertyDb.models.tax_groups.findByPk(id);
     if (!group) return res.status(404).json({ success: false, message: 'Tax Group not found' });
 
+    // Check if any items in item_master are linked to this tax_group
+    if (req.propertyDb.models.item_master) {
+      const linkedItemsCount = await req.propertyDb.models.item_master.count({
+        where: { tax_group_id: id }
+      });
+      if (linkedItemsCount > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot delete "${group.group_name}". It is currently linked to ${linkedItemsCount} item(s) in Item Master. Please reassign those items before deleting.`
+        });
+      }
+    }
+
     await group.update({ is_active: false });
-    return res.json({ success: true, message: 'Tax group deleted successfully' });
+    return res.json({ success: true, message: `Tax group "${group.group_name}" deleted successfully` });
   } catch (err: any) {
     console.error('Error deleting tax group:', err);
     return res.status(500).json({ success: false, message: err.message });
@@ -165,8 +665,12 @@ export async function deleteTaxGroup(req: Request, res: Response): Promise<any> 
 
 module.exports = {
   getTaxGroups,
+  seedDefaultTaxGroups,
   createTaxGroup,
   updateTaxGroup,
   deleteTaxGroup,
-  resolveOutletId
+  resolveOutletId,
+  resolveBillingCountry,
+  getDefaultTaxGroupsForCountry,
+  autoSeedTaxGroupsInternal
 };

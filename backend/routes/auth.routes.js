@@ -5,6 +5,7 @@ const ctrl = require('../controllers/auth/login.controller');
 const { loginLimiter } = require('../middlewares/rateLimit.middleware');
 
 router.post('/login', loginLimiter, ctrl.login);
+router.get('/quick-users', ctrl.getQuickUsers);
 router.post('/pin-login', loginLimiter, ctrl.pinLogin);
 router.post('/switch-outlet', auth, ctrl.switchOutlet);
 router.post('/supplier/request-otp', loginLimiter, ctrl.requestSupplierOtp);

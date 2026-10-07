@@ -56,17 +56,26 @@ class _PdfPreviewDialog extends StatelessWidget {
   final PdfPageFormat pageFormat;
   final Uint8List? prebuiltBytes;
 
-  bool get _isThermal => pageFormat.width < 150 * PdfPageFormat.mm;
+  bool get _isThermal => pageFormat.width <= 90 * PdfPageFormat.mm;
+  bool get _isA5 => !_isThermal && pageFormat.width <= 165 * PdfPageFormat.mm;
+
+  String get _formatLabel {
+    if (_isThermal) return '${(pageFormat.width / PdfPageFormat.mm).round()} mm Thermal Roll';
+    if (_isA5) return 'A5 Format';
+    return 'A4 Format';
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final screenSize = MediaQuery.of(context).size;
 
-    // For thermal (narrow) bills show a narrow dialog; for A4 a wider one.
+    // For thermal (narrow) bills show a narrow dialog; for A5 medium; for A4 wide.
     final dialogWidth = _isThermal
         ? (screenSize.width * 0.42).clamp(280.0, 480.0)
-        : screenSize.width * 0.88;
+        : (_isA5
+            ? (screenSize.width * 0.65).clamp(380.0, 720.0)
+            : screenSize.width * 0.88);
     final dialogHeight = screenSize.height * 0.92;
 
     return Dialog(
@@ -103,9 +112,7 @@ class _PdfPreviewDialog extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          _isThermal
-                              ? '${(pageFormat.width / PdfPageFormat.mm).round()} mm Thermal Roll'
-                              : 'A4 Format',
+                          _formatLabel,
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 11,

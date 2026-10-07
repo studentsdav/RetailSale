@@ -47,6 +47,7 @@ class SystemSettings {
   List<Map<String, dynamic>> paymentModes;
   Map<String, dynamic> receiptTemplateConfig;
   Map<String, dynamic> a4TemplateConfig;
+  Map<String, dynamic> a5TemplateConfig;
   Map<String, dynamic> kotTemplateConfig;
   Map<String, dynamic> tokenTemplateConfig;
   String restaurantSettlementMode; // 'DIRECT' or 'AFTER_BILL_PRINT'
@@ -94,6 +95,7 @@ class SystemSettings {
     List<Map<String, dynamic>>? paymentModes,
     Map<String, dynamic>? receiptTemplateConfig,
     Map<String, dynamic>? a4TemplateConfig,
+    Map<String, dynamic>? a5TemplateConfig,
     Map<String, dynamic>? kotTemplateConfig,
     Map<String, dynamic>? tokenTemplateConfig,
     this.restaurantSettlementMode = 'DIRECT',
@@ -108,6 +110,7 @@ class SystemSettings {
             ],
         receiptTemplateConfig = receiptTemplateConfig ?? {},
         a4TemplateConfig = a4TemplateConfig ?? {},
+        a5TemplateConfig = a5TemplateConfig ?? {},
         kotTemplateConfig = kotTemplateConfig ?? {},
         tokenTemplateConfig = tokenTemplateConfig ?? {};
 
@@ -217,6 +220,17 @@ class SystemSettings {
         }
         return <String, dynamic>{};
       }(),
+      a5TemplateConfig: () {
+        final rawA5 = json['a5_template_config'] ?? json['a5TemplateConfig'];
+        if (rawA5 is Map) return Map<String, dynamic>.from(rawA5);
+        if (rawA5 is String && rawA5.trim().isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawA5);
+            if (decoded is Map) return Map<String, dynamic>.from(decoded);
+          } catch (_) {}
+        }
+        return <String, dynamic>{};
+      }(),
       kotTemplateConfig: () {
         final rawKC = json['kot_template_config'] ?? json['kotTemplateConfig'];
         if (rawKC is Map) return Map<String, dynamic>.from(rawKC);
@@ -304,6 +318,7 @@ class SystemSettings {
       'payment_modes': paymentModes,
       'receipt_template_config': receiptTemplateConfig,
       'a4_template_config': a4TemplateConfig,
+      'a5_template_config': a5TemplateConfig,
       'kot_template_config': kotTemplateConfig,
       'token_template_config': tokenTemplateConfig,
       'default_charges':

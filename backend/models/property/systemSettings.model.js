@@ -195,6 +195,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.JSONB,
             defaultValue: {}
         },
+        a5_template_config: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },
         kot_template_config: {
             type: DataTypes.JSONB,
             defaultValue: {}

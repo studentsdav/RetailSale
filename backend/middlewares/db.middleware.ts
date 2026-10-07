@@ -43,6 +43,7 @@ export const dbMiddleware = async (req: Request, res: Response, next: NextFuncti
           ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS currency_decimals INTEGER DEFAULT 2;
           ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS receipt_template_config JSONB DEFAULT '{}';
           ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS a4_template_config JSONB DEFAULT '{}';
+          ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS a5_template_config JSONB DEFAULT '{}';
           ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS kot_template_config JSONB DEFAULT '{}';
           ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS token_template_config JSONB DEFAULT '{}';
           ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS token_no VARCHAR(50) NULL;
@@ -53,6 +54,9 @@ export const dbMiddleware = async (req: Request, res: Response, next: NextFuncti
           ALTER TABLE email_configurations ADD COLUMN IF NOT EXISTS resend_api_key TEXT NULL;
           ALTER TABLE outlets ADD COLUMN IF NOT EXISTS supervisor_pin VARCHAR(100) DEFAULT '1234';
           ALTER TABLE outlets ADD COLUMN IF NOT EXISTS supervisor_pin_type VARCHAR(50) DEFAULT 'STATIC';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_code VARCHAR(100) DEFAULT NULL;
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS show_in_quick_login BOOLEAN DEFAULT TRUE;
+
         `);
         console.log('✅ Self-healed: Checked and added missing columns to tables');
 

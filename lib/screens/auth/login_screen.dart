@@ -1,3 +1,5 @@
+import '../../controllers/security/user_controller.dart';
+import '../../models/security/app_user_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
@@ -53,6 +55,10 @@ class _LoginScreenState extends State<LoginScreen>
   final _passwordFocus = FocusNode();
   final _pinFocus = FocusNode();
   bool _isPinMode = false;
+  List<QuickUser> _quickUsers = [];
+  QuickUser? _selectedQuickUser;
+  bool _isLoadingQuickUsers = false;
+
 
   String _role = 'STORE';
   String? _selectedOutlet;
@@ -124,7 +130,40 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() {});
   }
 
+
+  Future<void> _loadQuickUsers() async {
+    if (_selectedOutlet == null || _selectedOutlet!.isEmpty) return;
+    if (!mounted) return;
+    setState(() => _isLoadingQuickUsers = true);
+    try {
+      final users = await UserController.fetchQuickUsers(
+        outletCode: _selectedOutlet!,
+      );
+      if (!mounted) return;
+      setState(() {
+        _quickUsers = users;
+        if (_quickUsers.isNotEmpty) {
+          final match = _quickUsers.where((u) => u.username == _selectedQuickUser?.username);
+          if (match.isNotEmpty) {
+            _selectedQuickUser = match.first;
+            _usernameCtrl.text = _selectedQuickUser!.username;
+          } else {
+            _selectedQuickUser = _quickUsers.first;
+            _usernameCtrl.text = _selectedQuickUser!.username;
+          }
+        } else {
+          _selectedQuickUser = null;
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _quickUsers = []);
+    } finally {
+      if (mounted) setState(() => _isLoadingQuickUsers = false);
+    }
+  }
+
   Future<void> _loadOutletLogo() async {
+    _loadQuickUsers();
     String mod = 'ALL';
     String? fetchedPath = _logoPath;
     String? fetchedBg = _bgCoverImagePath;
@@ -1109,7 +1148,10 @@ class _LoginScreenState extends State<LoginScreen>
                 const SizedBox(width: 4),
                 Expanded(
                   child: InkWell(
-                    onTap: () => setState(() => _isPinMode = true),
+                    onTap: () {
+                      setState(() => _isPinMode = true);
+                      _loadQuickUsers();
+                    },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1287,19 +1329,84 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ] else ...[
             // PIN Login Form
-            TextFormField(
-              controller: _usernameCtrl,
-              focusNode: _usernameFocus,
-              textInputAction: TextInputAction.next,
-              onFieldSubmitted: (_) => _pinFocus.requestFocus(),
-              style: TextStyle(color: isDark ? Colors.white : Colors.black),
-              decoration: _enterpriseInputDecoration(
-                labelText: 'Username (Optional)',
-                prefixIcon: Icons.person_outline_rounded,
-                hintText: 'Enter username or leave blank for PIN matching',
+            if (_quickUsers.isNotEmpty) ...[
+              DropdownButtonFormField<QuickUser?>(
+                value: _selectedQuickUser,
+                decoration: _enterpriseInputDecoration(
+                  labelText: 'Select Staff Member / User',
+                  prefixIcon: Icons.account_circle_outlined,
+                ),
+                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                items: [
+                  ..._quickUsers.map((u) => DropdownMenuItem<QuickUser?>(
+                    value: u,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            u.fullName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13.5,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '(@${u.username})',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            u.role,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: primaryColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+                onChanged: (u) {
+                  setState(() {
+                    _selectedQuickUser = u;
+                    if (u != null) {
+                      _usernameCtrl.text = u.username;
+                    }
+                  });
+                },
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
+            ] else ...[
+              TextFormField(
+                controller: _usernameCtrl,
+                focusNode: _usernameFocus,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => _pinFocus.requestFocus(),
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: _enterpriseInputDecoration(
+                  labelText: 'Username (Optional)',
+                  prefixIcon: Icons.person_outline_rounded,
+                  hintText: 'Enter username or leave blank for PIN matching',
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             TextFormField(
               controller: _pinCtrl,
               focusNode: _pinFocus,

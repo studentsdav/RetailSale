@@ -78,7 +78,41 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
   String _a4FontSize = 'MEDIUM'; // SMALL, MEDIUM, LARGE
 
   // =========================================================================
-  // 3. KOT Kitchen Ticket Template Controllers & Toggles
+  // 3. A5 Half-Sheet Invoice Template Controllers & Toggles
+  // =========================================================================
+  final _a5HeaderTitleCtrl = TextEditingController();
+  final _a5HeaderSubtextCtrl = TextEditingController();
+  final _a5TaxRegNoCtrl = TextEditingController();
+  final _a5PanNoCtrl = TextEditingController();
+  final _a5FooterNoteCtrl = TextEditingController();
+  final _a5TermsCtrl = TextEditingController();
+  final _a5BankNameCtrl = TextEditingController();
+  final _a5BankAccountNoCtrl = TextEditingController();
+  final _a5BankIfscCtrl = TextEditingController();
+  final _a5MpesaPaybillCtrl = TextEditingController();
+  final _a5SignatoryLabelCtrl = TextEditingController();
+
+  bool _a5ShowLogo = true;
+  bool _a5ShowCompanyAddress = true;
+  bool _a5ShowCompanyContact = true;
+  bool _a5ShowTaxReg = true;
+  bool _a5ShowBuyerDetails = true;
+  bool _a5ShowShippingDetails = true;
+  bool _a5ShowHsnCode = true;
+  bool _a5ShowBrand = true;
+  bool _a5ShowItemDiscount = true;
+  bool _a5ShowTaxBreakup = true;
+  bool _a5ShowAmountInWords = true;
+  bool _a5ShowBankDetails = true;
+  bool _a5ShowQrCode = true;
+  bool _a5ShowTermsAndConditions = true;
+  bool _a5ShowSignatureBox = true;
+  bool _a5ShowCurrency = true;
+  String _a5ThemeColor = 'BLUE'; // BLUE, SLATE, EMERALD, CRIMSON
+  String _a5FontSize = 'MEDIUM'; // SMALL, MEDIUM, LARGE
+
+  // =========================================================================
+  // 4. KOT Kitchen Ticket Template Controllers & Toggles
   // =========================================================================
   final _kotHeaderTitleCtrl = TextEditingController(text: 'KITCHEN ORDER TICKET');
   final _kotFooterNoteCtrl = TextEditingController();
@@ -120,7 +154,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     Future.microtask(() => _loadSettings());
   }
 
@@ -146,6 +180,17 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
     _a4MpesaPaybillCtrl.dispose();
     _a4SignatoryLabelCtrl.dispose();
 
+        _a5HeaderTitleCtrl.dispose();
+    _a5HeaderSubtextCtrl.dispose();
+    _a5TaxRegNoCtrl.dispose();
+    _a5PanNoCtrl.dispose();
+    _a5FooterNoteCtrl.dispose();
+    _a5TermsCtrl.dispose();
+    _a5BankNameCtrl.dispose();
+    _a5BankAccountNoCtrl.dispose();
+    _a5BankIfscCtrl.dispose();
+    _a5MpesaPaybillCtrl.dispose();
+    _a5SignatoryLabelCtrl.dispose();
     _kotHeaderTitleCtrl.dispose();
     _kotFooterNoteCtrl.dispose();
 
@@ -170,6 +215,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
 
     final billConfig = settingsCtrl.settings?.receiptTemplateConfig ?? {};
     final a4Config = settingsCtrl.settings?.a4TemplateConfig ?? {};
+        final a5Config = settingsCtrl.settings?.a5TemplateConfig ?? {};
     final kotConfig = settingsCtrl.settings?.kotTemplateConfig ?? {};
     final tokenConfig = settingsCtrl.settings?.tokenTemplateConfig ?? {};
     final prop = propCtrl.data;
@@ -231,7 +277,39 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
     _a4ThemeColor = a4Config['theme_color'] ?? 'BLUE';
     _a4FontSize = a4Config['font_size'] ?? 'MEDIUM';
 
-    // 3. KOT Config
+    // 3. A5 Invoice Config
+    _a5HeaderTitleCtrl.text = a5Config['header_title'] ?? (a4Config['header_title'] ?? (prop?.propertyName.isNotEmpty == true ? prop!.propertyName : 'RETAIL ENTERPRISES LIMITED'));
+    _a5HeaderSubtextCtrl.text = a5Config['header_subtext'] ?? (a4Config['header_subtext'] ?? (prop?.address.isNotEmpty == true ? '${prop!.address}, ${prop.city}, ${prop.state}' : 'Industrial Area, Commercial Street, Nairobi, Kenya'));
+    _a5TaxRegNoCtrl.text = a5Config['tax_reg_no'] ?? (a4Config['tax_reg_no'] ?? (prop?.gstNo.isNotEmpty == true ? 'KRA PIN / GSTIN: ${prop!.gstNo}' : 'KRA PIN / GSTIN: P051987654X'));
+    _a5PanNoCtrl.text = a5Config['pan_no'] ?? (a4Config['pan_no'] ?? (prop?.panNo.isNotEmpty == true ? 'REG / PAN: ${prop!.panNo}' : 'COMPANY REG: CPR/2023/88990'));
+    _a5FooterNoteCtrl.text = a5Config['footer_note'] ?? (a4Config['footer_note'] ?? 'This is a computer generated invoice and does not require a physical signature.');
+    _a5TermsCtrl.text = a5Config['terms_and_conditions'] ?? (a4Config['terms_and_conditions'] ?? (prop?.termsAndConditions.isNotEmpty == true ? prop!.termsAndConditions : '1. Goods once sold will not be accepted back without prior inspection.\n2. Interest @ 18% p.a. will be charged on overdue payments after 30 days.\n3. Subject to local judicial arbitration.'));
+    _a5BankNameCtrl.text = a5Config['bank_name'] ?? (a4Config['bank_name'] ?? (prop?.bankName.isNotEmpty == true ? prop!.bankName : 'Standard Chartered / Equity Bank'));
+    _a5BankAccountNoCtrl.text = a5Config['bank_account_no'] ?? (a4Config['bank_account_no'] ?? (prop?.bankAccNo.isNotEmpty == true ? prop!.bankAccNo : 'A/C: 0102030405060'));
+    _a5BankIfscCtrl.text = a5Config['bank_ifsc'] ?? (a4Config['bank_ifsc'] ?? (prop?.bankIfsc.isNotEmpty == true ? prop!.bankIfsc : 'SWIFT: SCBLKENX / Branch: 010'));
+    _a5MpesaPaybillCtrl.text = a5Config['mpesa_paybill'] ?? (a4Config['mpesa_paybill'] ?? 'M-Pesa Paybill: 247247 | A/C: 0712345678');
+    _a5SignatoryLabelCtrl.text = a5Config['signatory_label'] ?? (a4Config['signatory_label'] ?? 'For ${prop?.propertyName.isNotEmpty == true ? prop!.propertyName : "RETAIL ENTERPRISES LTD"}\nAuthorized Signatory');
+
+    _a5ShowLogo = a5Config['show_logo'] ?? (a4Config['show_logo'] ?? true);
+    _a5ShowCompanyAddress = a5Config['show_address'] ?? (a4Config['show_address'] ?? true);
+    _a5ShowCompanyContact = a5Config['show_contact'] ?? (a4Config['show_contact'] ?? true);
+    _a5ShowTaxReg = a5Config['show_tax_reg'] ?? (a4Config['show_tax_reg'] ?? true);
+    _a5ShowBuyerDetails = a5Config['show_buyer_details'] ?? (a4Config['show_buyer_details'] ?? true);
+    _a5ShowShippingDetails = a5Config['show_shipping_details'] ?? (a4Config['show_shipping_details'] ?? true);
+    _a5ShowHsnCode = a5Config['show_hsn_code'] ?? (a4Config['show_hsn_code'] ?? true);
+    _a5ShowBrand = a5Config['show_brand'] ?? (a4Config['show_brand'] ?? true);
+    _a5ShowItemDiscount = a5Config['show_item_discount'] ?? (a4Config['show_item_discount'] ?? true);
+    _a5ShowTaxBreakup = a5Config['show_tax_breakup'] ?? (a4Config['show_tax_breakup'] ?? true);
+    _a5ShowAmountInWords = a5Config['show_amount_in_words'] ?? (a4Config['show_amount_in_words'] ?? true);
+    _a5ShowBankDetails = a5Config['show_bank_details'] ?? (a4Config['show_bank_details'] ?? true);
+    _a5ShowQrCode = a5Config['show_qr_code'] ?? (a4Config['show_qr_code'] ?? true);
+    _a5ShowTermsAndConditions = a5Config['show_terms'] ?? (a4Config['show_terms'] ?? true);
+    _a5ShowSignatureBox = a5Config['show_signature_box'] ?? (a4Config['show_signature_box'] ?? true);
+    _a5ShowCurrency = a5Config['show_currency_symbol'] ?? a5Config['show_currency'] ?? (a4Config['show_currency_symbol'] ?? true);
+    _a5ThemeColor = a5Config['theme_color'] ?? (a4Config['theme_color'] ?? 'BLUE');
+    _a5FontSize = a5Config['font_size'] ?? (a4Config['font_size'] ?? 'MEDIUM');
+
+    // 4. KOT Config
     _kotHeaderTitleCtrl.text = kotConfig['header_title'] ?? 'KITCHEN ORDER TICKET';
     _kotFooterNoteCtrl.text = kotConfig['footer_note'] ?? 'Order ready for cooking & serving';
     _kotShowStation = kotConfig['show_station'] ?? true;
@@ -337,6 +415,38 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
       'font_size': _a4FontSize,
     };
 
+    final a5Config = {
+      'header_title': _a5HeaderTitleCtrl.text.trim(),
+      'header_subtext': _a5HeaderSubtextCtrl.text.trim(),
+      'tax_reg_no': _a5TaxRegNoCtrl.text.trim(),
+      'pan_no': _a5PanNoCtrl.text.trim(),
+      'footer_note': _a5FooterNoteCtrl.text.trim(),
+      'terms_and_conditions': _a5TermsCtrl.text.trim(),
+      'bank_name': _a5BankNameCtrl.text.trim(),
+      'bank_account_no': _a5BankAccountNoCtrl.text.trim(),
+      'bank_ifsc': _a5BankIfscCtrl.text.trim(),
+      'mpesa_paybill': _a5MpesaPaybillCtrl.text.trim(),
+      'signatory_label': _a5SignatoryLabelCtrl.text.trim(),
+      'show_logo': _a5ShowLogo,
+      'show_address': _a5ShowCompanyAddress,
+      'show_contact': _a5ShowCompanyContact,
+      'show_tax_reg': _a5ShowTaxReg,
+      'show_buyer_details': _a5ShowBuyerDetails,
+      'show_shipping_details': _a5ShowShippingDetails,
+      'show_hsn_code': _a5ShowHsnCode,
+      'show_brand': _a5ShowBrand,
+      'show_item_discount': _a5ShowItemDiscount,
+      'show_tax_breakup': _a5ShowTaxBreakup,
+      'show_amount_in_words': _a5ShowAmountInWords,
+      'show_bank_details': _a5ShowBankDetails,
+      'show_qr_code': _a5ShowQrCode,
+      'show_terms': _a5ShowTermsAndConditions,
+      'show_signature_box': _a5ShowSignatureBox,
+      'show_currency_symbol': _a5ShowCurrency,
+      'theme_color': _a5ThemeColor,
+      'font_size': _a5FontSize,
+    };
+
     final kotConfig = {
       'header_title': _kotHeaderTitleCtrl.text.trim(),
       'footer_note': _kotFooterNoteCtrl.text.trim(),
@@ -373,6 +483,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
 
     currentSettings.receiptTemplateConfig = billConfig;
     currentSettings.a4TemplateConfig = a4Config;
+    currentSettings.a5TemplateConfig = a5Config;
     currentSettings.kotTemplateConfig = kotConfig;
     currentSettings.tokenTemplateConfig = tokenConfig;
 
@@ -383,11 +494,25 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('✅ Bill, A4 Invoice, KOT & Token templates saved successfully!'),
+          content: Text('✅ Bill, A4, A5 Invoice, KOT & Token templates saved successfully!'),
           backgroundColor: Color(0xFF15803D),
           behavior: SnackBarBehavior.floating,
         ),
       );
+    }
+  }
+
+  Color _getA5PrimaryColor() {
+    switch (_a5ThemeColor) {
+      case 'SLATE':
+        return const Color(0xFF1E293B);
+      case 'EMERALD':
+        return const Color(0xFF047857);
+      case 'CRIMSON':
+        return const Color(0xFF991B1B);
+      case 'BLUE':
+      default:
+        return const Color(0xFF0B5CAD);
     }
   }
 
@@ -452,6 +577,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
           tabs: const [
             Tab(icon: Icon(Icons.receipt_long, size: 18), text: '80mm Thermal Bill'),
             Tab(icon: Icon(Icons.description_outlined, size: 18), text: 'A4 Tax Invoice'),
+            Tab(icon: Icon(Icons.receipt_outlined, size: 18), text: 'A5 Tax Invoice'),
             Tab(icon: Icon(Icons.soup_kitchen_outlined, size: 18), text: 'Kitchen KOT'),
             Tab(icon: Icon(Icons.confirmation_number_outlined, size: 18), text: 'Token Slip'),
           ],
@@ -464,6 +590,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
               children: [
                 _build80mmBillDesignerTab(),
                 _buildA4InvoiceDesignerTab(),
+                _buildA5InvoiceDesignerTab(),
                 _buildKotDesignerTab(),
                 _buildTokenDesignerTab(),
               ],
@@ -713,13 +840,13 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          _buildColorOption('BLUE', 'Corporate Navy', const Color(0xFF0B5CAD)),
+                          _buildColorOption('BLUE', 'Corporate Navy', const Color(0xFF0B5CAD), selectedKey: _a4ThemeColor, onSelect: (c) => setState(() => _a4ThemeColor = c)),
                           const SizedBox(width: 8),
-                          _buildColorOption('SLATE', 'Modern Charcoal', const Color(0xFF1E293B)),
+                          _buildColorOption('SLATE', 'Modern Charcoal', const Color(0xFF1E293B), selectedKey: _a4ThemeColor, onSelect: (c) => setState(() => _a4ThemeColor = c)),
                           const SizedBox(width: 8),
-                          _buildColorOption('EMERALD', 'Forest Emerald', const Color(0xFF047857)),
+                          _buildColorOption('EMERALD', 'Forest Emerald', const Color(0xFF047857), selectedKey: _a4ThemeColor, onSelect: (c) => setState(() => _a4ThemeColor = c)),
                           const SizedBox(width: 8),
-                          _buildColorOption('CRIMSON', 'Executive Wine', const Color(0xFF991B1B)),
+                          _buildColorOption('CRIMSON', 'Executive Wine', const Color(0xFF991B1B), selectedKey: _a4ThemeColor, onSelect: (c) => setState(() => _a4ThemeColor = c)),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -786,6 +913,469 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
   // =========================================================================
   // TAB 3: Kitchen KOT Template Designer
   // =========================================================================
+
+  // =========================================================================
+  // TAB 3: A5 Half-Sheet Tax Invoice Template Designer
+  // =========================================================================
+  Widget _buildA5InvoiceDesignerTab() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 5,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildCardHeader('A5 Company & Header Details', 'Business identity on compact A5 (148 x 210 mm) tax invoice', Icons.business),
+                const SizedBox(height: 12),
+                _buildCardWrapper(
+                  child: Column(
+                    children: [
+                      _buildTextField('Company / Firm Legal Name', _a5HeaderTitleCtrl, 'e.g. RETAIL ENTERPRISES LIMITED'),
+                      const SizedBox(height: 12),
+                      _buildTextField('Registered Office & Postal Address', _a5HeaderSubtextCtrl, 'e.g. Commercial Street, Nairobi, Kenya', maxLines: 2),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: _buildTextField('KRA PIN / GSTIN / Tax ID', _a5TaxRegNoCtrl, 'e.g. P051987654X')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildTextField('Company Reg / PAN', _a5PanNoCtrl, 'e.g. CPR/2023/88990')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildCardHeader('Bank Settlement & Signatory Details', 'Payment coordinates & authorization seal', Icons.account_balance),
+                const SizedBox(height: 12),
+                _buildCardWrapper(
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: _buildTextField('Bank Name', _a5BankNameCtrl, 'e.g. Standard Chartered / Equity')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildTextField('Bank Account / IBAN', _a5BankAccountNoCtrl, 'e.g. 0102030405060')),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: _buildTextField('SWIFT / IFSC / Branch', _a5BankIfscCtrl, 'e.g. SCBLKENX / 010')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildTextField('M-Pesa Paybill / Till', _a5MpesaPaybillCtrl, 'e.g. Paybill: 247247 | Acc: 0712345678')),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _buildTextField('Signatory Designation Label', _a5SignatoryLabelCtrl, 'e.g. For RETAIL ENTERPRISES LTD\nAuthorized Signatory', maxLines: 2),
+                      const SizedBox(height: 12),
+                      _buildTextField('Invoice Terms & Conditions (Legal)', _a5TermsCtrl, 'e.g. 1. Goods once sold will not be accepted back...', maxLines: 3),
+                      const SizedBox(height: 12),
+                      _buildTextField('Computer Generated Footer Tagline', _a5FooterNoteCtrl, 'e.g. This is a computer generated invoice...', maxLines: 2),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildCardHeader('A5 Invoicing Sections & Tables', 'Toggle tables and visual blocks on A5 page', Icons.view_quilt),
+                const SizedBox(height: 12),
+                _buildCardWrapper(
+                  child: Column(
+                    children: [
+                      _buildSwitch('Print Company Logo & Header Brand Box', _a5ShowLogo, (v) => setState(() => _a5ShowLogo = v)),
+                      _buildSwitch('Print Registered Office Address Line', _a5ShowCompanyAddress, (v) => setState(() => _a5ShowCompanyAddress = v)),
+                      _buildSwitch('Print Company Telephone & Email Contacts', _a5ShowCompanyContact, (v) => setState(() => _a5ShowCompanyContact = v)),
+                      _buildSwitch('Print Tax PIN / GSTIN Block', _a5ShowTaxReg, (v) => setState(() => _a5ShowTaxReg = v)),
+                      _buildSwitch('Print "Billed To" Customer Card (Name, PIN, Address)', _a5ShowBuyerDetails, (v) => setState(() => _a5ShowBuyerDetails = v)),
+                      _buildSwitch('Print "Shipped To" Delivery Address Card', _a5ShowShippingDetails, (v) => setState(() => _a5ShowShippingDetails = v)),
+                      _buildSwitch('Print HSN / SAC Code Column in Items Grid', _a5ShowHsnCode, (v) => setState(() => _a5ShowHsnCode = v)),
+                      _buildSwitch('Print Item Brand Prefix in Description', _a5ShowBrand, (v) => setState(() => _a5ShowBrand = v)),
+                      _buildSwitch('Print Item Discount % Column', _a5ShowItemDiscount, (v) => setState(() => _a5ShowItemDiscount = v)),
+                      _buildSwitch('Print Comprehensive Tax Breakup Box (CGST/SGST/VAT/CTL)', _a5ShowTaxBreakup, (v) => setState(() => _a5ShowTaxBreakup = v)),
+                      _buildSwitch('Print Total Net Payable in Words', _a5ShowAmountInWords, (v) => setState(() => _a5ShowAmountInWords = v)),
+                      _buildSwitch('Print Bank Account & M-Pesa Settlement Block', _a5ShowBankDetails, (v) => setState(() => _a5ShowBankDetails = v)),
+                      _buildSwitch('Print e-Invoice / UPI Payment Verification QR', _a5ShowQrCode, (v) => setState(() => _a5ShowQrCode = v)),
+                      _buildSwitch('Print Terms & Conditions Box', _a5ShowTermsAndConditions, (v) => setState(() => _a5ShowTermsAndConditions = v)),
+                      _buildSwitch('Print Signature & Company Seal Box', _a5ShowSignatureBox, (v) => setState(() => _a5ShowSignatureBox = v)),
+                      _buildSwitch('Print Currency Symbol (${CurrencyService.symbol})', _a5ShowCurrency, (v) => setState(() => _a5ShowCurrency = v)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildCardHeader('A5 Accent Color Theme & Typography', 'Color scheme and font density scale', Icons.palette),
+                const SizedBox(height: 12),
+                _buildCardWrapper(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Theme Accent Color', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _buildColorOption('BLUE', 'Corporate Navy', const Color(0xFF0B5CAD), selectedKey: _a5ThemeColor, onSelect: (c) => setState(() => _a5ThemeColor = c)),
+                          const SizedBox(width: 8),
+                          _buildColorOption('SLATE', 'Modern Charcoal', const Color(0xFF1E293B), selectedKey: _a5ThemeColor, onSelect: (c) => setState(() => _a5ThemeColor = c)),
+                          const SizedBox(width: 8),
+                          _buildColorOption('EMERALD', 'Forest Emerald', const Color(0xFF047857), selectedKey: _a5ThemeColor, onSelect: (c) => setState(() => _a5ThemeColor = c)),
+                          const SizedBox(width: 8),
+                          _buildColorOption('CRIMSON', 'Executive Wine', const Color(0xFF991B1B), selectedKey: _a5ThemeColor, onSelect: (c) => setState(() => _a5ThemeColor = c)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('A5 Font Density / Size', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: _a5FontSize,
+                        decoration: _inputDecoration(),
+                        items: const [
+                          DropdownMenuItem(value: 'SMALL', child: Text('Compact (Dense Invoicing, Fit More Line Items)')),
+                          DropdownMenuItem(value: 'MEDIUM', child: Text('Medium Standard (Balanced Invoicing)')),
+                          DropdownMenuItem(value: 'LARGE', child: Text('Large Spacious (Executive Presentation)')),
+                        ],
+                        onChanged: (v) => setState(() => _a5FontSize = v ?? 'MEDIUM'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Container(width: 1, color: const Color(0xFFE2E8F0)),
+        Expanded(
+          flex: 5,
+          child: Container(
+            color: const Color(0xFFE2E8F0),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Live A5 Sheet Preview', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A))),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFCBD5E1))),
+                      child: Row(
+                        children: [
+                          Container(width: 10, height: 10, decoration: BoxDecoration(color: _getA5PrimaryColor(), shape: BoxShape.circle)),
+                          const SizedBox(width: 6),
+                          Text('A5 148 x 210 mm • Font: $_a5FontSize • $_a5ThemeColor', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF0F172A))),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Center(
+                      child: _buildLiveA5PreviewSheet(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // =========================================================================
+  // LIVE A5 INVOICE SHEET PREVIEW WIDGET (DYNAMIC FONT DENSITY)
+  // =========================================================================
+  Widget _buildLiveA5PreviewSheet() {
+    String fmt(num val) => _a5ShowCurrency ? CurrencyService.format(val) : val.toStringAsFixed(2);
+    final themeColor = _getA5PrimaryColor();
+
+    // Dynamic scaling based on _a5FontSize
+    double scale = 1.0;
+    if (_a5FontSize == 'SMALL') scale = 0.85;
+    if (_a5FontSize == 'LARGE') scale = 1.18;
+
+    final double titleSize = 14.0 * scale;
+    final double subtextSize = 8.5 * scale;
+    final double metaLabelSize = 7.5 * scale;
+    final double metaValueSize = 8.0 * scale;
+    final double tableHeaderSize = 8.0 * scale;
+    final double tableItemSize = 7.8 * scale;
+    final double summaryLabelSize = 7.8 * scale;
+    final double netTotalSize = 11.0 * scale;
+
+    return Container(
+      width: 450,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 6)),
+        ],
+      ),
+      padding: EdgeInsets.all(18 * scale),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // A5 Top Banner / Header
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_a5ShowLogo) ...[
+                Container(
+                  width: 40 * scale,
+                  height: 40 * scale,
+                  decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                  child: Icon(Icons.corporate_fare, color: themeColor, size: 24 * scale),
+                ),
+                SizedBox(width: 10 * scale),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _a5HeaderTitleCtrl.text.isEmpty ? 'RETAIL ENTERPRISES LIMITED' : _a5HeaderTitleCtrl.text,
+                      style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.bold, color: themeColor),
+                    ),
+                    if (_a5ShowCompanyAddress && _a5HeaderSubtextCtrl.text.isNotEmpty) ...[
+                      SizedBox(height: 2 * scale),
+                      Text(_a5HeaderSubtextCtrl.text, style: TextStyle(fontSize: subtextSize, color: const Color(0xFF475569))),
+                    ],
+                    if (_a5ShowCompanyContact) ...[
+                      SizedBox(height: 2 * scale),
+                      Text('Phone: +254 700 000000 | Email: sales@retailpos.com', style: TextStyle(fontSize: 7.8 * scale, color: const Color(0xFF64748B))),
+                    ],
+                    if (_a5ShowTaxReg) ...[
+                      SizedBox(height: 2 * scale),
+                      Text('${_a5TaxRegNoCtrl.text} | ${_a5PanNoCtrl.text}', style: TextStyle(fontSize: 8 * scale, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 6 * scale),
+                decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(4)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('TAX INVOICE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11 * scale, letterSpacing: 0.8)),
+                    Text('A5 COMPACT', style: TextStyle(color: Colors.white70, fontSize: 7 * scale)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10 * scale),
+          Divider(color: themeColor, thickness: 1.2),
+          SizedBox(height: 4 * scale),
+
+          // Metadata + Billed To Cards
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(7 * scale),
+                  decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(4)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('INVOICE DETAILS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 8.5 * scale, color: themeColor)),
+                      SizedBox(height: 3 * scale),
+                      _a4MetaRow('Invoice No:', 'INV-2026-00892', metaLabelSize, metaValueSize),
+                      _a4MetaRow('Date & Time:', '27-Sep-2026 14:00 PM', metaLabelSize, metaValueSize),
+                      _a4MetaRow('Payment Mode:', 'BANK / M-PESA', metaLabelSize, metaValueSize),
+                      _a4MetaRow('Place of Supply:', 'Nairobi, Kenya (01)', metaLabelSize, metaValueSize),
+                    ],
+                  ),
+                ),
+              ),
+              if (_a5ShowBuyerDetails) ...[
+                SizedBox(width: 8 * scale),
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(7 * scale),
+                    decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(4)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('BILLED TO (BUYER)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 8.5 * scale, color: themeColor)),
+                        SizedBox(height: 3 * scale),
+                        Text('Apex Commercial Supplies Ltd', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 8.5 * scale)),
+                        Text('Plot 45, Uhuru Highway, Nairobi', style: TextStyle(fontSize: 7.8 * scale, color: const Color(0xFF475569))),
+                        Text('KRA PIN: P059988776Z', style: TextStyle(fontSize: 7.8 * scale, color: const Color(0xFF475569))),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          SizedBox(height: 8 * scale),
+
+          // Tabular Items Table
+          Container(
+            decoration: BoxDecoration(border: Border.all(color: const Color(0xFFCBD5E1))),
+            child: Column(
+              children: [
+                Container(
+                  color: themeColor.withValues(alpha: 0.08),
+                  padding: EdgeInsets.symmetric(horizontal: 6 * scale, vertical: 4 * scale),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 18 * scale, child: Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: tableHeaderSize))),
+                      Expanded(flex: 4, child: Text('ITEM DESCRIPTION', style: TextStyle(fontWeight: FontWeight.bold, fontSize: tableHeaderSize))),
+                      if (_a5ShowHsnCode) Expanded(flex: 2, child: Text('HSN/SAC', style: TextStyle(fontWeight: FontWeight.bold, fontSize: tableHeaderSize))),
+                      Expanded(flex: 1, child: Text('QTY', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: tableHeaderSize))),
+                      Expanded(flex: 2, child: Text('RATE', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, fontSize: tableHeaderSize))),
+                      if (_a5ShowItemDiscount) Expanded(flex: 2, child: Text('DISC', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, fontSize: tableHeaderSize))),
+                      if (_a5ShowTaxBreakup) Expanded(flex: 2, child: Text('TAX', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, fontSize: tableHeaderSize))),
+                      Expanded(flex: 2, child: Text('AMOUNT', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, fontSize: tableHeaderSize))),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: Color(0xFFCBD5E1)),
+                _a4ItemTableRow('1', '${_a5ShowBrand ? "Brookside - " : ""}Fresh Whole Milk 500ml', '0401.20', '10.0', fmt(80.00), fmt(0.00), '16% (${fmt(128.00)})', fmt(800.00), tableItemSize, scale),
+                const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                _a4ItemTableRow('2', '${_a5ShowBrand ? "Farmers - " : ""}Sandwich Bread 400g', '1905.90', '5.0', fmt(65.00), '5% (${fmt(16.25)})', '16% (${fmt(49.40)})', fmt(308.75), tableItemSize, scale),
+                const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                _a4ItemTableRow('3', 'Mineral Drinking Water 1L Bottle', '2201.10', '24.0', fmt(50.00), fmt(0.00), '16% (${fmt(192.00)})', fmt(1200.00), tableItemSize, scale),
+              ],
+            ),
+          ),
+          SizedBox(height: 8 * scale),
+
+          // Financial Breakup & Bank Details Box
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_a5ShowAmountInWords) ...[
+                      Container(
+                        padding: EdgeInsets.all(5 * scale),
+                        decoration: BoxDecoration(color: const Color(0xFFF8FAFC), border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(4)),
+                        child: Text(
+                          'Amount in Words: Kenya Shillings Two Thousand Three Hundred Eight and 75/100 Only.',
+                          style: TextStyle(fontSize: 7.8 * scale, fontStyle: FontStyle.italic, color: Colors.grey.shade800),
+                        ),
+                      ),
+                      SizedBox(height: 5 * scale),
+                    ],
+                    if (_a5ShowBankDetails) ...[
+                      Container(
+                        padding: EdgeInsets.all(5 * scale),
+                        decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(4)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('BANK & PAYMENT SETTLEMENT DETAILS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 7.8 * scale, color: themeColor)),
+                            SizedBox(height: 2 * scale),
+                            Text('Bank: ${_a5BankNameCtrl.text}', style: TextStyle(fontSize: 7.5 * scale)),
+                            Text('${_a5BankAccountNoCtrl.text} | ${_a5BankIfscCtrl.text}', style: TextStyle(fontSize: 7.5 * scale)),
+                            Text(_a5MpesaPaybillCtrl.text, style: TextStyle(fontSize: 7.5 * scale, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              SizedBox(width: 8 * scale),
+              Expanded(
+                flex: 4,
+                child: Container(
+                  padding: EdgeInsets.all(7 * scale),
+                  decoration: BoxDecoration(color: const Color(0xFFF8FAFC), border: Border.all(color: const Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(4)),
+                  child: Column(
+                    children: [
+                      _a4SummaryRow('Taxable Amount:', fmt(1989.35), summaryLabelSize),
+                      if (_a5ShowTaxBreakup) ...[
+                        _a4SummaryRow('CGST / VAT (16%):', fmt(318.30), summaryLabelSize),
+                        _a4SummaryRow('Tourism CTL (2%):', fmt(39.79), summaryLabelSize),
+                      ],
+                      _a4SummaryRow('Round Off:', fmt(-0.69), summaryLabelSize),
+                      const Divider(height: 6, color: Color(0xFF94A3B8)),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('NET TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5 * scale, color: themeColor)),
+                          Text(fmt(2346.75), style: TextStyle(fontWeight: FontWeight.bold, fontSize: netTotalSize, color: themeColor)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8 * scale),
+
+          // Terms and Signatory Box
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_a5ShowTermsAndConditions && _a5TermsCtrl.text.isNotEmpty) ...[
+                Expanded(
+                  flex: 6,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Terms & Conditions:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 7.8 * scale)),
+                      SizedBox(height: 2 * scale),
+                      Text(_a5TermsCtrl.text, style: TextStyle(fontSize: 7.0 * scale, color: const Color(0xFF475569))),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 8 * scale),
+              ],
+              if (_a5ShowQrCode) ...[
+                Column(
+                  children: [
+                    Icon(Icons.qr_code_2, size: 36 * scale),
+                    Text('e-Invoice QR', style: TextStyle(fontSize: 6.5 * scale, color: Colors.grey)),
+                  ],
+                ),
+                SizedBox(width: 8 * scale),
+              ],
+              if (_a5ShowSignatureBox) ...[
+                Expanded(
+                  flex: 4,
+                  child: Container(
+                    padding: EdgeInsets.all(5 * scale),
+                    decoration: BoxDecoration(border: Border.all(color: const Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(4)),
+                    child: Column(
+                      children: [
+                        Text(
+                          _a5SignatoryLabelCtrl.text.isEmpty ? 'Authorized Signatory' : _a5SignatoryLabelCtrl.text,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 7.5 * scale, fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 16 * scale),
+                        const Divider(height: 1, color: Colors.grey),
+                        SizedBox(height: 2 * scale),
+                        Text('Signature & Stamp', style: TextStyle(fontSize: 6.5 * scale, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (_a5FooterNoteCtrl.text.isNotEmpty) ...[
+            SizedBox(height: 6 * scale),
+            Center(
+              child: Text(_a5FooterNoteCtrl.text, style: TextStyle(fontSize: 7.0 * scale, color: Colors.grey)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildKotDesignerTab() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2161,11 +2751,11 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
     );
   }
 
-  Widget _buildColorOption(String key, String label, Color color) {
-    final isSelected = _a4ThemeColor == key;
+  Widget _buildColorOption(String key, String label, Color color, {required String selectedKey, required ValueChanged<String> onSelect}) {
+    final isSelected = selectedKey == key;
     return Expanded(
       child: InkWell(
-        onTap: () => setState(() => _a4ThemeColor = key),
+        onTap: () => onSelect(key),
         borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),

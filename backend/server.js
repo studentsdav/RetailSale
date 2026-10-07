@@ -226,6 +226,7 @@ if (!fs.existsSync(licensePath)) {
                 ADD COLUMN IF NOT EXISTS currency_decimals INTEGER DEFAULT 2,
                 ADD COLUMN IF NOT EXISTS receipt_template_config JSONB DEFAULT '{}',
                 ADD COLUMN IF NOT EXISTS a4_template_config JSONB DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS a5_template_config JSONB DEFAULT '{}',
                 ADD COLUMN IF NOT EXISTS kot_template_config JSONB DEFAULT '{}',
                 ADD COLUMN IF NOT EXISTS token_template_config JSONB DEFAULT '{}';
             `);
