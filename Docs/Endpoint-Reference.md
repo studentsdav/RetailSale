@@ -70,7 +70,9 @@ Idempotency-Key: <UUID> (Optional for safe retries)
 
 ## 3. Authentication APIs (`/api/auth`)
 
-- `POST /api/auth/login` — Authenticate store user and issue JWT token.
+- `POST /api/auth/login` — Authenticate store user (email/password) and issue JWT token.
+- `POST /api/auth/pin-login` — High-speed PIN login for waiters/cashiers with outlet & username resolution.
+- `GET /api/auth/quick-users` — List quick-login staff enabled for dropdown PIN selection.
 - `POST /api/auth/refresh` — Refresh expired JWT token.
 - `POST /api/auth/change-password` — Change current user password.
 - `POST /api/auth/logout` — Invalidate user session.
@@ -91,14 +93,20 @@ Idempotency-Key: <UUID> (Optional for safe retries)
 
 ---
 
-## 5. Inventory, Items & Transfers (`/api/inventory`)
+## 5. Inventory, Items, Modifiers & Stock Taking (`/api/inventory`)
 
-- `GET /api/inventory/items` — List items with search, category, and low stock filters.
+- `GET /api/inventory/items` — List items with search, category, Veg/Non-Veg, and low stock filters.
 - `POST /api/inventory/items` — Create new item master record.
-- `PUT /api/inventory/items/:id` — Update item details, pricing, and barcode.
+- `PUT /api/inventory/items/:id` — Update item details, pricing, dietary flags, and barcode.
 - `DELETE /api/inventory/items/:id` — Deactivate item.
 - `GET /api/inventory/categories` — List item categories.
 - `POST /api/inventory/categories` — Create item category.
+- `GET /api/inventory/modifiers` — List item modifiers and add-on groups (e.g. Extra Cheese).
+- `POST /api/inventory/modifiers` — Create modifier with price and optional raw material recipe link.
+- `PUT /api/inventory/modifiers/:id` — Edit modifier properties and pricing.
+- `DELETE /api/inventory/modifiers/:id` — Remove modifier.
+- `GET /api/stock-taking` — Retrieve stock audit sheet with current balances and variances.
+- `POST /api/stock-taking/reconcile` — Commit physical count and post adjustment variance journal.
 - `GET /api/inventory/stock-locations` — List warehouse locations & racks.
 - `POST /api/inventory/transfers/request` — Create multi-branch stock transfer request.
 - `POST /api/inventory/transfers/dispatch` — Dispatch stock to target branch.
@@ -113,7 +121,7 @@ Idempotency-Key: <UUID> (Optional for safe retries)
 *Requires: JWT + `PURCHASE` License Module.*
 
 - `GET /api/purchase-orders` — List purchase orders with status filter.
-- `POST /api/purchase-orders` — Create new purchase order.
+- `POST /api/purchase-orders` — Create new purchase order (supports integer net rounding for VAT-inclusive).
 - `GET /api/purchase-orders/:id` — Retrieve purchase order details.
 - `PUT /api/purchase-orders/:id` — Update pending purchase order.
 - `POST /api/purchase-orders/:id/approve` — Manager approval of PO.
@@ -123,20 +131,26 @@ Idempotency-Key: <UUID> (Optional for safe retries)
 
 ## 7. Goods Receiving / GRN (`/api/receiving`)
 
+> **DOCTRINE**: GRNs are **NEVER auto-generated**. They require manual operator physical counting and inward verification.
+
 - `GET /api/receiving` — List Goods Receiving Notes (GRNs).
-- `POST /api/receiving` — Commit new GRN and credit stock into inventory.
+- `POST /api/receiving` — Commit manual operator-verified GRN and credit stock into inventory.
 - `GET /api/receiving/:id` — Retrieve GRN details and linked PO.
 - `PUT /api/receiving/:id` — Modify receiving entry (Admin audit).
 
 ---
 
-## 8. Suppliers & Vendors (`/api/suppliers`)
+## 8. Suppliers & Vendors (`/api/suppliers`, `/api/payment-methods`)
 
 - `GET /api/suppliers` — List suppliers with outstanding balances.
-- `POST /api/suppliers` — Create supplier master profile.
+- `POST /api/suppliers` — Create supplier master profile (state is optional; opening balance auto-syncs to COA).
 - `PUT /api/suppliers/:id` — Update supplier details & credit limit.
+- `POST /api/suppliers/:id/payments` — Settle supplier invoice using custom payment methods.
 - `POST /api/suppliers/return` — Process return to supplier (Debit Note).
 - `POST /api/suppliers/return-refund` — Settle supplier refund/adjustment.
+- `GET /api/payment-methods` — List payment methods with linked `coa_account_id`.
+- `POST /api/payment-methods` — Create custom payment method linked to COA Asset account.
+- `PUT /api/payment-methods/:id` — Update payment method and COA binding.
 
 ---
 
@@ -144,16 +158,19 @@ Idempotency-Key: <UUID> (Optional for safe retries)
 
 - `GET /api/restaurant/floors` — List floors and dining areas.
 - `POST /api/restaurant/floors` — Create dining floor.
-- `GET /api/restaurant/tables` — List tables with live availability status.
+- `GET /api/restaurant/tables` — List tables with live availability status and assigned staff.
 - `POST /api/restaurant/tables` — Create new dining table.
+- `POST /api/restaurant/tables/bulk-import` — Bulk import dining tables from Excel/CSV template.
+- `POST /api/restaurant/tables/:id/assign` — Assign table or section to specific waiter/captain.
 - `PUT /api/restaurant/tables/:id/status` — Update table status (`OCCUPIED`, `AVAILABLE`).
 - `POST /api/restaurant/tables/transfer` — Transfer active order to another table.
 - `POST /api/restaurant/tables/merge` — Merge multiple tables for group dining.
 - `GET /api/restaurant/kots/active` — Live active KOTs stream for KDS.
-- `POST /api/restaurant/kots` — Create & fire new KOT to kitchen.
+- `POST /api/restaurant/kots` — Create & fire new KOT to kitchen (supports multi-client tickets per table).
 - `PUT /api/restaurant/kots/:id/items/:itemId/status` — Bump-bar update (`COOKING` -> `DONE`).
 - `POST /api/restaurant/kots/:id/settle` — Settle table and generate POS invoice.
 - `POST /api/restaurant/reservations` — Create table reservation.
+- `POST /api/v1/qr-order` — Public customer QR code table self-ordering submission.
 
 ---
 
@@ -368,4 +385,29 @@ Idempotency-Key: <UUID> (Optional for safe retries)
 
 ---
 
-*Last Updated: 2026-10-02 | Covers 100% of all 32 Express Route Modules*
+
+## 33. Quick Users & PIN Authentication (`/api/auth`)
+
+- `GET /api/auth/quick-users?outlet_code=...&role=...` — Pre-login active staff members configured for fast dropdown selection.
+- `POST /api/auth/pin-login` — Scoped authentication using `outlet_code`, `username`, `pin`, and `role`.
+
+---
+
+## 34. Multi-Country Tax Seeding & Integrity (`/api/settings/tax-groups`)
+
+- `POST /api/settings/tax-groups/seed-country` — Auto-seed legal fiscal tax slabs for detected country (IN, DE, US, KE, BR, GB).
+- `POST /api/settings/tax-groups/replace-and-delete` — Atomic reassignment of linked items to target tax group before deleting old group.
+- `DELETE /api/settings/tax-groups/:id` — Safe delete tax group with linked item count protection.
+
+---
+
+
+## 35. Contactless QR Table Dining (`/api/restaurant/dining`)
+
+- `GET /api/restaurant/dining/catalog?outlet_id=...&table_id=...` — Retrieve live public menu, categories, and active table session metadata for guest devices.
+- `POST /api/restaurant/dining/place-order` — Place dining order from QR web client, generate kitchen KOT tickets, and notify floor captain.
+- `GET /api/restaurant/dining/active-orders?table_id=...` — Poll live table order status and kitchen preparation updates.
+
+---
+
+*Last Updated: 2026-10-07 | Covers 100% of all 32 Express Route Modules*

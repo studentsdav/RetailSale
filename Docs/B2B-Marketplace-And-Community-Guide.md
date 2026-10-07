@@ -61,7 +61,7 @@ sequenceDiagram
   * **City-Wise Regional Filtering**: Browse suppliers across major trading hubs (New York, Los Angeles, Chicago, Miami, Dallas, Austin, Seattle, San Francisco, Boston).
   * **Category Filtering**: Filter vendors by trade sector: *Grocery & Staples, Dairy & Frozen, Bakery & Confectionery, Beverages, Personal Care, Household & Cleaning, Electronics*.
   * **Live Catalog & Cart**: Browse product images, wholesale tiered pricing, unit specifications, and add quantities to cart.
-  * **1-Click Purchase Order Conversion**: Direct checkout converts cart items into a formal [`purchase_orders`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/models/property/purchaseOrder.model.js) entry, registers the vendor in `supplier_master`, and prepares Goods Receiving Note (GRN) tracking.
+  * **1-Click Purchase Order Conversion**: Direct checkout converts cart items into a formal [`purchase_orders`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/models/property/purchaseOrder.model.js) entry and registers the vendor in `supplier_master`. *(Note: Goods Receiving Notes / GRN are never auto-created; the store operator must physically inspect goods and manually receive them to update live stock).*
 
 ---
 

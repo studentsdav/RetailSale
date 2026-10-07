@@ -51,9 +51,8 @@ flowchart TD
 3. Click the **"Create Purchase Order (PO)"** button.
 4. The system automatically:
    - ✅ Generates a formal **Purchase Order** in your inventory module.
-   - ✅ Links the supplier to your vendor directory.
-   - ✅ Sets up a **Goods Received Note (GRN)** tracking entry.
-5. When the supplier delivers the goods, simply open **Inventory ➔ Purchase Orders ➔ Receive Goods** to add them directly into your live shop stock!
+   - ✅ Links the supplier to your vendor directory with sub-ledger balance tracking.
+5. **Physical Receiving (Manual Only)**: When the delivery truck arrives, your warehouse receiver must open **Purchases ➔ Goods Receiving (GRN)**, physically count and verify the delivered boxes, and click **Save & Receive Stock** to add inventory to your live shop stock! *(GRNs are never created automatically)*.
 
 ---
 

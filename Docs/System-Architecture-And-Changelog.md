@@ -168,6 +168,119 @@ graph TD
 
 ---
 
+
+### 12. 🔐 Staff Quick PIN & Username-Scoped Authentication (Oct 2026)
+* **Pre-Login Quick User Selector**:
+  * Endpoint `GET /api/auth/quick-users` delivering active staff with `show_in_quick_login = true`.
+  * Mobile Floor Console (`waiter_auth_screen.dart`) and Desktop POS (`login_screen.dart`) user pickers.
+* **Username-Scoped Tuple Authentication**:
+  * Scoped validation via $\langle \text{Outlet Code}, \text{Username}, \text{PIN} \rangle$ eliminating duplicate PIN collisions across staff members.
+  * Database migration version `113` adding `show_in_quick_login` and `pin_code` to the `users` table.
+  * User Management toggle in Create/Edit user dialogs.
+
+---
+
+### 13. 🌐 Multi-Country Auto-Tax Seeding & Dependency Protection (Oct 2026)
+* **Automated Fiscal Slabs**:
+  * Auto-generation of country-specific tax rules on initial outlet load:
+    * **India (`IN`)**: GST 5%, GST 18%, IGST 5%, IGST 18%, Nil / Exempt (0%).
+    * **Germany / EU (`DE`, `EU`)**: Standard MwSt (19%), Reduced MwSt (7%), Zero (0%).
+    * **USA (`US`)**: Sales Tax (8.25%, 6.0%), Tax Exempt.
+    * **Kenya (`KE`)**: Standard VAT (16%), Zero-Rated (0%), Exempt (0%).
+    * **Brazil (`BR`)**: ICMS (18%), PIS/COFINS (9.25%), ISS (5%).
+    * **UK (`GB`)**: Standard VAT (20%), Reduced (5%), Zero (0%).
+* **Relational Integrity & Item Reassignment**:
+  * Safe deletion verification checking `item_master.tax_group_id`.
+  * Atomic reassign-and-delete workflow preventing orphaned items.
+
+---
+
+### 14. 📄 A5 Half-Page Invoice Engine & Template Customization (Oct 2026)
+* **Dedicated A5 Geometry**:
+  * High-precision vector rendering for standard A5 sheets ($148 \times 210\text{ mm}$, $419.53 \times 595.28\text{ pt}$).
+  * Supported alongside Thermal 80mm, Thermal 58mm, and A4 formats.
+* **Persistent A5 Configuration**:
+  * Stored in `system_settings.a5_template_config` JSONB column.
+  * Direct format routing in `pdf_preview_dialog.dart` and `pos_invoice_printer.dart`.
+
+---
+
+### 15. 🔀 Dynamic Console Routing & Multi-Channel Dispatch (Oct 2026)
+* **Automated Workstation Routing**:
+  * Segregated order dispatching based on order origin and assigned role:
+    * Dining Floor / Table QR $\rightarrow$ **Captain / Waiter Console** (`CaptainDashboardScreen`).
+    * Retail Mobile App / Web Catalog $\rightarrow$ **Retailer Operations Console** (`RetailerConsoleScreen`).
+    * Home Delivery $\rightarrow$ **Rider & Logistics Portal** (`RiderPortalScreen`).
+
+---
+
+
+### 16. 📱 Contactless QR Table Ordering & Digital Dining Suite (Oct 2026)
+* **Table QR Designer & Print Geometry Engine**:
+  * 5 physical print formats in `table_qr_designer_screen.dart` (Google Standee, Foldable Tent Card, Acrylic Stand, Sticker Disc, A4 Multi-Table Grid Sheet).
+  * QR payloads with deep link schema: `http://{server_ip}:3000/#/dining?outlet_id=...&table_id=...`.
+* **Zero-Install Customer Dining Web App**:
+  * Live digital menu browsing (`table_dining_screen.dart`) with pure veg / non-veg switches, search, and modifier customization.
+  * Real-time kitchen state polling and live status progression (Placed $\rightarrow$ Preparing $\rightarrow$ Served).
+* **Automatic KOT Firing & Table Session Merging**:
+  * Atomic KOT dispatching via `dining.controller.ts` pushing orders directly to Kitchen Display Systems (KDS), thermal printers, and Captain Consoles.
+
+---
+
+### 17. ⚡ Fast PIN Login & Post-Login Preloading Optimization (Oct 2026)
+* **Staff Quick-Login & User Dropdown Matrix**:
+  * Direct PIN entry without requiring typing lengthy email/passwords on mobile screens.
+  * User dropdown selector in `login_screen.dart` and `waiter_auth_screen.dart` dynamically filtered by `show_in_quick_login = true`.
+  * Outlet-scoped PIN validation ensuring that multiple staff with identical numeric PINs (e.g. `1234`) are safely authenticated by resolving `(outlet_id, username, pin_code)`.
+* **Post-Login Pre-Warming Pipeline**:
+  * Parallel asynchronous preloading of taxes, payment methods, categories, and offline cached catalogs to reduce post-login wait times by over 80%.
+
+---
+
+### 18. 🍽️ Captain Console & Floor Table Management (Oct 2026)
+* **Multi-Client Separate Bills per Table**:
+  * Support for multiple independent guest sub-sessions/tickets seated at the same physical table.
+  * Each client ticket can order, generate distinct KOTs, and settle bills independently without closing the physical table.
+* **Waiter/User Table Assignment**:
+  * Real-time binding of specific tables or floor sections to individual waiters and captains (`restaurant_tables.assigned_user_id`).
+* **Bulk Table Import from Excel**:
+  * Built-in Excel/CSV parser and template validator importing hundreds of tables across floors and dining areas in a single operation.
+
+---
+
+### 19. 🧹 Navigation Menu Taxonomy & Deduplication (Oct 2026)
+* **Consolidated Operations Menu**:
+  * Removed duplicate entries (*Purchase Order* vs. *Vendor Purchase Order*) under Operations, establishing a single canonical route to `PurchaseOrderListScreen`.
+* **Permission-Driven Dynamic Sidebar**:
+  * Dynamic sidebar rendering based on active business module (`RETAIL`, `RESTAURANT`, `SUPERMARKET`) and granular user permissions.
+
+---
+
+### 20. 💼 Vendor Lifecycle, Purchase Engine & COA Integration (Oct 2026)
+* **Optional State for International Vendors**:
+  * Relaxed mandatory state validation for cross-border and international supplier registration.
+* **Vendor Opening Balance with Automated COA Ledger Sync**:
+  * Entering an opening balance on vendor creation automatically posts double-entry vouchers to `Accounts Payable` and `Opening Balance Offset`.
+* **VAT-Inclusive Net Amount Rounding**:
+  * Fixed fractional cent calculation disputes by enforcing standard integer rounding (`Math.round(...)`) for net invoice amounts when taxes are inclusive.
+* **Dynamic Custom Payment Methods & COA Account Binding**:
+  * Custom payment methods defined under Settings now seamlessly populate supplier payment screens and map to their respective Balance Sheet asset accounts in Chart of Accounts (`payment_methods.coa_account_id`).
+
+---
+
+### 21. 📦 Stock Taking, Item Modifiers & Operator-Only GRN Doctrine (Oct 2026)
+* **Physical Stock Taking & Variance Reconciliation**:
+  * Dedicated cycle count screen tracking Item Name, Unit, Current System Balance, Counted in Hand, Variance, and Reason/Remarks, with filtering by department, search, and audit reports.
+* **Modifiers & Add-ons Engine (e.g., Extra Cheese)**:
+  * Full Add/Edit/Delete lifecycle for item modifiers with optional raw material stock deduction (e.g., deducting 30g cheese from inventory per burger).
+* **Dietary Tagging & Waiter App Direct KOT Dispatch**:
+  * Veg / Non-Veg / Vegan dietary tags in Item Master and POS item cards.
+  * Waiter app direct kitchen dispatch with immediate KOT thermal printing and KDS sync.
+* **Operator-Only Manual GRN Physical Receiving Doctrine**:
+  * Clarified and verified that **Goods Receiving (GRN) is strictly manual upon operator inspection and physical counting**; GRNs are NEVER auto-generated on PO placement.
+
+---
+
 ## 📁 Key File Map
 
 | File Path | Role / Description |
@@ -193,7 +306,28 @@ graph TD
 | `lib/widgets/cloud_feature_gate.dart` | Cloud feature gate with direct server config & migration wizard actions |
 | `lib/screens/dashboard/server_config_screen.dart` | Dedicated server configuration & migration launcher screen |
 | `lib/screens/settings/settings_screen.dart` | Settings screen with cloud banners and 1-Click Migration launcher |
-| `Docs/One-Click-Cloud-Migration-Guide.md` | Architectural guide and table mapping reference for migrations |
-| `Docs/B2B-Marketplace-And-Community-Guide.md` | Architecture guide for Marketplace, Vendor Onboarding, Chat & POs |
-| `Docs/Lynx-AI-StickyNotes-Currency-Tax-Guide.md` | Architecture guide for Lynx AI, Sticky Notes, Multi-Currency & Tax Matrix |
-| `Docs/System-Architecture-And-Changelog.md` | Comprehensive system architecture and chronological upgrades changelog |
+| `docs/One-Click-Cloud-Migration-Guide.md` | Architectural guide and table mapping reference for migrations |
+| `docs/B2B-Marketplace-And-Community-Guide.md` | Architecture guide for Marketplace, Vendor Onboarding, Chat & POs |
+| `docs/Lynx-AI-StickyNotes-Currency-Tax-Guide.md` | Architecture guide for Lynx AI, Sticky Notes, Multi-Currency & Tax Matrix |
+| `docs/System-Architecture-And-Changelog.md` | Comprehensive system architecture and chronological upgrades changelog |
+| `docs/Developer-Guide-QR-Table-Ordering.md` | Architecture, KOT state machine & API guide for QR Table Dining |
+| `docs/User-Guide-QR-Table-Ordering.md` | Operations guide for designing table QR standees and managing dining orders |
+| `docs/Developer-Guide-Staff-PIN-And-Quick-Login.md` | Architecture & API guide for Staff PIN and User Dropdown |
+| `docs/User-Guide-Staff-PIN-And-Quick-Login.md` | Operational guide for staff PIN setup and mobile login |
+| `docs/Developer-Guide-Fast-Login-And-Preloading.md` | Preloading architecture, cache warmup & benchmark optimizations |
+| `docs/User-Guide-Fast-Login-And-PIN-Access.md` | User guide for rapid PIN authentication & post-login load speedup |
+| `docs/Developer-Guide-Captain-Console-Table-Management.md` | Architecture for multi-client table orders, waiter assignment, and Excel bulk table import |
+| `docs/User-Guide-Captain-Console-Table-Management.md` | Operations guide for managing split bills, assigning tables, and importing floor plans |
+| `docs/Developer-Guide-Menu-Layout-And-Deduplication.md` | Navigation taxonomy, permission filtering, and route deduplication |
+| `docs/User-Guide-Navigation-And-Menu-Structure.md` | Step-by-step navigation guide, drawer hierarchy, and role views |
+| `docs/Developer-Guide-Vendor-Purchase-And-COA-Integration.md` | Technical specifications for vendor opening balance, VAT rounding, and COA binding |
+| `docs/User-Guide-Vendor-Purchase-And-Payments.md` | User guide for vendor onboarding, PO/GRN integer rounding, and COA payment methods |
+| `docs/Developer-Guide-Stock-Taking-Modifiers-And-GRN-Verification.md` | Architecture for cycle count audits, modifier raw stock deduction, and operator-only GRN |
+| `docs/User-Guide-Stock-Taking-Modifiers-And-GRN-Verification.md` | User guide for physical stock audits, extra cheese modifiers, and manual GRN checking |
+| `docs/Developer-Guide-Auto-Tax-Seeding-And-Tax-Integrity.md` | Multi-Country Tax Seeding and Relational Item Integrity |
+| `docs/User-Guide-Auto-Tax-Seeding-And-Tax-Integrity.md` | User guide for international taxes and safe tax replacement |
+| `docs/Developer-Guide-A5-Invoice-And-Template-Designer.md` | A5 Invoice rendering pipeline and template JSON schema |
+| `docs/User-Guide-A5-Invoice-And-Template-Designer.md` | User guide for A5 half-page printing and template setup |
+| `docs/Developer-Guide-Dynamic-Console-Routing.md` | Multi-channel order routing architecture & dispatching |
+| `docs/User-Guide-Dynamic-Console-Routing.md` | User guide for order flows across Captain, Retailer, and Rider consoles |
+
