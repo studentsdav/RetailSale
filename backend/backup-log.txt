@@ -22018,3 +22018,14 @@ D:\inventorynew\RetailSale new\RetailSale\backend\utils\migrations.ts:4183:2: ER
 2026-10-07T17:31:58.747Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-10-07T17:31:58.759Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-10-07T17:31:58.770Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.011Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.036Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.042Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.047Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.052Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.058Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.063Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.067Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.072Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.078Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-07T17:51:11.082Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

@@ -110,34 +110,69 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 
 ---
 
-## 📚 Documentation
+## 📚 Complete Documentation Suite
 
-### 👤 Store User & Cashier Guides (No Coding Required)
-- 🚀 **[1-Click Cloud & Offline Store Migration User Guide](./Docs/User-Guide-1Click-Cloud-Migration.md)**
-- 🛍️ **[B2B Wholesale Marketplace & Vendor Portal User Guide](./Docs/User-Guide-B2B-Marketplace-And-Vendor.md)**
-- 💬 **[B2B Community Hub & Direct Trade Chat User Guide](./Docs/User-Guide-B2B-Community-And-Chat.md)**
-- 🤖 **[Famalth Lynx AI Assistant & Search User Guide](./Docs/User-Guide-Lynx-AI-Assistant.md)**
-- 📝 **[POS Sticky Notes & Shift Checklists User Guide](./Docs/User-Guide-Sticky-Notes.md)**
-- 🌍 **[Currency & Multi-Tax Matrix Setup User Guide](./Docs/User-Guide-Currency-And-Taxes.md)**
-- ☁️ **[Cloud Features & Server Configuration User Guide](./Docs/User-Guide-Cloud-Features-And-Server-Config.md)**
-- 🛡️ **[Security, Anti-Hacker & Data Protection User Guide](./Docs/User-Guide-Security-And-Data-Protection.md)**
-- 📖 **[Master User Guide & Daily Workflow Index](./Docs/User-Guide.md)**
+> 🌟 **[Browse the Full Master Wiki (WIKI.md)](./WIKI.md)** — Complete searchable documentation portal covering every architecture diagram, API, user walkthrough, and data model.
+
+### 👤 Store User & Operator Guides (No Coding Required)
+- 🚀 **[1-Click Cloud & Offline Store Migration](./docs/User-Guide-1Click-Cloud-Migration.md)** — Bi-directional sync, store cloning & backup restore
+- ⚡ **[Fast Staff Login & PIN Access](./docs/User-Guide-Fast-Login-And-PIN-Access.md)** — Dropdown quick-login, 4-digit staff PIN & preloading speedup
+- 👤 **[Staff PIN Configuration & Mobile Login](./docs/User-Guide-Staff-PIN-And-Quick-Login.md)** — Setting user PINs & mobile-friendly auth
+- 🍽️ **[Captain Console & Floor Table Management](./docs/User-Guide-Captain-Console-Table-Management.md)** — Multi-client split bills, waiter table assignment & Excel import
+- 📱 **[Contactless QR Table Ordering](./docs/User-Guide-QR-Table-Ordering.md)** — Self-ordering standees, tent cards & digital dining
+- 🍳 **[Restaurant & Hospitality Operations](./docs/User-Guide-Restaurant-And-Hospitality.md)** — Visual floor plan, KDS kitchen display & table transfers
+- 🧭 **[System Navigation & Clean Menu Structure](./docs/User-Guide-Navigation-And-Menu-Structure.md)** — Deduplicated operations menu & role-specific drawer views
+- 💼 **[Vendor Purchasing & Supplier Payments](./docs/User-Guide-Vendor-Purchase-And-Payments.md)** — International vendors, opening balance COA sync, VAT rounding & custom payments
+- 📦 **[Stock Taking, Modifiers & GRN Verification](./docs/User-Guide-Stock-Taking-Modifiers-And-GRN-Verification.md)** — Physical count audit, extra cheese recipes, dietary flags & manual GRN receiving
+- 🛒 **[POS Operations & Inventory Management](./docs/User-Guide-POS-Operations-And-Inventory.md)** — High-speed billing, barcode manager, damage write-offs & stock transfers
+- 🏭 **[Manufacturing & BOM Assembly](./docs/User-Guide-Manufacturing-BOM-And-Assembly.md)** — Recipe configurations, finished goods production & component deductions
+- 💰 **[Accounting, COA & Financial Ledgers](./docs/User-Guide-Accounting-And-Financial-Ledger.md)** — Double-entry vouchers, bank reconciliation, loans/EMI & P&L statements
+- 👥 **[HRMS & Staff Payroll Management](./docs/User-Guide-HRMS-And-Payroll.md)** — Daily attendance punch, shifts, salary structures & automated payslips
+- 🎁 **[Promotions, Loyalty & Lucky Draw](./docs/User-Guide-Promotions-Loyalty-And-LuckyDraw.md)** — Happy hours, bill-value promos, tiered reward points & raffle draws
+- 🖨️ **[A5 Invoice & Thermal Template Designer](./docs/User-Guide-A5-Invoice-And-Template-Designer.md)** — Customizing A5 laser, 80mm & 58mm receipt layouts
+- 🌐 **[Auto-Tax Seeding & Tax Integrity](./docs/User-Guide-Auto-Tax-Seeding-And-Tax-Integrity.md)** — Country tax rules (GST/VAT/Sales Tax) & safe tax replacement
+- 🔀 **[Dynamic Workstation Console Routing](./docs/User-Guide-Dynamic-Console-Routing.md)** — Dispatching orders across Captain, Retailer, and Rider portals
+- 🛍️ **[B2B Wholesale Marketplace & Vendor Portal](./docs/User-Guide-B2B-Marketplace-And-Vendor.md)** — Vendor catalog publishing, direct PO carts & trade directory
+- 💬 **[B2B Community Hub & Direct Trade Chat](./docs/User-Guide-B2B-Community-And-Chat.md)** — Merchant-to-vendor messaging & industry group channels
+- 🤖 **[Famalth Lynx AI Assistant & Voice Search](./docs/User-Guide-Lynx-AI-Assistant.md)** — Natural language store querying & conversational PO drafting
+- 📝 **[POS Sticky Notes & Shift Checklists](./docs/User-Guide-Sticky-Notes.md)** — Pinnable color-coded shift reminders & scratchpads
+- 🌍 **[Currency Formats & Tax Matrix](./docs/User-Guide-Currency-And-Taxes.md)** — Multi-currency formatting & rate management
+- ☁️ **[Cloud Features & Server Configuration](./docs/User-Guide-Cloud-Features-And-Server-Config.md)** — Online hosting URLs, outlet verification & gateway setup
+- 🛡️ **[Security, Anti-Hacker & Data Protection](./docs/User-Guide-Security-And-Data-Protection.md)** — Master recovery PIN, auto-reinstall & disaster recovery
+- ❓ **[Complete Store Operations FAQ](./docs/User-Guide-FAQ.md)** — Frequently asked cashier and manager troubleshooting questions
+- 📖 **[Master User Guide & Workflow Index](./docs/User-Guide.md)** — Universal operational documentation hub
+
+---
 
 ### 🛠️ Developer & Technical Architecture Guides
-- [🛡️ Security, Rate Limiting, Anti-DDoS, Caching & Load Balancers Architecture](./Docs/Developer-Security-Cache-LoadBalancer-Guide.md)
-- [🚀 1-Click Bi-Directional Cloud & Offline Migration Architecture](./Docs/One-Click-Cloud-Migration-Guide.md)
-- [🛍️ B2B Marketplace, Vendor Onboarding & Community Chat Architecture](./Docs/B2B-Marketplace-And-Community-Guide.md)
-- [🤖 Famalth Lynx AI, Sticky Notes, Multi-Currency & Tax Matrix Architecture](./Docs/Lynx-AI-StickyNotes-Currency-Tax-Guide.md)
-- [📜 System Architecture Upgrades & Changelog (Sept–Oct 2026)](./Docs/System-Architecture-And-Changelog.md)
-- [Retailer Installation & Update Guide](./Docs/Retailer-Installation-Guide.md)
-- [Render Cloud Deployment & Environment Guide](./Docs/Render-Cloud-Deployment-Guide.md)
-- [Google Gmail OAuth2 Setup Guide](./Docs/Google-Gmail-OAuth2-Setup-Guide.md)
-- [Own Server Online Deployment Guide](./Docs/Own-Server-Online-Deployment-Guide.md)
-- [Complete Help File](./Docs/Help-File.md)
-- [Developer Guide](./Docs/Developer-Guide.md)
-- [Frontend Developer Guide](./Docs/Frontend-Guide.md)
-- [Backend Developer Guide](./Docs/Backend-Guide.md)
-- [Endpoint Reference](./Docs/Endpoint-Reference.md)
+- 📋 **[Master Feature & Documentation Coverage Matrix](./docs/Feature-Coverage-Checklist.md)** — 100% verified UI & backend feature audit
+- 📜 **[System Architecture Upgrades & Changelog (Sept–Oct 2026)](./docs/System-Architecture-And-Changelog.md)** — Architectural evolution timeline & core invariants
+- 📡 **[Master REST API Endpoint Reference](./docs/Endpoint-Reference.md)** — Comprehensive specification of all 38 backend route modules
+- ⚡ **[Fast Login, PIN Authentication & Preloading Architecture](./docs/Developer-Guide-Fast-Login-And-Preloading.md)** — Benchmark speedups & parallel cache warming
+- 👤 **[Staff PIN Security & Dynamic Dropdown Architecture](./docs/Developer-Guide-Staff-PIN-And-Quick-Login.md)** — Multi-user collision resolution & JWT scoping
+- 🍽️ **[Captain Console & Floor Management Architecture](./docs/Developer-Guide-Captain-Console-Table-Management.md)** — Multi-client split sessions, waiter binding & Excel parser
+- 📱 **[QR Contactless Ordering & Real-Time Dining Architecture](./docs/Developer-Guide-QR-Table-Ordering.md)** — Geometry print engine, customer web app & atomic KOT stream
+- 🍳 **[Restaurant & Hospitality Technical Architecture](./docs/Developer-Guide-Restaurant-Hospitality.md)** — Table state machine, KDS live pipeline & billing settlement
+- 🧭 **[Navigation Hierarchy, Menu Layout & Deduplication](./docs/Developer-Guide-Menu-Layout-And-Deduplication.md)** — Module filtering & route consolidation
+- 💼 **[Vendor Lifecycle, Purchase Engine & COA Integration](./docs/Developer-Guide-Vendor-Purchase-And-COA-Integration.md)** — Opening balance vouchers, VAT integer rounding & payment methods
+- 📦 **[Stock Taking, Modifier Recipes & GRN Verification](./docs/Developer-Guide-Stock-Taking-Modifiers-And-GRN-Verification.md)** — Variance journals, raw stock deductions & manual GRN doctrine
+- 🛒 **[POS Engine, Inventory State Machine & BOM Manufacturing](./docs/Developer-Guide-POS-Inventory-Manufacturing.md)** — Atomic stock deduction & assembly algorithms
+- 💰 **[Financial Accounting, COA & Double-Entry Ledger Architecture](./docs/Developer-Guide-Accounting-Finance.md)** — Voucher invariants, amortization & balance sheet generation
+- 👥 **[HRMS, Shift Scheduling & Payroll Processing Engine](./docs/Developer-Guide-HRMS-Payroll.md)** — Punch calculation logic, tax deductions & payslip generator
+- 🤖 **[AI Framework, Autonomous Background Agents & Lynx](./docs/Developer-Guide-AI-Autonomous-Agents.md)** — Autonomous agent loop, LLM tool definitions & upsell model
+- 🧩 **[Plugins, Workflows & WhatsApp Queue Architecture](./docs/Developer-Guide-Plugins-Workflows-Automation.md)** — Sandbox plugin runtime, webhooks & adaptive backoff queue
+- 🖨️ **[A5 Invoice Rendering Pipeline & Template Schema](./docs/Developer-Guide-A5-Invoice-And-Template-Designer.md)** — Vector PDF generation & JSON block layout engine
+- 🌐 **[Auto-Tax Seeding & Tax Integrity Engine](./docs/Developer-Guide-Auto-Tax-Seeding-And-Tax-Integrity.md)** — Country tax presets & relational integrity safety
+- 🔀 **[Dynamic Workstation Console Routing Architecture](./docs/Developer-Guide-Dynamic-Console-Routing.md)** — Dispatch channels for Captain, Retailer, and Rider consoles
+- 🛡️ **[Security, Anti-DDoS, Rate Limiting & Load Balancer Guide](./docs/Developer-Security-Cache-LoadBalancer-Guide.md)** — Redis rate-limiting, token buckets & intrusion detection
+- 🚀 **[1-Click Relational Store Migration Architecture](./docs/One-Click-Cloud-Migration-Guide.md)** — Relational ID translation engine & sequence re-alignment
+- 🛍️ **[B2B Wholesale Marketplace & Community Chat Architecture](./docs/B2B-Marketplace-And-Community-Guide.md)** — Real-time chat, vendor publishing & direct PO integration
+- 🤖 **[Lynx AI, Sticky Notes & Currency Engine Architecture](./docs/Lynx-AI-StickyNotes-Currency-Tax-Guide.md)** — Storage schemas, sync routines & AI natural language parser
+- 💻 **[Backend Core Developer Guide](./docs/Backend-Guide.md)** & **[Frontend Developer Guide](./docs/Frontend-Guide.md)** — Architecture overviews & component standards
+- 🖥️ **[Retailer Installation & Update Installer Guide](./docs/Retailer-Installation-Guide.md)** & **[Windows Inno Setup Guide](./docs/Windows-Installer-Developer-Guide.md)**
+- ☁️ **[Render Cloud Deployment Guide](./docs/Render-Cloud-Deployment-Guide.md)**, **[Web Deployment Guide](./docs/Web-Deployment-Guide.md)** & **[Own Server Guide](./docs/Own-Server-Online-Deployment-Guide.md)**
+- ✉️ **[Google Gmail OAuth2 Setup Guide](./docs/Google-Gmail-OAuth2-Setup-Guide.md)** & **[Settings Master Guide](./docs/Settings-Guide.md)**
+- 📘 **[Complete Help File & Feature Directory](./docs/Help-File.md)**
 
 ---
 
