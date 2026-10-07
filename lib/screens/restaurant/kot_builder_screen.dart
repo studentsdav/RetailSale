@@ -1862,16 +1862,44 @@ class _KotBuilderScreenState extends State<KotBuilderScreen> {
                                                         child: Column(
                                                           crossAxisAlignment: CrossAxisAlignment.start,
                                                           children: [
-                                                            Text(
-                                                              displayName,
-                                                              maxLines: 2,
-                                                              overflow: TextOverflow.ellipsis,
-                                                              style: const TextStyle(
-                                                                color: Color(0xFF1E293B),
-                                                                fontWeight: FontWeight.w700,
-                                                                fontSize: 12.5,
-                                                                height: 1.25,
-                                                              ),
+                                                            Row(
+                                                              children: [
+                                                                (() {
+                                                                  final rawFoodType = (item is Map ? (item['food_type'] ?? item['dietary_type'] ?? (item['is_veg'] == false ? 'NON_VEG' : 'VEG')) : (item.foodType ?? (item.isVeg ? 'VEG' : 'NON_VEG'))).toString().toUpperCase();
+                                                                  final isVeg = rawFoodType == 'VEG' || rawFoodType == 'VEGAN';
+                                                                  final isEgg = rawFoodType == 'EGG';
+                                                                  final isVegan = rawFoodType == 'VEGAN';
+                                                                  final badgeColor = isVegan ? const Color(0xFF059669) : (isEgg ? const Color(0xFFEAB308) : (isVeg ? const Color(0xFF16A34A) : const Color(0xFFDC2626)));
+                                                                  return Container(
+                                                                    margin: const EdgeInsets.only(right: 5),
+                                                                    padding: const EdgeInsets.all(1.5),
+                                                                    decoration: BoxDecoration(
+                                                                      border: Border.all(color: badgeColor, width: 1.2),
+                                                                      borderRadius: BorderRadius.circular(2.5),
+                                                                    ),
+                                                                    child: isVegan
+                                                                        ? Icon(Icons.eco, size: 6, color: badgeColor)
+                                                                        : Container(
+                                                                            width: 5,
+                                                                            height: 5,
+                                                                            decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle),
+                                                                          ),
+                                                                  );
+                                                                })(),
+                                                                Expanded(
+                                                                  child: Text(
+                                                                    displayName,
+                                                                    maxLines: 2,
+                                                                    overflow: TextOverflow.ellipsis,
+                                                                    style: const TextStyle(
+                                                                      color: Color(0xFF1E293B),
+                                                                      fontWeight: FontWeight.w700,
+                                                                      fontSize: 12.5,
+                                                                      height: 1.25,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
                                                             ),
                                                             const SizedBox(height: 2),
                                                             Text(

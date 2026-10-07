@@ -244,6 +244,42 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
       return;
     }
 
+    String? custName;
+    String? custPhone;
+    for (final k in targetKots) {
+      final n = (k['customer_name'] ?? '').toString().trim();
+      final p = (k['customer_phone'] ?? '').toString().trim();
+      if (n.isNotEmpty && (custName == null || custName.isEmpty) && n.toLowerCase() != 'guest') custName = n;
+      if (p.isNotEmpty && (custPhone == null || custPhone.isEmpty)) custPhone = p;
+      if (custName == null || custName.isEmpty || custName.toLowerCase() == 'guest' || custPhone == null || custPhone.isEmpty) {
+        final rem = (k['remarks'] ?? '').toString();
+        if (rem.contains('Customer Self-Order (QR):')) {
+          final idx = rem.indexOf('Customer Self-Order (QR):');
+          var qrPart = rem.substring(idx + 'Customer Self-Order (QR):'.length);
+          final pipeIdx = qrPart.indexOf('|');
+          if (pipeIdx != -1) qrPart = qrPart.substring(0, pipeIdx);
+
+          final phoneMatch = RegExp(r'\(([^)]*)\)').firstMatch(qrPart);
+          final cleanName = qrPart
+              .replaceAll(RegExp(r'\[CID:[^\]]*\]', caseSensitive: false), '')
+              .replaceAll(RegExp(r'\[EM:[^\]]*\]', caseSensitive: false), '')
+              .replaceAll(RegExp(r'\([^)]*\)'), '')
+              .trim();
+
+          if ((custName == null || custName.isEmpty || custName.toLowerCase() == 'guest') &&
+              cleanName.isNotEmpty &&
+              cleanName.toLowerCase() != 'guest') {
+            custName = cleanName;
+          }
+          if ((custPhone == null || custPhone.isEmpty) &&
+              phoneMatch != null &&
+              phoneMatch.group(1)!.trim().isNotEmpty) {
+            custPhone = phoneMatch.group(1)!.trim();
+          }
+        }
+      }
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -251,6 +287,8 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
           preloadedTableId: widget.tableId,
           preloadedItems: grouped.values.toList(),
           preloadedKotIds: kotIds,
+          preloadedCustomerName: custName,
+          preloadedCustomerPhone: custPhone,
         ),
       ),
     ).then((_) => _fetchTableKots());
@@ -812,23 +850,8 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                 ],
               ),
               pw.SizedBox(height: 10),
-              pw.Row(
-                children: [
-                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                  pw.SizedBox(width: 4),
-                  pw.Expanded(
-                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-                  ),
-                  pw.SizedBox(width: 4),
-                  pw.Text('CUT HERE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                  pw.SizedBox(width: 4),
-                  pw.Expanded(
-                    child: pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-                  ),
-                  pw.SizedBox(width: 4),
-                  pw.Text('✂', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                ],
-              ),
+              pw.SizedBox(height: 10),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 6),
             ],
           );
@@ -1117,6 +1140,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
           'status': 'Cancelled',
           'remarks': reason,
         });
+        if (!mounted) return;
         if (res['success'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Cancelled KOT $kotNo successfully.')),
@@ -1124,6 +1148,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
           _fetchTableKots();
         }
       } catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
@@ -1327,97 +1352,131 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Top Line: KOT No, Bill Tag, Status Badge
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: [
-                              Text(
-                                'KOT: ${kot['kot_no']}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE0E7FF),
-                                  border: Border.all(color: const Color(0xFFC7D2FE)),
-                                  borderRadius: BorderRadius.circular(4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  'KOT: ${kot['kot_no']}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                 ),
-                                child: Text(
-                                  clientTag,
-                                  style: const TextStyle(
-                                    color: Color(0xFF3730A3),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 10.5,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE0E7FF),
+                                    border: Border.all(color: const Color(0xFFC7D2FE)),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    clientTag,
+                                    style: const TextStyle(
+                                      color: Color(0xFF3730A3),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10.5,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: kot['status'] == 'Preparing'
-                                ? Colors.blue.shade50
-                                : (kot['status'] == 'Ready' ? Colors.green.shade50 : Colors.grey.shade200),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _formatKotStatus(kot['status']),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: kot['status'] == 'Preparing'
-                                  ? Colors.blue.shade800
-                                  : (kot['status'] == 'Ready' ? Colors.green.shade800 : scheme.onSurface),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: kot['payment_status'] == 'PAID' ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                                    border: Border.all(color: kot['payment_status'] == 'PAID' ? const Color(0xFF86EFAC) : const Color(0xFFFDE68A)),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    kot['payment_status'] == 'PAID' ? 'PAID (${kot['payment_mode'] ?? 'ONLINE'})' : 'UNPAID',
+                                    style: TextStyle(
+                                      color: kot['payment_status'] == 'PAID' ? const Color(0xFF15803D) : const Color(0xFFB45309),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    // Sub Line: Waiter & Time
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Waiter: ${kot['waiter']?['employee_name'] ?? 'N/A'} • $minutesElapsed min ago',
-                            style: TextStyle(fontSize: 11.5, color: scheme.outline),
-                            overflow: TextOverflow.ellipsis,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: kot['status'] == 'Preparing'
+                                  ? Colors.blue.shade50
+                                  : (kot['status'] == 'Ready' ? Colors.green.shade50 : Colors.grey.shade200),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _formatKotStatus(kot['status']),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: kot['status'] == 'Preparing'
+                                  ? Colors.blue.shade800
+                                  : (kot['status'] == 'Ready' ? Colors.green.shade800 : scheme.onSurface),
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    if (kot['status'] == 'Cancelled' || kot['status'] == 'Rejected') ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        '${kot['status'] == 'Rejected' ? 'REJECTED' : 'CANCELLED'}: ${kot['remarks'] ?? 'No reason provided'}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red),
+                        ],
                       ),
-                    ],
-                    // Action Buttons Row
-                    if (kot['status'] != 'Cancelled' && kot['status'] != 'Rejected') ...[
-                      const SizedBox(height: 6),
-                      const Divider(height: 1),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        alignment: WrapAlignment.end,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 6,
+                      const SizedBox(height: 4),
+                      // Sub Line: Waiter & Time
+                      Row(
                         children: [
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            icon: const Icon(Icons.print_outlined, color: Colors.teal, size: 19),
-                            tooltip: 'Reprint KOT Ticket',
-                            onPressed: () => _reprintKot(kot),
+                          Expanded(
+                            child: Text(
+                              '${kot['customer_name'] != null && kot['customer_name'].toString().isNotEmpty ? "Customer: ${kot['customer_name']} • " : ""}Waiter: ${kot['waiter']?['employee_name'] ?? 'N/A'} • $minutesElapsed min ago',
+                              style: TextStyle(fontSize: 11.5, color: scheme.outline),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
+                        ],
+                      ),
+                      if (kot['status'] == 'Cancelled' || kot['status'] == 'Rejected') ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${kot['status'] == 'Rejected' ? 'REJECTED' : 'CANCELLED'}: ${kot['remarks'] ?? 'No reason provided'}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red),
+                        ),
+                      ],
+                      // Action Buttons Row
+                      if (kot['status'] != 'Cancelled' && kot['status'] != 'Rejected') ...[
+                        const SizedBox(height: 6),
+                        const Divider(height: 1),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          alignment: WrapAlignment.end,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            if (kot['status'] == 'Placed' || kot['status'] == 'New')
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF16A34A),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  visualDensity: VisualDensity.compact,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                ),
+                                icon: const Icon(Icons.check_circle_outline, size: 14),
+                                label: const Text('Accept Order', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                onPressed: () async {
+                                  try {
+                                    await ApiClient.put('/api/restaurant/kots/${kot['id']}/status', {'status': 'Preparing'});
+                                    _fetchTableKots();
+                                  } catch (_) {}
+                                },
+                              ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              icon: const Icon(Icons.print_outlined, color: Colors.teal, size: 19),
+                              tooltip: 'Reprint KOT Ticket',
+                              onPressed: () => _reprintKot(kot),
+                            ),
                           IconButton(
                             visualDensity: VisualDensity.compact,
                             padding: const EdgeInsets.all(4),

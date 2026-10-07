@@ -82,12 +82,37 @@ export const listKots = async (req: Request, res: Response) => {
                 { model: (req as any).propertyDb.models.hr_employees, as: 'captain', attributes: [['full_name', 'employee_name']], required: false },
                 { model: (req as any).propertyDb.models.kot_revisions, as: 'revisions', required: false },
                 {
+                    model: (req as any).propertyDb.models.sales_headers,
+                    as: 'sales_header',
+                    required: false,
+                    attributes: [
+                        'id', 'sale_no', 'status', 'payment_mode', 'net_amount', 'amount_paid', 'balance_due',
+                        'sub_total', 'taxable_amount', 'total_tax', 'cgst_amount', 'sgst_amount', 'igst_amount',
+                        'total_discount', 'manual_discount_amount', 'manual_discount_type', 'manual_discount_value',
+                        'scheme_discount', 'coupon_discount_amount', 'loyalty_discount_amount',
+                        'charges', 'charge_total', 'charge_tax_total', 'tax_breakup', 'round_off_amount'
+                    ]
+                },
+                {
                     model: (req as any).propertyDb.models.kot_items,
                     as: 'items',
                     required: false,
                     include: [
                         { model: (req as any).propertyDb.models.kitchen_stations, as: 'station', attributes: ['station_name'], required: false },
-                        { model: (req as any).propertyDb.models.item_master, as: 'item', attributes: ['brand', 'location', 'item_group', 'sub_category'], required: false }
+                        {
+                            model: (req as any).propertyDb.models.item_master,
+                            as: 'item',
+                            attributes: ['id', 'item_name', 'rate', 'retail_sale_price', 'mrp', 'tax_percent', 'tax_type', 'tax_group_id', 'brand', 'location', 'item_group', 'sub_category', 'is_tax_inclusive'],
+                            required: false,
+                            include: [
+                                {
+                                    model: (req as any).propertyDb.models.tax_groups,
+                                    as: 'tax_group',
+                                    attributes: ['id', 'group_name', 'total_rate', 'is_tax_inclusive'],
+                                    required: false
+                                }
+                            ]
+                        }
                     ]
                 }
             ],
@@ -105,6 +130,60 @@ export const listKots = async (req: Request, res: Response) => {
             if (!plain.captain || !plain.captain.employee_name || plain.captain.employee_name.toString().toLowerCase().includes('dummy')) {
                 plain.captain = { employee_name: 'N/A' };
             }
+
+            if (plain.sales_header) {
+                plain.bill_no = plain.sales_header.sale_no;
+                plain.total_amount = Number(plain.sales_header.net_amount);
+                plain.net_amount = Number(plain.sales_header.net_amount);
+                plain.subtotal_amount = Number(plain.sales_header.sub_total);
+                plain.taxable_amount = Number(plain.sales_header.taxable_amount);
+                plain.tax_amount = Number(plain.sales_header.total_tax);
+                plain.discount_amount = Number(plain.sales_header.total_discount || 0);
+                plain.discount_type = plain.sales_header.manual_discount_type;
+                plain.discount_value = Number(plain.sales_header.manual_discount_value || 0);
+                plain.charge_total = Number(plain.sales_header.charge_total || 0);
+                plain.charge_tax_total = Number(plain.sales_header.charge_tax_total || 0);
+                plain.charges = plain.sales_header.charges || [];
+                plain.tax_breakup = plain.sales_header.tax_breakup || null;
+                plain.round_off_amount = Number(plain.sales_header.round_off_amount || 0);
+                plain.payment_mode = plain.sales_header.payment_mode || plain.payment_mode;
+                if (plain.sales_header.status === 'COMPLETED' || plain.sales_header.status === 'PAID' || Number(plain.sales_header.balance_due ?? 0) <= 0.01) {
+                    plain.is_settled = true;
+                    plain.payment_status = 'PAID';
+                    plain.status = 'Closed';
+                }
+            }
+
+            // Extract customer info from remarks or revisions if plain.customer_name is missing
+            if (!plain.customer_name && plain.remarks) {
+                const rem = String(plain.remarks);
+                const qrIdx = rem.indexOf('Customer Self-Order (QR):');
+                if (qrIdx !== -1) {
+                    let qrPart = rem.substring(qrIdx + 'Customer Self-Order (QR):'.length);
+                    const pipeIdx = qrPart.indexOf('|');
+                    if (pipeIdx !== -1) qrPart = qrPart.substring(0, pipeIdx);
+
+                    const cidMatch = qrPart.match(/\[CID:\s*([^\]]*)\]/i);
+                    const emMatch = qrPart.match(/\[EM:\s*([^\]]*)\]/i);
+                    const phoneMatch = qrPart.match(/\(([^)]*)\)/);
+
+                    let parsedName = qrPart
+                        .replace(/\[CID:[^\]]*\]/ig, '')
+                        .replace(/\[EM:[^\]]*\]/ig, '')
+                        .replace(/\([^)]*\)/g, '')
+                        .trim();
+
+                    const parsedPhone = phoneMatch ? phoneMatch[1].trim() : '';
+                    const parsedCid = cidMatch ? cidMatch[1].trim() : '';
+                    const parsedEm = emMatch ? emMatch[1].trim() : '';
+
+                    if (parsedName && parsedName.toLowerCase() !== 'guest') plain.customer_name = parsedName;
+                    if (parsedPhone) plain.customer_phone = parsedPhone;
+                    if (parsedCid) plain.customer_id = parsedCid;
+                    if (parsedEm) plain.customer_email = parsedEm;
+                }
+            }
+
             resultData.push(plain);
         }
 
@@ -135,12 +214,31 @@ export const getKotDetails = async (req: Request, res: Response) => {
                 { model: (req as any).propertyDb.models.hr_employees, as: 'waiter', attributes: [['full_name', 'employee_name']], required: false },
                 { model: (req as any).propertyDb.models.hr_employees, as: 'captain', attributes: [['full_name', 'employee_name']], required: false },
                 {
+                    model: (req as any).propertyDb.models.sales_headers,
+                    as: 'sales_header',
+                    required: false,
+                    attributes: ['id', 'sale_no', 'status', 'payment_mode', 'net_amount', 'amount_paid', 'balance_due', 'sub_total', 'total_tax', 'charge_total', 'charge_tax_total']
+                },
+                {
                     model: (req as any).propertyDb.models.kot_items,
                     as: 'items',
                     required: false,
                     include: [
                         { model: (req as any).propertyDb.models.kitchen_stations, as: 'station', attributes: ['station_name'], required: false },
-                        { model: (req as any).propertyDb.models.item_master, as: 'item', attributes: ['brand', 'location', 'item_group', 'sub_category'], required: false }
+                        {
+                            model: (req as any).propertyDb.models.item_master,
+                            as: 'item',
+                            attributes: ['id', 'item_name', 'rate', 'retail_sale_price', 'mrp', 'tax_percent', 'tax_type', 'tax_group_id', 'brand', 'location', 'item_group', 'sub_category'],
+                            required: false,
+                            include: [
+                                {
+                                    model: (req as any).propertyDb.models.tax_groups,
+                                    as: 'tax_group',
+                                    attributes: ['id', 'group_name', 'total_rate', 'is_tax_inclusive'],
+                                    required: false
+                                }
+                            ]
+                        }
                     ]
                 },
                 { model: (req as any).propertyDb.models.kot_revisions, as: 'revisions' }
@@ -148,7 +246,51 @@ export const getKotDetails = async (req: Request, res: Response) => {
         });
 
         if (!kot) return res.status(404).json({ success: false, message: 'KOT not found' });
-        res.json({ success: true, data: kot });
+        const plain = kot.get ? kot.get({ plain: true }) : kot;
+
+        if (plain.sales_header) {
+            plain.bill_no = plain.sales_header.sale_no;
+            plain.total_amount = Number(plain.sales_header.net_amount);
+            plain.net_amount = Number(plain.sales_header.net_amount);
+            plain.subtotal_amount = Number(plain.sales_header.sub_total);
+            plain.tax_amount = Number(plain.sales_header.total_tax);
+            plain.payment_mode = plain.sales_header.payment_mode || plain.payment_mode;
+            if (plain.sales_header.status === 'COMPLETED' || plain.sales_header.status === 'PAID' || Number(plain.sales_header.balance_due ?? 0) <= 0.01) {
+                plain.is_settled = true;
+                plain.payment_status = 'PAID';
+                plain.status = 'Closed';
+            }
+        }
+
+        if (!plain.customer_name && plain.remarks) {
+            const rem = String(plain.remarks);
+            const qrIdx = rem.indexOf('Customer Self-Order (QR):');
+            if (qrIdx !== -1) {
+                let qrPart = rem.substring(qrIdx + 'Customer Self-Order (QR):'.length);
+                const pipeIdx = qrPart.indexOf('|');
+                if (pipeIdx !== -1) qrPart = qrPart.substring(0, pipeIdx);
+
+                const cidMatch = qrPart.match(/\[CID:\s*([^\]]*)\]/i);
+                const emMatch = qrPart.match(/\[EM:\s*([^\]]*)\]/i);
+                const phoneMatch = qrPart.match(/\(([^)]*)\)/);
+
+                let parsedName = qrPart
+                    .replace(/\[CID:[^\]]*\]/ig, '')
+                    .replace(/\[EM:[^\]]*\]/ig, '')
+                    .replace(/\([^)]*\)/g, '')
+                    .trim();
+
+                const parsedPhone = phoneMatch ? phoneMatch[1].trim() : '';
+                const parsedCid = cidMatch ? cidMatch[1].trim() : '';
+                const parsedEm = emMatch ? emMatch[1].trim() : '';
+
+                if (parsedName && parsedName.toLowerCase() !== 'guest') plain.customer_name = parsedName;
+                if (parsedPhone) plain.customer_phone = parsedPhone;
+                if (parsedCid) plain.customer_id = parsedCid;
+                if (parsedEm) plain.customer_email = parsedEm;
+            }
+        }
+        res.json({ success: true, data: plain });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }

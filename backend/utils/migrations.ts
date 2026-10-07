@@ -4165,6 +4165,20 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 112,
+    description: "Add food_type, dietary_type, and is_veg columns to item_master table for dietary preferences and food tags",
+    up: async (db: any) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE item_master 
+          ADD COLUMN IF NOT EXISTS food_type VARCHAR(20) DEFAULT 'VEG',
+          ADD COLUMN IF NOT EXISTS dietary_type VARCHAR(20) DEFAULT 'VEG',
+          ADD COLUMN IF NOT EXISTS is_veg BOOLEAN DEFAULT TRUE;
+        COMMIT;
+      `);
+    }
   }
 ];
 

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Op } from 'sequelize';
+import { diningWaiterCalls } from './dining.controller';
 const audit = require('../../services/audit.service');
 
 /* =========================================================================
@@ -319,6 +320,19 @@ export const listTables = async (req: Request, res: Response) => {
             const plain = t.get({ plain: true });
             const tableIdNum = Number(plain.id);
             const hasActiveKot = tablesWithActiveKots.has(tableIdNum);
+
+            // Active dining customer assistance request (Water / Server / Bill / Custom)
+            const activeCall = (diningWaiterCalls || []).find((c: any) =>
+                (!outlet_id || Number(c.outlet_id) === Number(outlet_id)) &&
+                Number(c.table_id) === tableIdNum &&
+                !c.resolved
+            );
+            plain.active_service_request = activeCall ? {
+                id: activeCall.id,
+                request_type: activeCall.request_type,
+                customer_name: activeCall.customer_name,
+                created_at: activeCall.created_at
+            } : null;
 
             if (autoSeatedTableIds.has(plain.id)) {
                 plain.status = 'Occupied';

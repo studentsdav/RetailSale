@@ -1365,8 +1365,8 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   backgroundColor: Colors.amber.shade50,
                   child: Icon(Icons.delivery_dining, color: Colors.amber.shade800),
                 ),
-                title: const Text('Cash on Delivery (CoD)'),
-                subtitle: const Text('Pay when order is delivered'),
+                title: const Text('Cash on Delivery (CoD)', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Pay with cash or delivery card machine when delivered'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1377,24 +1377,46 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   _placeOrder();
                 },
               ),
-              const Divider(),
-              ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.green.shade50,
-                  child: Icon(Icons.payment_outlined, color: Colors.green.shade800),
+              if (_merchantUpiId.isNotEmpty) ...[
+                const Divider(),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.blue.shade50,
+                    child: Icon(Icons.qr_code_scanner, color: Colors.blue.shade800),
+                  ),
+                  title: const Text('Direct Store UPI (0% Fee)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Pay directly to $_merchantUpiId (Scan Soundbox / QR)'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _paymentMode = 'PAID';
+                      _chosenPaymentMethod = 'UPI';
+                    });
+                    _placeOrder();
+                  },
                 ),
-                title: const Text('Pay Online Now'),
-                subtitle: const Text('UPI, Credit/Debit Card'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() {
-                    _paymentMode = 'PAID';
-                    _chosenPaymentMethod = _enablePaymentGateway ? 'CARD' : 'UPI';
-                  });
-                  _placeOrder();
-                },
-              ),
+              ],
+              if (_enablePaymentGateway) ...[
+                const Divider(),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.green.shade50,
+                    child: Icon(Icons.payment_outlined, color: Colors.green.shade800),
+                  ),
+                  title: const Text('Pay Online via Gateway', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Credit/Debit Card, NetBanking, Wallets'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _paymentMode = 'PAID';
+                      _chosenPaymentMethod = 'CARD';
+                    });
+                    _placeOrder();
+                  },
+                ),
+              ],
             ],
           ),
         );
@@ -3935,6 +3957,60 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
     );
   }
 
+  Widget _buildDietaryBadge(String? type, {double size = 12}) {
+    if (type == null || type.isEmpty || type == 'OTHER') return const SizedBox.shrink();
+    Color borderColor;
+    Color dotColor;
+    bool isVegan = false;
+
+    switch (type.toUpperCase()) {
+      case 'VEG':
+        borderColor = const Color(0xFF16A34A);
+        dotColor = const Color(0xFF16A34A);
+        break;
+      case 'NON_VEG':
+      case 'NON-VEG':
+      case 'NONVEG':
+        borderColor = const Color(0xFFDC2626);
+        dotColor = const Color(0xFFDC2626);
+        break;
+      case 'EGG':
+        borderColor = const Color(0xFFEAB308);
+        dotColor = const Color(0xFFEAB308);
+        break;
+      case 'VEGAN':
+        borderColor = const Color(0xFF059669);
+        dotColor = const Color(0xFF059669);
+        isVegan = true;
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: borderColor, width: 1.2),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Center(
+        child: isVegan
+            ? Icon(Icons.eco, size: size * 0.7, color: dotColor)
+            : Container(
+                width: size * 0.45,
+                height: size * 0.45,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+      ),
+    );
+  }
+
   Widget _buildProductCatalogSection(ThemeData theme, bool isMobile) {
     final int crossAxisCount = isMobile ? 2 : 3;
     final double childAspectRatio = isMobile ? 0.63 : 0.70;
@@ -4138,6 +4214,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                             final String baseName = hasVariants 
                                 ? (item['item_name'] ?? 'Product').toString().split(' - ').first 
                                 : (item['item_name'] ?? 'Product');
+                            final String foodType = (item['food_type'] ?? item['dietary_type'] ?? (item['is_veg'] == false ? 'NON_VEG' : (item['is_veg'] == true ? 'VEG' : ''))).toString().trim();
 
                             final override = _getOverrideForItem(item);
                             final double displaySelling = _getItemPrice(item);
@@ -4182,7 +4259,7 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Top Image Section with Discount Badge
+                                    // Top Image Section with Discount Badge & Dietary Tag
                                     Stack(
                                       children: [
                                         Container(
@@ -4242,6 +4319,26 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                               ),
                                             ),
                                           ),
+                                        if (foodType.isNotEmpty && foodType != 'OTHER')
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(4),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black.withOpacity(0.08),
+                                                    blurRadius: 3,
+                                                    offset: const Offset(0, 1),
+                                                  ),
+                                                ],
+                                              ),
+                                              padding: const EdgeInsets.all(3),
+                                              child: _buildDietaryBadge(foodType, size: 14),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                     
@@ -4270,16 +4367,28 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                                                   ),
                                                   const SizedBox(height: 2),
                                                 ],
-                                                Text(
-                                                  baseName,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 13,
-                                                    color: Color(0xFF1E293B),
-                                                    height: 1.2,
-                                                  ),
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
+                                                Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    if (foodType.isNotEmpty && foodType != 'OTHER')
+                                                      Padding(
+                                                        padding: const EdgeInsets.only(top: 2.5, right: 5),
+                                                        child: _buildDietaryBadge(foodType, size: 12),
+                                                      ),
+                                                    Expanded(
+                                                      child: Text(
+                                                        baseName,
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.w600,
+                                                          fontSize: 13,
+                                                          color: Color(0xFF1E293B),
+                                                          height: 1.2,
+                                                        ),
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                                 const SizedBox(height: 6),
                                                 Container(
@@ -4459,15 +4568,29 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
                   );
                   final double remainingQty = sub != null ? (double.tryParse(sub['today_remaining_qty']?.toString() ?? '0') ?? 0.0) : 0.0;
 
+                  final String cartFoodType = (item['food_type'] ?? item['dietary_type'] ?? (item['is_veg'] == false ? 'NON_VEG' : (item['is_veg'] == true ? 'VEG' : ''))).toString().trim();
+
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          (item['brand'] ?? '').toString().isNotEmpty
-                              ? '${item['item_name'] ?? 'Product'} (${item['brand']})'
-                              : (item['item_name'] ?? 'Product'),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (cartFoodType.isNotEmpty && cartFoodType != 'OTHER')
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2.5, right: 5),
+                                child: _buildDietaryBadge(cartFoodType, size: 12),
+                              ),
+                            Expanded(
+                              child: Text(
+                                (item['brand'] ?? '').toString().isNotEmpty
+                                    ? '${item['item_name'] ?? 'Product'} (${item['brand']})'
+                                    : (item['item_name'] ?? 'Product'),
+                              ),
+                            ),
+                          ],
                         ),
                         if (sub != null && remainingQty > 0)
                           Container(

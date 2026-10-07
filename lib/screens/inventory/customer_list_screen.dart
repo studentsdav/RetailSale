@@ -1166,16 +1166,27 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                           color: WidgetStateProperty.all(shade),
                                           cells: [
                                             DataCell(
-                                              Text(
-                                                customer.customerName
-                                                        .trim()
-                                                        .isEmpty
-                                                    ? 'Walk-in Customer'
-                                                    : customer.customerName
-                                                        .trim(),
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                ),
+                                              Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    customer.customerName.trim().isEmpty
+                                                        ? 'Walk-in Customer'
+                                                        : customer.customerName.trim(),
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                  if (customer.customerEmail.trim().isNotEmpty)
+                                                    Text(
+                                                      customer.customerEmail.trim(),
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors.blueGrey.shade600,
+                                                      ),
+                                                    ),
+                                                ],
                                               ),
                                             ),
                                             DataCell(Text(customer.customerPhone)),

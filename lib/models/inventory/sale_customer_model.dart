@@ -3,6 +3,7 @@ class SaleCustomer {
   final String customerName;
   final String customerPhone;
   final String customerAddress;
+  final String customerEmail;
   final String customerGstin;
   final int? schemeId;
   final String? schemeName;
@@ -14,6 +15,7 @@ class SaleCustomer {
     required this.customerName,
     required this.customerPhone,
     required this.customerAddress,
+    this.customerEmail = '',
     this.customerGstin = '',
     this.schemeId,
     this.schemeName,
@@ -24,10 +26,11 @@ class SaleCustomer {
   factory SaleCustomer.fromJson(Map<String, dynamic> json) {
     return SaleCustomer(
       id: json['id'] ?? 0,
-      customerName: json['customer_name'] ?? '',
-      customerPhone: json['customer_phone'] ?? '',
-      customerAddress: json['customer_address'] ?? '',
-      customerGstin: json['customer_gstin'] ?? '',
+      customerName: json['customer_name'] ?? json['name'] ?? '',
+      customerPhone: json['customer_phone'] ?? json['phone'] ?? json['mobile'] ?? '',
+      customerAddress: json['customer_address'] ?? json['address'] ?? '',
+      customerEmail: json['customer_email'] ?? json['email'] ?? '',
+      customerGstin: json['customer_gstin'] ?? json['gstin'] ?? '',
       schemeId: json['scheme_id'],
       schemeName: json['scheme_name'],
       outletId: json['outlet_id'],

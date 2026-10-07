@@ -77,11 +77,13 @@ router.post('/migration/sync-online-to-offline', migrationCtrl.syncOnlineToOffli
 
 // Table QR Customer Self-Ordering Dining Endpoints
 const diningCtrl = require('../controllers/restaurant/dining.controller');
+router.get('/dining/tables', diningCtrl.getPublicDiningTables);
 router.get('/dining/table-info', diningCtrl.getTableDiningInfo);
 router.post('/dining/request-otp', diningCtrl.requestCustomerDiningOtp);
 router.post('/dining/verify-otp', diningCtrl.verifyCustomerDiningOtp);
 router.post('/dining/register-profile', diningCtrl.registerCustomerDiningProfile);
 router.post('/dining/place-order', diningCtrl.placeCustomerDiningOrder);
+router.post('/dining/pay-bill', diningCtrl.payCustomerDiningBill);
 router.post('/dining/call-waiter', diningCtrl.callTableWaiter);
 
 module.exports = router;

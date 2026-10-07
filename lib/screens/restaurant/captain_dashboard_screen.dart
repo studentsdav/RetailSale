@@ -22,6 +22,7 @@ import '../../core/auth/token_storage.dart';
 import '../../controllers/security/user_controller.dart';
 import '../auth/login_screen.dart';
 import '../auth/waiter_auth_screen.dart';
+import '../dashboard/retailer_console_screen.dart';
 
 class CaptainDashboardScreen extends StatefulWidget {
   const CaptainDashboardScreen({super.key});
@@ -44,6 +45,12 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
   List<dynamic> _activeTakeawayKots = [];
   List<dynamic> _activeNcKots = [];
   List<dynamic> _activeKots = [];
+  List<Map<String, dynamic>> _activeWaiterCalls = [];
+  final Set<String> _dismissedCallIds = {};
+  bool _isAssistanceAlertModalOpen = false;
+  final Set<String> _seenCustomerOrderIds = {};
+  bool _isCustomerOrderAlertOpen = false;
+  bool _hasInitializedCustomerOrders = false;
   List<String> _availableStaffList = [];
   bool _isScreenActive = true;
 
@@ -101,7 +108,7 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     _liveKdsTickerTimer?.cancel();
     if (!_isScreenActive) return;
 
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_isScreenActive && mounted) {
         _refreshData();
       }
@@ -180,6 +187,370 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     if (!mounted || !_isScreenActive) return;
     context.read<RestaurantController>().loadTables();
     _fetchActiveKots();
+    _fetchWaiterCalls();
+    _fetchCustomerAppOrders();
+  }
+
+  Future<void> _fetchCustomerAppOrders() async {
+    try {
+      final res = await ApiClient.get('/api/delivery/retailer/orders?today=true');
+      if (res['success'] == true && res['data'] is List) {
+        final List<dynamic> orders = res['data'];
+
+        if (!_hasInitializedCustomerOrders) {
+          for (final ord in orders) {
+            final id = ord['id']?.toString() ?? '';
+            if (id.isNotEmpty) _seenCustomerOrderIds.add(id);
+          }
+          _hasInitializedCustomerOrders = true;
+          return;
+        }
+
+        final newOrders = orders.where((ord) {
+          final id = ord['id']?.toString() ?? '';
+          final status = (ord['status'] ?? '').toString().toUpperCase().trim();
+          final isPending = status == 'PENDING' || status == 'NEW' || status == 'PLACED' || status == 'WAITING_CONFIRMATION';
+          return id.isNotEmpty && !_seenCustomerOrderIds.contains(id) && isPending;
+        }).toList();
+
+        if (newOrders.isNotEmpty && !_isCustomerOrderAlertOpen && !_isAssistanceAlertModalOpen && mounted && _isScreenActive) {
+          for (final ord in newOrders) {
+            final id = ord['id']?.toString() ?? '';
+            if (id.isNotEmpty) _seenCustomerOrderIds.add(id);
+          }
+          _showNewCustomerOrderDialog(newOrders.first, totalNewCount: newOrders.length);
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _showNewCustomerOrderDialog(dynamic order, {int totalNewCount = 1}) {
+    if (_isCustomerOrderAlertOpen || !mounted) return;
+    _isCustomerOrderAlertOpen = true;
+
+    final orderNo = order['sale_order_no'] ?? order['order_number'] ?? '#ORD-${order['id']}';
+    final customerName = order['customer_name'] ?? order['name'] ?? 'Online Customer';
+    final customerPhone = order['customer_phone'] ?? order['phone'] ?? '';
+    final totalAmount = double.tryParse((order['total_amount'] ?? order['net_amount'] ?? 0).toString()) ?? 0.0;
+    final paymentMode = (order['payment_mode'] ?? order['payment_type'] ?? 'COD').toString().toUpperCase();
+    final deliveryAddress = order['delivery_address'] ?? order['address'] ?? '';
+    final items = (order['items'] is List) ? (order['items'] as List) : [];
+    final itemsCount = items.isNotEmpty ? items.length : (int.tryParse((order['total_items'] ?? 1).toString()) ?? 1);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+          contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'New Customer Order!',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                        ),
+                        if (totalNewCount > 1) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '+$totalNewCount new',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Received from Customer Mobile App',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '$orderNo',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFDE68A)),
+                            ),
+                            child: const Text(
+                              'PENDING',
+                              style: TextStyle(color: Color(0xFFB45309), fontSize: 10, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline, size: 15, color: Color(0xFF64748B)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              customerPhone.isNotEmpty ? '$customerName ($customerPhone)' : customerName,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.shopping_basket_outlined, size: 15, color: Color(0xFF64748B)),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$itemsCount item${itemsCount > 1 ? "s" : ""}',
+                                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              const Icon(Icons.payment_outlined, size: 15, color: Color(0xFF64748B)),
+                              const SizedBox(width: 4),
+                              Text(
+                                paymentMode,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '₹ ${totalAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF059669)),
+                          ),
+                        ],
+                      ),
+                      if (deliveryAddress.toString().trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.location_on_outlined, size: 15, color: Color(0xFF64748B)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                deliveryAddress.toString().trim(),
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Dismiss', style: TextStyle(color: Color(0xFF64748B))),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.storefront_outlined, size: 18),
+              label: const Text(
+                'Open Retailer Console Direct',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RetailerConsoleScreen()),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      _isCustomerOrderAlertOpen = false;
+    });
+  }
+
+  Future<void> _fetchWaiterCalls() async {
+    try {
+      final res = await ApiClient.get('/api/restaurant/dining/waiter-calls');
+      if (res['success'] == true && res['data'] is List) {
+        if (mounted) {
+          final newCalls = List<Map<String, dynamic>>.from(res['data']);
+          setState(() {
+            _activeWaiterCalls = newCalls;
+          });
+
+          // Check for unhandled / newly arrived assistance calls
+          final unhandledCalls = newCalls.where((c) {
+            final id = c['id']?.toString() ?? '';
+            return id.isNotEmpty && !_dismissedCallIds.contains(id) && c['resolved'] != true;
+          }).toList();
+
+          if (unhandledCalls.isNotEmpty && !_isAssistanceAlertModalOpen && mounted && _isScreenActive) {
+            final ctrl = Provider.of<RestaurantController>(context, listen: false);
+            _showActiveServiceRequestsModal(context, ctrl, isAutoPopup: true);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _resolveWaiterCall(dynamic tableId, [String? callId]) async {
+    try {
+      await ApiClient.post('/api/restaurant/dining/resolve-waiter-call', {
+        'id': callId,
+        'table_id': tableId,
+      });
+      if (mounted) {
+        setState(() {
+          _activeWaiterCalls.removeWhere((c) =>
+              (callId != null && c['id']?.toString() == callId.toString()) ||
+              (tableId != null && c['table_id']?.toString() == tableId.toString()));
+        });
+        _refreshData();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Table request marked as attended & resolved.'),
+            backgroundColor: Color(0xFF16A34A),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (_) {}
+  }
+
+  Map<String, dynamic>? _getServiceRequestForTable(dynamic table) {
+    if (table == null) return null;
+    final tId = table['id']?.toString();
+    
+    // 1. Live waiter calls matching this table
+    final match = _activeWaiterCalls.firstWhere(
+      (c) => c['table_id']?.toString() == tId && c['resolved'] != true,
+      orElse: () => {},
+    );
+    if (match.isNotEmpty) return match;
+
+    // 2. From table active_service_request field
+    if (table['active_service_request'] is Map && table['active_service_request'].isNotEmpty) {
+      return Map<String, dynamic>.from(table['active_service_request']);
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _getServiceRequestDisplayInfo(String? rawType) {
+    final type = (rawType ?? 'CALL_WAITER').toUpperCase().trim();
+    if (type == 'WATER') {
+      return {
+        'label': 'Water Requested',
+        'shortLabel': 'WATER',
+        'icon': Icons.water_drop,
+        'color': const Color(0xFF0284C7),
+        'bgColor': const Color(0xFFE0F2FE),
+        'borderColor': const Color(0xFF38BDF8),
+      };
+    }
+    if (type == 'BILL') {
+      return {
+        'label': 'Bill Requested',
+        'shortLabel': 'BILL',
+        'icon': Icons.receipt_long,
+        'color': const Color(0xFFD97706),
+        'bgColor': const Color(0xFFFEF3C7),
+        'borderColor': const Color(0xFFFBBF24),
+      };
+    }
+    if (type == 'CLEAN' || type == 'CLEANING') {
+      return {
+        'label': 'Cleaning Needed',
+        'shortLabel': 'CLEAN',
+        'icon': Icons.cleaning_services,
+        'color': const Color(0xFF7C3AED),
+        'bgColor': const Color(0xFFF3E8FF),
+        'borderColor': const Color(0xFFA78BFA),
+      };
+    }
+    // Default: CALL_WAITER / SERVER / STEWARD
+    return {
+      'label': 'Server Called',
+      'shortLabel': 'SERVER',
+      'icon': Icons.notifications_active,
+      'color': const Color(0xFFEA580C),
+      'bgColor': const Color(0xFFFFEDD5),
+      'borderColor': const Color(0xFFFB923C),
+    };
   }
 
   String _getEffectiveTableStatus(dynamic table) {
@@ -827,6 +1198,51 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                 ),
               ),
             ),
+            (() {
+              final activeAlerts = _activeWaiterCalls.where((c) => c['resolved'] != true).toList();
+              final tableAlertCount = activeAlerts.isNotEmpty
+                  ? activeAlerts.length
+                  : ctrl.tables.where((t) => t['active_service_request'] != null).length;
+              if (tableAlertCount == 0) return const SizedBox.shrink();
+
+              return Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _showActiveServiceRequestsModal(context, ctrl),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFEF4444), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withOpacity(0.15),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.notifications_active, size: 16, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 5),
+                        Text(
+                          '$tableAlertCount Table Alert${tableAlertCount > 1 ? "s" : ""}',
+                          style: const TextStyle(
+                            color: Color(0xFFDC2626),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            })(),
           ],
         ),
       ),
@@ -1050,6 +1466,8 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
         final List runningItems = isOccupiedOrBilling
             ? (activeKotItemsByTable[table['id']] ?? [])
             : [];
+        final serviceReq = _getServiceRequestForTable(table);
+        final serviceReqDisplay = serviceReq != null ? _getServiceRequestDisplayInfo(serviceReq['request_type']) : null;
 
         stackChildren.add(
           Positioned(
@@ -1065,12 +1483,14 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                   side: BorderSide(
-                    color: status == 'Occupied'
-                        ? Colors.pink.shade300
-                        : status == 'Billed'
-                            ? Colors.amber.shade400
-                            : Colors.teal.shade300,
-                    width: 1.5,
+                    color: serviceReqDisplay != null
+                        ? (serviceReqDisplay['borderColor'] as Color)
+                        : (status == 'Occupied'
+                            ? Colors.pink.shade300
+                            : status == 'Billed'
+                                ? Colors.amber.shade400
+                                : Colors.teal.shade300),
+                    width: serviceReqDisplay != null ? 2.5 : 1.5,
                   ),
                 ),
                 child: Container(
@@ -1175,6 +1595,48 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (serviceReq != null && serviceReqDisplay != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(top: 3, bottom: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: serviceReqDisplay['bgColor'] as Color,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: serviceReqDisplay['borderColor'] as Color, width: 1.0),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(serviceReqDisplay['icon'] as IconData, size: 11, color: serviceReqDisplay['color'] as Color),
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: Text(
+                                  serviceReqDisplay['label'] as String,
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: serviceReqDisplay['color'] as Color,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () => _resolveWaiterCall(table['id'], serviceReq['id']?.toString()),
+                                child: Container(
+                                  padding: const EdgeInsets.all(1.5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: serviceReqDisplay['color'] as Color, width: 0.6),
+                                  ),
+                                  child: Icon(Icons.check, size: 9, color: serviceReqDisplay['color'] as Color),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       if (isOccupiedOrBilling) (() {
                         final kStatus = _getKitchenStatusForTable(table['id'], runningItems);
                         if (kStatus.isEmpty) return const SizedBox.shrink();
@@ -1577,6 +2039,243 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     );
   }
 
+  void _showActiveServiceRequestsModal(BuildContext context, RestaurantController ctrl, {bool isAutoPopup = false}) {
+    if (_isAssistanceAlertModalOpen) return;
+    _isAssistanceAlertModalOpen = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            // Collect all active requests from _activeWaiterCalls and ctrl.tables
+            final List<Map<String, dynamic>> allActiveRequests = [];
+            final Set<String> seenTableIds = {};
+
+            for (final call in _activeWaiterCalls) {
+              final tId = call['table_id']?.toString() ?? '';
+              if (tId.isNotEmpty && !seenTableIds.contains(tId)) {
+                seenTableIds.add(tId);
+                allActiveRequests.add(Map<String, dynamic>.from(call));
+              }
+            }
+
+            for (final t in ctrl.tables) {
+              final tId = t['id']?.toString() ?? '';
+              if (!seenTableIds.contains(tId) && t['active_service_request'] is Map && (t['active_service_request'] as Map).isNotEmpty) {
+                seenTableIds.add(tId);
+                final req = Map<String, dynamic>.from(t['active_service_request']);
+                req['table_id'] = t['id'];
+                req['table_name'] = t['table_name'] ?? 'Table $tId';
+                allActiveRequests.add(req);
+              }
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFFEF4444), width: 1.5),
+                    ),
+                    child: const Icon(Icons.notifications_active, color: Color(0xFFDC2626), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isAutoPopup ? '⚡ New Table Assistance Request!' : 'Live Table Assistance Requests',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          allActiveRequests.isEmpty
+                              ? 'All tables currently attended'
+                              : '${allActiveRequests.length} table${allActiveRequests.length > 1 ? "s" : ""} requesting service',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 500,
+                child: allActiveRequests.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 28),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 48),
+                              SizedBox(height: 10),
+                              Text('All requests resolved & clear!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF334155))),
+                            ],
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: allActiveRequests.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, idx) {
+                          final req = allActiveRequests[idx];
+                          final rawType = req['request_type']?.toString();
+                          final display = _getServiceRequestDisplayInfo(rawType);
+                          final tableName = req['table_name'] ?? 'Table #${req['table_id']}';
+                          final guestName = req['customer_name'] ?? 'Guest';
+                          final tableObj = ctrl.tables.firstWhere(
+                            (t) => t['id']?.toString() == req['table_id']?.toString(),
+                            orElse: () => null,
+                          );
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: (display['bgColor'] as Color).withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: display['borderColor'] as Color, width: 1.2),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: display['borderColor'] as Color),
+                                  ),
+                                  child: Icon(display['icon'] as IconData, size: 20, color: display['color'] as Color),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            tableName,
+                                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF0F172A)),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: display['bgColor'] as Color,
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: (display['borderColor'] as Color).withValues(alpha: 0.6)),
+                                            ),
+                                            child: Text(
+                                              display['label'] as String,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w800,
+                                                color: display['color'] as Color,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'Customer: $guestName',
+                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Attended / Resolve Button
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF16A34A),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                  icon: const Icon(Icons.check, size: 15),
+                                  label: const Text('Attended', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                                  onPressed: () async {
+                                    final callId = req['id']?.toString();
+                                    if (callId != null) _dismissedCallIds.add(callId);
+                                    await _resolveWaiterCall(req['table_id'], req['id']);
+                                    setModalState(() {
+                                      allActiveRequests.removeAt(idx);
+                                    });
+                                  },
+                                ),
+                                if (tableObj != null) ...[
+                                  const SizedBox(width: 6),
+                                  OutlinedButton(
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    child: const Text('Open', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                                    onPressed: () {
+                                      final callId = req['id']?.toString();
+                                      if (callId != null) _dismissedCallIds.add(callId);
+                                      Navigator.pop(ctx);
+                                      _handleTableTap(context, tableObj, ctrl);
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              actions: [
+                if (allActiveRequests.isNotEmpty)
+                  TextButton.icon(
+                    icon: const Icon(Icons.done_all, size: 16),
+                    label: const Text('Clear All Requests'),
+                    style: TextButton.styleFrom(foregroundColor: const Color(0xFF16A34A)),
+                    onPressed: () async {
+                      for (final req in allActiveRequests) {
+                        final callId = req['id']?.toString();
+                        if (callId != null) _dismissedCallIds.add(callId);
+                        await _resolveWaiterCall(req['table_id'], req['id']);
+                      }
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
+                    },
+                  ),
+                FilledButton.tonal(
+                  onPressed: () {
+                    for (final req in allActiveRequests) {
+                      final callId = req['id']?.toString();
+                      if (callId != null) _dismissedCallIds.add(callId);
+                    }
+                    Navigator.pop(ctx);
+                  },
+                  child: Text(allActiveRequests.isEmpty ? 'Close' : 'Dismiss / Keep in Background'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).then((_) {
+      _isAssistanceAlertModalOpen = false;
+    });
+  }
+
   LinearGradient _getTableGradient(String status) {
     switch (status) {
       case 'Available':
@@ -1820,6 +2519,8 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                     final table = filteredTables[index];
                                     final String status = _getEffectiveTableStatus(table);
                                     final gradient = _getTableGradient(status);
+                                    final serviceReq = _getServiceRequestForTable(table);
+                                    final serviceReqDisplay = serviceReq != null ? _getServiceRequestDisplayInfo(serviceReq['request_type']) : null;
 
                                     final int? areaId =
                                         table['dining_area_id'] ??
@@ -1867,6 +2568,12 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(12),
+                                          side: serviceReqDisplay != null
+                                              ? BorderSide(
+                                                  color: serviceReqDisplay['borderColor'] as Color,
+                                                  width: 2.5,
+                                                )
+                                              : BorderSide.none,
                                         ),
                                         child: Container(
                                           decoration: BoxDecoration(
@@ -2010,6 +2717,49 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                                                     fontWeight:
                                                         FontWeight.bold),
                                               ),
+                                              // ── Live Assistance Request Badge (Water / Server / Bill) ──
+                                              if (serviceReq != null && serviceReqDisplay != null) ...[
+                                                Container(
+                                                  margin: const EdgeInsets.only(top: 4, bottom: 3),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                                                  decoration: BoxDecoration(
+                                                    color: serviceReqDisplay['bgColor'] as Color,
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: serviceReqDisplay['borderColor'] as Color, width: 1.2),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(serviceReqDisplay['icon'] as IconData, size: 13, color: serviceReqDisplay['color'] as Color),
+                                                      const SizedBox(width: 4),
+                                                      Expanded(
+                                                        child: Text(
+                                                          serviceReqDisplay['label'] as String,
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.w900,
+                                                            color: serviceReqDisplay['color'] as Color,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                      InkWell(
+                                                        onTap: () => _resolveWaiterCall(table['id'], serviceReq['id']?.toString()),
+                                                        child: Container(
+                                                          padding: const EdgeInsets.all(2),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.white,
+                                                            shape: BoxShape.circle,
+                                                            border: Border.all(color: serviceReqDisplay['color'] as Color, width: 0.8),
+                                                          ),
+                                                          child: Icon(Icons.check, size: 10, color: serviceReqDisplay['color'] as Color),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
                                               // ── Kitchen Status Badge ──────────────────────
                                               if (isOccupiedOrBilling) (() {
                                                 final kStatus = _getKitchenStatusForTable(table['id'], runningItems);

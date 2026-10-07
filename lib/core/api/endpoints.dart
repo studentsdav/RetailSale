@@ -226,6 +226,8 @@ class ApiEndpoints {
   static const String publicDiningRegisterProfile = '/api/public/dining/register-profile';
   static const String publicDiningPlaceOrder = '/api/public/dining/place-order';
   static const String publicDiningCallWaiter = '/api/public/dining/call-waiter';
+  static const String publicDiningPayBill = '/api/public/dining/pay-bill';
+  static const String publicDiningBillDetails = '/api/public/dining/bill-details';
   static const String diningWaiterCalls = '/api/restaurant/dining/waiter-calls';
   static const String resolveWaiterCall = '/api/restaurant/dining/resolve-waiter-call';
 }

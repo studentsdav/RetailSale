@@ -86,5 +86,7 @@ router.put('/challans/:id/status', challanCtrl.updateChallanStatus);
 const diningCtrl = require('../controllers/restaurant/dining.controller');
 router.get('/dining/waiter-calls', diningCtrl.getActiveWaiterCalls);
 router.post('/dining/resolve-waiter-call', diningCtrl.resolveWaiterCall);
+router.post('/tables/:id/assistance', diningCtrl.callTableWaiter);
+router.post('/tables/assistance/resolve', diningCtrl.resolveWaiterCall);
 
 module.exports = router;

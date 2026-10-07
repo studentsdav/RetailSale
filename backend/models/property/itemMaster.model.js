@@ -1,12 +1,15 @@
 module.exports = (sequelize, DataTypes) => {
-    // Auto ensure modifier columns exist in database table
+    // Auto ensure modifier and dietary columns exist in database table
     if (sequelize && typeof sequelize.query === 'function') {
         sequelize.query(`
             ALTER TABLE item_master
             ADD COLUMN IF NOT EXISTS is_modifier BOOLEAN DEFAULT FALSE,
             ADD COLUMN IF NOT EXISTS applicable_item_ids TEXT,
             ADD COLUMN IF NOT EXISTS deduct_raw_item_id INTEGER,
-            ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0;
+            ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS food_type VARCHAR(20) DEFAULT 'VEG',
+            ADD COLUMN IF NOT EXISTS dietary_type VARCHAR(20) DEFAULT 'VEG',
+            ADD COLUMN IF NOT EXISTS is_veg BOOLEAN DEFAULT TRUE;
         `).catch(() => {});
     }
 
@@ -185,6 +188,21 @@ module.exports = (sequelize, DataTypes) => {
             deduct_qty: {
                 type: DataTypes.DECIMAL(12, 4),
                 defaultValue: 0
+            },
+
+            food_type: {
+                type: DataTypes.STRING(20),
+                defaultValue: 'VEG'
+            },
+
+            dietary_type: {
+                type: DataTypes.STRING(20),
+                defaultValue: 'VEG'
+            },
+
+            is_veg: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: true
             },
 
             is_active: {

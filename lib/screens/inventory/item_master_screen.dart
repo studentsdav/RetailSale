@@ -82,6 +82,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
   String? _brand;
   String? _unit;
   String _taxType = 'GST';
+  String _foodType = 'VEG';
   bool _stockable = true;
   bool _isSaleable = true;
   bool _discountApplicable = true;
@@ -379,6 +380,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _selectedTaxGroup = null;
     _unit = null;
     _taxType = 'GST';
+    _foodType = 'VEG';
     _stockable = true;
     _isSaleable = true;
     _isModifier = false;
@@ -497,6 +499,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
         stockable: _stockable,
         isSaleable: _isSaleable,
         isModifier: _isModifier,
+        foodType: _foodType,
         applicableItemIds: _applicableItemIds.isEmpty ? null : _applicableItemIds.join(','),
         deductRawItemId: _deductRawItemId,
         deductQty: double.tryParse(_deductQtyCtrl.text.trim()) ?? 0.0,
@@ -690,6 +693,7 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     _stockable = it.stockable;
     _isSaleable = it.isSaleable;
     _isModifier = it.isModifier;
+    _foodType = it.foodType.isNotEmpty ? it.foodType : 'VEG';
     _deductQtyCtrl.text = it.deductQty.toString();
     _deductRawItemId = it.deductRawItemId;
     if (_deductRawItemId != null && _items.isNotEmpty) {
@@ -2159,6 +2163,48 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
     );
   }
 
+  Widget _buildDietaryBadge(String? type, {double size = 14}) {
+    final t = (type ?? 'VEG').toUpperCase();
+    if (t == 'OTHER' || t == 'NONE' || t.isEmpty) return const SizedBox.shrink();
+    final isVeg = t == 'VEG';
+    final isEgg = t == 'EGG';
+    final isVegan = t == 'VEGAN';
+    final Color borderColor = isVeg
+        ? const Color(0xFF16A34A)
+        : (isEgg
+            ? const Color(0xFFEAB308)
+            : (isVegan ? const Color(0xFF059669) : const Color(0xFFDC2626)));
+    final Color dotColor = borderColor;
+
+    return Tooltip(
+      message: isVeg
+          ? 'Pure Veg'
+          : (isEgg ? 'Contains Egg' : (isVegan ? 'Vegan' : 'Non-Veg')),
+      child: Container(
+        width: size,
+        height: size,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: borderColor, width: 1.5),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Center(
+          child: isVegan
+              ? Icon(Icons.eco, size: size * 0.7, color: dotColor)
+              : Container(
+                  width: size * 0.55,
+                  height: size * 0.55,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildToggleChip({
     required String title,
     required bool value,
@@ -2233,6 +2279,44 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                // Dietary / Food Type Selector
+                Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFD1D5DB)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildDietaryBadge(_foodType, size: 14),
+                      const SizedBox(width: 6),
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _foodType,
+                          isDense: true,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'VEG', child: Text('🟢 Veg')),
+                            DropdownMenuItem(value: 'NON_VEG', child: Text('🔴 Non-Veg')),
+                            DropdownMenuItem(value: 'EGG', child: Text('🟡 Egg')),
+                            DropdownMenuItem(value: 'VEGAN', child: Text('🌿 Vegan')),
+                            DropdownMenuItem(value: 'OTHER', child: Text('⚪ General')),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) setState(() => _foodType = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 if (_editIndex == null)
                   _buildToggleChip(
                     title: 'Has Variants',
@@ -3449,7 +3533,16 @@ class _ItemMasterScreenState extends State<ItemMasterScreen> {
                               i.isEven ? Colors.grey.shade50 : Colors.white),
                           cells: [
                             DataCell(Text(it.itemCode)),
-                            DataCell(Text(it.itemName)),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildDietaryBadge(it.foodType, size: 13),
+                                  const SizedBox(width: 6),
+                                  Text(it.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
                             DataCell(
                               (() {
                                 final locText = (it.location.trim().isEmpty || it.location.trim() == '-')

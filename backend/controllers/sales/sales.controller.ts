@@ -4284,9 +4284,12 @@ exports.createSale = async (req, res) => {
 
         if (tableId || parsedKotIds.length > 0) {
             try {
+                const isPaidOrSettled = (referenceSale.status === 'COMPLETED' || referenceSale.status === 'PAID') && Number(referenceSale.balance_due ?? 0) <= 0.01;
+                const newKotStatus = isPaidOrSettled ? 'Closed' : 'billed';
+
                 if (parsedKotIds.length > 0) {
                     await req.propertyDb.models.kot_headers.update({
-                        status: 'billed',
+                        status: newKotStatus,
                         sales_header_id: referenceSale.id,
                         kds_dismissed: true
                     }, {
@@ -4295,13 +4298,16 @@ exports.createSale = async (req, res) => {
                     });
                 } else if (tableId) {
                     await req.propertyDb.models.kot_headers.update({
-                        status: 'billed',
+                        status: newKotStatus,
                         sales_header_id: referenceSale.id,
                         kds_dismissed: true
                     }, {
                         where: { 
                             table_id: Number(tableId), 
-                            sales_header_id: null
+                            [Op.or]: [
+                                { sales_header_id: null },
+                                { sales_header_id: referenceSale.id }
+                            ]
                         },
                         transaction: t
                     });
@@ -4655,9 +4661,12 @@ exports.modifySale = async (req, res) => {
                 const rawKotIds = req.body.kot_ids || req.body.kotIds || req.body.header?.kot_ids || req.body.header?.kotIds || (req.body.kot_id ? [req.body.kot_id] : null);
                 const parsedKotIds = (Array.isArray(rawKotIds) ? rawKotIds : []).map((id: any) => Number(id)).filter((id: number) => id > 0);
 
+                const isPaidOrSettled = (status === 'COMPLETED' || status === 'PAID') && Number(newSale.balance_due ?? 0) <= 0.01;
+                const newKotStatus = isPaidOrSettled ? 'Closed' : 'billed';
+
                 if (parsedKotIds.length > 0) {
                     await req.propertyDb.models.kot_headers.update({
-                        status: 'billed',
+                        status: newKotStatus,
                         sales_header_id: newSale.id,
                         kds_dismissed: true
                     }, {
@@ -4666,13 +4675,16 @@ exports.modifySale = async (req, res) => {
                     });
                 } else if (tableId) {
                     await req.propertyDb.models.kot_headers.update({
-                        status: 'billed',
+                        status: newKotStatus,
                         sales_header_id: newSale.id,
                         kds_dismissed: true
                     }, {
                         where: { 
                             table_id: Number(tableId), 
-                            sales_header_id: null
+                            [Op.or]: [
+                                { sales_header_id: null },
+                                { sales_header_id: newSale.id }
+                            ]
                         },
                         transaction: t
                     });

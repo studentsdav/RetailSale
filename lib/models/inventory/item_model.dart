@@ -29,6 +29,7 @@ class Item {
   final bool stockable;
   final bool isSaleable;
   final bool isModifier;
+  final String foodType; // 'VEG', 'NON_VEG', 'EGG', 'VEGAN', 'OTHER'
   final String? applicableItemIds;
   final int? deductRawItemId;
   final double deductQty;
@@ -43,6 +44,10 @@ class Item {
   final double b2bPrice;
   final double b2cPrice;
   final int minOrderQtyB2B;
+
+  bool get isVeg => foodType == 'VEG' || foodType == 'VEGAN';
+  bool get isNonVeg => foodType == 'NON_VEG';
+  bool get hasEgg => foodType == 'EGG';
 
   Item({
     required this.id,
@@ -72,6 +77,7 @@ class Item {
     required this.stockable,
     required this.isSaleable,
     this.isModifier = false,
+    this.foodType = 'VEG',
     this.applicableItemIds,
     this.deductRawItemId,
     this.deductQty = 0.0,
@@ -127,6 +133,7 @@ class Item {
       stockable: json['stockable'] ?? true,
       isSaleable: json['is_saleable'] ?? true,
       isModifier: json['is_modifier'] == true || json['is_modifier'] == 1 || json['is_modifier'].toString() == 'true',
+      foodType: (json['food_type'] ?? json['dietary_type'] ?? (json['is_veg'] == false ? 'NON_VEG' : (json['is_veg'] == true ? 'VEG' : 'VEG'))).toString().toUpperCase(),
       applicableItemIds: json['applicable_item_ids']?.toString(),
       deductRawItemId: json['deduct_raw_item_id'] != null ? int.tryParse(json['deduct_raw_item_id'].toString()) : null,
       deductQty: double.tryParse(json['deduct_qty']?.toString() ?? '0') ?? 0.0,
@@ -172,6 +179,9 @@ class Item {
       'stockable': stockable,
       'is_saleable': isSaleable,
       'is_modifier': isModifier,
+      'food_type': foodType,
+      'dietary_type': foodType,
+      'is_veg': isVeg,
       'applicable_item_ids': applicableItemIds,
       'deduct_raw_item_id': deductRawItemId,
       'deduct_qty': deductQty,

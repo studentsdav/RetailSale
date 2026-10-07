@@ -59,7 +59,10 @@ async function ensureItemMasterModifierColumns(propertyDb: any) {
             ADD COLUMN IF NOT EXISTS is_modifier BOOLEAN DEFAULT FALSE,
             ADD COLUMN IF NOT EXISTS applicable_item_ids TEXT,
             ADD COLUMN IF NOT EXISTS deduct_raw_item_id INTEGER,
-            ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0;
+            ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS food_type VARCHAR(20) DEFAULT 'VEG',
+            ADD COLUMN IF NOT EXISTS dietary_type VARCHAR(20) DEFAULT 'VEG',
+            ADD COLUMN IF NOT EXISTS is_veg BOOLEAN DEFAULT TRUE;
         `);
     } catch (_) {}
 }
@@ -202,7 +205,10 @@ export const createItem = async (req: Request, res: Response) => {
             is_tax_inclusive,
             is_happy_hour,
             location,
-            kitchen_location
+            kitchen_location,
+            food_type,
+            dietary_type,
+            is_veg
         } = req.body;
 
         const outlet_id = (req as any).user.outlet_id;
@@ -227,6 +233,8 @@ export const createItem = async (req: Request, res: Response) => {
                 message: `Item "${item_name}" with Brand "${brand}" already exists. Please use a different brand or a different item name.`
             });
         }
+
+        const resolvedFoodType = food_type || dietary_type || (is_veg === false ? 'NON_VEG' : 'VEG');
 
         const item = await (req as any).propertyDb.models.item_master.create({
             outlet_id,
@@ -259,9 +267,37 @@ export const createItem = async (req: Request, res: Response) => {
             applicable_item_ids: applicable_item_ids ? String(applicable_item_ids) : null,
             deduct_raw_item_id: deduct_raw_item_id ? Number(deduct_raw_item_id) : null,
             deduct_qty: Number(deduct_qty) || 0,
+            food_type: resolvedFoodType,
+            dietary_type: resolvedFoodType,
+            is_veg: is_veg !== undefined ? Boolean(is_veg) : (resolvedFoodType !== 'NON_VEG'),
             is_tax_inclusive: is_tax_inclusive ?? false,
             is_happy_hour: is_happy_hour ?? false,
             is_active: true
+        });
+
+        // Explicit safeguard update for modifier and dietary columns
+        await (req as any).propertyDb.query(`
+            UPDATE item_master
+            SET is_modifier = :is_modifier,
+                applicable_item_ids = :applicable_item_ids,
+                deduct_raw_item_id = :deduct_raw_item_id,
+                deduct_qty = :deduct_qty,
+                food_type = :food_type,
+                dietary_type = :dietary_type,
+                is_veg = :is_veg
+            WHERE id = :id AND outlet_id = :outlet_id
+        `, {
+            replacements: {
+                id: item.id,
+                outlet_id: (req as any).user.outlet_id,
+                is_modifier: is_modifier === true || is_modifier === 'true' || is_modifier === 1,
+                applicable_item_ids: applicable_item_ids ? String(applicable_item_ids).trim() : null,
+                deduct_raw_item_id: deduct_raw_item_id ? Number(deduct_raw_item_id) : null,
+                deduct_qty: Number(deduct_qty) || 0,
+                food_type: resolvedFoodType,
+                dietary_type: resolvedFoodType,
+                is_veg: is_veg !== undefined ? Boolean(is_veg) : (resolvedFoodType !== 'NON_VEG')
+            }
         });
 
         await audit.log({
@@ -410,6 +446,9 @@ export const bulkImportItems = async (req: Request, res: Response) => {
                 applicable_item_ids: row.applicable_item_ids ? String(row.applicable_item_ids) : null,
                 deduct_raw_item_id: row.deduct_raw_item_id ? Number(row.deduct_raw_item_id) : null,
                 deduct_qty: parseFloat(row.deduct_qty) || 0,
+                food_type: row.food_type || row.dietary_type || (row.is_veg === false || row.is_veg === 'false' || row.is_veg === 'NO' ? 'NON_VEG' : 'VEG'),
+                dietary_type: row.dietary_type || row.food_type || (row.is_veg === false || row.is_veg === 'false' || row.is_veg === 'NO' ? 'NON_VEG' : 'VEG'),
+                is_veg: row.is_veg !== undefined ? (row.is_veg !== false && row.is_veg !== 'false' && row.is_veg !== 'NO') : true,
                 is_tax_inclusive: row.is_tax_inclusive === true || row.is_tax_inclusive === 'YES' || row.is_tax_inclusive === 'true' || row.is_tax_inclusive === 1,
                 is_happy_hour: row.is_happy_hour === true || row.is_happy_hour === 'YES' || row.is_happy_hour === 'true' || row.is_happy_hour === 1,
                 is_active: true
@@ -650,6 +689,31 @@ export const updateItem = async (req: Request, res: Response) => {
         }
 
         await item.update(payload);
+
+        // Explicit safeguard update for modifier and dietary columns
+        await (req as any).propertyDb.query(`
+            UPDATE item_master
+            SET is_modifier = :is_modifier,
+                applicable_item_ids = :applicable_item_ids,
+                deduct_raw_item_id = :deduct_raw_item_id,
+                deduct_qty = :deduct_qty,
+                food_type = :food_type,
+                dietary_type = :dietary_type,
+                is_veg = :is_veg
+            WHERE id = :id AND outlet_id = :outlet_id
+        `, {
+            replacements: {
+                id: item.id,
+                outlet_id,
+                is_modifier: payload.is_modifier === true || payload.is_modifier === 'true' || payload.is_modifier === 1,
+                applicable_item_ids: payload.applicable_item_ids ? String(payload.applicable_item_ids).trim() : null,
+                deduct_raw_item_id: payload.deduct_raw_item_id ? Number(payload.deduct_raw_item_id) : null,
+                deduct_qty: Number(payload.deduct_qty) || 0,
+                food_type: payload.food_type || 'VEG',
+                dietary_type: payload.dietary_type || payload.food_type || 'VEG',
+                is_veg: payload.is_veg !== undefined ? Boolean(payload.is_veg) : (payload.food_type !== 'NON_VEG')
+            }
+        });
 
         await audit.log({
             req,

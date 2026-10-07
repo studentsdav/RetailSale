@@ -69,6 +69,10 @@ import '../hrms/hrms_masters_screen.dart';
 import '../inventory/supplier_master_screen.dart';
 import '../restaurant/captain_dashboard_screen.dart';
 import '../restaurant/waiter_app_screen.dart';
+import '../restaurant/kots_history_screen.dart';
+import '../restaurant/table_qr_designer_screen.dart';
+import '../restaurant/table_reservation_screen.dart';
+import '../dining/table_dining_screen.dart';
 import '../settings/mpesa_config_screen.dart';
 import '../restaurant/floor_plan_configurator.dart';
 import '../restaurant/restaurant_setup_screen.dart';
@@ -213,6 +217,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
   List<_TransactionTypeSummary> monthlyTransactionTypes = [];
   Map<String, _GrowthComparison> growthComparisons = {};
   Timer? _notificationTimer;
+  Timer? _customerOrderPollTimer;
+  final Set<String> _seenCustomerOrderIds = {};
+  bool _isCustomerOrderAlertOpen = false;
+  bool _hasInitializedCustomerOrders = false;
+  final Set<String> _seenDiningCallIds = {};
+  bool _isDiningAlertOpen = false;
+  bool _hasInitializedDiningCalls = false;
   String currentVersion = "";
   final InventoryDashboardController dashboardCtrl =
       InventoryDashboardController();
@@ -434,6 +445,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
     DateTimeService.instance.addListener(_onTimeZoneChanged);
     _currentTime = DateTimeService.instance.nowInTimeZone;
     _startAppBarTimer();
+    _startCustomerOrderPolling();
 
     _loadPropertyInfo();
 
@@ -472,18 +484,485 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
     });
   }
 
+  void _startCustomerOrderPolling() {
+    _customerOrderPollTimer?.cancel();
+    _fetchAndCheckCustomerOrders();
+    _fetchAndCheckDiningAlerts();
+    _customerOrderPollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted) {
+        _fetchAndCheckCustomerOrders();
+        _fetchAndCheckDiningAlerts();
+      }
+    });
+  }
+
+  Future<void> _fetchAndCheckDiningAlerts() async {
+    try {
+      final res = await ApiClient.get('/api/restaurant/dining/waiter-calls');
+      if (res['success'] == true && res['data'] is List) {
+        final List<dynamic> calls = res['data'];
+
+        if (!_hasInitializedDiningCalls) {
+          for (final c in calls) {
+            final id = c['id']?.toString() ?? '';
+            if (id.isNotEmpty) _seenDiningCallIds.add(id);
+          }
+          _hasInitializedDiningCalls = true;
+          return;
+        }
+
+        final newCalls = calls.where((c) {
+          final id = c['id']?.toString() ?? '';
+          return id.isNotEmpty && !_seenDiningCallIds.contains(id) && c['resolved'] != true;
+        }).toList();
+
+        if (newCalls.isNotEmpty && !_isDiningAlertOpen && !_isCustomerOrderAlertOpen && mounted) {
+          for (final c in newCalls) {
+            final id = c['id']?.toString() ?? '';
+            if (id.isNotEmpty) _seenDiningCallIds.add(id);
+          }
+          _showDiningAppAlertDialog(newCalls.first, totalNewCount: newCalls.length);
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _showDiningAppAlertDialog(dynamic call, {int totalNewCount = 1}) {
+    if (_isDiningAlertOpen || !mounted) return;
+    _isDiningAlertOpen = true;
+
+    final tableName = call['table_name'] ?? 'Table #${call['table_id'] ?? ''}';
+    final customerName = call['customer_name'] ?? 'Guest';
+    final requestType = (call['request_type'] ?? 'CALL_WAITER').toString().toUpperCase();
+
+    IconData requestIcon = Icons.notifications_active;
+    Color requestColor = const Color(0xFFEA580C);
+    String requestTitle = 'Server Called';
+    if (requestType == 'WATER') {
+      requestIcon = Icons.water_drop;
+      requestColor = const Color(0xFF0284C7);
+      requestTitle = 'Water Requested';
+    } else if (requestType == 'BILL') {
+      requestIcon = Icons.receipt_long;
+      requestColor = const Color(0xFFD97706);
+      requestTitle = 'Bill Requested';
+    } else if (requestType == 'ORDER' || requestType == 'KOT') {
+      requestIcon = Icons.restaurant_menu;
+      requestColor = const Color(0xFF16A34A);
+      requestTitle = 'New Dining Table Order';
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+          contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: requestColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: requestColor, width: 1.5),
+                ),
+                child: Icon(requestIcon, color: requestColor, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Dining App Alert: $requestTitle',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (totalNewCount > 1) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '+$totalNewCount',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Received from Customer Dining QR App',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 460,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        tableName,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: requestColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: requestColor.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          requestTitle.toUpperCase(),
+                          style: TextStyle(color: requestColor, fontSize: 10, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.person_outline, size: 15, color: Color(0xFF64748B)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Requested by: $customerName',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Dismiss', style: TextStyle(color: Color(0xFF64748B))),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7A1A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.table_restaurant_outlined, size: 18),
+              label: const Text(
+                'Open Captain Console Direct',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CaptainDashboardScreen()),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      _isDiningAlertOpen = false;
+    });
+  }
+
+  Future<void> _fetchAndCheckCustomerOrders() async {
+    try {
+      final res = await ApiClient.get('/api/delivery/retailer/orders?today=true');
+      if (res['success'] == true && res['data'] is List) {
+        final List<dynamic> orders = res['data'];
+
+        // Initial fetch: mark existing orders as known so we don't spam popups on launch
+        if (!_hasInitializedCustomerOrders) {
+          for (final ord in orders) {
+            final id = ord['id']?.toString() ?? '';
+            if (id.isNotEmpty) _seenCustomerOrderIds.add(id);
+          }
+          _hasInitializedCustomerOrders = true;
+          return;
+        }
+
+        // Find newly placed customer app orders
+        final newOrders = orders.where((ord) {
+          final id = ord['id']?.toString() ?? '';
+          final status = (ord['status'] ?? '').toString().toUpperCase().trim();
+          final isPending = status == 'PENDING' || status == 'NEW' || status == 'PLACED' || status == 'WAITING_CONFIRMATION';
+          return id.isNotEmpty && !_seenCustomerOrderIds.contains(id) && isPending;
+        }).toList();
+
+        if (newOrders.isNotEmpty && !_isCustomerOrderAlertOpen && mounted) {
+          for (final ord in newOrders) {
+            final id = ord['id']?.toString() ?? '';
+            if (id.isNotEmpty) _seenCustomerOrderIds.add(id);
+          }
+          _showNewCustomerOrderDialog(newOrders.first, totalNewCount: newOrders.length);
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _showNewCustomerOrderDialog(dynamic order, {int totalNewCount = 1}) {
+    if (_isCustomerOrderAlertOpen || !mounted) return;
+    _isCustomerOrderAlertOpen = true;
+
+    final orderNo = order['sale_order_no'] ?? order['order_number'] ?? '#ORD-${order['id']}';
+    final customerName = order['customer_name'] ?? order['name'] ?? 'Online Customer';
+    final customerPhone = order['customer_phone'] ?? order['phone'] ?? '';
+    final totalAmount = double.tryParse((order['total_amount'] ?? order['net_amount'] ?? 0).toString()) ?? 0.0;
+    final paymentMode = (order['payment_mode'] ?? order['payment_type'] ?? 'COD').toString().toUpperCase();
+    final deliveryAddress = order['delivery_address'] ?? order['address'] ?? '';
+    final items = (order['items'] is List) ? (order['items'] as List) : [];
+    final itemsCount = items.isNotEmpty ? items.length : (int.tryParse((order['total_items'] ?? 1).toString()) ?? 1);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+          contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'New Customer Order!',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                        ),
+                        if (totalNewCount > 1) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '+$totalNewCount new',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Received from Customer Mobile App',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '$orderNo',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFDE68A)),
+                            ),
+                            child: const Text(
+                              'PENDING',
+                              style: TextStyle(color: Color(0xFFB45309), fontSize: 10, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline, size: 15, color: Color(0xFF64748B)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              customerPhone.isNotEmpty ? '$customerName ($customerPhone)' : customerName,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.shopping_basket_outlined, size: 15, color: Color(0xFF64748B)),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$itemsCount item${itemsCount > 1 ? "s" : ""}',
+                                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              const Icon(Icons.payment_outlined, size: 15, color: Color(0xFF64748B)),
+                              const SizedBox(width: 4),
+                              Text(
+                                paymentMode,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '$_currencyPrefix ${totalAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF059669)),
+                          ),
+                        ],
+                      ),
+                      if (deliveryAddress.toString().trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.location_on_outlined, size: 15, color: Color(0xFF64748B)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                deliveryAddress.toString().trim(),
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Dismiss', style: TextStyle(color: Color(0xFF64748B))),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.storefront_outlined, size: 18),
+              label: const Text(
+                'Open Retailer Console Direct',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RetailerConsoleScreen()),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      _isCustomerOrderAlertOpen = false;
+    });
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _currentTime = DateTimeService.instance.nowInTimeZone;
       _startAppBarTimer();
+      _startCustomerOrderPolling();
       _loadNotificationPreference();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
       _appBarTimer?.cancel();
+      _customerOrderPollTimer?.cancel();
       _notificationTimer?.cancel();
       _appBarTimer = null;
+      _customerOrderPollTimer = null;
       _notificationTimer = null;
     }
   }
@@ -493,6 +972,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
     WidgetsBinding.instance.removeObserver(this);
     DateTimeService.instance.removeListener(_onTimeZoneChanged);
     _appBarTimer?.cancel();
+    _customerOrderPollTimer?.cancel();
     _dataProtectionTimer?.cancel();
     _notificationTimer?.cancel();
     super.dispose();
@@ -3339,6 +3819,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'category': 'Restaurant (Beta)',
         'icon': Icons.restaurant_menu,
         'label': 'Captain Console',
+        'isBeta': true,
         'permission': 'RESTAURANT_CONSOLE',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CaptainDashboardScreen())),
       },
@@ -3347,6 +3828,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'icon': Icons.room_service_outlined,
         'label': 'Waiter Floor Terminal',
         'subLabel': 'Post kitchen orders, print bills, and track running & settled tickets',
+        'isBeta': true,
         'permission': 'RESTAURANT_CONSOLE',
         'keywords': ['waiter', 'waiter app', 'table order', 'kot', 'kitchen order', 'proforma', 'running orders', 'floor app'],
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WaiterAppScreen())),
@@ -3355,6 +3837,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'category': 'Restaurant (Beta)',
         'icon': Icons.map_outlined,
         'label': 'Floor Designer',
+        'isBeta': true,
         'permission': 'RESTAURANT_FLOOR_DESIGN',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FloorPlanConfigurator())),
       },
@@ -3362,13 +3845,60 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'category': 'Restaurant (Beta)',
         'icon': Icons.soup_kitchen_outlined,
         'label': 'Kitchen KDS Queue',
+        'isBeta': true,
         'permission': 'RESTAURANT_KDS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const KdsScreen())),
       },
       {
         'category': 'Restaurant (Beta)',
+        'icon': Icons.receipt_long_outlined,
+        'label': 'KOT Order History',
+        'subLabel': 'Kitchen order tickets audit logs, reprints & cancellation reasons',
+        'isBeta': true,
+        'permission': 'RESTAURANT_CONSOLE',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const KotsHistoryScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.qr_code_2_outlined,
+        'label': 'Table QR Designer',
+        'subLabel': 'Design & print branded QR standees with custom styles & cutlery icons',
+        'isBeta': true,
+        'permission': 'RESTAURANT_SETUP',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TableQrDesignerScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.event_seat_outlined,
+        'label': 'Table Reservations',
+        'subLabel': 'Guest booking calendar, time slot scheduling & table allocation',
+        'isBeta': true,
+        'permission': 'RESTAURANT_SETUP',
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TableReservationScreen())),
+      },
+      {
+        'category': 'Restaurant (Beta)',
+        'icon': Icons.mobile_friendly_outlined,
+        'label': 'Customer QR Dining (Preview)',
+        'subLabel': 'Swiggy/Zomato style customer self-ordering, cart & digital bill self-pay',
+        'isBeta': true,
+        'permission': 'RESTAURANT_CONSOLE',
+        'onTap': () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const TableDiningScreen(
+              tableName: 'Table 1',
+              tableId: '1',
+              outletId: '1',
+            ),
+          ),
+        ),
+      },
+      {
+        'category': 'Restaurant (Beta)',
         'icon': Icons.settings_applications_outlined,
         'label': 'Restaurant Setup',
+        'isBeta': true,
         'permission': 'RESTAURANT_SETUP',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RestaurantSetupScreen())),
       },
@@ -3376,6 +3906,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'category': 'Restaurant (Beta)',
         'icon': Icons.analytics_outlined,
         'label': 'Restaurant Analytics & Reports',
+        'isBeta': true,
         'permission': 'RESTAURANT_ANALYTICS',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RestaurantAnalyticsReportsScreen())),
       },

@@ -24,12 +24,12 @@ enum TableCardLayout {
 }
 
 class TableQrDesignerScreen extends StatefulWidget {
-  final List<dynamic> tables;
+  final List<dynamic>? tables;
   final String? initialTableId;
 
   const TableQrDesignerScreen({
     super.key,
-    required this.tables,
+    this.tables,
     this.initialTableId,
   });
 
@@ -39,6 +39,8 @@ class TableQrDesignerScreen extends StatefulWidget {
 
 class _TableQrDesignerScreenState extends State<TableQrDesignerScreen> {
   TableCardLayout _selectedLayout = TableCardLayout.googleStandee;
+  List<dynamic> _loadedTables = [];
+  List<dynamic> get _allTables => _loadedTables.isNotEmpty ? _loadedTables : (widget.tables ?? const []);
   
   // Customization controls
   late TextEditingController _baseUrlCtrl;
@@ -128,15 +130,16 @@ class _TableQrDesignerScreenState extends State<TableQrDesignerScreen> {
     _wifiPassCtrl = TextEditingController(text: 'Welcome@123');
 
     // Select all tables by default
-    for (final tbl in widget.tables) {
+    final initialList = widget.tables ?? const [];
+    for (final tbl in initialList) {
       final id = tbl['id']?.toString() ?? '';
       if (id.isNotEmpty) _selectedTableIds.add(id);
     }
 
     if (widget.initialTableId != null && widget.initialTableId!.isNotEmpty) {
       _previewTableId = widget.initialTableId;
-    } else if (widget.tables.isNotEmpty) {
-      _previewTableId = widget.tables.first['id']?.toString();
+    } else if (initialList.isNotEmpty) {
+      _previewTableId = initialList.first['id']?.toString();
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -146,6 +149,25 @@ class _TableQrDesignerScreenState extends State<TableQrDesignerScreen> {
 
   void _loadBrandingDetails() async {
     try {
+      if (widget.tables == null || widget.tables!.isEmpty) {
+        final restCtrl = Provider.of<RestaurantController>(context, listen: false);
+        if (restCtrl.tables.isEmpty) {
+          await restCtrl.loadTables();
+        }
+        if (mounted && restCtrl.tables.isNotEmpty) {
+          setState(() {
+            _loadedTables = List<dynamic>.from(restCtrl.tables);
+            for (final tbl in _loadedTables) {
+              final id = tbl['id']?.toString() ?? '';
+              if (id.isNotEmpty) _selectedTableIds.add(id);
+            }
+            if (_previewTableId == null && _loadedTables.isNotEmpty) {
+              _previewTableId = _loadedTables.first['id']?.toString();
+            }
+          });
+        }
+      }
+
       final propCtrl = Provider.of<PropertyInfoController>(context, listen: false);
       if (propCtrl.data == null) {
         await propCtrl.load();
@@ -225,15 +247,15 @@ class _TableQrDesignerScreenState extends State<TableQrDesignerScreen> {
   }
 
   dynamic _getPreviewTable() {
-    if (_previewTableId == null) return widget.tables.isNotEmpty ? widget.tables.first : null;
-    return widget.tables.firstWhere(
+    if (_previewTableId == null) return _allTables.isNotEmpty ? _allTables.first : null;
+    return _allTables.firstWhere(
       (t) => t['id']?.toString() == _previewTableId,
-      orElse: () => widget.tables.isNotEmpty ? widget.tables.first : null,
+      orElse: () => _allTables.isNotEmpty ? _allTables.first : null,
     );
   }
 
   List<dynamic> _getFilteredTables() {
-    return widget.tables.where((tbl) {
+    return _allTables.where((tbl) {
       final floorId = tbl['floor_id']?.toString() ?? '';
       final areaId = tbl['dining_area_id']?.toString() ?? '';
       
@@ -665,7 +687,7 @@ class _TableQrDesignerScreenState extends State<TableQrDesignerScreen> {
 
   Widget _buildTableSelectionList(RestaurantController ctrl, List<dynamic> filteredTables) {
     return _sectionContainer(
-      title: '5. Select Tables to Print (${_selectedTableIds.length}/${widget.tables.length})',
+      title: '5. Select Tables to Print (${_selectedTableIds.length}/${_allTables.length})',
       icon: Icons.table_restaurant_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1528,7 +1550,7 @@ class _TableQrDesignerScreenState extends State<TableQrDesignerScreen> {
             ),
             itemCount: 4,
             itemBuilder: (context, i) {
-              final tbl = i < widget.tables.length ? widget.tables[i] : table;
+              final tbl = i < _allTables.length ? _allTables[i] : table;
               return Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -2176,7 +2198,7 @@ class _TableQrDesignerScreenState extends State<TableQrDesignerScreen> {
     try {
       final doc = pw.Document();
       final tablesToPrint = isBulk
-          ? widget.tables.where((t) => _selectedTableIds.contains(t['id']?.toString())).toList()
+          ? _allTables.where((t) => _selectedTableIds.contains(t['id']?.toString())).toList()
           : [_getPreviewTable()].whereType<dynamic>().toList();
 
       if (tablesToPrint.isEmpty) {

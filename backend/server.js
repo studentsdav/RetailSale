@@ -288,7 +288,10 @@ if (!fs.existsSync(licensePath)) {
                 ADD COLUMN IF NOT EXISTS is_modifier BOOLEAN DEFAULT FALSE,
                 ADD COLUMN IF NOT EXISTS applicable_item_ids TEXT,
                 ADD COLUMN IF NOT EXISTS deduct_raw_item_id INTEGER,
-                ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0;
+                ADD COLUMN IF NOT EXISTS deduct_qty DECIMAL(12, 4) DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS food_type VARCHAR(20) DEFAULT 'VEG',
+                ADD COLUMN IF NOT EXISTS dietary_type VARCHAR(20) DEFAULT 'VEG',
+                ADD COLUMN IF NOT EXISTS is_veg BOOLEAN DEFAULT TRUE;
             `);
             console.log('✅ Verified/added custom columns in property_info, restaurant_tables, kot_headers, sales_headers, and item_master');
         } catch (colErr) {

@@ -310,12 +310,159 @@ class _SaleScreenState extends State<SaleScreen> {
         await _loadExistingSaleForEdit(widget.editSaleId!);
       }
 
-      if (widget.preloadedCustomerName != null && widget.preloadedCustomerName!.trim().isNotEmpty) {
-        _customerName.text = widget.preloadedCustomerName!.trim();
+      final pName = widget.preloadedCustomerName?.trim() ?? '';
+      final pPhone = widget.preloadedCustomerPhone?.trim() ?? '';
+      if (pName.isNotEmpty || pPhone.isNotEmpty) {
+        _customerName.text = pName;
+        _customerPhone.text = pPhone;
+
+        if (ctrl.customers.isEmpty) {
+          try {
+            await ctrl.refreshCustomers();
+          } catch (_) {}
+        }
+
+        // Auto-match and select the customer in ctrl.customers or DB
+        SaleCustomer? matchedCust;
+        if (pPhone.isNotEmpty) {
+          try {
+            matchedCust = ctrl.customers.firstWhere(
+              (c) => c.customerPhone.trim() == pPhone,
+            );
+          } catch (_) {}
+        }
+        if (matchedCust == null && pName.isNotEmpty && pName.toLowerCase() != 'walk-in' && pName.toLowerCase() != 'guest') {
+          try {
+            matchedCust = ctrl.customers.firstWhere(
+              (c) => c.customerName.trim().toLowerCase() == pName.toLowerCase(),
+            );
+          } catch (_) {}
+        }
+
+        if (matchedCust != null) {
+          await _applyCustomer(matchedCust);
+        } else {
+          // Try searching customers async from API
+          try {
+            final searchVal = pPhone.isNotEmpty ? pPhone : pName;
+            if (searchVal.isNotEmpty && searchVal.toLowerCase() != 'walk-in' && searchVal.toLowerCase() != 'guest') {
+              final matches = await ctrl.searchCustomers(searchVal);
+              if (matches.isNotEmpty) {
+                final exact = matches.firstWhere(
+                  (c) => (pPhone.isNotEmpty && c.customerPhone.trim() == pPhone) ||
+                         (pName.isNotEmpty && c.customerName.trim().toLowerCase() == pName.toLowerCase()),
+                  orElse: () => matches.first,
+                );
+                await _applyCustomer(exact);
+                matchedCust = exact;
+              }
+            }
+          } catch (_) {}
+
+          if (matchedCust == null && (pName.isNotEmpty || pPhone.isNotEmpty)) {
+            final ephem = SaleCustomer(
+              id: 0,
+              customerName: pName,
+              customerPhone: pPhone,
+              customerAddress: '',
+              customerGstin: '',
+            );
+            await _applyCustomer(ephem);
+          }
+        }
+      } else if (_preloadedTableId != null && _selectedCustomer == null && _customerName.text.isEmpty) {
+        try {
+          final res = await ApiClient.get('${ApiEndpoints.restaurantKots}?table_id=$_preloadedTableId&active_only=true');
+          if (res != null && res['data'] is List) {
+            final kList = res['data'] as List;
+            String? foundName;
+            String? foundPhone;
+            for (final k in kList) {
+              final n = (k['customer_name'] ?? '').toString().trim();
+              final p = (k['customer_phone'] ?? '').toString().trim();
+              if (n.isNotEmpty && (foundName == null || foundName.isEmpty) && n.toLowerCase() != 'guest') foundName = n;
+              if (p.isNotEmpty && (foundPhone == null || foundPhone.isEmpty)) foundPhone = p;
+              if (foundName == null || foundName.isEmpty || foundName.toLowerCase() == 'guest' || foundPhone == null || foundPhone.isEmpty) {
+                final rem = (k['remarks'] ?? '').toString();
+                if (rem.contains('Customer Self-Order (QR):')) {
+                  final idx = rem.indexOf('Customer Self-Order (QR):');
+                  var qrPart = rem.substring(idx + 'Customer Self-Order (QR):'.length);
+                  final pipeIdx = qrPart.indexOf('|');
+                  if (pipeIdx != -1) qrPart = qrPart.substring(0, pipeIdx);
+
+                  final phoneMatch = RegExp(r'\(([^)]*)\)').firstMatch(qrPart);
+                  final cleanName = qrPart
+                      .replaceAll(RegExp(r'\[CID:[^\]]*\]', caseSensitive: false), '')
+                      .replaceAll(RegExp(r'\[EM:[^\]]*\]', caseSensitive: false), '')
+                      .replaceAll(RegExp(r'\([^)]*\)'), '')
+                      .trim();
+
+                  if ((foundName == null || foundName.isEmpty || foundName.toLowerCase() == 'guest') &&
+                      cleanName.isNotEmpty &&
+                      cleanName.toLowerCase() != 'guest') {
+                    foundName = cleanName;
+                  }
+                  if ((foundPhone == null || foundPhone.isEmpty) &&
+                      phoneMatch != null &&
+                      phoneMatch.group(1)!.trim().isNotEmpty) {
+                    foundPhone = phoneMatch.group(1)!.trim();
+                  }
+                }
+              }
+            }
+            if (foundName != null || foundPhone != null) {
+              final fName = foundName ?? '';
+              final fPhone = foundPhone ?? '';
+              _customerName.text = fName;
+              _customerPhone.text = fPhone;
+
+              if (ctrl.customers.isEmpty) {
+                try {
+                  await ctrl.refreshCustomers();
+                } catch (_) {}
+              }
+
+              SaleCustomer? mCust;
+              if (fPhone.isNotEmpty) {
+                try {
+                  mCust = ctrl.customers.firstWhere((c) => c.customerPhone.trim() == fPhone);
+                } catch (_) {}
+              }
+              if (mCust == null && fName.isNotEmpty && fName.toLowerCase() != 'guest') {
+                try {
+                  mCust = ctrl.customers.firstWhere((c) => c.customerName.trim().toLowerCase() == fName.toLowerCase());
+                } catch (_) {}
+              }
+              if (mCust == null && (fPhone.isNotEmpty || fName.isNotEmpty)) {
+                try {
+                  final searchVal = fPhone.isNotEmpty ? fPhone : fName;
+                  final matches = await ctrl.searchCustomers(searchVal);
+                  if (matches.isNotEmpty) {
+                    mCust = matches.firstWhere(
+                      (c) => (fPhone.isNotEmpty && c.customerPhone.trim() == fPhone) ||
+                             (fName.isNotEmpty && c.customerName.trim().toLowerCase() == fName.toLowerCase()),
+                      orElse: () => matches.first,
+                    );
+                  }
+                } catch (_) {}
+              }
+              if (mCust != null) {
+                await _applyCustomer(mCust);
+              } else {
+                final ephem = SaleCustomer(
+                  id: 0,
+                  customerName: fName,
+                  customerPhone: fPhone,
+                  customerAddress: '',
+                  customerGstin: '',
+                );
+                await _applyCustomer(ephem);
+              }
+            }
+          }
+        } catch (_) {}
       }
-      if (widget.preloadedCustomerPhone != null && widget.preloadedCustomerPhone!.trim().isNotEmpty) {
-        _customerPhone.text = widget.preloadedCustomerPhone!.trim();
-      }
+
       if (widget.challanNo != null && widget.challanNo!.trim().isNotEmpty) {
         _notes.text = 'Converted from Delivery Challan ${widget.challanNo}';
       }
@@ -1155,8 +1302,8 @@ class _SaleScreenState extends State<SaleScreen> {
 
   bool get _hasCustomerContext =>
       _selectedCustomer != null ||
-      (_customerName.text.trim().isNotEmpty &&
-          _customerPhone.text.trim().isNotEmpty);
+      _customerName.text.trim().isNotEmpty ||
+      _customerPhone.text.trim().isNotEmpty;
 
   List<SaleScheme> get _eligibleSchemes => !_hasCustomerContext
       ? const <SaleScheme>[]
@@ -10119,6 +10266,60 @@ class _SaleScreenState extends State<SaleScreen> {
     });
   }
 
+  Widget _buildDietaryBadge(String? type, {double size = 12}) {
+    if (type == null || type.isEmpty || type == 'OTHER') return const SizedBox.shrink();
+    Color borderColor;
+    Color dotColor;
+    bool isVegan = false;
+
+    switch (type.toUpperCase()) {
+      case 'VEG':
+        borderColor = const Color(0xFF16A34A);
+        dotColor = const Color(0xFF16A34A);
+        break;
+      case 'NON_VEG':
+      case 'NON-VEG':
+      case 'NONVEG':
+        borderColor = const Color(0xFFDC2626);
+        dotColor = const Color(0xFFDC2626);
+        break;
+      case 'EGG':
+        borderColor = const Color(0xFFEAB308);
+        dotColor = const Color(0xFFEAB308);
+        break;
+      case 'VEGAN':
+        borderColor = const Color(0xFF059669);
+        dotColor = const Color(0xFF059669);
+        isVegan = true;
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: borderColor, width: 1.2),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Center(
+        child: isVegan
+            ? Icon(Icons.eco, size: size * 0.7, color: dotColor)
+            : Container(
+                width: size * 0.45,
+                height: size * 0.45,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+      ),
+    );
+  }
+
   Widget _buildCatalogPane() {
     final allProducts = _catalogItems;
     final products = allProducts.take(_displayedCatalogCount).toList();
@@ -10478,21 +10679,33 @@ class _SaleScreenState extends State<SaleScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Title (Dark Blue)
+                                  // Title (Dark Blue) with Dietary Indicator
                                   Padding(
                                     padding: const EdgeInsets.only(right: 24.0), // Padding to avoid overlap with delete/info badges
-                                    child: Text(
-                                      item.brand.trim().isNotEmpty
-                                          ? '${item.brand.trim()} - ${item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName}'
-                                          : (item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Color(0xFF223854),
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13.5,
-                                        height: 1.2,
-                                      ),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (item.foodType.isNotEmpty && item.foodType != 'OTHER')
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 2.5, right: 5),
+                                            child: _buildDietaryBadge(item.foodType, size: 12),
+                                          ),
+                                        Expanded(
+                                          child: Text(
+                                            item.brand.trim().isNotEmpty
+                                                ? '${item.brand.trim()} - ${item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName}'
+                                                : (item.productTemplateId != null ? item.itemName.split(' - ').first : item.itemName),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Color(0xFF223854),
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13.5,
+                                              height: 1.2,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -11075,17 +11288,20 @@ class _SaleScreenState extends State<SaleScreen> {
                       ),
                   ],
                 ),
-                if (_customerPhone.text.trim().isNotEmpty)
+                if (_hasCustomerContext || _customerName.text.trim().isNotEmpty || _customerPhone.text.trim().isNotEmpty) ...[
                   Text(
-                    _customerName.text.trim().isEmpty
-                        ? 'Walk-in Customer'
-                        : _customerName.text.trim(),
+                    _customerName.text.trim().isNotEmpty
+                        ? _customerName.text.trim()
+                        : (_selectedCustomer?.customerName.trim().isNotEmpty == true
+                            ? _selectedCustomer!.customerName.trim()
+                            : 'Customer'),
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                if (_customerPhone.text.trim().isNotEmpty)
-                  Text(_customerPhone.text.trim()),
+                  if (_customerPhone.text.trim().isNotEmpty)
+                    Text(_customerPhone.text.trim()),
+                ],
                 if (_previousOutstandingAmount > 0 &&
-                    _customerPhone.text.trim().isNotEmpty) ...[
+                    _hasCustomerContext) ...[
                   const SizedBox(height: 4),
                   Text(
                     'Previous Credit ${CurrencyService.format(_previousOutstandingAmount)}',
@@ -11096,7 +11312,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   ),
                 ],
                 if (_availableAdvanceAmount > 0 &&
-                    _customerPhone.text.trim().isNotEmpty) ...[
+                    _hasCustomerContext) ...[
                   const SizedBox(height: 4),
                   Text(
                     'Available Advance ${CurrencyService.format(_availableAdvanceAmount)}',
