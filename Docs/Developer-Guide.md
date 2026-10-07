@@ -143,7 +143,10 @@ For in-depth implementation details of each individual subsystem, consult the de
 | 🤖 **[AI Intelligence & Autonomous Agents](./Developer-Guide-AI-Autonomous-Agents.md)** | Lynx AI tool calling schemas, autonomous replenishment background agents, and Smart Upsell engine. |
 | 🔌 **[Plugins, Workflows & Automation](./Developer-Guide-Plugins-Workflows-Automation.md)** | Plugin sandboxing (VM2), event bus triggers, WhatsApp BullMQ queue, and Webhook dispatch. |
 | 🛡️ **[Developer Security, Cache & Load Balancer](./Developer-Security-Cache-LoadBalancer-Guide.md)** | High-concurrency clustering, Redis caching, AES encryption, and distributed locks. |
-| 📡 **[Full REST API Endpoint Reference](./Endpoint-Reference.md)** | 100% complete REST API reference for all 32 backend route modules with request/response schemas. |
+| 📱 **[M-Pesa Mobile Money Integration Architecture](./Developer-Guide-Mpesa-Mobile-Money.md)** | Safaricom Daraja STK push lifecycle, OAuth token caching, and webhook callback processing. |
+| 🏢 **[Multi-Outlet Hierarchy & Scoping Architecture](./Developer-Guide-Multi-Outlet-Hierarchy.md)** | Multi-tenant database routing, outlet scoping middleware, warehouse tree data models, and sequence numbering. |
+| 📊 **[Reports, Analytics & BI Engine Architecture](./Developer-Guide-Reports-And-Analytics.md)** | SQL aggregations, Redis dashboard cache warming, read-replica queries, and vector PDF rendering. |
+| 📡 **[Full REST API Endpoint Reference](./Endpoint-Reference.md)** | 100% complete REST API reference for all 33 backend route modules with request/response schemas. |
 | 🚀 **[Windows Installer & Packaging Guide](./Windows-Installer-Developer-Guide.md)** | Complete InnoSetup packaging, bundling PostgreSQL runtime, Node binary, and Flutter executables. |
 
 ---

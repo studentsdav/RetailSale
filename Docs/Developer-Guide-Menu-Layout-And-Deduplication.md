@@ -53,7 +53,7 @@ In earlier iterations, both *"Purchase Order"* and *"Vendor Purchase Order"* app
 
 ## 3. Permission-Aware Dynamic Menu Router
 
-In [`lib/core/navigation/home_route_helper.dart`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/core/navigation/home_route_helper.dart) and `AppDrawer`:
+In [`lib/core/navigation/home_route_helper.dart`](../lib/core/navigation/home_route_helper.dart) and `AppDrawer`:
 - Single source of truth prevents duplicate routes from being rendered.
 - Menu items verify `PermissionService.can(permissionKey)`.
 - If an operator lacks procurement rights, the entire **Purchase Orders** group is hidden gracefully.

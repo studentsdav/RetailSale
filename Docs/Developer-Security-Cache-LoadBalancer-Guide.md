@@ -44,7 +44,7 @@ graph TD
 
 ## 🚦 1. Multi-Tier Rate Limiting Matrix
 
-Implemented in [`backend/middlewares/rateLimit.middleware.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/middlewares/rateLimit.middleware.ts):
+Implemented in [`backend/middlewares/rateLimit.middleware.ts`](../backend/middlewares/rateLimit.middleware.ts):
 
 | Limiter Name | Target Routes | Window (Time) | Max Requests | Behavior on Exceeded |
 | :--- | :--- | :--- | :--- | :--- |
@@ -78,7 +78,7 @@ export const loginLimiter = rateLimit({
 
 To prevent **Slowloris** and **Slow POST** attacks where malicious actors open hundreds of HTTP connections and transmit data agonizingly slowly to exhaust server socket descriptors:
 
-Configured in [`backend/server.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/server.ts):
+Configured in [`backend/server.ts`](../backend/server.ts):
 
 ```typescript
 // Anti-DDoS Slowloris Socket Protection
@@ -106,7 +106,7 @@ When running in cloud environments (e.g., Render, AWS ALB, Nginx, or Kubernetes)
 
 ## ⚡ 4. In-Memory Caching & Idempotency Layer
 
-Implemented in [`backend/utils/cache.util.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/utils/cache.util.ts) and [`backend/middlewares/idempotency.middleware.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/middlewares/idempotency.middleware.ts):
+Implemented in [`backend/utils/cache.util.ts`](../backend/utils/cache.util.ts) and [`backend/middlewares/idempotency.middleware.ts`](../backend/middlewares/idempotency.middleware.ts):
 
 - **Idempotency Safeguard**: In-flight and completed financial write transactions (Sales, Purchase Orders, Vouchers) cache their idempotency key (`idempotency:{outletId}:{key}`) for 120 seconds.
 - **Duplicate Prevention**: If network latency causes the Flutter client to retry a submission, the backend returns the cached HTTP response instantly without double-charging or deducting stock twice.
@@ -115,7 +115,7 @@ Implemented in [`backend/utils/cache.util.ts`](file:///d:/inventorynew/RetailSal
 
 ## 🔒 5. Production Security Headers & XSS/Clickjacking Mitigation
 
-Implemented in [`backend/middlewares/security.middleware.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/middlewares/security.middleware.ts):
+Implemented in [`backend/middlewares/security.middleware.ts`](../backend/middlewares/security.middleware.ts):
 
 | Header | Value | Vulnerability Mitigated |
 | :--- | :--- | :--- |

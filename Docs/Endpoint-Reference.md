@@ -410,4 +410,14 @@ Idempotency-Key: <UUID> (Optional for safe retries)
 
 ---
 
-*Last Updated: 2026-10-07 | Covers 100% of all 32 Express Route Modules*
+## 36. M-Pesa & Mobile Money Gateway (`/api/mpesa`)
+
+- `POST /api/mpesa/callback` — Public asynchronous webhook callback for Safaricom Daraja STK push results.
+- `GET /api/mpesa/config` — Retrieve outlet M-Pesa Till / Paybill credentials.
+- `POST /api/mpesa/config` — Save encrypted M-Pesa shortcode, passkey, and Daraja API keys (Admin only).
+- `POST /api/mpesa/stk-push` — Trigger instant M-Pesa STK push prompt on customer mobile device.
+- `POST /api/mpesa/stk-query` — Poll real-time status of initiated STK push transaction.
+
+---
+
+*Last Updated: October 2026 | Covers 100% of all 33 Express Route Modules & Payment Gateways*

@@ -99,7 +99,7 @@ To eliminate client freeze:
 
 ## 4. Startup Route Resolution (`HomeRouteHelper`)
 
-In [`lib/core/navigation/home_route_helper.dart`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/core/navigation/home_route_helper.dart), onboarding checks use persisted local flags (`LocalPreferences.isOnboardingCompleted`) to avoid repeating full HTTP checklist roundtrips on every sign-in:
+In [`lib/core/navigation/home_route_helper.dart`](../lib/core/navigation/home_route_helper.dart), onboarding checks use persisted local flags (`LocalPreferences.isOnboardingCompleted`) to avoid repeating full HTTP checklist roundtrips on every sign-in:
 
 ```dart
 static Future<Widget> resolve() async {

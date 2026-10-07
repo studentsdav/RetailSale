@@ -91,6 +91,11 @@ Managed in `backend/jobs/`:
 | `whatsappQueueJob` | Continuous (BullMQ) | Dispatches pending WhatsApp receipts, POs, and OTPs with automatic retry backoff. |
 | `autonomousReplenishmentJob` | Every 6 hours | Evaluates stock runout forecasts and drafts automated PO proposals. |
 | `loyaltyExpiryJob` | Monthly on 1st | Expires unredeemed customer loyalty points older than 12 months. |
+| `analyticsRefreshJob` | Hourly | Pre-aggregates sales KPIs and brand margins into Redis cache tables for sub-second dashboard loading. |
+| `luckyDrawJob` | Configured Campaign Schedule | Automates certified random winner selection and logs draw audit trails. |
+| `nightAuditJob` | Midnight (00:00) | Automated end-of-day reconciliation, unbilled KOT validation, and daily ledger locking. |
+| `notesReminderJob` | Every 15 minutes | Scans pinned sticky notes for approaching deadlines and dispatches system notifications. |
+| `recurringExpensesJob` | Monthly on 1st | Auto-posts scheduled recurring monthly operational expenses (Rent, Internet, Electricity) to General Ledger. |
 
 ---
 
@@ -125,6 +130,7 @@ All routes are mounted under `/api` in `backend/server.ts` (or `server.js`):
 ├── /v1/developer       -> developer.routes.ts
 ├── /whatsapp           -> whatsapp.routes.ts
 ├── /whatsapp-webhook   -> whatsappWebhook.routes.ts
+├── /mpesa              -> mpesa.routes.ts
 ├── /user-notes         -> userNote.routes.ts
 ├── /tax-groups         -> taxGroup.routes.ts
 ├── /system             -> systemTime.routes.ts

@@ -122,4 +122,32 @@ This matrix provides a 100% verified audit of all UI screens, Backend route modu
 
 ---
 
-*Last Verified: 2026-10-07 | Total Project UI and Backend Feature Coverage: 100% Complete*
+### 10. Mobile Money & M-Pesa Integration
+| UI Screen / Feature | Backend Route | Non-Technical User Guide | Technical Developer Guide | Audit Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **M-Pesa STK Push Config** (`mpesa_config_screen.dart`) | `/api/mpesa` | [M-Pesa User Guide](./User-Guide-Mpesa-Mobile-Money.md) | [M-Pesa Dev Guide](./Developer-Guide-Mpesa-Mobile-Money.md) | 🟢 100% Covered |
+| **M-Pesa Cashless Counter Billing** | `/api/mpesa/stk-push` | [M-Pesa User Guide](./User-Guide-Mpesa-Mobile-Money.md#4-collecting-m-pesa-payments-at-pos-counter) | [M-Pesa Dev Guide](./Developer-Guide-Mpesa-Mobile-Money.md#stk-push-initiation-pipeline) | 🟢 100% Covered |
+
+---
+
+### 11. Multi-Outlet, Hierarchy & Warehouse Linking
+| UI Screen / Feature | Backend Route | Non-Technical User Guide | Technical Developer Guide | Audit Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Outlet Setup & Checklist** (`outlet_setup_screen.dart`, `outlet_setup_checklist_screen.dart`) | `/api/public/outlet` | [Multi-Outlet Guide](./User-Guide-Multi-Outlet-And-Warehouse-Hierarchy.md) | [Multi-Outlet Dev Guide](./Developer-Guide-Multi-Outlet-Hierarchy.md) | 🟢 100% Covered |
+| **Outlet Hierarchy Linking** (`outlet_hierarchy_linking_screen.dart`) | `/api/inventory/transfers` | [Multi-Outlet Guide](./User-Guide-Multi-Outlet-And-Warehouse-Hierarchy.md#3-outlet-hierarchy--central-warehouse-linking) | [Multi-Outlet Dev Guide](./Developer-Guide-Multi-Outlet-Hierarchy.md) | 🟢 100% Covered |
+| **Stock Storage Locations** (`stock_location_screen.dart`) | `/api/inventory/stock-locations` | [Multi-Outlet Guide](./User-Guide-Multi-Outlet-And-Warehouse-Hierarchy.md#4-stock-locations-warehouses-shelves-racks--bins) | [Multi-Outlet Dev Guide](./Developer-Guide-Multi-Outlet-Hierarchy.md) | 🟢 100% Covered |
+
+---
+
+### 12. Reports & Analytics Suite (26+ Analytical Reports)
+| UI Screen / Feature | Backend Route | Non-Technical User Guide | Technical Developer Guide | Audit Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Sales & Payment Reports** (`sales_report_screen.dart`, `payment_analysis_screen.dart`) | `/api/reports/sales` | [Reports Guide](./User-Guide-Reports-And-Business-Intelligence.md#2-sales-revenue--payment-reports) | [Reports Dev Guide](./Developer-Guide-Reports-And-Analytics.md) | 🟢 100% Covered |
+| **Stock Valuation & Ledgers** (`stock_balance_screen.dart`, `stock_ledger_report_screen.dart`) | `/api/reports/stock-balance` | [Reports Guide](./User-Guide-Reports-And-Business-Intelligence.md#3-stock-valuation--transfer-reports) | [Reports Dev Guide](./Developer-Guide-Reports-And-Analytics.md) | 🟢 100% Covered |
+| **Cashier Handover & EOD Closing** (`cashier_handover_report_screen.dart`, `closing_report_screen.dart`) | `/api/reports/cashier-handover` | [Reports Guide](./User-Guide-Reports-And-Business-Intelligence.md#4-cashier-handover-day-closing--night-audit) | [Reports Dev Guide](./Developer-Guide-Reports-And-Analytics.md) | 🟢 100% Covered |
+| **Brand & Scheme Analysis** (`brand_analysis_screen.dart`, `scheme_report_screen.dart`) | `/api/reports/brand-analysis` | [Reports Guide](./User-Guide-Reports-And-Business-Intelligence.md#5-marketing-schemes--loyalty-reports) | [Reports Dev Guide](./Developer-Guide-Reports-And-Analytics.md) | 🟢 100% Covered |
+| **Staff Commission Reports** (`commission_report_screen.dart`, `commission_rules_screen.dart`) | `/api/reports/commission-report` | [Reports Guide](./User-Guide-Reports-And-Business-Intelligence.md#7-sales-commission--staff-performance) | [Reports Dev Guide](./Developer-Guide-Reports-And-Analytics.md) | 🟢 100% Covered |
+
+---
+
+*Last Verified: October 2026 | Total Project UI and Backend Feature Coverage: 100% Complete*

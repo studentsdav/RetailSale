@@ -106,7 +106,7 @@ ALTER TABLE item_master
 
 ## 4. Waiter & Captain Floor App Kitchen KOT Pipeline
 
-The mobile Floor App ([`waiter_auth_screen.dart`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/auth/waiter_auth_screen.dart) and [`captain_dashboard_screen.dart`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/restaurant/captain_dashboard_screen.dart)) enables floor servers to post orders directly to the kitchen:
+The mobile Floor App ([`waiter_auth_screen.dart`](../lib/screens/auth/waiter_auth_screen.dart) and [`captain_dashboard_screen.dart`](../lib/screens/restaurant/captain_dashboard_screen.dart)) enables floor servers to post orders directly to the kitchen:
 1. Select active table $\rightarrow$ Pick dishes with modifier add-ons $\rightarrow$ Tap **Send KOT**.
 2. Atomic KOT insertion into `kot_headers` and `kot_items`.
 3. Kitchen Display Screens (KDS) update live via WebSocket event `NEW_KOT_ORDER`.

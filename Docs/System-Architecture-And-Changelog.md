@@ -61,7 +61,7 @@ graph TD
   * **Full Table Coverage Across 11 Domains**:
     * `outlets`, `users`, `system_settings`, `branding`, `property_info`, `numbering_settings`, `tax_groups`, `categories`, `brands`, `item_master`, `stock_locations`, `stock_ledger`, `customers`, `suppliers`, `sales_headers`, `sales_items`, `purchase_orders`, `purchase_order_items`, `expenses`, `chart_of_accounts`, `bank_accounts`, `accounting_vouchers`, `voucher_lines`, `floors`, `dining_areas`, `restaurant_tables`, `kot_headers`, `kot_items`, `milk_subscriptions`, `delivery_customers`, `hr_employees`.
   * **Flutter UI Migration Wizard**:
-    * Created [`CloudMigrationScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/dashboard/cloud_migration_screen.dart) & [`CloudMigrationService`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/core/services/cloud_migration_service.dart).
+    * Created [`CloudMigrationScreen`](../lib/screens/dashboard/cloud_migration_screen.dart) & [`CloudMigrationService`](../lib/core/services/cloud_migration_service.dart).
     * Provides 2-way toggle: `Offline ➔ Online Cloud` and `Online Cloud ➔ Offline`.
     * Step-by-step visual tracker and statistical summary cards (Products, Customers, Bills).
 
@@ -72,11 +72,11 @@ graph TD
   * **B2B Wholesale Marketplace**, **Marketplace Vendor Portal & Catalog Publisher**, **B2B Messaging & Communication Center**, **Customer Self-Ordering App**, **Retailer Console**, **Delivery Rider App**, and **Online Payment Gateways (Razorpay, Stripe, Paytm, UPI)**.
 * **Behavior by Mode**:
   * **Online Hosted Mode (`!AppConfig.isLocalServer`)**: Features load and connect directly.
-  * **Local Offline Mode (`AppConfig.isLocalServer`)**: Displays the [`CloudFeatureGate`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/widgets/cloud_feature_gate.dart) notice explaining self-hosted VPS vs. managed Famalth cloud options.
+  * **Local Offline Mode (`AppConfig.isLocalServer`)**: Displays the [`CloudFeatureGate`](../lib/widgets/cloud_feature_gate.dart) notice explaining self-hosted VPS vs. managed Famalth cloud options.
 * **Direct Server Configuration Link**:
-  * Replaced generic settings redirects with direct navigation to [`ServerConfigScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/dashboard/server_config_screen.dart) for quick cloud server URL configuration and outlet verification.
+  * Replaced generic settings redirects with direct navigation to [`ServerConfigScreen`](../lib/screens/dashboard/server_config_screen.dart) for quick cloud server URL configuration and outlet verification.
 * **Settings Tab Cloud Notices**:
-  * Added cloud notice banners with a 1-click **"Configure Cloud URL"** button inside [`SettingsScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/settings/settings_screen.dart) (Payment Gateway & UPI) and [`VendorMarketplaceSettingsScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/settings/vendor_marketplace_settings_screen.dart).
+  * Added cloud notice banners with a 1-click **"Configure Cloud URL"** button inside [`SettingsScreen`](../lib/screens/settings/settings_screen.dart) (Payment Gateway & UPI) and [`VendorMarketplaceSettingsScreen`](../lib/screens/settings/vendor_marketplace_settings_screen.dart).
 
 ---
 
@@ -87,7 +87,7 @@ graph TD
 * **Subscription Delivery Job Active Count Pre-Check**:
   * Added global active subscription pre-checks (`milk_subscriptions.count()`) to skip unnecessary multi-tenant iterations when no active recurring deliveries exist for the day.
 * **Lifecycle-Aware Screen Timers (`WidgetsBindingObserver`)**:
-  * Implemented across [`KdsScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/restaurant/kds_screen.dart), [`CaptainDashboardScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/restaurant/captain_dashboard_screen.dart), [`RetailerConsoleScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/dashboard/retailer_console_screen.dart), and [`MainDashboardScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/dashboard/main_dashboard_screen.dart).
+  * Implemented across [`KdsScreen`](../lib/screens/restaurant/kds_screen.dart), [`CaptainDashboardScreen`](../lib/screens/restaurant/captain_dashboard_screen.dart), [`RetailerConsoleScreen`](../lib/screens/dashboard/retailer_console_screen.dart), and [`MainDashboardScreen`](../lib/screens/dashboard/main_dashboard_screen.dart).
   * Automatically **pauses periodic timers and API polling** when the application is minimized, inactive, or running in the background, and resumes only upon returning to foreground.
 * **Business Module Polling Gates**:
   * Gated KDS and live dining table polling so retail and grocery businesses never hit restaurant endpoints.
@@ -111,7 +111,7 @@ graph TD
 ### 6. 🛍️ B2B Wholesale Marketplace & Vendor Onboarding (Sept–Oct 2026)
 * **Vendor Self-Onboarding & Catalog Publishing**:
   * Merchants can toggle "Become a Marketplace Vendor", configure Minimum Order Value (MOV), operational regional hub, and accepted payment modes.
-  * Automated synchronization of active [`item_master`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/models/property/itemMaster.model.js) catalog into the regional marketplace.
+  * Automated synchronization of active [`item_master`](../backend/models/property/itemMaster.model.js) catalog into the regional marketplace.
 * **Regional Multi-City Vendor Discovery**:
   * Integrated multi-city filtering (New York, Los Angeles, Chicago, Miami, Dallas, Austin, Seattle, San Francisco, Boston).
   * Category-based trade sector filters: *Grocery & Staples, Dairy & Frozen, Bakery & Confectionery, Beverages, Personal Care, Household & Cleaning, Electronics*.
@@ -130,27 +130,27 @@ graph TD
 
 ### 8. 📦 1-Click Purchase Order Generation from Vendor Catalog (Sept–Oct 2026)
 * **Direct Catalog-to-PO Conversion**:
-  * Retailers can browse a vendor's live wholesale catalog in [`B2BMarketplaceScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/inventory/b2b_marketplace_screen.dart), add required quantities to cart, and convert directly into a formal [`purchase_orders`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/models/property/purchaseOrder.model.js) entry.
+  * Retailers can browse a vendor's live wholesale catalog in [`B2BMarketplaceScreen`](../lib/screens/inventory/b2b_marketplace_screen.dart), add required quantities to cart, and convert directly into a formal [`purchase_orders`](../backend/models/property/purchaseOrder.model.js) entry.
 * **Automated Vendor Linkage**:
-  * Automatically creates/links the vendor in [`supplier_master`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/models/property/supplierMaster.model.js) and sets up Goods Receiving Note (GRN) tracking with 1 click.
+  * Automatically creates/links the vendor in [`supplier_master`](../backend/models/property/supplierMaster.model.ts) and sets up Goods Receiving Note (GRN) tracking with 1 click.
 
 ---
 
 ### 9. 🤖 Famalth Lynx AI Assistant & Natural Language PO Generation (Sept–Oct 2026)
 * **Natural Language Store Intelligence**:
-  * Integrated Lynx AI conversational assistant in [`LynxAssistDialog`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/widgets/lynx_assist_dialog.dart) and [`ai_assist.controller.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/controllers/ai_assist.controller.ts).
+  * Integrated Lynx AI conversational assistant in [`LynxAssistModal`](../lib/widgets/lynx_assist_modal.dart) and [`ai_assist.controller.ts`](../backend/controllers/ai_assist.controller.ts).
   * Real-time intent detection for revenue analysis, low stock alerts, top-selling items, customer balance lookups, and fast POS voice shortcuts.
 * **Direct PO Generation via Natural Language**:
   * Users can converse with Lynx (e.g., *"Order 50 units of Organic Milk 1L from Amul Dairy"*).
   * Lynx parses quantities, matches supplier records, extracts item IDs, and drafts structured purchase order intents directly from chat.
 * **Universal Dashboard Search Bar**:
-  * Integrated persistent search header in [`MainDashboardScreen`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/screens/dashboard/main_dashboard_screen.dart) supporting quick navigation, customer lookup, and Lynx AI query shortcuts.
+  * Integrated persistent search header in [`MainDashboardScreen`](../lib/screens/dashboard/main_dashboard_screen.dart) supporting quick navigation, customer lookup, and Lynx AI query shortcuts.
 
 ---
 
 ### 10. 📝 Sticky Notes Collaboration System (Sept–Oct 2026)
 * **Digital Shift Sticky Notes**:
-  * Floating widget in [`StickyNoteWidget`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/widgets/sticky_note_widget.dart) and management via [`userNote.controller.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/controllers/notes/userNote.controller.ts).
+  * Floating widget in [`StickyNotesModal`](../lib/widgets/sticky_notes_modal.dart) and management via [`userNote.controller.ts`](../backend/controllers/notes/userNote.controller.ts).
   * Color-coded note cards (Yellow, Green, Blue, Purple, Orange, Pink, Teal).
   * Pinned shift notes, copy/duplicate notes, archive workflows, and recycling trash bin management.
   * User-scoped storage guaranteeing confidentiality between shift cashiers and managers.
@@ -160,9 +160,9 @@ graph TD
 ### 11. 🌍 Global Multi-Currency & Multi-Tax Matrix (Sept–Oct 2026)
 * **Multi-Currency Engine**:
   * Configurable currency symbols, ISO codes (USD, EUR, GBP, KES, INR, AED, CAD, AUD), symbol placement (before/after amount), and customizable decimal precision.
-  * Centralized formatting via [`CurrencyFormat`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/core/utils/currency_format.dart) and [`SystemSetting`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/models/property/systemSetting.model.js).
+  * Centralized formatting via [`CurrencyService`](../lib/core/currency/currency_service.dart) and [`SystemSettings`](../backend/models/property/systemSettings.model.ts).
 * **Flexible Multi-Tax Matrix (GST, CTL, VAT, CESS, Custom)**:
-  * Unified Tax Group system configured via [`taxGroup.controller.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/controllers/settings/taxGroup.controller.ts) and [`TaxGroupMaster`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/models/property/taxGroupMaster.model.js).
+  * Unified Tax Group system configured via [`taxGroup.controller.ts`](../backend/controllers/settings/taxGroup.controller.ts) and [`TaxGroup`](../backend/models/property/taxGroup.model.ts).
   * Support for Single Flat Taxes (VAT, Sales Tax), Split Destination Taxes (Indian GST: CGST + SGST / IGST), Compound Multi-Tier Taxes (CTL + VAT + CESS), and custom enterprise tax schedules.
   * Automated tax calculation in sales orders, purchase orders, invoices, thermal receipts, and financial tax liability ledgers.
 

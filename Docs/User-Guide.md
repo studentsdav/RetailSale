@@ -40,6 +40,9 @@ Click on any guide below for comprehensive step-by-step instructions:
 | 🚀 **[1-Click Cloud & Offline Store Migration](./User-Guide-1Click-Cloud-Migration.md)** | Migrating your local POS database to the cloud server or downloading your cloud store to local offline POS in 1 click. |
 | ☁️ **[Cloud Features & Server Configuration](./User-Guide-Cloud-Features-And-Server-Config.md)** | Understanding Offline vs Cloud mode, unlocking the Rider Delivery App, Customer Online Shopping App, and Server URL setup. |
 | 🛡️ **[Security & Data Protection](./User-Guide-Security-And-Data-Protection.md)** | Anti-hacker protection, failed login lockouts, duplicate invoice prevention, role permissions, and database backup safeguards. |
+| 📱 **[M-Pesa & Mobile Money Integration](./User-Guide-Mpesa-Mobile-Money.md)** | Safaricom Daraja STK push configuration, Till/Paybill cashless counter billing, and instant payment reconciliation. |
+| 🏢 **[Multi-Outlet & Warehouse Hierarchy](./User-Guide-Multi-Outlet-And-Warehouse-Hierarchy.md)** | Central distribution warehouse setup, multi-branch hierarchy linking, aisle/rack/bin stock locations, and setup wizard. |
+| 📊 **[Reports & Business Intelligence Suite](./User-Guide-Reports-And-Business-Intelligence.md)** | Generating and analyzing 26+ reports across sales, cashiers, stock valuation, brand performance, commissions, and taxes. |
 
 ---
 

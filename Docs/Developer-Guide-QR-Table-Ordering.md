@@ -104,7 +104,7 @@ The customer-facing dining interface is built for zero-friction mobile browsing 
 
 ## 4. Backend Dining & KOT Dispatch API
 
-Implemented in [`backend/controllers/restaurant/dining.controller.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/controllers/restaurant/dining.controller.ts):
+Implemented in [`backend/controllers/restaurant/dining.controller.ts`](../backend/controllers/restaurant/dining.controller.ts):
 
 ### 1. `GET /api/restaurant/dining/catalog`
 Fetches public menu, categories, and table metadata for guest devices.

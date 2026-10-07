@@ -725,3 +725,64 @@ exports.pinLogin = async (req, res) => {
         return res.status(500).json({ success: false, message: 'PIN login failed: ' + error.message });
     }
 };
+
+exports.getQuickUsers = async (req, res) => {
+    try {
+        const { outlet_code, role } = req.query;
+        if (!outlet_code) {
+            return res.status(400).json({ success: false, message: 'outlet_code is required' });
+        }
+        const db = req.propertyDb;
+        const currentOutlet = await db.models.outlets.findOne({
+            where: { outlet_code, is_active: true }
+        });
+        if (!currentOutlet) {
+            return res.status(404).json({ success: false, message: 'Outlet not found' });
+        }
+
+        const { Op } = require('sequelize');
+        const whereClause = {
+            outlet_id: currentOutlet.id,
+            is_active: true,
+            [Op.or]: [
+                { show_in_quick_login: true },
+                { show_in_quick_login: null }
+            ]
+        };
+
+        if (role) {
+            const reqRole = role.toString().toUpperCase().trim();
+            if (['WAITER', 'CAPTAIN', 'CAPTION', 'STEWARD', 'SERVER'].includes(reqRole)) {
+                whereClause.role = {
+                    [Op.in]: ['WAITER', 'CAPTAIN', 'CAPTION', 'STEWARD', 'SERVER', 'MANAGER', 'ADMIN']
+                };
+            } else {
+                whereClause.role = {
+                    [Op.in]: [reqRole, 'ADMIN', 'MANAGER']
+                };
+            }
+        }
+
+        const users = await db.models.users.findAll({
+            where: whereClause,
+            attributes: ['id', 'username', 'full_name', 'role', 'pin_code', 'show_in_quick_login'],
+            order: [['full_name', 'ASC'], ['username', 'ASC']]
+        });
+
+        const formatted = users.map(u => ({
+            id: u.id,
+            username: u.username,
+            full_name: u.full_name || u.username,
+            role: u.role,
+            has_pin: !!(u.pin_code && u.pin_code.toString().trim().length > 0)
+        }));
+
+        return res.json({ success: true, data: formatted });
+    } catch (err) {
+        console.error('[GET QUICK USERS ERROR]', err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+module.exports = exports;
+

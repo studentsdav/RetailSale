@@ -48,10 +48,10 @@ sequenceDiagram
 
 ---
 
-### 2. 📝 Sticky Notes & Reminder System (`lib/widgets/notes/sticky_notes_modal.dart`)
+### 2. 📝 Sticky Notes & Reminder System (`lib/widgets/sticky_notes_modal.dart`)
 * **Architecture**:
-  * Frontend: [`StickyNotesModal`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/widgets/notes/sticky_notes_modal.dart), [`UserNotesController`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/controllers/notes/user_notes_controller.dart), [`UserNote`](file:///d:/inventorynew/RetailSale%20new/RetailSale/lib/models/notes/user_note_model.dart).
-  * Backend: [`userNote.routes.ts`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/routes/userNote.routes.ts) & [`userNote.model.js`](file:///d:/inventorynew/RetailSale%20new/RetailSale/backend/models/property/userNote.model.js).
+  * Frontend: [`StickyNotesModal`](../lib/widgets/sticky_notes_modal.dart), `UserNotesController`, `UserNote`.
+  * Backend: [`userNote.routes.ts`](../backend/routes/userNote.routes.ts) & [`userNote.model.ts`](../backend/models/property/userNote.model.ts).
 * **Capabilities**:
   * **Color-Coded Organization**: Assign pastel colors (Yellow, Blue, Green, Pink, Purple, Orange) for priority categorization.
   * **Pin to Dashboard**: Pin critical shift notes, supplier delivery reminders, or cash drawer handover checklists.
