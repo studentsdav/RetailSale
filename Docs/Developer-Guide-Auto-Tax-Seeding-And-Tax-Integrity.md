@@ -1,10 +1,10 @@
-# Developer Guide: Multi-Country Tax Seeding & Tax Group Deletion Integrity
+﻿# Developer Guide: Multi-Country Tax Seeding & Tax Group Deletion Integrity
 
 This technical guide documents the automatic multi-country tax seeding engine, international fiscal rule catalogs, relational integrity checks, and replacement workflows.
 
 ---
 
-## 📑 Table of Contents
+## ðŸ“‘ Table of Contents
 1. [Architecture & System Flow](#1-architecture--system-flow)
 2. [Multi-Country Fiscal Catalogs](#2-multi-country-fiscal-catalogs)
 3. [Auto-Seeding Engine Implementation](#3-auto-seeding-engine-implementation)
@@ -26,11 +26,11 @@ flowchart TD
     B -- No --> F
 
     F --> G[User Triggers Delete on Tax Group]
-    G --> H[Check `item_master` for linked `tax_group_id`]
+    G --> H[Check item_master for linked tax_group_id]
     H --> I{Is Tax Linked to Products?}
     I -- Yes --> J[Block Deletion with 400 Bad Request]
     J --> K[Prompt User with Safe Replacement Dialog]
-    K --> L[Bulk Reassign Items: `UPDATE item_master SET tax_group_id = target`]
+    K --> L[Bulk Reassign Items: UPDATE item_master SET tax_group_id = target]
     L --> M[Safe Delete Original Tax Group]
     I -- No --> M
 ```

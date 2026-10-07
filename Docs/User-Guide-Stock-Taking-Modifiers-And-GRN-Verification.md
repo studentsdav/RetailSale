@@ -6,7 +6,7 @@ This guide explains how to conduct physical inventory stock takes, configure ite
 
 ## 📑 Table of Contents
 1. [Physical Stock Taking & Inventory Variance Audits](#1-physical-stock-taking--inventory-variance-audits)
-2. [Managing Modifiers & Add-ons (e.g. Extra Cheese)](#2-managing-modifiers--add-ons-eg-extra-cheese)
+2. [Managing Modifiers & Add-ons inside Item Master (e.g. Extra Cheese)](#2-managing-modifiers--add-ons-inside-item-master-eg-extra-cheese)
 3. [Veg / Non-Veg Dietary Tags in Item Master](#3-veg--non-veg-dietary-tags-in-item-master)
 4. [Using the Waiter App for Direct Kitchen KOT Orders](#4-using-the-waiter-app-for-direct-kitchen-kot-orders)
 5. [⚠️ Critical Store Rule: Manual Goods Receiving (GRN) Only](#5-️-critical-store-rule-manual-goods-receiving-grn-only)
@@ -31,18 +31,19 @@ Periodic stock audits reconcile your on-hand physical warehouse count with syste
 
 ---
 
-## 2. Managing Modifiers & Add-ons (e.g. Extra Cheese)
+## 2. Managing Modifiers & Add-ons inside Item Master (e.g. Extra Cheese)
 
-Modifiers allow customers to customize their meals with optional extras:
+Modifiers and add-ons are managed directly within **Item Master** (no separate screen needed):
 
-1. Open **Restaurant / Inventory** $\rightarrow$ **Modifier Master**.
-2. Click **+ Add Modifier**:
-   - **Modifier Name**: *Extra Cheese Block*.
-   - **Extra Selling Price**: `+₹40.00`.
-   - **Linked Menu Items**: Select *Margherita Pizza*, *Farmhouse Pizza*, *Burger*.
-   - **Raw Material Stock Deduction**: Link to raw store item *Processed Cheddar Cheese Block* and enter deduction qty `0.05 KG`.
-3. Save.
-4. When a waiter or QR guest adds *Extra Cheese*, the customer bill increases by ₹40, and 50 grams of cheese is automatically deducted from inventory.
+1. Open **Operations / Inventory** $\rightarrow$ **Item Master** (`item_master_screen.dart`).
+2. Click **+ Add Item** (or edit an existing item):
+   - **Item Name**: e.g., *Extra Cheese Block*, *Almond Milk*, *Double Patty*.
+   - **Selling Price / Rate**: Enter the extra charge (e.g., `+₹40.00`).
+   - **Toggle "Is Modifier / Add-on"**: Enable this toggle chip to display the modifier configuration panel.
+   - **Applicable Menu Items**: Select which parent dishes/menu items this add-on applies to (e.g., *Margherita Pizza*, *Farmhouse Pizza*, *Burger*).
+   - **Raw Material Stock Deduction (Optional Recipe Link)**: Select the raw inventory item (e.g., *Processed Cheddar Cheese Block*) and enter the deduction quantity (e.g., `0.05 KG` or `50 GM`).
+3. Click **Save Item**.
+4. **POS & Waiter Operation**: When a waiter, cashier, or QR ordering guest selects *Extra Cheese*, the customer bill increases by ₹40, and 50 grams of cheese is automatically deducted from inventory upon order completion.
 
 ---
 

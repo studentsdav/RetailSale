@@ -60,11 +60,19 @@ const ROLE_MAX_DISCOUNTS = {
 
 exports.listUsers = async (req, res) => {
     const outlet_id = req.user.outlet_id;
+    const isAdmin = (req.user.role || '').toUpperCase() === 'ADMIN';
     const users = await req.propertyDb.models.users.findAll({
         where: { outlet_id },
         attributes: { exclude: ['password_hash'] }
     });
-    res.json({ success: true, data: users });
+    const sanitized = users.map((u) => {
+        const userJson = u.toJSON ? u.toJSON() : { ...u };
+        if (!isAdmin) {
+            userJson.pin_code = userJson.pin_code ? '••••' : null;
+        }
+        return userJson;
+    });
+    res.json({ success: true, data: sanitized });
 };
 
 exports.checkUsernameAvailability = async (req, res) => {
@@ -498,6 +506,10 @@ const activeSupervisorOtps = new Map();
 exports.getSupervisorPin = async (req, res) => {
     try {
         const outlet_id = req.user.outlet_id;
+        const isAdmin = (req.user.role || '').toUpperCase() === 'ADMIN';
+        if (!isAdmin) {
+            return res.status(403).json({ success: false, message: 'Only Administrators can view supervisor PIN settings' });
+        }
         const outlet = await req.propertyDb.models.outlets.findOne({ where: { id: outlet_id } });
         res.json({
             success: true,

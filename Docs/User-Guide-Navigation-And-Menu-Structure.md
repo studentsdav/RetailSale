@@ -57,10 +57,9 @@ Under the **Operations** dropdown menu, you will find streamlined categories:
 3. **Supplier Master**: Manage vendor profiles, tax registrations, opening balances, and payment terms.
 
 ### 📦 Inventory & Stock
-1. **Item Master & Barcodes**: Product catalogue, categories, sub-categories, MRP/Selling prices, Veg/Non-Veg dietary flags, and barcode printing.
-2. **Modifiers Master**: Configurable toppings, add-ons (e.g., extra cheese, spicy spice levels) linked to raw materials.
-3. **Stock Taking & Audit**: Cycle count tool with variance calculation and reconciliation reporting.
-4. **Stock Transfers**: Inter-outlet and central warehouse inventory movements.
+1. **Item Master & Barcodes**: Product catalogue, categories, sub-categories, MRP/Selling prices, Veg/Non-Veg dietary flags, barcode printing, and **Item Modifiers & Add-ons** (configured directly within dishes/items).
+2. **Stock Taking & Audit**: Cycle count tool with variance calculation and reconciliation reporting.
+3. **Stock Transfers**: Inter-outlet and central warehouse inventory movements.
 
 ---
 

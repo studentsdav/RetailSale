@@ -60,7 +60,10 @@ sequenceDiagram
 
 ## 2. Item Modifiers & Recipe Stock Deduction Engine
 
-Modifiers allow configurable add-ons and preparation variations (e.g. *Extra Cheese*, *Almond Milk*, *Double Patty*).
+Modifiers allow configurable add-ons and preparation variations (e.g. *Extra Cheese*, *Almond Milk*, *Double Patty*). 
+
+> [!NOTE]
+> **Unified Item Master Architecture**: Rather than maintaining a separate disconnected "Modifier Master", modifiers and add-ons are modeled as first-class items within `item_master` (`is_modifier = TRUE`). This allows modifiers to have barcodes, tax rates, selling prices, and optional BOM raw material consumption links directly within the unified catalogue.
 
 ### Database Schema in `item_master`:
 ```sql

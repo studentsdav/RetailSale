@@ -1,27 +1,27 @@
-# 🏢 Developer Guide: Multi-Outlet & Warehouse Hierarchy Architecture
+﻿# ðŸ¢ Developer Guide: Multi-Outlet & Warehouse Hierarchy Architecture
 
 This technical document details the multi-tenant outlet scoping middleware, hierarchical warehouse tree data structures, branch-scoped document numbering sequences, and cross-outlet stock transfer state isolation.
 
 ---
 
-## 🏗️ Multi-Outlet Scoping & Context Middleware
+## ðŸ—ï¸ Multi-Outlet Scoping & Context Middleware
 
 The system isolates store data while enabling unified enterprise consolidation:
 
 ```mermaid
 flowchart TD
-    Req["Incoming HTTP Request with JWT"] --> AuthMid["`auth.middleware` extracts `req.user.outlet_code`"]
-    AuthMid --> OutletMid["`outlet.middleware` / `propertyContext.middleware`"]
+    Req["Incoming HTTP Request with JWT"] --> AuthMid["auth.middleware extracts req.user.outlet_code"]
+    AuthMid --> OutletMid["outlet.middleware / propertyContext.middleware"]
     OutletMid --> ScopeCheck{"Is User Admin / Global Owner?"}
-    ScopeCheck -- Yes --> GlobalScope["Allow cross-outlet filters via `?outlet_code=...`"]
-    ScopeCheck -- No --> BranchScope["Strictly bind queries to `WHERE outlet_code = req.user.outlet_code`"]
+    ScopeCheck -- Yes --> GlobalScope["Allow cross-outlet filters via ?outlet_code=..."]
+    ScopeCheck -- No --> BranchScope["Strictly bind queries to WHERE outlet_code = req.user.outlet_code"]
     GlobalScope --> DB["Execute Scoped Sequelize Query"]
     BranchScope --> DB
 ```
 
 ---
 
-## 🗄️ Relational Database Schema & Models
+## ðŸ—„ï¸ Relational Database Schema & Models
 
 ### 1. `Outlet` (Branch Master)
 - `id` (PK, Integer)
@@ -50,7 +50,7 @@ flowchart TD
 
 ---
 
-## 🔄 Cross-Outlet Stock Request & Transfer Protocols
+## ðŸ”„ Cross-Outlet Stock Request & Transfer Protocols
 
 ```mermaid
 sequenceDiagram
@@ -61,7 +61,7 @@ sequenceDiagram
     participant Warehouse as Central Warehouse (OUTLET_01)
 
     Branch->>API: POST /api/inventory/transfers/request {source: OUTLET_01, target: OUTLET_02, items}
-    API->>DB: Insert `StockTransferHeader` (Status: REQUESTED)
+    API->>DB: Insert StockTransferHeader (Status: REQUESTED)
     API-->>Branch: Request Created (ID: TRF-2026-0089)
 
     Warehouse->>API: POST /api/inventory/transfers/dispatch {transferId, vehicleNo}
@@ -75,14 +75,14 @@ sequenceDiagram
 
 ---
 
-## 📡 REST API Endpoint Specifications
+## ðŸ“¡ REST API Endpoint Specifications
 
-- `GET /api/public/outlet` — List registered outlets.
-- `POST /api/public/outlet` — Register new outlet terminal.
-- `GET /api/inventory/stock-locations` — List warehouse aisles and bin locations.
-- `POST /api/inventory/stock-locations` — Create stock storage zone.
-- `GET /api/inventory/numbering-settings` — Retrieve sequence formatting for outlet.
-- `POST /api/inventory/numbering-settings` — Update sequence rules (Prefix/Suffix/Padding).
+- `GET /api/public/outlet` â€” List registered outlets.
+- `POST /api/public/outlet` â€” Register new outlet terminal.
+- `GET /api/inventory/stock-locations` â€” List warehouse aisles and bin locations.
+- `POST /api/inventory/stock-locations` â€” Create stock storage zone.
+- `GET /api/inventory/numbering-settings` â€” Retrieve sequence formatting for outlet.
+- `POST /api/inventory/numbering-settings` â€” Update sequence rules (Prefix/Suffix/Padding).
 
 ---
 

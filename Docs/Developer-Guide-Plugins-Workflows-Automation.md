@@ -1,22 +1,22 @@
-# 🔌 Developer Guide: Plugins, Workflows & Automation Architecture
+﻿# ðŸ”Œ Developer Guide: Plugins, Workflows & Automation Architecture
 
 This technical document details the plugin sandboxing framework, event-driven workflow automation engine, WhatsApp BullMQ queue worker, and developer ecosystem API key architecture.
 
 ---
 
-## 🏗️ System Architecture Overview
+## ðŸ—ï¸ System Architecture Overview
 
 ```text
 Extensibility & Automation Layer
-├── 🧩 Plugin Marketplace & Sandboxed Execution Engine (`/api/v1/plugins`)
-├── ⚡ Event-Driven Workflow Automation Engine (`/api/v1/workflows`)
-├── 📱 WhatsApp Cloud API & Async BullMQ Queue (`/api/whatsapp`)
-└── 🔑 Developer API Token & Outbound Webhook Subsystem (`/api/v1/developer`)
+â”œâ”€â”€ ðŸ§© Plugin Marketplace & Sandboxed Execution Engine (`/api/v1/plugins`)
+â”œâ”€â”€ âš¡ Event-Driven Workflow Automation Engine (`/api/v1/workflows`)
+â”œâ”€â”€ ðŸ“± WhatsApp Cloud API & Async BullMQ Queue (`/api/whatsapp`)
+â””â”€â”€ ðŸ”‘ Developer API Token & Outbound Webhook Subsystem (`/api/v1/developer`)
 ```
 
 ---
 
-## 🧩 Plugin Marketplace & Sandbox Lifecycle
+## ðŸ§© Plugin Marketplace & Sandbox Lifecycle
 
 The plugin subsystem (`backend/services/plugin_manager.service.ts`) enables third-party developers to extend the POS with custom integrations (payment gateways, accounting exports, loyalty providers):
 
@@ -40,9 +40,9 @@ The plugin subsystem (`backend/services/plugin_manager.service.ts`) enables thir
 
 ---
 
-## ⚡ Event-Driven Workflow Automation Engine
+## âš¡ Event-Driven Workflow Automation Engine
 
-The workflow engine executes user-defined **Trigger ➔ Condition ➔ Action** rules:
+The workflow engine executes user-defined **Trigger âž” Condition âž” Action** rules:
 
 ```mermaid
 flowchart LR
@@ -62,7 +62,7 @@ flowchart LR
 
 ---
 
-## 📱 WhatsApp Cloud API & Async BullMQ Queue
+## ðŸ“± WhatsApp Cloud API & Async BullMQ Queue
 
 Transactional messages (e-invoices, POs, OTPs, promotional campaigns) are dispatched asynchronously to guarantee sub-millisecond POS checkout without waiting for HTTP network calls:
 
@@ -75,20 +75,20 @@ sequenceDiagram
     participant Meta as Meta WhatsApp Cloud API
     
     POS->>API: Sale Done -> Send E-Receipt to Customer
-    API->>Redis: Enqueue Job `SEND_WHATSAPP_INVOICE` (Priority: HIGH)
+    API->>Redis: Enqueue Job SEND_WHATSAPP_INVOICE (Priority: HIGH)
     API-->>POS: HTTP 200 OK (Job Enqueued, Checkout completes instantly)
     
     loop Worker Loop
         Redis->>Worker: Dequeue Job
         Worker->>Meta: POST https://graph.facebook.com/v18.0/...
         Meta-->>Worker: HTTP 200 OK (Message ID)
-        Worker->>Worker: Log Status: DELIVERED in `whatsapp_logs`
+        Worker->>Worker: Log Status: DELIVERED in whatsapp_logs
     end
 ```
 
 ---
 
-## 🔑 Developer Ecosystem: API Keys & Webhooks
+## ðŸ”‘ Developer Ecosystem: API Keys & Webhooks
 
 External systems (custom eCommerce websites, ERPs, mobile apps) can integrate using scoped Developer API Keys:
 
@@ -109,18 +109,18 @@ Receiving servers can verify this signature to guarantee authenticity.
 
 ---
 
-## 📡 REST API Endpoint Specifications
+## ðŸ“¡ REST API Endpoint Specifications
 
-- `GET /api/v1/plugins/marketplace` — Fetch available plugin directory.
-- `POST /api/v1/plugins/install` — Download and register plugin sandbox.
-- `POST /api/v1/plugins/:id/toggle` — Enable or disable installed plugin.
-- `GET /api/v1/workflows/rules` — List configured automation rules.
-- `POST /api/v1/workflows/rules/:id/toggle` — Activate/deactivate rule.
-- `POST /api/v1/workflows/trigger` — Emit event into workflow pipeline.
-- `GET /api/whatsapp/config` — Retrieve WhatsApp API setup.
-- `POST /api/whatsapp/config` — Update Meta Cloud API tokens & phone number ID.
-- `GET /api/v1/developer/api-keys` — List generated developer integration keys.
-- `POST /api/v1/developer/api-keys` — Generate new scoped developer API key.
+- `GET /api/v1/plugins/marketplace` â€” Fetch available plugin directory.
+- `POST /api/v1/plugins/install` â€” Download and register plugin sandbox.
+- `POST /api/v1/plugins/:id/toggle` â€” Enable or disable installed plugin.
+- `GET /api/v1/workflows/rules` â€” List configured automation rules.
+- `POST /api/v1/workflows/rules/:id/toggle` â€” Activate/deactivate rule.
+- `POST /api/v1/workflows/trigger` â€” Emit event into workflow pipeline.
+- `GET /api/whatsapp/config` â€” Retrieve WhatsApp API setup.
+- `POST /api/whatsapp/config` â€” Update Meta Cloud API tokens & phone number ID.
+- `GET /api/v1/developer/api-keys` â€” List generated developer integration keys.
+- `POST /api/v1/developer/api-keys` â€” Generate new scoped developer API key.
 
 ---
 

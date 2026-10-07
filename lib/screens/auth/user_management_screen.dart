@@ -165,6 +165,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   ];
 
   String _userBusinessModule = 'ALL';
+  String _currentUserRole = '';
+  bool get _isAdmin => _currentUserRole.toUpperCase() == 'ADMIN';
 
   List<PermissionGroup> get filteredPermissionGroups {
     return permissionGroups.where((group) {
@@ -204,8 +206,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Future<void> _loadActiveModule() async {
     final userMap = await TokenStorage.getUser();
     final mod = userMap?['business_module'] ?? userMap?['outlet_module'] ?? 'ALL';
+    final role = (userMap?['role'] ?? '').toString();
     if (!mounted) return;
-    setState(() => _userBusinessModule = mod);
+    setState(() {
+      _userBusinessModule = mod;
+      _currentUserRole = role;
+    });
   }
 
   @override
@@ -240,16 +246,18 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         title: const Text('User Management'),
         centerTitle: true,
         actions: [
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Color(0xFFFF7A1A)),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          if (_isAdmin) ...[
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFFF7A1A)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+              icon: const Icon(Icons.shield_outlined, color: Color(0xFFFF7A1A)),
+              label: const Text('Supervisor PIN', style: TextStyle(color: Color(0xFFFF7A1A), fontWeight: FontWeight.bold)),
+              onPressed: _openSupervisorPinDialog,
             ),
-            icon: const Icon(Icons.shield_outlined, color: Color(0xFFFF7A1A)),
-            label: const Text('Supervisor PIN', style: TextStyle(color: Color(0xFFFF7A1A), fontWeight: FontWeight.bold)),
-            onPressed: _openSupervisorPinDialog,
-          ),
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
+          ],
           FilledButton.icon(
             icon: const Icon(Icons.person_add),
             label: const Text('Add User'),
@@ -343,14 +351,15 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.pin, size: 14, color: Colors.teal),
+                                  Icon(_isAdmin ? Icons.pin : Icons.lock_outline, size: 14, color: Colors.teal),
                                   const SizedBox(width: 4),
                                   Text(
-                                    u.pinCode!.trim(),
+                                    _isAdmin ? u.pinCode!.trim() : '••••',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: Colors.teal.shade800,
                                       fontSize: 12,
+                                      letterSpacing: _isAdmin ? 0 : 2,
                                     ),
                                   ),
                                 ],
@@ -590,6 +599,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     bool isOtpSent = false;
     bool isLoading = false;
     bool obscurePass = true;
+    bool obscurePin = true;
     String? dialogError;
 
     showDialog(
@@ -761,16 +771,21 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         TextFormField(
                           controller: pinCode,
                           keyboardType: TextInputType.number,
+                          obscureText: obscurePin,
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                             LengthLimitingTextInputFormatter(6),
                           ],
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Quick Login PIN (4-6 Digits)',
                             hintText: 'e.g. 123456',
                             helperText: 'For fast PIN login in Waiter, POS & Floor apps',
-                            prefixIcon: Icon(Icons.pin_rounded),
-                            border: OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.pin_rounded),
+                            suffixIcon: IconButton(
+                              icon: Icon(obscurePin ? Icons.visibility_off : Icons.visibility),
+                              onPressed: () => setDialogState(() => obscurePin = !obscurePin),
+                            ),
+                            border: const OutlineInputBorder(),
                           ),
                           validator: (v) {
                             if (v != null && v.trim().isNotEmpty) {
@@ -1094,6 +1109,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     bool isEmailVerified = originalEmail.isNotEmpty;
     bool isOtpSent = false;
     bool isLoading = false;
+    bool obscurePin = true;
 
     showDialog(
       context: context,
@@ -1192,16 +1208,21 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         TextFormField(
                           controller: pinCode,
                           keyboardType: TextInputType.number,
+                          obscureText: obscurePin,
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                             LengthLimitingTextInputFormatter(6),
                           ],
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Quick Login PIN (4-6 Digits)',
                             hintText: 'e.g. 123456',
                             helperText: 'For fast PIN login in Waiter, POS & Floor apps',
-                            prefixIcon: Icon(Icons.pin_rounded),
-                            border: OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.pin_rounded),
+                            suffixIcon: IconButton(
+                              icon: Icon(obscurePin ? Icons.visibility_off : Icons.visibility),
+                              onPressed: () => setDialogState(() => obscurePin = !obscurePin),
+                            ),
+                            border: const OutlineInputBorder(),
                           ),
                           validator: (v) {
                             if (v != null && v.trim().isNotEmpty) {
