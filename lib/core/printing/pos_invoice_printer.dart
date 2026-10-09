@@ -1988,9 +1988,9 @@ class PosInvoicePrinter {
       }
       final suffix = isReturned ? ' (REFUNDED)' : (isExchanged ? ' (EXCHANGED)' : '');
 
-      final brandStr = showBrand && item.brand != null && item.brand!.trim().isNotEmpty
-          ? '${item.brand!.trim()} - '
-          : '';
+      final rawBrand = (showBrand && item.brand != null && item.brand!.trim().isNotEmpty) ? item.brand!.trim() : '';
+      final bool alreadyHasBrand = rawBrand.isNotEmpty && item.itemName.trim().toLowerCase().startsWith(rawBrand.toLowerCase());
+      final brandStr = (rawBrand.isNotEmpty && !alreadyHasBrand) ? '$rawBrand - ' : '';
       final List mods = item.modifierDetails ?? [];
       final String modsStr = mods.isNotEmpty ? '\n* Mods: ${mods.join(", ")}' : '';
       final String remarkStr = (item.itemRemark != null && item.itemRemark!.trim().isNotEmpty) ? '\n* Note: ${item.itemRemark!.trim()}' : '';
@@ -2657,9 +2657,14 @@ class PosInvoicePrinter {
             children: [
               pw.Expanded(
                 child: pw.Text(
-                  (item.isSchemeFree || item.isAdvanceFree)
-                      ? '${showBrand && item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()} (FREE)$suffix'
-                      : '${showBrand && item.brand != null && item.brand!.trim().isNotEmpty ? '${item.brand!.trim()} - ' : ''}${item.itemName.trim()}$suffix',
+                  () {
+                    final String rawBrand = (showBrand && item.brand != null && item.brand!.trim().isNotEmpty) ? item.brand!.trim() : '';
+                    final String rawName = item.itemName.trim();
+                    final bool alreadyHasBrand = rawBrand.isNotEmpty && rawName.toLowerCase().startsWith(rawBrand.toLowerCase());
+                    final String displayName = (rawBrand.isNotEmpty && !alreadyHasBrand) ? '$rawBrand - $rawName' : rawName;
+                    final bool isFree = item.isSchemeFree || item.isAdvanceFree;
+                    return isFree ? '$displayName (FREE)$suffix' : '$displayName$suffix';
+                  }(),
                   style: pw.TextStyle(
                     fontWeight: pw.FontWeight.bold,
                     fontSize: 8.7,
@@ -3184,10 +3189,12 @@ class PosInvoicePrinter {
       if (charge.taxGroup != null && charge.taxGroup!.components.isNotEmpty) {
         for (final comp in charge.taxGroup!.components) {
           final compAmount = taxableAmount * comp.rate / 100;
+          final rawCompName = comp.componentName.trim();
+          final compName = _cleanTaxComponentName(rawCompName, fallback: comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX');
           addTax(
             TaxBreakdown(
               code: comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX',
-              label: '${comp.componentName} (${_formatTaxPercent(comp.rate)}%)',
+              label: '$compName (${_formatTaxPercent(comp.rate)}%)',
               taxType: comp.componentCode,
               rate: comp.rate,
               taxableAmount: taxableAmount,
@@ -3458,7 +3465,8 @@ class PosInvoicePrinter {
       final list = <TaxBreakdown>[];
       for (final comp in item.taxGroup!.components) {
         final compAmount = taxableAmount * comp.rate / 100;
-        final compName = comp.componentName.isNotEmpty ? comp.componentName : (isIndia ? 'GST' : 'Sales Tax');
+        final rawCompName = comp.componentName.trim();
+        final compName = _cleanTaxComponentName(rawCompName, fallback: isIndia ? 'GST' : 'Sales Tax');
         list.add(
           TaxBreakdown(
             code: comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX',
@@ -3474,7 +3482,27 @@ class PosInvoicePrinter {
     }
 
     if (item.taxBreakup.isNotEmpty) {
-      return item.taxBreakup;
+      final hasRawTaxGroup = item.taxBreakup.any((t) =>
+          t.code.toUpperCase().contains('TAX_GROUP') ||
+          t.label.toUpperCase().contains('TAX_GROUP'));
+      if (!hasRawTaxGroup) {
+        return item.taxBreakup.map((t) {
+          final cleanedLabel = t.label
+              .replaceAll(RegExp(r'\s*\(\s*\d+(\.\d+)?%\s*\)\s*\(\s*\d+(\.\d+)?%\s*\)', caseSensitive: false), ' (${_formatTaxPercent(t.rate)}%)')
+              .trim();
+          if (cleanedLabel != t.label) {
+            return TaxBreakdown(
+              code: t.code,
+              label: cleanedLabel,
+              taxType: t.taxType,
+              rate: t.rate,
+              taxableAmount: t.taxableAmount,
+              taxAmount: t.taxAmount,
+            );
+          }
+          return t;
+        }).toList();
+      }
     }
 
     final normalizedType = item.taxType.trim().toUpperCase();
@@ -3639,42 +3667,88 @@ class PosInvoicePrinter {
     ];
   }
 
+  static String _cleanTaxComponentName(String raw, {String fallback = 'TAX'}) {
+    if (raw.trim().isEmpty) return fallback;
+    final cleaned = raw
+        .replaceAll(RegExp(r'\s*\(\s*\d+(\.\d+)?%\s*\)', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s*\b\d+(\.\d+)?%\s*$', caseSensitive: false), '')
+        .trim();
+    if (cleaned.isEmpty ||
+        cleaned.toUpperCase().contains('TAX_GROUP') ||
+        cleaned.toUpperCase().contains('TAX_DEFAULT') ||
+        cleaned.toUpperCase() == 'DEFAULT') {
+      return fallback;
+    }
+    return cleaned;
+  }
+
   static String _taxPrefix(SaleOrder order, SaleItem item) {
+    final bool isIndia = CountryTaxHelper.isIndiaCountry(order.billingCountry);
     if (item.taxGroup != null) {
-      final code = (item.taxGroup!.groupCode ?? '').trim();
-      if (code.isNotEmpty) {
-        return code;
-      }
       final name = item.taxGroup!.groupName.trim();
-      if (name.isNotEmpty) {
+      if (name.isNotEmpty &&
+          !name.toUpperCase().contains('TAX_GROUP') &&
+          !name.toUpperCase().contains('TAX_DEFAULT') &&
+          name.toUpperCase() != 'DEFAULT') {
         // Remove duplicate trailing rate/percentage so "GST 5%" doesn't become "GST 5% 5%"
         final cleaned = name
             .replaceAll(RegExp(r'\s*\(\s*\d+(\.\d+)?%\s*\)\s*$', caseSensitive: false), '')
             .replaceAll(RegExp(r'\s*\b\d+(\.\d+)?%\s*$', caseSensitive: false), '')
+            .replaceAll(RegExp(r'[_]+'), ' ')
             .trim();
+        final cleanWord = cleaned.replaceAll(RegExp(r'\s+\d+(\.\d+)?\s*$', caseSensitive: false), '').trim();
+        if (cleanWord.isNotEmpty) {
+          return cleanWord;
+        }
         if (cleaned.isNotEmpty) {
           return cleaned;
         }
-        return name;
+      }
+
+      final code = (item.taxGroup!.groupCode ?? '').trim();
+      if (code.isNotEmpty &&
+          !code.toUpperCase().contains('TAX_GROUP') &&
+          !code.toUpperCase().contains('TAX_DEFAULT') &&
+          code.toUpperCase() != 'DEFAULT') {
+        final codeCleaned = code
+            .replaceAll(RegExp(r'[_0-9\.]+$'), '')
+            .replaceAll(RegExp(r'[_]+'), ' ')
+            .trim();
+        if (codeCleaned.isNotEmpty) {
+          return codeCleaned;
+        }
       }
     }
     final normType = item.taxType.trim().toUpperCase();
-    if (normType == 'GST' || normType == 'CGST_SGST' || normType == 'IGST' || normType == 'GST_INCLUSIVE') {
+    if (normType == 'GST' ||
+        normType == 'CGST_SGST' ||
+        normType == 'IGST' ||
+        normType == 'GST_INCLUSIVE' ||
+        normType.startsWith('GST')) {
       return 'GST';
     }
-    if (normType == 'US_SALES_TAX' || normType == 'COMPOSITE' || normType == 'SALES_TAX') {
+    if (normType == 'US_SALES_TAX' ||
+        normType == 'COMPOSITE' ||
+        normType == 'SALES_TAX' ||
+        normType.contains('SALES')) {
       return 'Sales Tax';
     }
-    if (normType == 'VAT' || normType == 'VAT_ONLY' || normType == 'VAT_CTL') {
+    if (normType == 'VAT' ||
+        normType == 'VAT_ONLY' ||
+        normType == 'VAT_CTL' ||
+        normType.startsWith('VAT')) {
       return 'VAT';
     }
     if (normType == 'CESS') return 'CESS';
+    if (normType == 'TAX_GROUP') {
+      return isIndia ? 'GST' : 'Tax';
+    }
     if (normType == 'CUSTOM' || normType == 'OTHER') return 'Tax';
     if (normType == 'NONE') return 'Tax';
     if (order.billingTaxMode == 'VAT') return 'VAT';
-    if (order.billingTaxMode == 'SALES_TAX') return 'Sales Tax';
+    if (order.billingTaxMode == 'SALES_TAX' || order.billingTaxMode == 'US_SALES_TAX') return 'Sales Tax';
     if (order.billingTaxMode == 'NONE') return 'Tax';
-    return 'GST';
+    return isIndia ? 'GST' : 'Tax';
   }
 
   static TaxBreakdown? _itemTaxForCode(SaleOrder order, SaleItem item, String code) {
@@ -3889,8 +3963,9 @@ class PosInvoicePrinter {
     final String headerSubtext = (cfg['header_subtext']?.toString().trim().isNotEmpty == true)
         ? cfg['header_subtext'].toString().trim()
         : (property?.address ?? '');
-    final String taxRegNo = (cfg['tax_reg_no']?.toString().trim().isNotEmpty == true)
-        ? cfg['tax_reg_no'].toString().trim()
+    final rawTaxReg = (cfg['tax_reg_no']?.toString().trim() ?? '');
+    final String taxRegNo = (rawTaxReg.isNotEmpty && !rawTaxReg.toUpperCase().contains('TAX_DEFAULT'))
+        ? rawTaxReg
         : '';
 
     final bodyStyle = pw.TextStyle(font: fontRegular, fontSize: 8.9 * scale, color: _thermalSecondary);
@@ -3948,7 +4023,7 @@ class PosInvoicePrinter {
                   'Website: ${property.website}',
                   textAlign: pw.TextAlign.center,
                 ),
-              if (property.gstNo.isNotEmpty)
+              if (property.gstNo.isNotEmpty && !property.gstNo.toUpperCase().contains('TAX_DEFAULT'))
                 pw.Text(
                   '${_taxIdLabel(country)}: ${property.gstNo}',
                   textAlign: pw.TextAlign.center,

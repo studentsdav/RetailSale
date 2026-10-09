@@ -83,14 +83,28 @@ export const getTableDiningInfo = async (req: Request, res: Response) => {
         }
 
         let allowNegativeStock = false;
-        let baseCurrencySymbol = '€';
-        let baseCurrencyCode = 'EUR';
+        let baseCurrencySymbol = '₹';
+        let baseCurrencyCode = 'INR';
         let billingTaxMode = 'GST';
         let enablePaymentGateway = false;
         let paymentGatewayProvider = 'SANDBOX';
         let merchantUpiId = '';
-        if ((req as any).propertyDb.models.system_settings) {
-            const sysSettings = await (req as any).propertyDb.models.system_settings.findOne({ where: { outlet_id } });
+
+        if (propInfo && propInfo.currency_symbol) {
+            baseCurrencySymbol = propInfo.currency_symbol;
+        }
+        if (propInfo && propInfo.currency_code) {
+            baseCurrencyCode = propInfo.currency_code;
+        }
+
+        if ((req as any).propertyDb && (req as any).propertyDb.models.system_settings) {
+            let sysSettings = null;
+            if (outlet_id) {
+                sysSettings = await (req as any).propertyDb.models.system_settings.findOne({ where: { outlet_id } });
+            }
+            if (!sysSettings) {
+                sysSettings = await (req as any).propertyDb.models.system_settings.findOne();
+            }
             if (sysSettings) {
                 if (sysSettings.allow_negative_stock) allowNegativeStock = true;
                 if (sysSettings.base_currency_symbol) baseCurrencySymbol = sysSettings.base_currency_symbol;
@@ -100,12 +114,6 @@ export const getTableDiningInfo = async (req: Request, res: Response) => {
                 if (sysSettings.payment_gateway_provider) paymentGatewayProvider = sysSettings.payment_gateway_provider;
                 if (sysSettings.merchant_upi_id) merchantUpiId = sysSettings.merchant_upi_id;
             }
-        }
-        if (propInfo && propInfo.currency_symbol) {
-            baseCurrencySymbol = propInfo.currency_symbol;
-        }
-        if (propInfo && propInfo.currency_code) {
-            baseCurrencyCode = propInfo.currency_code;
         }
 
         // Fetch Active Menu Items
@@ -508,21 +516,51 @@ export const getTableDiningInfo = async (req: Request, res: Response) => {
  */
 export const requestCustomerDiningOtp = async (req: Request, res: Response) => {
     try {
-        const { email } = req.body;
+        const { email, is_registration } = req.body;
         const outlet_id = await resolveOutletId(req);
 
         if (!email || !email.includes('@')) {
             return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
         }
 
+        const cleanEmail = email.toLowerCase().trim();
+
+        // Search for existing customer by email in outlet
+        let customer = null;
+        if ((req as any).propertyDb && (req as any).propertyDb.models.customers) {
+            customer = await (req as any).propertyDb.models.customers.findOne({
+                where: {
+                    outlet_id,
+                    customer_email: cleanEmail
+                }
+            });
+            if (!customer) {
+                customer = await (req as any).propertyDb.models.customers.findOne({
+                    where: {
+                        outlet_id,
+                        customer_address: { [Op.like]: `%${cleanEmail}%` }
+                    }
+                });
+            }
+        }
+
+        // If customer is attempting to Login with OTP, but has never registered
+        if (!is_registration && !customer) {
+            return res.status(404).json({
+                success: false,
+                not_registered: true,
+                message: 'No account found for this email. Please register first with your name and phone number to continue.'
+            });
+        }
+
         // Generate 6 digit OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const storeKey = `${email.toLowerCase().trim()}_${outlet_id || 0}`;
+        const storeKey = `${cleanEmail}_${outlet_id || 0}`;
 
         diningOtpStore.set(storeKey, {
             otp,
             expiresAt: Date.now() + 10 * 60 * 1000, // 10 mins
-            email: email.toLowerCase().trim(),
+            email: cleanEmail,
             outletId: outlet_id || 0
         });
 
@@ -533,11 +571,19 @@ export const requestCustomerDiningOtp = async (req: Request, res: Response) => {
             if (propInfo && propInfo.property_name) restaurantName = propInfo.property_name;
         }
 
-        await sendOtpEmail(email, otp, `${restaurantName} - Table Dining Verification`);
+        await sendOtpEmail(cleanEmail, otp, `${restaurantName} - Table Dining Verification`);
+
+        if (is_registration && customer) {
+            return res.json({
+                success: true,
+                already_registered_in_outlet: true,
+                message: `You are already registered! Login verification code sent to ${cleanEmail}.`
+            });
+        }
 
         return res.json({
             success: true,
-            message: `Verification code sent to ${email}. Valid for 10 minutes.`
+            message: `Verification code sent to ${cleanEmail}. Valid for 10 minutes.`
         });
     } catch (err: any) {
         console.error('[REQUEST DINING OTP ERR]', err);

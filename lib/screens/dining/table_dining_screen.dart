@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
+import '../../core/currency/currency_service.dart';
 
 class TableDiningScreen extends StatefulWidget {
   final String? outletId;
@@ -973,7 +974,10 @@ class _TableDiningScreenState extends State<TableDiningScreen> with SingleTicker
     if (resCurrency != null && resCurrency.toString().trim().isNotEmpty) {
       return resCurrency.toString().trim();
     }
-    return '€';
+    if (CurrencyService.symbol.isNotEmpty) {
+      return CurrencyService.symbol;
+    }
+    return '₹';
   }
 
   double _getCartSubtotal() {
@@ -4310,7 +4314,7 @@ class _CustomerAuthBottomSheet extends StatefulWidget {
 
 class _CustomerAuthBottomSheetState extends State<_CustomerAuthBottomSheet> {
   // Modes: 'LOGIN' | 'REGISTER' | 'OTP'
-  String _authMode = 'LOGIN'; 
+  String _authMode = 'REGISTER'; 
   
   // Controllers
   final TextEditingController _loginIdentifierCtrl = TextEditingController();
@@ -4394,10 +4398,26 @@ class _CustomerAuthBottomSheetState extends State<_CustomerAuthBottomSheet> {
         body: jsonEncode({
           'email': email,
           'outlet_id': widget.outletId,
+          'is_registration': false,
         }),
       );
 
       final json = jsonDecode(res.body);
+
+      // If user is not registered in the system, redirect them to register first
+      if (res.statusCode == 404 ||
+          json['not_registered'] == true ||
+          (json['message'] ?? '').toString().toLowerCase().contains('register first') ||
+          (json['message'] ?? '').toString().toLowerCase().contains('no account found')) {
+        setState(() {
+          _regEmailCtrl.text = email;
+          _authMode = 'REGISTER';
+          _loading = false;
+          _error = json['message'] ?? 'No account found with this email. Please register first with your name & contact details.';
+        });
+        return;
+      }
+
       if (json['success'] == true) {
         _activeVerificationTarget = email;
         _startResendTimer();
@@ -4409,7 +4429,17 @@ class _CustomerAuthBottomSheetState extends State<_CustomerAuthBottomSheet> {
       } else {
         throw Exception(json['message'] ?? 'Failed to send OTP code');
       }
-    } catch (_) {
+    } catch (err) {
+      final errStr = err.toString().replaceAll('Exception: ', '').trim();
+      if (errStr.toLowerCase().contains('register first') || errStr.toLowerCase().contains('no account')) {
+        setState(() {
+          _regEmailCtrl.text = email;
+          _authMode = 'REGISTER';
+          _loading = false;
+          _error = errStr;
+        });
+        return;
+      }
       // Offline / Demo fallback: Send mock OTP and continue
       _activeVerificationTarget = email;
       _startResendTimer();

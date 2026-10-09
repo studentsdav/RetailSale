@@ -3,19 +3,19 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
 
 import '../../controllers/inventory/issue_controller.dart';
 import '../../controllers/modify/issue_modify_controller.dart';
+import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 import '../../core/config/date_time_service.dart';
 import '../../core/currency/currency_service.dart';
+import '../../core/printing/pos_invoice_printer.dart';
 import '../../models/auth/permission_service.dart';
-import '../../controllers/settings/property_info_controller.dart';
 import '../../models/common/property_info_model.dart' show PropertyInfo;
 import '../../models/inventory/stock_location_model.dart';
 import '../../utils/branding_storage.dart';
-import '../../core/printing/pos_invoice_printer.dart';
-import '../../controllers/settings/system_settings_controller.dart';
-import 'package:provider/provider.dart';
 
 class IssueModifyScreen extends StatefulWidget {
   const IssueModifyScreen({super.key});
@@ -26,18 +26,26 @@ class IssueModifyScreen extends StatefulWidget {
 
 class _IssueModifyScreenState extends State<IssueModifyScreen> {
   final ctrl = IssueModifyController();
+  final issueCtrl = IssueController();
+  final propertyCtrl = PropertyInfoController();
+  final settingsCtrl = SystemSettingsController();
+
+  final _searchCtrl = TextEditingController();
+
+  DateTime _fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 7));
+  bool _loading = false;
+  String _statusFilter = 'ALL';
+  String _selectedDeptFilter = 'ALL';
+
+  PropertyInfo? propertyInfo;
+  int? selectedIssueId;
+  StockLocationdata? selectedDepartment;
+  List items = [];
+  Map<String, dynamic>? selectedIssueData;
+
   bool get _canReprint =>
       PermissionService.can('REPRINT_ISSUE') || PermissionService.can('MODIFY_ISSUE');
   bool get _canModify => PermissionService.can('MODIFY_ISSUE');
-  final issueCtrl = IssueController();
-  final propertyCtrl = PropertyInfoController();
-  DateTime selectedDate = DateTimeService.instance.nowInTimeZone;
-  PropertyInfo? propertyInfo;
-
-  int? issueId;
-  StockLocationdata? selectedDepartment;
-
-  List items = [];
 
   @override
   void initState() {
@@ -45,136 +53,220 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
     _initLoad();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _initLoad() async {
     await issueCtrl.getdepartment();
     await propertyCtrl.load();
+    await settingsCtrl.load();
     propertyInfo = propertyCtrl.data;
     await _loadIssues();
   }
 
   Future<void> _loadIssues() async {
-    final date = DateFormat('yyyy-MM-dd').format(selectedDate);
+    setState(() => _loading = true);
+    try {
+      final dateStr = DateFormat('yyyy-MM-dd').format(_fromDate);
+      await ctrl.loadIssueByDate(dateStr);
 
-    await ctrl.loadIssueByDate(date);
-
-    setState(() {
-      issueId = null;
-      selectedDepartment = null;
-      items = [];
-    });
+      final issues = List.from(ctrl.issues);
+      if (selectedIssueId != null) {
+        final match = issues.cast<Map?>().firstWhere(
+              (iss) => int.tryParse(iss?['id']?.toString() ?? '') == selectedIssueId,
+              orElse: () => null,
+            );
+        if (match != null) {
+          await _loadDetails(selectedIssueId!);
+        } else if (issues.isNotEmpty) {
+          final firstId = int.tryParse(issues.first['id']?.toString() ?? '');
+          if (firstId != null) await _loadDetails(firstId);
+        } else {
+          setState(() {
+            selectedIssueId = null;
+            selectedDepartment = null;
+            selectedIssueData = null;
+            items = [];
+          });
+        }
+      } else if (issues.isNotEmpty) {
+        final firstId = int.tryParse(issues.first['id']?.toString() ?? '');
+        if (firstId != null) await _loadDetails(firstId);
+      } else {
+        setState(() {
+          selectedIssueId = null;
+          selectedDepartment = null;
+          selectedIssueData = null;
+          items = [];
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _loadDetails(int id) async {
     setState(() {
-      issueId = id;
-      selectedDepartment = null;
+      selectedIssueId = id;
       items = [];
     });
 
-    await ctrl.loadIssueDetails(id);
-
-    final dept = ctrl.issueDetails['department'];
-    StockLocationdata? nextDepartment;
-
     try {
-      nextDepartment = issueCtrl.departments.firstWhere(
-        (d) => d.locationName == dept,
-      );
-    } catch (e) {
-      nextDepartment = null;
-    }
+      await ctrl.loadIssueDetails(id);
+      final dept = ctrl.issueDetails['department'];
+      StockLocationdata? nextDepartment;
+      try {
+        nextDepartment = issueCtrl.departments.firstWhere(
+          (d) => d.locationName.toString().toLowerCase() == dept.toString().toLowerCase(),
+        );
+      } catch (_) {
+        nextDepartment = null;
+      }
 
-    setState(() {
-      items = List.from(ctrl.items);
-      selectedDepartment = nextDepartment;
-    });
+      final matchedSummary = ctrl.issues.cast<Map?>().firstWhere(
+            (iss) => int.tryParse(iss?['id']?.toString() ?? '') == id,
+            orElse: () => null,
+          );
+
+      setState(() {
+        items = List.from(ctrl.items);
+        selectedDepartment = nextDepartment;
+        selectedIssueData = Map<String, dynamic>.from(
+          ctrl.issueDetails.isNotEmpty ? ctrl.issueDetails : (matchedSummary ?? {}),
+        );
+      });
+    } catch (_) {}
+  }
+
+  List<Map<String, dynamic>> get _filteredIssues {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    return ctrl.issues.cast<Map<String, dynamic>>().where((iss) {
+      final status = (iss['status'] ?? 'CLOSED').toString().toUpperCase().trim();
+      final dept = (iss['department'] ?? '').toString().toLowerCase().trim();
+      final issueNo = (iss['issue_no'] ?? '').toString().toLowerCase().trim();
+      final reqNo = (iss['open_request_no'] ?? '').toString().toLowerCase().trim();
+
+      if (_statusFilter != 'ALL') {
+        if (_statusFilter == 'COMPLETED' && status != 'CLOSED' && status != 'COMPLETED') return false;
+        if (_statusFilter == 'CANCELLED' && status != 'CANCELLED') return false;
+      }
+
+      if (_selectedDeptFilter != 'ALL' && dept != _selectedDeptFilter.toLowerCase()) {
+        return false;
+      }
+
+      if (query.isNotEmpty) {
+        final matchesNo = issueNo.contains(query);
+        final matchesReq = reqNo.contains(query);
+        final matchesDept = dept.contains(query);
+        final matchesId = (iss['id']?.toString() ?? '').contains(query);
+        if (!matchesNo && !matchesReq && !matchesDept && !matchesId) return false;
+      }
+
+      return true;
+    }).toList();
   }
 
   double get total {
     double t = 0;
-
     for (var i in items) {
-      t += double.parse(i['qty'].toString()) *
-          double.parse(i['rate'].toString());
+      final qty = double.tryParse(i['qty']?.toString() ?? '0') ?? 0;
+      final rate = double.tryParse(i['rate']?.toString() ?? '0') ?? 0;
+      t += qty * rate;
     }
-
     return t;
   }
 
   Future<void> _save() async {
-    try {
-      if (issueId == null) {
-        _msg("Select Issue");
-        return;
-      }
+    if (selectedIssueId == null) {
+      _msg("Select an Issue first");
+      return;
+    }
 
+    if (selectedDepartment == null) {
+      _msg("Select a Department");
+      return;
+    }
+
+    if (items.isEmpty) {
+      _msg("At least 1 item is required");
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
       await ctrl.modifyIssue(
-        id: issueId!,
+        id: selectedIssueId!,
         department: selectedDepartment!.locationName,
         items: items,
       );
 
-      _msg("Issue Updated");
+      if (!mounted) return;
+      _msg("Stock Dispatch Updated Successfully");
+      await _loadIssues();
     } catch (e) {
-      _msg(e.toString());
+      _msg(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _msg(String m) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-  }
-
-  void _reprint() {
-    if (issueId == null) {
-      _msg("Select Issue");
-      return;
-    }
-
-    _printIssue();
-  }
-
-  void _closeScreen() {
-    Navigator.of(context).maybePop();
+  void _msg(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   Future<void> _printIssue() async {
+    if (selectedIssueId == null) {
+      _msg("Select Issue first");
+      return;
+    }
+
     final sysCountry = mounted ? context.read<SystemSettingsController>().settings?.billingCountry : null;
     final pdf = await PosInvoicePrinter.createDocument();
 
-    final property = propertyCtrl.data;
+    final property = propertyInfo ?? propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
 
-    final issue = ctrl.issueDetails;
-
-    final issueDate = DateTime.parse(issue['issue_date']);
+    final issue = selectedIssueData ?? ctrl.issueDetails;
+    final rawDate = issue['issue_date'] ?? issue['created_at'] ?? DateTime.now().toIso8601String();
+    final issueDate = DateTime.tryParse(rawDate.toString()) ?? DateTime.now();
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(24),
         build: (context) => [
-          /// ================= HEADER =================
           PosInvoicePrinter.buildStandardA4Header(
             property: property,
             logo: logo,
             country: sysCountry,
             rightWidget: pw.Container(
-              padding: const pw.EdgeInsets.all(8),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(),
-              ),
+              padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blueGrey800)),
               child: pw.Text(
                 "STOCK DISPATCH SLIP",
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                ),
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: PdfColors.blueGrey900),
               ),
             ),
           ),
-
-          pw.SizedBox(height: 20),
-
-          /// ================= ISSUE INFO =================
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text(
+              "REPRINT",
+              style: pw.TextStyle(color: PdfColors.red, fontWeight: pw.FontWeight.bold, fontSize: 9),
+            ),
+          ),
+          pw.SizedBox(height: 12),
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
@@ -186,36 +278,40 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Expanded(
+                  flex: 3,
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text("DEPARTMENT DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
                       pw.SizedBox(height: 4),
-                      pw.Text(selectedDepartment?.locationName ?? issue['department']?.toString() ?? 'N/A', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900)),
-                      pw.Text("Dispatch Type: ${issue['issue_type'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                      pw.Text(
+                        selectedDepartment?.locationName ?? issue['department']?.toString() ?? 'N/A',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.blueGrey900),
+                      ),
+                      pw.Text("Dispatch Type: ${issue['issue_type'] ?? 'REGULAR'}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
                     ],
                   ),
                 ),
                 pw.Container(width: 0.5, height: 45, color: PdfColors.grey300, margin: const pw.EdgeInsets.symmetric(horizontal: 16)),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("DISPATCH DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
-                    pw.SizedBox(height: 4),
-                    _metaRow("Dispatch No", issue['issue_no'].toString()),
-                    _metaRow("Date", DateFormat('dd-MMM-yyyy').format(issueDate)),
-                    if ((issue['open_request_no'] ?? '').toString().trim().isNotEmpty)
-                      _metaRow("Request ID", issue['open_request_no'].toString().trim()),
-                    _metaRow("Status", issue['status']?.toString() ?? 'CLOSED'),
-                  ],
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("DISPATCH DETAILS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.blueGrey800)),
+                      pw.SizedBox(height: 4),
+                      _pdfMetaRow("Dispatch No", issue['issue_no']?.toString() ?? ''),
+                      _pdfMetaRow("Date", DateFormat('dd-MMM-yyyy').format(issueDate)),
+                      if ((issue['open_request_no'] ?? '').toString().trim().isNotEmpty)
+                        _pdfMetaRow("Request ID", issue['open_request_no'].toString().trim()),
+                      _pdfMetaRow("Status", issue['status']?.toString() ?? 'CLOSED'),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-
           pw.SizedBox(height: 20),
-
-          /// ================= ITEM TABLE =================
           pw.Table(
             border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
             columnWidths: {
@@ -227,47 +323,41 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
               5: const pw.FixedColumnWidth(60),
             },
             children: [
-              /// HEADER
               pw.TableRow(
                 decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
                 children: [
-                  _cell("S.No", bold: true, alignment: pw.Alignment.center),
-                  _cell("Item", bold: true),
-                  _cell("Unit", bold: true, alignment: pw.Alignment.center),
-                  _cell("Qty", bold: true, alignment: pw.Alignment.centerRight),
-                  _cell("Rate", bold: true, alignment: pw.Alignment.centerRight),
-                  _cell("Amount", bold: true, alignment: pw.Alignment.centerRight),
+                  _pdfCell("S.No", bold: true, alignment: pw.Alignment.center),
+                  _pdfCell("Item", bold: true),
+                  _pdfCell("Unit", bold: true, alignment: pw.Alignment.center),
+                  _pdfCell("Qty", bold: true, alignment: pw.Alignment.centerRight),
+                  _pdfCell("Rate", bold: true, alignment: pw.Alignment.centerRight),
+                  _pdfCell("Amount", bold: true, alignment: pw.Alignment.centerRight),
                 ],
               ),
-
-              /// ITEMS
               ...List.generate(items.length, (i) {
                 final r = items[i];
-
-                final qty = double.parse(r['qty'].toString());
-                final rate = double.parse(r['rate'].toString());
-
+                final qty = double.tryParse(r['qty']?.toString() ?? '0') ?? 0;
+                final rate = double.tryParse(r['rate']?.toString() ?? '0') ?? 0;
                 final amount = qty * rate;
-                final brand = r['item_master']?['brand']?.toString() ?? '';
-                final itemName = r['item_master']?['item_name'] ?? r['item_code'];
+                final itemMaster = r['item_master'] as Map<String, dynamic>?;
+                final brand = itemMaster?['brand']?.toString() ?? r['brand']?.toString() ?? '';
+                final itemName = itemMaster?['item_name'] ?? r['item_name'] ?? r['item_code'] ?? '';
+                final unit = itemMaster?['unit'] ?? r['unit'] ?? '';
 
                 return pw.TableRow(
                   children: [
-                    _cell("${i + 1}", alignment: pw.Alignment.center),
-                    _cell(brand.isNotEmpty ? '$itemName ($brand)' : '$itemName'),
-                    _cell(r['item_master']?['unit'] ?? "", alignment: pw.Alignment.center),
-                    _cell(qty.toString(), alignment: pw.Alignment.centerRight),
-                    _cell(CurrencyService.format(rate), alignment: pw.Alignment.centerRight),
-                    _cell(CurrencyService.format(amount), alignment: pw.Alignment.centerRight),
+                    _pdfCell("${i + 1}", alignment: pw.Alignment.center),
+                    _pdfCell(brand.isNotEmpty ? '$itemName ($brand)' : '$itemName'),
+                    _pdfCell(unit, alignment: pw.Alignment.center),
+                    _pdfCell(qty.toString(), alignment: pw.Alignment.centerRight),
+                    _pdfCell(CurrencyService.format(rate), alignment: pw.Alignment.centerRight),
+                    _pdfCell(CurrencyService.format(amount), alignment: pw.Alignment.centerRight),
                   ],
                 );
-              })
+              }),
             ],
           ),
-
           pw.SizedBox(height: 20),
-
-          /// ================= TOTAL =================
           pw.Align(
             alignment: pw.Alignment.centerRight,
             child: pw.Container(
@@ -283,10 +373,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
               ),
             ),
           ),
-
           pw.SizedBox(height: 30),
-
-          /// ================= FOOTER =================
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
@@ -295,35 +382,23 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                 children: [
                   pw.Text("Dispatched By (Store)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                   pw.SizedBox(height: 30),
-                ]
+                ],
               ),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
                   pw.Text("Received By (Dept)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                   pw.SizedBox(height: 30),
-                ]
+                ],
               ),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Text("Approved By", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                   pw.SizedBox(height: 30),
-                ]
+                ],
               ),
             ],
-          ),
-
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Text(
-              "REPRINT",
-              style: pw.TextStyle(
-                color: PdfColors.red,
-                fontWeight: pw.FontWeight.bold,
-                fontSize: 9,
-              ),
-            ),
           ),
         ],
       ),
@@ -332,7 +407,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
     await Printing.layoutPdf(name: 'Issue_${issue['issue_no']}', onLayout: (format) async => pdf.save());
   }
 
-  pw.Widget _cell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
+  pw.Widget _pdfCell(String text, {bool bold = false, pw.Alignment alignment = pw.Alignment.centerLeft}) {
     return pw.Container(
       alignment: alignment,
       padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
@@ -347,7 +422,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
     );
   }
 
-  pw.Widget _metaRow(String label, String value) {
+  pw.Widget _pdfMetaRow(String label, String value) {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 2),
       child: pw.Row(
@@ -355,376 +430,777 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
         children: [
           pw.SizedBox(
             width: 45,
-            child: pw.Text(
-              "$label:",
-              style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
-            ),
+            child: pw.Text("$label:", style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
           ),
-          pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+          pw.Text(value, style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900)),
+        ],
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toUpperCase().trim()) {
+      case 'CLOSED':
+      case 'COMPLETED':
+        return Colors.green;
+      case 'CANCELLED':
+        return Colors.red;
+      case 'PENDING':
+      case 'OPEN':
+        return Colors.orange;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F6F9),
+      appBar: AppBar(
+        title: const Text(
+          "Modify & Reprint Stock Dispatch",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        elevation: 0.5,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: "Refresh Data",
+            onPressed: _loadIssues,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildStatusTabs(),
+          _buildToolbar(theme),
+          _buildKpiBanner(),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : isDesktop
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 380,
+                            child: _buildIssueListPanel(),
+                          ),
+                          const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFE2E8F0)),
+                          Expanded(
+                            child: _buildIssueDetailsPanel(),
+                          ),
+                        ],
+                      )
+                    : _buildIssueListPanel(),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildStatusTabs() {
+    final issues = ctrl.issues.cast<Map<String, dynamic>>();
+    int totalCount = issues.length;
+    int completedCount = 0;
+    int cancelledCount = 0;
 
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    for (var iss in issues) {
+      final st = (iss['status'] ?? 'CLOSED').toString().toUpperCase().trim();
+      if (st == 'CANCELLED') cancelledCount++;
+      else completedCount++;
+    }
 
-    return Scaffold(
-      backgroundColor: const Color(0xffF5F7FB),
-      appBar: AppBar(
-        title: const Text("Modify Stock Dispatch"),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            /// FILTER CARD
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: scheme.outlineVariant),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Wrap(
-                  spacing: 20,
-                  runSpacing: 16,
-                  crossAxisAlignment: WrapCrossAlignment.end,
-                  children: [
-                    /// DATE
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Date",
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          height: 38,
-                          width: 160,
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.calendar_today, size: 14),
-                            label: Text(
-                              DateFormat('dd-MMM-yyyy').format(selectedDate),
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                            onPressed: () async {
-                              final d = await showDatePicker(
-                                context: context,
-                                initialDate: selectedDate,
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime.now(),
-                              );
+    final tabs = [
+      {'key': 'ALL', 'label': 'All Dispatches', 'count': totalCount, 'color': Colors.blueGrey},
+      {'key': 'COMPLETED', 'label': 'Completed / Closed', 'count': completedCount, 'color': Colors.green},
+      {'key': 'CANCELLED', 'label': 'Cancelled', 'count': cancelledCount, 'color': Colors.red},
+    ];
 
-                              if (d != null) {
-                                selectedDate = d;
-                                await _loadIssues();
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: tabs.map((tab) {
+            final isSelected = _statusFilter == tab['key'];
+            final color = tab['color'] as MaterialColor;
+            final count = tab['count'] as int;
 
-                    /// ISSUE NO
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Issue No",
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          height: 38,
-                          width: 220,
-                          child: DropdownButtonFormField<int>(
-                            key: ValueKey('issue-$issueId'),
-                            initialValue: issueId,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            ),
-                            items: ctrl.issues.map<DropdownMenuItem<int>>((e) {
-                              return DropdownMenuItem(
-                                value: e['id'],
-                                child: Text(e['issue_no'], style: const TextStyle(fontSize: 13)),
-                              );
-                            }).toList(),
-                            onChanged: (v) {
-                              if (v != null) {
-                                _loadDetails(v);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    /// DEPARTMENT
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Department",
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          height: 38,
-                          width: 260,
-                          child: DropdownButtonFormField<StockLocationdata>(
-                            key: ValueKey(
-                              'issue-department-$issueId-${selectedDepartment?.id ?? selectedDepartment?.locationName}',
-                            ),
-                            initialValue: selectedDepartment,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            ),
-                            items: issueCtrl.departments.map((d) {
-                              return DropdownMenuItem(
-                                value: d,
-                                child: Text(d.locationName, style: const TextStyle(fontSize: 13)),
-                              );
-                            }).toList(),
-                            onChanged: (v) {
-                              setState(() {
-                                selectedDepartment = v;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            /// ITEMS GRID
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: scheme.outlineVariant),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(scheme.surfaceContainerHighest),
-                        columnSpacing: 40,
-                        columns: const [
-                          DataColumn(label: Text("S.No")),
-                          DataColumn(label: Text("Code")),
-                          DataColumn(label: Text("Item")),
-                          DataColumn(label: Text("Unit")),
-                          DataColumn(label: Text("Qty")),
-                          DataColumn(label: Text("Rate")),
-                          DataColumn(label: Text("Amount")),
-                        ],
-                        rows: List.generate(items.length, (i) {
-                          final item = items[i];
-
-                          final amount = double.parse(item['qty'].toString()) *
-                              double.parse(item['rate'].toString());
-
-                          return DataRow(
-                            color: WidgetStateProperty.resolveWith(
-                              (states) =>
-                                  i.isEven ? const Color(0xffFAFBFD) : Colors.white,
-                            ),
-                            cells: [
-                              DataCell(Text("${i + 1}")),
-
-                              DataCell(Text(item['item_master']['item_code'])),
-                              DataCell(Text(
-                                '${item['item_master']['item_name']}${item['item_master']['brand'] != null && item['item_master']['brand'].toString().isNotEmpty ? ' (${item['item_master']['brand']})' : ''}'
-                              )),
-
-                              DataCell(Text(item['item_master']['unit'] ?? "")),
-
-                              /// QTY
-                              DataCell(
-                                SizedBox(
-                                  width: 80,
-                                  child: TextFormField(
-                                    key: ValueKey(
-                                      'issue-$issueId-${item['id'] ?? item['item_code'] ?? item['item_master']?['item_code'] ?? item['item_master']?['item_name']}-qty',
-                                    ),
-                                    initialValue: item['qty'].toString(),
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    ),
-                                    onChanged: (v) {
-                                      item['qty'] = double.tryParse(v) ?? 0;
-
-                                      setState(() {});
-                                    },
-                                  ),
-                                ),
-                              ),
-
-                              /// RATE
-                              DataCell(
-                                SizedBox(
-                                  width: 90,
-                                  child: TextFormField(
-                                    key: ValueKey(
-                                      'issue-$issueId-${item['id'] ?? item['item_code'] ?? item['item_master']?['item_code'] ?? item['item_master']?['item_name']}-rate',
-                                    ),
-                                    initialValue: item['rate'].toString(),
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    ),
-                                    onChanged: (v) {
-                                      item['rate'] = double.tryParse(v) ?? 0;
-
-                                      setState(() {});
-                                    },
-                                  ),
-                                ),
-                              ),
-
-                              DataCell(
-                                Text(
-                                  amount.toStringAsFixed(2),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            /// TOTAL BAR
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 300,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _statusFilter = tab['key'] as String;
+                  });
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: scheme.outlineVariant),
+                    color: isSelected ? color.shade50 : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? color.shade400 : Colors.grey.shade300,
+                      width: isSelected ? 1.5 : 1,
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Text(
-                        "Total Amount",
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      const Spacer(),
                       Text(
-                        CurrencyService.format(total),
+                        tab['label'] as String,
                         style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: scheme.primary,
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? color.shade900 : Colors.grey.shade700,
                         ),
-                      )
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: isSelected ? color.shade600 : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : Colors.grey.shade800,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ],
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolbar(ThemeData theme) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          // Date Range button
+          OutlinedButton.icon(
+            icon: const Icon(Icons.date_range, size: 16),
+            label: Text(
+              DateFormat('dd-MMM-yyyy').format(_fromDate),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 16),
-            SafeArea(
-              top: false,
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                alignment: WrapAlignment.end,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            onPressed: () async {
+              final d = await showDatePicker(
+                context: context,
+                initialDate: _fromDate,
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now(),
+              );
+              if (d != null) {
+                setState(() => _fromDate = d);
+                await _loadIssues();
+              }
+            },
+          ),
+          // Search Box
+          SizedBox(
+            width: 220,
+            height: 38,
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: "Search Dispatch #, Dept...",
+                hintStyle: const TextStyle(fontSize: 12, color: Colors.grey),
+                prefixIcon: const Icon(Icons.search, size: 16, color: Colors.grey),
+                suffixIcon: _searchCtrl.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 16),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          // Department dropdown filter
+          SizedBox(
+            width: 200,
+            height: 38,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('filter-dept-$_selectedDeptFilter'),
+              initialValue: _selectedDeptFilter,
+              decoration: InputDecoration(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+              ),
+              items: [
+                const DropdownMenuItem(value: 'ALL', child: Text("All Departments", style: TextStyle(fontSize: 12))),
+                ...issueCtrl.departments.map(
+                  (d) => DropdownMenuItem(
+                    value: d.locationName,
+                    child: Text(d.locationName, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _selectedDeptFilter = v);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiBanner() {
+    final filtered = _filteredIssues;
+    int totalCount = filtered.length;
+    double totalValue = 0;
+
+    for (var iss in filtered) {
+      final amt = double.tryParse(iss['total_amount']?.toString() ?? '0') ?? 0;
+      totalValue += amt;
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          _buildKpiCard("TOTAL DISPATCHES", "$totalCount", Icons.local_shipping_outlined, Colors.blue),
+          const SizedBox(width: 8),
+          _buildKpiCard("TOTAL DISPATCH VALUE", CurrencyService.format(totalValue), Icons.payments_outlined, Colors.purple),
+          const SizedBox(width: 8),
+          _buildKpiCard("DEPARTMENTS", "${issueCtrl.departments.length}", Icons.apartment_outlined, Colors.green),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiCard(String title, String val, IconData icon, MaterialColor color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.shade50,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(icon, size: 18, color: color.shade700),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_canModify)
-                    Tooltip(
-                      message: 'Close modify screen',
-                      child: SizedBox(
-                        width: 140,
-                        height: 44,
-                        child: OutlinedButton.icon(
-                          onPressed: _closeScreen,
-                          icon: const Icon(Icons.close_outlined, size: 18),
-                          label: const Text('Cancel'),
-                        ),
-                      ),
-                    ),
-                  if (_canReprint)
-                    Tooltip(
-                      message: 'Print stock dispatch slip',
-                      child: SizedBox(
-                        width: 140,
-                        height: 44,
-                        child: FilledButton.icon(
-                          onPressed: _reprint,
-                          icon: const Icon(Icons.print_outlined, size: 18),
-                          label: const Text('Print'),
-                        ),
-                      ),
-                    ),
-                  if (_canModify)
-                    Tooltip(
-                      message: 'Save stock dispatch changes',
-                      child: SizedBox(
-                        width: 140,
-                        height: 44,
-                        child: FilledButton.icon(
-                          onPressed: _save,
-                          icon: const Icon(Icons.save_outlined, size: 18),
-                          label: const Text('Save'),
-                        ),
-                      ),
-                    ),
+                  Text(title, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+                  const SizedBox(height: 2),
+                  Text(val, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color.shade900), overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildIssueListPanel() {
+    final list = _filteredIssues;
+
+    if (list.isEmpty) {
+      return Container(
+        color: Colors.white,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade300),
+              const SizedBox(height: 12),
+              Text("No dispatch slips found", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      color: Colors.white,
+      child: ListView.separated(
+        itemCount: list.length,
+        separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+        itemBuilder: (ctx, i) {
+          final iss = list[i];
+          final id = int.tryParse(iss['id']?.toString() ?? '');
+          final issueNo = iss['issue_no']?.toString() ?? 'Issue #$id';
+          final deptName = iss['department']?.toString() ?? 'N/A';
+          final status = (iss['status'] ?? 'CLOSED').toString().toUpperCase().trim();
+          final isSelected = selectedIssueId == id;
+          final statusColor = _getStatusColor(status);
+          final rawDate = iss['issue_date'] ?? iss['created_at'];
+          DateTime? issueDate;
+          if (rawDate != null) {
+            issueDate = DateTime.tryParse(rawDate.toString());
+          }
+          final dateStr = issueDate != null ? DateFormat('dd MMM yyyy').format(issueDate) : '';
+          final totalAmt = double.tryParse(iss['total_amount']?.toString() ?? '0') ?? 0;
+          final reqNo = (iss['open_request_no'] ?? '').toString().trim();
+
+          return InkWell(
+            onTap: id != null ? () => _loadDetails(id) : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFFEFF6FF) : Colors.transparent,
+                border: Border(
+                  left: BorderSide(
+                    color: isSelected ? Colors.blue.shade600 : Colors.transparent,
+                    width: 4,
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          issueNo,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.blue.shade900 : Colors.black87,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: statusColor.withOpacity(0.4), width: 0.5),
+                        ),
+                        child: Text(
+                          status,
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.apartment_outlined, size: 12, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          deptName,
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (reqNo.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      "Req ID: $reqNo",
+                      style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade600),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(dateStr, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                      Row(
+                        children: [
+                          Text(
+                            CurrencyService.format(totalAmt),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade800),
+                          ),
+                          if (_canReprint && id != null) ...[
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: () {
+                                _loadDetails(id).then((_) => _printIssue());
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.all(2),
+                                child: Icon(Icons.print_outlined, size: 15, color: Colors.blue),
+                              ),
+                            ),
+                          ]
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildIssueDetailsPanel() {
+    if (selectedIssueId == null) {
+      return Container(
+        color: Colors.white,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.touch_app_outlined, size: 48, color: Colors.grey.shade300),
+              const SizedBox(height: 12),
+              Text("Select a Dispatch Slip to view or modify", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final status = (selectedIssueData?['status'] ?? ctrl.issueDetails['status'] ?? 'CLOSED').toString().toUpperCase().trim();
+    final statusColor = _getStatusColor(status);
+    final isEditable = _canModify && status != 'CANCELLED';
+
+    return Container(
+      color: Colors.white,
+      child: Column(
+        children: [
+          // Header Card
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+              color: Color(0xFFFAFAFA),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            selectedIssueData?['issue_no']?.toString() ?? 'Issue #$selectedIssueId',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: statusColor.withOpacity(0.4), width: 0.5),
+                            ),
+                            child: Text(
+                              status,
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (isEditable)
+                        Row(
+                          children: [
+                            const Text("Department: ", style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 4),
+                            SizedBox(
+                              width: 220,
+                              height: 32,
+                              child: DropdownButtonFormField<StockLocationdata>(
+                                key: ValueKey('edit-dept-issue-$selectedIssueId-${selectedDepartment?.id ?? selectedDepartment?.locationName}'),
+                                initialValue: selectedDepartment,
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: issueCtrl.departments
+                                    .map((StockLocationdata d) => DropdownMenuItem(
+                                          value: d,
+                                          child: Text(d.locationName, style: const TextStyle(fontSize: 11)),
+                                        ))
+                                    .toList(),
+                                onChanged: (v) {
+                                  setState(() => selectedDepartment = v);
+                                },
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Text(
+                          "Department: ${selectedDepartment?.locationName ?? selectedIssueData?['department'] ?? 'N/A'}",
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                        ),
+                    ],
+                  ),
+                ),
+                // Action Buttons
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    if (_canReprint && selectedIssueId != null)
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.print_outlined, size: 14),
+                        label: const Text("Print", style: TextStyle(fontSize: 11)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                        onPressed: _printIssue,
+                      ),
+                    if (isEditable)
+                      FilledButton.icon(
+                        icon: const Icon(Icons.save_outlined, size: 14),
+                        label: const Text("Save Changes", style: TextStyle(fontSize: 11)),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        ),
+                        onPressed: _save,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Items Table
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                      columnSpacing: 28,
+                      horizontalMargin: 14,
+                      headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF475569)),
+                      dataTextStyle: const TextStyle(fontSize: 12),
+                      columns: [
+                        const DataColumn(label: Text("#")),
+                        const DataColumn(label: Text("Code")),
+                        const DataColumn(label: Text("Item Name")),
+                        const DataColumn(label: Text("Unit")),
+                        const DataColumn(label: Text("Qty")),
+                        const DataColumn(label: Text("Rate")),
+                        const DataColumn(label: Text("Amount")),
+                        if (isEditable) const DataColumn(label: Text("Action")),
+                      ],
+                      rows: List.generate(items.length, (i) {
+                        final item = items[i];
+                        final qty = double.tryParse(item['qty']?.toString() ?? '0') ?? 0;
+                        final rate = double.tryParse(item['rate']?.toString() ?? '0') ?? 0;
+                        final amount = qty * rate;
+                        final itemMaster = item['item_master'] as Map<String, dynamic>?;
+                        final itemCode = itemMaster?['item_code'] ?? item['item_code'] ?? '';
+                        final itemName = itemMaster?['item_name'] ?? item['item_name'] ?? '';
+                        final brand = itemMaster?['brand']?.toString() ?? item['brand']?.toString() ?? '';
+                        final unit = itemMaster?['unit'] ?? item['unit'] ?? '';
+
+                        return DataRow(
+                          color: WidgetStateProperty.resolveWith(
+                            (states) => i.isEven ? const Color(0xFFFAFBFD) : Colors.white,
+                          ),
+                          cells: [
+                            DataCell(Text("${i + 1}")),
+                            DataCell(Text(itemCode.toString())),
+                            DataCell(
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 160),
+                                child: Text(
+                                  brand.isNotEmpty ? '$itemName ($brand)' : itemName.toString(),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ),
+                            DataCell(Text(unit.toString())),
+                            DataCell(
+                              isEditable
+                                  ? SizedBox(
+                                      width: 70,
+                                      child: TextFormField(
+                                        key: ValueKey('issue-qty-$selectedIssueId-$i-${item['id']}'),
+                                        initialValue: qty.toString(),
+                                        style: const TextStyle(fontSize: 12),
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        onChanged: (v) {
+                                          item['qty'] = double.tryParse(v) ?? 0;
+                                          setState(() {});
+                                        },
+                                      ),
+                                    )
+                                  : Text(qty.toString()),
+                            ),
+                            DataCell(
+                              isEditable
+                                  ? SizedBox(
+                                      width: 80,
+                                      child: TextFormField(
+                                        key: ValueKey('issue-rate-$selectedIssueId-$i-${item['id']}'),
+                                        initialValue: rate.toString(),
+                                        style: const TextStyle(fontSize: 12),
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        onChanged: (v) {
+                                          item['rate'] = double.tryParse(v) ?? 0;
+                                          setState(() {});
+                                        },
+                                      ),
+                                    )
+                                  : Text(CurrencyService.format(rate)),
+                            ),
+                            DataCell(
+                              Text(
+                                CurrencyService.format(amount),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (isEditable)
+                              DataCell(
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                                  onPressed: () {
+                                    items.removeAt(i);
+                                    setState(() {});
+                                  },
+                                ),
+                              ),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Total Summary Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _buildSummaryBadge("Total Items", "${items.length}"),
+                const SizedBox(width: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Text("Total Amount: ", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
+                      Text(
+                        CurrencyService.format(total),
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryBadge(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+      ],
     );
   }
 }

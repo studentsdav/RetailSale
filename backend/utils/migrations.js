@@ -4181,7 +4181,19 @@ COMMIT;
         BEGIN;
         ALTER TABLE users 
           ADD COLUMN IF NOT EXISTS pin_code VARCHAR(100) DEFAULT NULL,
-          ADD COLUMN IF NOT EXISTS show_in_quick_login BOOLEAN DEFAULT TRUE;
+          ADD COLUMN IF NOT EXISTS show_in_quick_login BOOLEAN DEFAULT FALSE;
+        COMMIT;
+      `);
+    }
+  },
+  {
+    version: 114,
+    description: "Set default FALSE for show_in_quick_login on users and clear unconfigured admin quick logins",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE users ALTER COLUMN show_in_quick_login SET DEFAULT FALSE;
+        UPDATE users SET show_in_quick_login = FALSE WHERE show_in_quick_login IS NULL OR role = 'ADMIN';
         COMMIT;
       `);
     }

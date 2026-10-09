@@ -576,26 +576,39 @@ class _KdsScreenState extends State<KdsScreen> with WidgetsBindingObserver {
                                             return rB.compareTo(rA);
                                           });
                                           for (final rev in revisions) {
-                                            final Map<String, dynamic>? changes = rev['change_details'] is String
-                                                ? jsonDecode(rev['change_details'])
-                                                : rev['change_details'];
-                                            if (changes != null && changes['updated'] is List) {
-                                              final List updatedList = changes['updated'];
-                                              final matchUpdate = updatedList.firstWhere(
-                                                (u) => u['item_id'] == item['item_id'],
-                                                orElse: () => null,
-                                              );
-                                              if (matchUpdate != null) {
-                                                final double oldQty = double.tryParse(matchUpdate['old_qty']?.toString() ?? '0') ?? 0.0;
-                                                final double newQty = double.tryParse(matchUpdate['new_qty']?.toString() ?? '0') ?? 0.0;
-                                                if (newQty > oldQty) {
-                                                  qtyChangeMessage = 'Qty Increased: ${oldQty.toInt()} ➔ ${newQty.toInt()}';
-                                                } else if (newQty < oldQty) {
-                                                  qtyChangeMessage = 'Qty Decreased: ${oldQty.toInt()} ➔ ${newQty.toInt()}';
-                                                }
-                                                break;
+                                            try {
+                                              dynamic rawChanges = rev['change_details'];
+                                              if (rawChanges is String && rawChanges.trim().isNotEmpty) {
+                                                try {
+                                                  rawChanges = jsonDecode(rawChanges);
+                                                } catch (_) {}
                                               }
-                                            }
+
+                                              List updatedList = [];
+                                              if (rawChanges is Map && rawChanges['updated'] is List) {
+                                                updatedList = rawChanges['updated'] as List;
+                                              } else if (rawChanges is List) {
+                                                updatedList = rawChanges;
+                                              }
+
+                                              if (updatedList.isNotEmpty) {
+                                                final currentItemId = item['item_id'] ?? item['id'];
+                                                final matchUpdate = updatedList.firstWhere(
+                                                  (u) => u is Map && (u['item_id'] == currentItemId || u['id'] == currentItemId),
+                                                  orElse: () => null,
+                                                );
+                                                if (matchUpdate != null && matchUpdate is Map) {
+                                                  final double oldQty = double.tryParse(matchUpdate['old_qty']?.toString() ?? '0') ?? 0.0;
+                                                  final double newQty = double.tryParse(matchUpdate['new_qty']?.toString() ?? '0') ?? 0.0;
+                                                  if (newQty > oldQty) {
+                                                    qtyChangeMessage = 'Qty Increased: ${oldQty.toInt()} ➔ ${newQty.toInt()}';
+                                                  } else if (newQty < oldQty) {
+                                                    qtyChangeMessage = 'Qty Decreased: ${oldQty.toInt()} ➔ ${newQty.toInt()}';
+                                                  }
+                                                  break;
+                                                }
+                                              }
+                                            } catch (_) {}
                                           }
 
                                           return Row(

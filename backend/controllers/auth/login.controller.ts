@@ -745,10 +745,7 @@ exports.getQuickUsers = async (req, res) => {
         const whereClause: any = {
             outlet_id: currentOutlet.id,
             is_active: true,
-            [Op.or]: [
-                { show_in_quick_login: true },
-                { show_in_quick_login: null }
-            ]
+            show_in_quick_login: true
         };
 
         if (role) {

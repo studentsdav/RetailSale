@@ -340,32 +340,53 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     DataCell(Text(u.fullName)),
                     DataCell(Text(u.role)),
                     DataCell(
-                      u.pinCode != null && u.pinCode!.trim().isNotEmpty
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.teal.shade200),
-                              ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          u.pinCode != null && u.pinCode!.trim().isNotEmpty
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.teal.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.teal.shade200),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(_isAdmin ? Icons.pin : Icons.lock_outline, size: 14, color: Colors.teal),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _isAdmin ? u.pinCode!.trim() : '••••',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.teal.shade800,
+                                          fontSize: 12,
+                                          letterSpacing: _isAdmin ? 0 : 2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : const Text('Not Set', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic)),
+                          if (u.showInQuickLogin)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 3),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(_isAdmin ? Icons.pin : Icons.lock_outline, size: 14, color: Colors.teal),
-                                  const SizedBox(width: 4),
+                                  Icon(Icons.visibility, size: 11, color: Colors.blue.shade700),
+                                  const SizedBox(width: 3),
                                   Text(
-                                    _isAdmin ? u.pinCode!.trim() : '••••',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.teal.shade800,
-                                      fontSize: 12,
-                                      letterSpacing: _isAdmin ? 0 : 2,
-                                    ),
+                                    'In Quick Dropdown',
+                                    style: TextStyle(fontSize: 10, color: Colors.blue.shade700, fontWeight: FontWeight.w600),
                                   ),
                                 ],
                               ),
-                            )
-                          : const Text('Not Set', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic)),
+                            ),
+                        ],
+                      ),
                     ),
                     DataCell(Text(u.mobile)),
                     DataCell(Text(u.email)),
@@ -593,7 +614,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final maxDiscount = TextEditingController(text: '100');
     final otpCtrl = TextEditingController();
     String role = 'STORE';
-    bool showInQuickLogin = true;
+    bool showInQuickLogin = false;
 
     bool isEmailVerified = false;
     bool isOtpSent = false;

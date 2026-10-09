@@ -178,6 +178,7 @@ exports.createOutlet = async (req, res) => {
                 password_hash: hash,
                 contact_email: contact_email,
                 mobile: contact_phone,
+                show_in_quick_login: false,
                 is_active: true
             });
 
@@ -269,6 +270,7 @@ exports.createAdmin = async (req, res) => {
             full_name: full_name || 'System Admin',
             role: 'ADMIN',
             password_hash: hash,
+            show_in_quick_login: false,
             is_active: true
         });
 

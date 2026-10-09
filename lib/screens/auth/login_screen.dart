@@ -146,10 +146,14 @@ class _LoginScreenState extends State<LoginScreen>
           final match = _quickUsers.where((u) => u.username == _selectedQuickUser?.username);
           if (match.isNotEmpty) {
             _selectedQuickUser = match.first;
-            _usernameCtrl.text = _selectedQuickUser!.username;
+            if (_isPinMode) {
+              _usernameCtrl.text = _selectedQuickUser!.username;
+            }
           } else {
             _selectedQuickUser = _quickUsers.first;
-            _usernameCtrl.text = _selectedQuickUser!.username;
+            if (_isPinMode) {
+              _usernameCtrl.text = _selectedQuickUser!.username;
+            }
           }
         } else {
           _selectedQuickUser = null;

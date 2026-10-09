@@ -54,7 +54,8 @@ module.exports = async (req, res, next) => {
                     ALTER TABLE outlets ADD COLUMN IF NOT EXISTS supervisor_pin VARCHAR(100) DEFAULT '1234';
                     ALTER TABLE outlets ADD COLUMN IF NOT EXISTS supervisor_pin_type VARCHAR(50) DEFAULT 'STATIC';
           ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_code VARCHAR(100) DEFAULT NULL;
-          ALTER TABLE users ADD COLUMN IF NOT EXISTS show_in_quick_login BOOLEAN DEFAULT TRUE;
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS show_in_quick_login BOOLEAN DEFAULT FALSE;
+          ALTER TABLE users ALTER COLUMN show_in_quick_login SET DEFAULT FALSE;
 
                 `);
                 console.log('✅ Self-healed: Checked and added missing columns to tables');

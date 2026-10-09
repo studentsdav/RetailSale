@@ -13,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         show_in_quick_login: {
             type: DataTypes.BOOLEAN,
-            defaultValue: true
+            defaultValue: false
         },
         full_name: DataTypes.STRING,
         mobile: DataTypes.STRING,

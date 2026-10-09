@@ -613,23 +613,49 @@ class _SaleScreenState extends State<SaleScreen> {
             }).toList();
           }
 
-          final saleItem = SaleItem(
-            itemId: finalItemId,
-            itemCode: matched?.itemCode ?? (itemCode.isNotEmpty ? itemCode : 'ITEM-$finalItemId'),
-            itemName: matched?.itemName ?? (itemName.isNotEmpty ? itemName : 'Unknown Item'),
-            barcode: matched?.barcode ?? '',
-            unit: matched?.unit ?? 'PCS',
-            qty: qty,
-            rate: resolvedRate,
-            taxType: matched?.taxType ?? 'GST',
-            taxPercent: (matched?.taxPercent ?? 0.0).toDouble(),
-            brand: matched?.brand,
-            isTaxInclusive: matched?.isTaxInclusive ?? false,
-            notes: (preload['notes'] ?? preload['remarks'])?.toString(),
-            modifierDetails: modDetails.isNotEmpty ? modDetails : null,
-            modifierObjects: modObjects.isNotEmpty ? modObjects : null,
-            itemRemark: (preload['item_remark'] ?? preload['itemRemark'])?.toString().trim(),
-          );
+          final saleItem = matched != null
+              ? _buildBaseSaleItem(
+                  item: matched,
+                  qty: qty,
+                  seed: SaleItem(
+                    itemId: matched.id,
+                    itemCode: matched.itemCode,
+                    itemName: matched.itemName,
+                    hsnSacCode: matched.hsnSacCode,
+                    barcode: matched.barcode,
+                    unit: matched.unit,
+                    qty: qty,
+                    rate: resolvedRate,
+                    taxType: matched.taxType,
+                    taxPercent: matched.taxPercent,
+                    taxGroupId: matched.taxGroupId,
+                    taxGroup: matched.taxGroup,
+                    discountApplicable: matched.discountApplicable,
+                    schemeApplicable: matched.schemeApplicable,
+                    brand: matched.brand,
+                    isTaxInclusive: matched.isTaxInclusive,
+                    location: matched.location.trim() != '-' ? matched.location.trim() : null,
+                    notes: (preload['notes'] ?? preload['remarks'])?.toString(),
+                    modifierDetails: modDetails.isNotEmpty ? modDetails : null,
+                    modifierObjects: modObjects.isNotEmpty ? modObjects : null,
+                    itemRemark: (preload['item_remark'] ?? preload['itemRemark'])?.toString().trim(),
+                  ),
+                )
+              : SaleItem(
+                  itemId: finalItemId,
+                  itemCode: itemCode.isNotEmpty ? itemCode : 'ITEM-$finalItemId',
+                  itemName: itemName.isNotEmpty ? itemName : 'Unknown Item',
+                  barcode: '',
+                  unit: 'PCS',
+                  qty: qty,
+                  rate: resolvedRate,
+                  taxType: 'GST',
+                  taxPercent: 0.0,
+                  notes: (preload['notes'] ?? preload['remarks'])?.toString(),
+                  modifierDetails: modDetails.isNotEmpty ? modDetails : null,
+                  modifierObjects: modObjects.isNotEmpty ? modObjects : null,
+                  itemRemark: (preload['item_remark'] ?? preload['itemRemark'])?.toString().trim(),
+                );
 
           _items.add(saleItem);
         }

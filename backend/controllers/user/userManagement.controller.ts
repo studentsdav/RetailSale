@@ -208,7 +208,7 @@ exports.createUser = async (req, res) => {
         max_discount_percent: finalMaxDiscount,
         password_hash: hash,
         pin_code: pin_code ? pin_code.toString().trim() : null,
-        show_in_quick_login: show_in_quick_login !== undefined ? Boolean(show_in_quick_login) : true,
+        show_in_quick_login: show_in_quick_login !== undefined ? Boolean(show_in_quick_login) : false,
         is_active: true
     });
 

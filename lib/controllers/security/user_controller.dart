@@ -55,7 +55,7 @@ class UserController extends ChangeNotifier {
     String? contact_email,
     double maxDiscountPercent = 100.0,
     String? pinCode,
-    bool showInQuickLogin = true,
+    bool showInQuickLogin = false,
     List<String>? permissions,
     required String password,
   }) async {

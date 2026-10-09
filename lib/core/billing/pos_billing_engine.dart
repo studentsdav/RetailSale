@@ -293,10 +293,18 @@ class PosBillingEngine {
       final list = <TaxBreakdown>[];
       for (final comp in taxGroup.components) {
         final compAmount = taxableAmount * comp.rate / 100;
+        final rawCompName = comp.componentName.trim();
+        final cleanedCompName = rawCompName
+            .replaceAll(RegExp(r'\s*\(\s*\d+(\.\d+)?%\s*\)', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\s*\b\d+(\.\d+)?%\s*$', caseSensitive: false), '')
+            .trim();
+        final baseName = cleanedCompName.isNotEmpty
+            ? cleanedCompName
+            : (comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX');
         list.add(
           TaxBreakdown(
             code: comp.componentCode.isNotEmpty ? comp.componentCode : 'TAX',
-            label: '${comp.componentName} (${_fmt(comp.rate)}%)',
+            label: '$baseName (${_fmt(comp.rate)}%)',
             taxType: comp.componentCode,
             rate: comp.rate,
             taxableAmount: taxableAmount,

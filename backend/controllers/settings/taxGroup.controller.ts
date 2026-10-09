@@ -21,8 +21,8 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'GST_0',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'CGST_0', component_name: 'CGST (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'SGST_0', component_name: 'SGST (0%)', rate: 0.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'CGST_0', component_name: 'CGST', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_0', component_name: 'SGST', rate: 0.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -30,8 +30,8 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'GST_5',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'CGST_2.5', component_name: 'CGST (2.5%)', rate: 2.5, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'SGST_2.5', component_name: 'SGST (2.5%)', rate: 2.5, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'CGST_2.5', component_name: 'CGST', rate: 2.5, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_2.5', component_name: 'SGST', rate: 2.5, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -39,8 +39,8 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'GST_12',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'CGST_6', component_name: 'CGST (6%)', rate: 6.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'SGST_6', component_name: 'SGST (6%)', rate: 6.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'CGST_6', component_name: 'CGST', rate: 6.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_6', component_name: 'SGST', rate: 6.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -48,8 +48,8 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'GST_18',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'CGST_9', component_name: 'CGST (9%)', rate: 9.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'SGST_9', component_name: 'SGST (9%)', rate: 9.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'CGST_9', component_name: 'CGST', rate: 9.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_9', component_name: 'SGST', rate: 9.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -57,8 +57,8 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'GST_28',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'CGST_14', component_name: 'CGST (14%)', rate: 14.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'SGST_14', component_name: 'SGST (14%)', rate: 14.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'CGST_14', component_name: 'CGST', rate: 14.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'SGST_14', component_name: 'SGST', rate: 14.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -66,7 +66,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'IGST_5',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'IGST_5', component_name: 'IGST (5%)', rate: 5.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'IGST_5', component_name: 'IGST', rate: 5.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -74,7 +74,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'IGST_12',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'IGST_12', component_name: 'IGST (12%)', rate: 12.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'IGST_12', component_name: 'IGST', rate: 12.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -82,7 +82,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'IGST_18',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'IGST_18', component_name: 'IGST (18%)', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'IGST_18', component_name: 'IGST', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -90,7 +90,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'IGST_28',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'IGST_28', component_name: 'IGST (28%)', rate: 28.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'IGST_28', component_name: 'IGST', rate: 28.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       }
     ];
@@ -103,7 +103,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'USA_EXEMPT',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'EXEMPT_0', component_name: 'Exempt (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'EXEMPT_0', component_name: 'Exempt', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -111,7 +111,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'USA_SALES_6.25',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'STATE_TAX_6.25', component_name: 'State Sales Tax (6.25%)', rate: 6.25, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'STATE_TAX_6.25', component_name: 'State Sales Tax', rate: 6.25, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -119,8 +119,8 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'USA_SALES_7.25',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'STATE_TAX_6', component_name: 'State Sales Tax (6%)', rate: 6.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'LOCAL_TAX_1.25', component_name: 'Local County Tax (1.25%)', rate: 1.25, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'STATE_TAX_6', component_name: 'State Sales Tax', rate: 6.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'LOCAL_TAX_1.25', component_name: 'Local County Tax', rate: 1.25, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -128,8 +128,8 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'USA_SALES_8.25',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'STATE_TAX_6.25', component_name: 'State Sales Tax (6.25%)', rate: 6.25, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'CITY_TAX_2', component_name: 'City Sales Tax (2%)', rate: 2.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'STATE_TAX_6.25', component_name: 'State Sales Tax', rate: 6.25, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'CITY_TAX_2', component_name: 'City Sales Tax', rate: 2.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
         ]
       }
     ];
@@ -142,7 +142,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'KE_VAT_0',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'KE_ZERO_0', component_name: 'Zero-Rated VAT (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'KE_ZERO_0', component_name: 'Zero-Rated VAT', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -150,7 +150,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'KE_VAT_16',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'KE_VAT_16', component_name: 'VAT (16%)', rate: 16.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'KE_VAT_16', component_name: 'VAT', rate: 16.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -158,8 +158,8 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'KE_HOSP_18',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'KE_VAT_16', component_name: 'VAT (16%)', rate: 16.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'KE_CTL_2', component_name: 'Catering & Tourism Levy (2%)', rate: 2.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'KE_VAT_16', component_name: 'VAT', rate: 16.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'KE_CTL_2', component_name: 'Catering & Tourism Levy', rate: 2.0, calculation_order: 2, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -167,7 +167,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'KE_VAT_8',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'KE_VAT_8', component_name: 'Fuel VAT (8%)', rate: 8.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'KE_VAT_8', component_name: 'Fuel VAT', rate: 8.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       }
     ];
@@ -180,7 +180,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'UK_VAT_0',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'UK_ZERO_0', component_name: 'Zero Rate VAT (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'UK_ZERO_0', component_name: 'Zero Rate VAT', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -188,7 +188,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'UK_VAT_5',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'UK_RED_5', component_name: 'Reduced VAT (5%)', rate: 5.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'UK_RED_5', component_name: 'Reduced VAT', rate: 5.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -196,7 +196,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'UK_VAT_20',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'UK_STD_20', component_name: 'Standard VAT (20%)', rate: 20.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'UK_STD_20', component_name: 'Standard VAT', rate: 20.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       }
     ];
@@ -209,7 +209,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'DE_MWST_0',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'DE_ZERO_0', component_name: 'Steuerfrei (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'DE_ZERO_0', component_name: 'Steuerfrei', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -217,7 +217,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'DE_MWST_7',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'DE_RED_7', component_name: 'Ermäßigter MwSt (7%)', rate: 7.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'DE_RED_7', component_name: 'Ermäßigter MwSt', rate: 7.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -225,7 +225,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'DE_MWST_19',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'DE_STD_19', component_name: 'Regelsteuersatz MwSt (19%)', rate: 19.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'DE_STD_19', component_name: 'Regelsteuersatz MwSt', rate: 19.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       }
     ];
@@ -238,7 +238,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'BR_ISENTO',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'BR_ISENTO_0', component_name: 'Isento de Impostos (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'BR_ISENTO_0', component_name: 'Isento de Impostos', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -246,7 +246,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'BR_ICMS_18',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'BR_ICMS_18', component_name: 'ICMS Estadual (18%)', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'BR_ICMS_18', component_name: 'ICMS Estadual', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -254,9 +254,9 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'BR_TRIB_27.25',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'BR_ICMS_18', component_name: 'ICMS (18%)', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'BR_PIS_1.65', component_name: 'PIS (1.65%)', rate: 1.65, calculation_order: 2, calculation_type: 'FLAT_PERCENT' },
-          { component_code: 'BR_COFINS_7.6', component_name: 'COFINS (7.6%)', rate: 7.6, calculation_order: 3, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'BR_ICMS_18', component_name: 'ICMS', rate: 18.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'BR_PIS_1.65', component_name: 'PIS', rate: 1.65, calculation_order: 2, calculation_type: 'FLAT_PERCENT' },
+          { component_code: 'BR_COFINS_7.6', component_name: 'COFINS', rate: 7.6, calculation_order: 3, calculation_type: 'FLAT_PERCENT' }
         ]
       }
     ];
@@ -269,7 +269,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'EU_VAT_0',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'EU_ZERO_0', component_name: 'Zero Rate VAT (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'EU_ZERO_0', component_name: 'Zero Rate VAT', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -277,7 +277,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'EU_VAT_10',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'EU_RED_10', component_name: 'Reduced VAT (10%)', rate: 10.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'EU_RED_10', component_name: 'Reduced VAT', rate: 10.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       },
       {
@@ -285,7 +285,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
         group_code: 'EU_VAT_21',
         is_tax_inclusive: false,
         components: [
-          { component_code: 'EU_STD_21', component_name: 'Standard VAT (21%)', rate: 21.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+          { component_code: 'EU_STD_21', component_name: 'Standard VAT', rate: 21.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
         ]
       }
     ];
@@ -298,7 +298,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
       group_code: 'TAX_0',
       is_tax_inclusive: false,
       components: [
-        { component_code: 'ZERO_0', component_name: 'Zero Tax (0%)', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        { component_code: 'ZERO_0', component_name: 'Zero Tax', rate: 0.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
       ]
     },
     {
@@ -306,7 +306,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
       group_code: 'TAX_10',
       is_tax_inclusive: false,
       components: [
-        { component_code: 'TAX_10', component_name: 'Standard Tax (10%)', rate: 10.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        { component_code: 'TAX_10', component_name: 'Standard Tax', rate: 10.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
       ]
     },
     {
@@ -314,7 +314,7 @@ export function getDefaultTaxGroupsForCountry(country?: string): Array<{
       group_code: 'TAX_15',
       is_tax_inclusive: false,
       components: [
-        { component_code: 'TAX_15', component_name: 'Standard Tax (15%)', rate: 15.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
+        { component_code: 'TAX_15', component_name: 'Standard Tax', rate: 15.0, calculation_order: 1, calculation_type: 'FLAT_PERCENT' }
       ]
     },
     {

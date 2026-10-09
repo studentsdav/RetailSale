@@ -21,7 +21,7 @@ class AppUser {
     required this.email,
     this.maxDiscountPercent = 100.0,
     this.pinCode,
-    this.showInQuickLogin = true,
+    this.showInQuickLogin = false,
     Set<String>? permissions,
   }) : permissions = permissions ?? {};
 
@@ -43,7 +43,9 @@ class AppUser {
       email: json['contact_email'] ?? "",
       maxDiscountPercent: parseMaxDisc(json['max_discount_percent']),
       pinCode: json['pin_code']?.toString(),
-      showInQuickLogin: json['show_in_quick_login'] != false,
+      showInQuickLogin: json['show_in_quick_login'] == true ||
+          json['show_in_quick_login'] == 1 ||
+          json['show_in_quick_login'] == 'true',
     );
   }
 }

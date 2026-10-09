@@ -102,14 +102,21 @@ export const listKots = async (req: Request, res: Response) => {
                         {
                             model: (req as any).propertyDb.models.item_master,
                             as: 'item',
-                            attributes: ['id', 'item_name', 'rate', 'retail_sale_price', 'mrp', 'tax_percent', 'tax_type', 'tax_group_id', 'brand', 'location', 'item_group', 'sub_category', 'is_tax_inclusive'],
+                            attributes: ['id', 'item_code', 'item_name', 'hsn_sac_code', 'barcode', 'unit', 'rate', 'retail_sale_price', 'mrp', 'tax_percent', 'tax_type', 'tax_group_id', 'brand', 'location', 'item_group', 'sub_category', 'is_tax_inclusive'],
                             required: false,
                             include: [
                                 {
                                     model: (req as any).propertyDb.models.tax_groups,
                                     as: 'tax_group',
-                                    attributes: ['id', 'group_name', 'total_rate', 'is_tax_inclusive'],
-                                    required: false
+                                    attributes: ['id', 'group_name', 'group_code', 'total_rate', 'is_tax_inclusive'],
+                                    required: false,
+                                    include: [
+                                        {
+                                            model: (req as any).propertyDb.models.tax_group_components,
+                                            as: 'components',
+                                            required: false
+                                        }
+                                    ]
                                 }
                             ]
                         }
@@ -228,14 +235,21 @@ export const getKotDetails = async (req: Request, res: Response) => {
                         {
                             model: (req as any).propertyDb.models.item_master,
                             as: 'item',
-                            attributes: ['id', 'item_name', 'rate', 'retail_sale_price', 'mrp', 'tax_percent', 'tax_type', 'tax_group_id', 'brand', 'location', 'item_group', 'sub_category'],
+                            attributes: ['id', 'item_code', 'item_name', 'hsn_sac_code', 'barcode', 'unit', 'rate', 'retail_sale_price', 'mrp', 'tax_percent', 'tax_type', 'tax_group_id', 'brand', 'location', 'item_group', 'sub_category', 'is_tax_inclusive'],
                             required: false,
                             include: [
                                 {
                                     model: (req as any).propertyDb.models.tax_groups,
                                     as: 'tax_group',
-                                    attributes: ['id', 'group_name', 'total_rate', 'is_tax_inclusive'],
-                                    required: false
+                                    attributes: ['id', 'group_name', 'group_code', 'total_rate', 'is_tax_inclusive'],
+                                    required: false,
+                                    include: [
+                                        {
+                                            model: (req as any).propertyDb.models.tax_group_components,
+                                            as: 'components',
+                                            required: false
+                                        }
+                                    ]
                                 }
                             ]
                         }
