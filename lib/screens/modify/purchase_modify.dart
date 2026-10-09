@@ -37,7 +37,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
 
   final _searchCtrl = TextEditingController();
 
-  DateTime _fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 7));
+  DateTime selectedDate = DateTimeService.instance.nowInTimeZone;
   bool _loading = false;
   String _statusFilter = 'ALL';
   String _selectedSupplierFilter = 'ALL';
@@ -75,7 +75,7 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
   Future<void> _loadPOs() async {
     setState(() => _loading = true);
     try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(_fromDate);
+      final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
       await ctrl.loadPOByDate(dateStr);
 
       final pos = List.from(ctrl.purchaseOrders);
@@ -128,9 +128,25 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
             orElse: () => null,
           );
 
+      final newItems = List.from(ctrl.items);
+      double calculatedTotal = 0;
+      for (var it in newItems) {
+        final q = double.tryParse(it['qty']?.toString() ?? '0') ?? 0;
+        final r = double.tryParse(it['rate']?.toString() ?? '0') ?? 0;
+        final t = double.tryParse(it['tax']?.toString() ?? '0') ?? 0;
+        calculatedTotal += (q * r) + ((q * r) * (t / 100));
+      }
+
+      if (matchedSummary != null) {
+        final curAmt = double.tryParse(matchedSummary['total_amount']?.toString() ?? '0') ?? 0;
+        if (curAmt == 0 && calculatedTotal > 0) {
+          matchedSummary['total_amount'] = calculatedTotal;
+        }
+      }
+
       setState(() {
         selectedSupplierId = suppId is int ? suppId : int.tryParse(suppId?.toString() ?? '');
-        items = List.from(ctrl.items);
+        items = newItems;
         selectedPoData = Map<String, dynamic>.from(
           ctrl.poDetails.isNotEmpty ? ctrl.poDetails : (matchedSummary ?? {}),
         );
@@ -142,7 +158,12 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
     final query = _searchCtrl.text.trim().toLowerCase();
     return ctrl.purchaseOrders.cast<Map<String, dynamic>>().where((p) {
       final status = (p['status'] ?? 'OPEN').toString().toUpperCase().trim();
-      final suppName = (p['supplier_name'] ?? p['supplier']?['supplier_name'] ?? '').toString().toLowerCase().trim();
+      final suppId = (p['supplier_id'] ?? '').toString().trim();
+      final suppObj = supplierCtrl.list.cast<Supplier?>().firstWhere(
+        (s) => s?.id.toString() == suppId,
+        orElse: () => null,
+      );
+      final suppName = (p['supplier_name'] ?? p['supplier']?['supplier_name'] ?? suppObj?.supplierName ?? '').toString().toLowerCase().trim();
       final suppId = (p['supplier_id'] ?? '').toString().trim();
       final poNo = (p['po_no'] ?? '').toString().toLowerCase().trim();
 
@@ -710,11 +731,11 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
         runSpacing: 10,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          // Date Range picker
+          // Date Picker Button
           OutlinedButton.icon(
             icon: const Icon(Icons.date_range, size: 16),
             label: Text(
-              DateFormat('dd-MMM-yyyy').format(_fromDate),
+              DateFormat('dd-MMM-yyyy').format(selectedDate),
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             style: OutlinedButton.styleFrom(
@@ -725,12 +746,12 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
             onPressed: () async {
               final d = await showDatePicker(
                 context: context,
-                initialDate: _fromDate,
+                initialDate: selectedDate,
                 firstDate: DateTime(2020),
                 lastDate: DateTime.now(),
               );
               if (d != null) {
-                setState(() => _fromDate = d);
+                setState(() => selectedDate = d);
                 await _loadPOs();
               }
             },
@@ -908,7 +929,12 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
           final po = list[i];
           final id = int.tryParse(po['id']?.toString() ?? '');
           final poNo = po['po_no']?.toString() ?? 'PO #$id';
-          final suppName = po['supplier_name'] ?? po['supplier']?['supplier_name'] ?? 'Supplier #${po['supplier_id']}';
+          final suppId = (po['supplier_id'] ?? '').toString().trim();
+          final suppObj = supplierCtrl.list.cast<Supplier?>().firstWhere(
+            (s) => s?.id.toString() == suppId,
+            orElse: () => null,
+          );
+          final suppName = po['supplier_name'] ?? po['supplier']?['supplier_name'] ?? suppObj?.supplierName ?? (suppId.isNotEmpty ? 'Supplier #$suppId' : 'No Supplier');
           final status = (po['status'] ?? 'OPEN').toString().toUpperCase().trim();
           final isSelected = selectedPoId == id;
           final statusColor = _getStatusColor(status);
@@ -918,7 +944,8 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
             poDate = DateTime.tryParse(rawDate.toString());
           }
           final dateStr = poDate != null ? DateFormat('dd MMM yyyy').format(poDate) : '';
-          final totalAmt = double.tryParse(po['total_amount']?.toString() ?? po['grand_total']?.toString() ?? '0') ?? 0;
+          final parsedAmt = double.tryParse(po['total_amount']?.toString() ?? po['grand_total']?.toString() ?? '0') ?? 0;
+          final totalAmt = parsedAmt > 0 ? parsedAmt : (isSelected && grandTotal > 0 ? grandTotal : 0.0);
 
           return InkWell(
             onTap: id != null ? () => _loadDetails(id) : null,

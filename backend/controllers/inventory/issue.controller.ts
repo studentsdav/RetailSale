@@ -303,29 +303,48 @@ export const getIssueDetails = async (req: Request, res: Response) => {
 export const getIssueByDate = async (req: Request, res: Response) => {
     try {
         const outlet_id = (req as any).user.outlet_id;
-        const { date } = req.query as any;
-        const normalizedDate = normalizeDateKey(date);
+        const { date, from_date, to_date } = req.query as any;
+
+        let dateClause: any = {};
+        if (from_date && to_date) {
+            const normFrom = normalizeDateKey(from_date) || from_date;
+            const normTo = normalizeDateKey(to_date) || to_date;
+            dateClause = { [Op.between]: [normFrom, normTo] };
+        } else if (date) {
+            const normalizedDate = normalizeDateKey(date) || date;
+            dateClause = normalizedDate;
+        }
+
+        const where: any = { outlet_id };
+        if (date || (from_date && to_date)) {
+            where.issue_date = dateClause;
+        }
 
         const data = await (req as any).propertyDb.models.issue_headers.findAll({
-            where: {
-                outlet_id,
-                issue_date: normalizedDate || date,
-                status: {
-                    [Op.ne]: 'CANCELLED'
+            where,
+            include: [
+                {
+                    model: (req as any).propertyDb.models.issue_items,
+                    as: 'items',
+                    attributes: ['id', 'qty', 'rate', 'amount']
                 }
-            },
-            attributes: [
-                'id',
-                'issue_no',
-                'department',
-                'issue_date'
             ],
             order: [['id', 'DESC']]
         });
 
+        const formatted = data.map((iss: any) => {
+            const json = iss.toJSON();
+            let total = 0;
+            if (Array.isArray(json.items)) {
+                total = json.items.reduce((sum: number, it: any) => sum + (Number(it.amount || (it.qty * it.rate)) || 0), 0);
+            }
+            json.total_amount = total;
+            return json;
+        });
+
         res.json({
             success: true,
-            data
+            data: formatted
         });
 
     } catch (err: any) {

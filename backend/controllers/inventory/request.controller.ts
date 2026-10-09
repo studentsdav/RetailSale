@@ -286,33 +286,49 @@ export const listRequests = async (req: Request, res: Response) => {
 
 export const getRequestsByDate = async (req: Request, res: Response) => {
     try {
-        const { date } = req.query as any;
+        const { date, from_date, to_date } = req.query as any;
         const outlet_id = (req as any).user.outlet_id;
-        const normalizedDate = normalizeDateKey(date);
+
+        let dateClause: any = {};
+        if (from_date && to_date) {
+            const normFrom = normalizeDateKey(from_date) || from_date;
+            const normTo = normalizeDateKey(to_date) || to_date;
+            dateClause = { [Op.between]: [normFrom, normTo] };
+        } else if (date) {
+            const normalizedDate = normalizeDateKey(date) || date;
+            dateClause = normalizedDate;
+        }
+
+        const where: any = { outlet_id };
+        if (date || (from_date && to_date)) {
+            where.request_date = dateClause;
+        }
 
         const data = await (req as any).propertyDb.models.request_headers.findAll({
-            where: {
-                outlet_id,
-                request_date: normalizedDate || date,
-                approval_status: 'APPROVED',
-                status: {
-                    [Op.in]: ['OPEN', 'PARTIAL']
+            where,
+            include: [
+                {
+                    model: (req as any).propertyDb.models.request_items,
+                    as: 'items',
+                    attributes: ['id', 'qty', 'rate']
                 }
-            },
-            attributes: [
-                'id',
-                'request_no',
-                'department',
-                'request_date',
-                'status',
-                'approval_status'
             ],
-            order: [['created_at', 'DESC']]
+            order: [['created_at', 'DESC'], ['id', 'DESC']]
+        });
+
+        const formatted = data.map((reqItem: any) => {
+            const json = reqItem.toJSON();
+            let total = 0;
+            if (Array.isArray(json.items)) {
+                total = json.items.reduce((sum: number, it: any) => sum + ((Number(it.qty) || 0) * (Number(it.rate) || 0)), 0);
+            }
+            json.total_amount = total;
+            return json;
         });
 
         res.json({
             success: true,
-            data
+            data: formatted
         });
 
     } catch (err: any) {

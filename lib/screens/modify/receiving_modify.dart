@@ -40,7 +40,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
 
   final _searchCtrl = TextEditingController();
 
-  DateTime _fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 7));
+  DateTime selectedDate = DateTimeService.instance.nowInTimeZone;
   bool _loading = false;
   String _statusFilter = 'ALL';
   String _selectedSupplierFilter = 'ALL';
@@ -75,7 +75,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
 
     if (widget.initialGrnId != null) {
       if (widget.initialReceiptDate != null) {
-        _fromDate = widget.initialReceiptDate!;
+        selectedDate = widget.initialReceiptDate!;
       }
       await _loadGRNs();
       await _loadDetails(widget.initialGrnId!);
@@ -87,7 +87,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
   Future<void> _loadGRNs() async {
     setState(() => _loading = true);
     try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(_fromDate);
+      final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
       await ctrl.loadGRNByDate(dateStr);
 
       final grns = List.from(ctrl.grns);
@@ -140,9 +140,26 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
             orElse: () => null,
           );
 
+      final newItems = List.from(ctrl.items);
+      double calculatedTotal = 0;
+      for (var it in newItems) {
+        final q = _parseDouble(it['qty']);
+        final r = _parseDouble(it['rate']);
+        final t = _parseDouble(it['tax']);
+        calculatedTotal += (q * r) + ((q * r) * (t / 100));
+      }
+
+      if (matchedSummary != null) {
+        final curAmt = _parseDouble(matchedSummary['net_amount'] ?? matchedSummary['total_amount']);
+        if (curAmt == 0 && calculatedTotal > 0) {
+          matchedSummary['net_amount'] = calculatedTotal;
+          matchedSummary['total_amount'] = calculatedTotal;
+        }
+      }
+
       setState(() {
         selectedSupplierId = suppId is int ? suppId : int.tryParse(suppId?.toString() ?? '');
-        items = List.from(ctrl.items);
+        items = newItems;
         selectedGrnData = Map<String, dynamic>.from(
           ctrl.grnDetails.isNotEmpty ? ctrl.grnDetails : (matchedSummary ?? {}),
         );
@@ -658,7 +675,7 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
           OutlinedButton.icon(
             icon: const Icon(Icons.date_range, size: 16),
             label: Text(
-              DateFormat('dd-MMM-yyyy').format(_fromDate),
+              DateFormat('dd-MMM-yyyy').format(selectedDate),
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             style: OutlinedButton.styleFrom(
@@ -669,12 +686,12 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
             onPressed: () async {
               final d = await showDatePicker(
                 context: context,
-                initialDate: _fromDate,
+                initialDate: selectedDate,
                 firstDate: DateTime(2020),
                 lastDate: DateTime.now(),
               );
               if (d != null) {
-                setState(() => _fromDate = d);
+                setState(() => selectedDate = d);
                 await _loadGRNs();
               }
             },
@@ -848,7 +865,12 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
           final grn = list[i];
           final id = int.tryParse(grn['id']?.toString() ?? '');
           final grnNo = grn['grn_no']?.toString() ?? 'GRN #$id';
-          final suppName = grn['supplier_name'] ?? grn['supplier']?['supplier_name'] ?? 'Supplier #${grn['supplier_id']}';
+          final suppId = (grn['supplier_id'] ?? '').toString().trim();
+          final suppObj = supplierCtrl.list.cast<Supplier?>().firstWhere(
+            (s) => s?.id.toString() == suppId,
+            orElse: () => null,
+          );
+          final suppName = grn['supplier_name'] ?? grn['supplier']?['supplier_name'] ?? suppObj?.supplierName ?? (suppId.isNotEmpty ? 'Supplier #$suppId' : 'No Supplier');
           final status = (grn['status'] ?? 'COMPLETED').toString().toUpperCase().trim();
           final isSelected = selectedGrnId == id;
           final statusColor = _getStatusColor(status);
@@ -858,7 +880,8 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
             receiptDate = DateTime.tryParse(rawDate.toString());
           }
           final dateStr = receiptDate != null ? DateFormat('dd MMM yyyy').format(receiptDate) : '';
-          final totalAmt = _parseDouble(grn['net_amount'] ?? grn['total_amount'] ?? grn['grand_total']);
+          final parsedAmt = _parseDouble(grn['net_amount'] ?? grn['total_amount'] ?? grn['grand_total']);
+          final totalAmt = parsedAmt > 0 ? parsedAmt : (isSelected && netAmount > 0 ? netAmount : 0.0);
           final billNo = (grn['supplier_bill_no'] ?? '').toString().trim();
 
           return InkWell(

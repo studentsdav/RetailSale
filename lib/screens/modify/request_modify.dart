@@ -35,8 +35,7 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
 
   final _searchCtrl = TextEditingController();
 
-  DateTime _fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 7));
-  DateTime _toDate = DateTimeService.instance.nowInTimeZone;
+  DateTime selectedDate = DateTimeService.instance.nowInTimeZone;
   bool _loading = false;
   String _statusFilter = 'ALL';
   String _selectedDeptFilter = 'ALL';
@@ -74,7 +73,7 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
   Future<void> _loadRequests() async {
     setState(() => _loading = true);
     try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(_fromDate);
+      final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
       await ctrl.loadRequestsByDate(dateStr);
 
       final requests = List.from(ctrl.requests);
@@ -133,8 +132,23 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
             orElse: () => null,
           );
 
+      final newItems = List.from(ctrl.items);
+      double calculatedTotal = 0;
+      for (var it in newItems) {
+        final q = double.tryParse(it['qty']?.toString() ?? '0') ?? 0;
+        final r = double.tryParse(it['rate']?.toString() ?? '0') ?? 0;
+        calculatedTotal += (q * r);
+      }
+
+      if (matchedSummary != null) {
+        final curAmt = double.tryParse(matchedSummary['total_amount']?.toString() ?? '0') ?? 0;
+        if (curAmt == 0 && calculatedTotal > 0) {
+          matchedSummary['total_amount'] = calculatedTotal;
+        }
+      }
+
       setState(() {
-        items = List.from(ctrl.items);
+        items = newItems;
         selectedDepartment = nextDepartment;
         selectedRequestData = Map<String, dynamic>.from(ctrl.requestDetails.isNotEmpty ? ctrl.requestDetails : (matchedSummary ?? {}));
       });
@@ -175,21 +189,16 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
     return sum;
   }
 
-  Future<void> _pickDate({required bool isFrom}) async {
-    final initial = isFrom ? _fromDate : _toDate;
+  Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial,
+      initialDate: selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (picked == null) return;
     setState(() {
-      if (isFrom) {
-        _fromDate = picked;
-      } else {
-        _toDate = picked;
-      }
+      selectedDate = picked;
     });
     _loadRequests();
   }
@@ -652,9 +661,9 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // From Date Picker
+                    // Date Picker
                     InkWell(
-                      onTap: () => _pickDate(isFrom: true),
+                      onTap: _pickDate,
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
                         height: 42,
@@ -674,7 +683,7 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text('Date', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.w600)),
-                                Text(DateFormat('dd-MMM-yyyy').format(_fromDate), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+                                Text(DateFormat('dd-MMM-yyyy').format(selectedDate), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
                               ],
                             ),
                           ],
@@ -875,11 +884,16 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
             final status = (r['status'] ?? 'PENDING').toString().toUpperCase().trim();
             final reqItems = r['items'] as List? ?? [];
 
-            double reqTotal = 0.0;
-            for (var it in reqItems) {
-              final q = double.tryParse(it['qty']?.toString() ?? '0') ?? 0.0;
-              final rt = double.tryParse(it['rate']?.toString() ?? '0') ?? 0.0;
-              reqTotal += (q * rt);
+            double reqTotal = double.tryParse(r['total_amount']?.toString() ?? '0') ?? 0.0;
+            if (reqTotal == 0.0) {
+              for (var it in reqItems) {
+                final q = double.tryParse(it['qty']?.toString() ?? '0') ?? 0.0;
+                final rt = double.tryParse(it['rate']?.toString() ?? '0') ?? 0.0;
+                reqTotal += (q * rt);
+              }
+            }
+            if (reqTotal == 0.0 && isSelected && totalReqAmount > 0) {
+              reqTotal = totalReqAmount;
             }
 
             final isPending = status == 'PENDING' || status == 'AUTO';

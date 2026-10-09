@@ -32,7 +32,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
 
   final _searchCtrl = TextEditingController();
 
-  DateTime _fromDate = DateTimeService.instance.nowInTimeZone.subtract(const Duration(days: 7));
+  DateTime selectedDate = DateTimeService.instance.nowInTimeZone;
   bool _loading = false;
   String _statusFilter = 'ALL';
   String _selectedDeptFilter = 'ALL';
@@ -70,7 +70,7 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
   Future<void> _loadIssues() async {
     setState(() => _loading = true);
     try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(_fromDate);
+      final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
       await ctrl.loadIssueByDate(dateStr);
 
       final issues = List.from(ctrl.issues);
@@ -131,8 +131,23 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
             orElse: () => null,
           );
 
+      final newItems = List.from(ctrl.items);
+      double calculatedTotal = 0;
+      for (var it in newItems) {
+        final q = double.tryParse(it['qty']?.toString() ?? '0') ?? 0;
+        final r = double.tryParse(it['rate']?.toString() ?? '0') ?? 0;
+        calculatedTotal += q * r;
+      }
+
+      if (matchedSummary != null) {
+        final curAmt = double.tryParse(matchedSummary['total_amount']?.toString() ?? '0') ?? 0;
+        if (curAmt == 0 && calculatedTotal > 0) {
+          matchedSummary['total_amount'] = calculatedTotal;
+        }
+      }
+
       setState(() {
-        items = List.from(ctrl.items);
+        items = newItems;
         selectedDepartment = nextDepartment;
         selectedIssueData = Map<String, dynamic>.from(
           ctrl.issueDetails.isNotEmpty ? ctrl.issueDetails : (matchedSummary ?? {}),
@@ -600,11 +615,11 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
         runSpacing: 10,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          // Date Range button
+          // Date Picker button
           OutlinedButton.icon(
             icon: const Icon(Icons.date_range, size: 16),
             label: Text(
-              DateFormat('dd-MMM-yyyy').format(_fromDate),
+              DateFormat('dd-MMM-yyyy').format(selectedDate),
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             style: OutlinedButton.styleFrom(
@@ -615,12 +630,12 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
             onPressed: () async {
               final d = await showDatePicker(
                 context: context,
-                initialDate: _fromDate,
+                initialDate: selectedDate,
                 firstDate: DateTime(2020),
                 lastDate: DateTime.now(),
               );
               if (d != null) {
-                setState(() => _fromDate = d);
+                setState(() => selectedDate = d);
                 await _loadIssues();
               }
             },
@@ -801,7 +816,8 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
             issueDate = DateTime.tryParse(rawDate.toString());
           }
           final dateStr = issueDate != null ? DateFormat('dd MMM yyyy').format(issueDate) : '';
-          final totalAmt = double.tryParse(iss['total_amount']?.toString() ?? '0') ?? 0;
+          final parsedAmt = double.tryParse(iss['total_amount']?.toString() ?? '0') ?? 0;
+          final totalAmt = parsedAmt > 0 ? parsedAmt : (isSelected && total > 0 ? total : 0.0);
           final reqNo = (iss['open_request_no'] ?? '').toString().trim();
 
           return InkWell(

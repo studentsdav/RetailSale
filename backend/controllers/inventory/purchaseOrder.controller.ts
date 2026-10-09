@@ -204,21 +204,52 @@ export const getPurchaseOrderDetails = async (req: Request, res: Response) => {
 export const getPoByDate = async (req: Request, res: Response) => {
     try {
         const outlet_id = (req as any).user.outlet_id;
-        const { date } = req.query as any;
-        const normalizedDate = normalizeDateKey(date);
+        const { date, from_date, to_date } = req.query as any;
+
+        let dateClause: any = {};
+        if (from_date && to_date) {
+            const normFrom = normalizeDateKey(from_date) || from_date;
+            const normTo = normalizeDateKey(to_date) || to_date;
+            dateClause = { [Op.between]: [normFrom, normTo] };
+        } else if (date) {
+            const normalizedDate = normalizeDateKey(date) || date;
+            dateClause = normalizedDate;
+        }
+
+        const where: any = { outlet_id };
+        if (date || (from_date && to_date)) {
+            where.po_date = dateClause;
+        }
 
         const data = await (req as any).propertyDb.models.purchase_orders.findAll({
-            where: {
-                outlet_id,
-                po_date: normalizedDate || date,
-                status: {
-                    [Op.in]: ['OPEN', 'PARTIAL']
+            where,
+            include: [
+                {
+                    model: (req as any).propertyDb.models.supplier_master,
+                    as: 'supplier',
+                    attributes: ['id', 'supplier_code', 'supplier_name', 'phone', 'address', 'gstin']
+                },
+                {
+                    model: (req as any).propertyDb.models.purchase_order_items,
+                    as: 'items',
+                    attributes: ['id', 'qty', 'rate', 'tax', 'amount', 'tax_amount', 'total_after_tax']
                 }
-            },
-            attributes: ['id', 'po_no']
+            ],
+            order: [['id', 'DESC']]
         });
 
-        res.json({ success: true, data });
+        const formatted = data.map((po: any) => {
+            const json = po.toJSON();
+            let total = Number(json.total_amount || 0);
+            if (total === 0 && Array.isArray(json.items) && json.items.length > 0) {
+                total = json.items.reduce((sum: number, it: any) => sum + (Number(it.amount || (it.qty * it.rate)) + Number(it.tax_amount || 0)), 0);
+            }
+            json.total_amount = total;
+            json.supplier_name = json.supplier?.supplier_name || (json.supplier_id ? `Supplier #${json.supplier_id}` : 'N/A');
+            return json;
+        });
+
+        res.json({ success: true, data: formatted });
 
     } catch (err: any) {
         res.status(500).json({ success: false, message: err.message });
