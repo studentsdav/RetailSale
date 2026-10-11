@@ -4205,6 +4205,20 @@ COMMIT;
       `);
     }
   }
+,
+  {
+    version: 115,
+    description: "Add custom_settings column to system_settings table for dynamic integrations and M-Pesa config",
+    up: async (db: any) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE system_settings 
+          ADD COLUMN IF NOT EXISTS custom_settings JSONB DEFAULT '{}'::jsonb;
+        COMMIT;
+      `);
+    }
+  }
 ];
 
 export default migrations;
+

@@ -1880,8 +1880,8 @@ exports.setOpeningBalance = async (req, res) => {
             reference_no: voucherNo,
             party_name: 'Business Deposit',
             payment_method: payment_mode,
-            amount_in: opening_balance,
-            amount_out: 0,
+            amount_in: opening_balance >= 0 ? opening_balance : 0,
+            amount_out: opening_balance < 0 ? Math.abs(opening_balance) : 0,
             adjustment_amount: 0,
             notes: note || `Opening deposit added on ${balance_date}`
         };
@@ -2311,7 +2311,11 @@ exports.getLedgerReport = async (req, res) => {
             },
             order: [['balance_date', 'ASC']]
         });
-        const daily = buildDailyLedgerGroups(entries, new Map(), openingBalance)
+        const openingMap = new Map();
+        for (const op of openingRows) {
+            openingMap.set(dateKey(op.balance_date), toAmount(op.opening_balance));
+        }
+        let daily = buildDailyLedgerGroups(entries, openingMap, openingBalance)
             .map((group) => ({
                 ...group,
                 date: dateKey(group.date),
@@ -2321,6 +2325,15 @@ exports.getLedgerReport = async (req, res) => {
                 }))
             }))
             .reverse();
+
+        if (daily.length === 0 && fromDate) {
+            daily = [{
+                date: dateKey(fromDate),
+                opening_balance: openingBalance,
+                closing_balance: closingBalance,
+                entries: []
+            }];
+        }
 
         res.json({
             success: true,

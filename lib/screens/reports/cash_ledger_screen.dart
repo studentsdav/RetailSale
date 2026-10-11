@@ -1785,8 +1785,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           '',
           'Opening deposit carried for business',
           '',
-          day.openingBalance.toStringAsFixed(2),
-          '',
+          day.openingBalance >= 0 ? day.openingBalance.toStringAsFixed(2) : '',
+          day.openingBalance < 0 ? day.openingBalance.abs().toStringAsFixed(2) : '',
           day.openingBalance.toStringAsFixed(2),
         ], style: ledgerOpeningStyle);
         for (final entry in day.entries) {
@@ -2036,8 +2036,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           '',
           'Opening deposit carried for business',
           '',
-          day.openingBalance.toStringAsFixed(2),
-          '',
+          day.openingBalance >= 0 ? day.openingBalance.toStringAsFixed(2) : '',
+          day.openingBalance < 0 ? day.openingBalance.abs().toStringAsFixed(2) : '',
           day.openingBalance.toStringAsFixed(2)
         ]);
         for (final entry in day.entries) {
@@ -3332,7 +3332,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 children: [
                   _buildKpiCard(
                     title: 'Deposit',
-                    value: _money(ctrl.depositTotal),
+                    value: _money(ctrl.depositTotal > 0 ? ctrl.depositTotal : ctrl.openingBalance),
                     icon: Icons.account_balance_rounded,
                     color: Colors.blueGrey,
                   ),
@@ -3577,17 +3577,22 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               const _LedgerCell('Opening deposit carried for business'),
               const _LedgerCell('-', align: TextAlign.right),
               _LedgerCell(
-                _money(day.openingBalance),
+                day.openingBalance >= 0 ? _money(day.openingBalance) : '-',
                 align: TextAlign.right,
                 bold: true,
                 color: Colors.green,
               ),
-              const _LedgerCell('-', align: TextAlign.right),
+              _LedgerCell(
+                day.openingBalance < 0 ? _money(day.openingBalance.abs()) : '-',
+                align: TextAlign.right,
+                bold: true,
+                color: Colors.red,
+              ),
               _LedgerCell(
                 _money(day.openingBalance),
                 align: TextAlign.right,
                 bold: true,
-                color: Colors.indigo,
+                color: day.openingBalance < 0 ? Colors.red : Colors.indigo,
               ),
             ],
           ),

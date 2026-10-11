@@ -210,6 +210,10 @@ module.exports = (sequelize, DataTypes) => {
         restaurant_settlement_mode: {
             type: DataTypes.STRING(30),
             defaultValue: 'DIRECT'
+        },
+        custom_settings: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
         }
     }, {
         tableName: 'system_settings',

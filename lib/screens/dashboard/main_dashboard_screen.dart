@@ -74,6 +74,7 @@ import '../restaurant/table_qr_designer_screen.dart';
 import '../restaurant/table_reservation_screen.dart';
 import '../dining/table_dining_screen.dart';
 import '../settings/mpesa_config_screen.dart';
+import '../settings/payment_gateways_screen.dart';
 import '../restaurant/floor_plan_configurator.dart';
 import '../restaurant/restaurant_setup_screen.dart';
 import '../restaurant/kds_screen.dart';
@@ -3777,11 +3778,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
         'icon': Icons.phone_android,
-        'label': 'Safaricom M-Pesa Integration',
-        'subLabel': 'Configure Daraja API STK Push, Till, & Paybill',
+        'label': 'Payment & Settlement Management',
+        'subLabel': 'Payment Methods, Settlement Mode (Direct / Pre-Bill), UPI, Stripe, Square, PayPal, M-Pesa',
         'permission': 'PAYMENT_MODES',
-        'keywords': ['mpesa', 'm-pesa', 'daraja', 'safaricom', 'stk push', 'paybill', 'till number', 'kenya payments', 'mobile money'],
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MpesaConfigScreen())),
+        'keywords': ['payment gateways', 'upi', 'stripe', 'square', 'razorpay', 'paypal', 'mpesa', 'daraja', 'settlement', 'digital wallet', 'india', 'usa', 'europe', 'germany', 'kenya'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentGatewaysScreen())),
       },
 
       // HR & Payroll

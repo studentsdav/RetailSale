@@ -7,6 +7,7 @@ import '../../models/common/property_info_model.dart';
 class PropertyInfoController extends ChangeNotifier {
   bool loading = false;
   PropertyInfo? data;
+  PropertyInfo? get propertyInfo => data;
 
   Future<void> load() async {
     try {

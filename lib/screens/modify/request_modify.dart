@@ -892,8 +892,12 @@ class _RequestModifyScreenState extends State<RequestModifyScreen> {
                 reqTotal += (q * rt);
               }
             }
-            if (reqTotal == 0.0 && isSelected && totalReqAmount > 0) {
-              reqTotal = totalReqAmount;
+            if (reqTotal == 0.0 && isSelected && items.isNotEmpty) {
+              for (var it in items) {
+                final q = double.tryParse(it['qty']?.toString() ?? '0') ?? 0.0;
+                final rt = double.tryParse(it['rate']?.toString() ?? '0') ?? 0.0;
+                reqTotal += (q * rt);
+              }
             }
 
             final isPending = status == 'PENDING' || status == 'AUTO';

@@ -185,6 +185,14 @@ exports.getSettings = async (req, res) => {
         }
 
         let settingsData = settings.toJSON ? settings.toJSON() : settings;
+        if (!settingsData.merchant_upi_id && req.propertyDb.models.property_info) {
+            const propInfo = await req.propertyDb.models.property_info.findOne({
+                where: { outlet_id }
+            }).catch(() => null);
+            if (propInfo && propInfo.upi_id) {
+                settingsData.merchant_upi_id = propInfo.upi_id;
+            }
+        }
         if (typeof settingsData.device_printer_mappings === 'string') {
             try {
                 settingsData.device_printer_mappings = JSON.parse(settingsData.device_printer_mappings);
@@ -310,6 +318,16 @@ exports.saveSettings = async (req, res) => {
             user_id: req.user.id
         });
 
+
+        if (req.body.merchant_upi_id !== undefined && req.propertyDb.models.property_info) {
+            const propInfo = await req.propertyDb.models.property_info.findOne({
+                where: { outlet_id },
+                transaction: t
+            });
+            if (propInfo) {
+                await propInfo.update({ upi_id: req.body.merchant_upi_id }, { transaction: t }).catch(() => {});
+            }
+        }
 
         await t.commit();
         res.json({ success: true, message: 'Settings saved successfully', data: record });

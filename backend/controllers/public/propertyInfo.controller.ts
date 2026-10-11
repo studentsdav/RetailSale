@@ -67,6 +67,24 @@ exports.getPropertyInfo = async (req: any, res: any) => {
             }
         }
 
+        if (actualOutletId && req.propertyDb.models.system_settings) {
+            const sysSettings = await req.propertyDb.models.system_settings.findOne({
+                where: { outlet_id: actualOutletId }
+            });
+            if (sysSettings) {
+                const upiGateway = sysSettings.custom_settings?.payment_gateways?.upi || {};
+                if (!infoObj.upi_id && (upiGateway.upi_id || sysSettings.merchant_upi_id)) {
+                    infoObj.upi_id = upiGateway.upi_id || sysSettings.merchant_upi_id || '';
+                }
+                if (!infoObj.upi_payee_name && upiGateway.payee_name) {
+                    infoObj.upi_payee_name = upiGateway.payee_name;
+                }
+                if ((infoObj.print_upi_qr === undefined || infoObj.print_upi_qr === null) && upiGateway.print_upi_qr !== undefined) {
+                    infoObj.print_upi_qr = upiGateway.print_upi_qr;
+                }
+            }
+        }
+
         res.json({ success: true, data: infoObj });
     } catch (err: any) {
         console.error("GET PROPERTY INFO ERROR STACK:", err);
@@ -165,6 +183,41 @@ exports.savePropertyInfo = async (req: any, res: any) => {
                 if (Object.keys(outletUpdates).length > 0) {
                     await outletObj.update(outletUpdates, { transaction: t }).catch(() => {});
                 }
+            }
+        }
+
+        if (req.propertyDb.models.system_settings) {
+            const sysSettings = await req.propertyDb.models.system_settings.findOne({
+                where: { outlet_id },
+                transaction: t
+            });
+            if (sysSettings) {
+                const currentCustom = sysSettings.custom_settings ? { ...sysSettings.custom_settings } : {};
+                const prevGateways = currentCustom.payment_gateways ? { ...currentCustom.payment_gateways } : {};
+                const prevUpi = prevGateways.upi ? { ...prevGateways.upi } : {};
+
+                prevGateways.upi = {
+                    ...prevUpi,
+                    enabled: prevUpi.enabled !== undefined ? prevUpi.enabled : true,
+                    upi_id: payload.upi_id !== undefined ? String(payload.upi_id).trim() : (prevUpi.upi_id || ''),
+                    payee_name: payload.upi_payee_name !== undefined && String(payload.upi_payee_name).trim() !== ''
+                        ? String(payload.upi_payee_name).trim()
+                        : (payload.legal_name || payload.property_name || prevUpi.payee_name || ''),
+                    print_upi_qr: payload.print_upi_qr !== undefined ? Boolean(payload.print_upi_qr) : (prevUpi.print_upi_qr ?? true),
+                    updated_at: new Date().toISOString()
+                };
+                currentCustom.payment_gateways = prevGateways;
+
+                const sysUpdates: any = {
+                    custom_settings: currentCustom
+                };
+                if (payload.upi_id !== undefined) {
+                    sysUpdates.merchant_upi_id = String(payload.upi_id).trim();
+                }
+
+                await sysSettings.update(sysUpdates, { transaction: t }).catch((e: any) => {
+                    console.warn("Could not sync UPI to system_settings:", e.message);
+                });
             }
         }
 

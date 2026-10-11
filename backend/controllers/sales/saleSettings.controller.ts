@@ -166,9 +166,13 @@ export const updatePaymentMethod = async (req: Request, res: Response): Promise<
     if (!method) {
       return res.status(404).json({ success: false, message: 'Payment method not found' });
     }
-    if (method.is_system) {
-      return res.status(400).json({ success: false, message: 'System payment methods cannot be modified' });
-    }
+    // Only CASH cannot be disabled
+        if (method.name === 'CASH' && is_active === false) {
+            return res.status(400).json({ success: false, message: 'Cash payment method cannot be disabled' });
+        }
+        if (method.is_system && name && name.trim().toUpperCase() !== method.name) {
+            return res.status(400).json({ success: false, message: 'System payment method name cannot be changed' });
+        }
     // Check if any bills are made with this payment method
     const usedInBills = await req.propertyDb.models.sales_headers.findOne({
       where: { payment_mode: method.name }
@@ -204,9 +208,9 @@ export const deletePaymentMethod = async (req: Request, res: Response): Promise<
     if (!method) {
       return res.status(404).json({ success: false, message: 'Payment method not found' });
     }
-    if (method.is_system) {
-      return res.status(400).json({ success: false, message: 'System payment methods cannot be deleted' });
-    }
+    if (method.name === 'CASH') {
+            return res.status(400).json({ success: false, message: 'Cash payment method cannot be deleted' });
+        }
     // Check if any bills are made with this payment method
     const usedInBills = await req.propertyDb.models.sales_headers.findOne({
       where: { payment_mode: method.name }

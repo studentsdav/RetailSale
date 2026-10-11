@@ -164,7 +164,6 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
         orElse: () => null,
       );
       final suppName = (p['supplier_name'] ?? p['supplier']?['supplier_name'] ?? suppObj?.supplierName ?? '').toString().toLowerCase().trim();
-      final suppId = (p['supplier_id'] ?? '').toString().trim();
       final poNo = (p['po_no'] ?? '').toString().toLowerCase().trim();
 
       if (_statusFilter != 'ALL') {

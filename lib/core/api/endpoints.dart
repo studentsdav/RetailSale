@@ -216,6 +216,7 @@ class ApiEndpoints {
   static const String itemModifiers = '/api/inventory/modifiers';
 
   // SAFARICOM M-PESA DARAJA
+  static const String paymentGatewaysConfig = '/api/payments/gateways/config';
   static const String mpesaConfig = '/api/payments/mpesa/config';
   static const String mpesaStkPush = '/api/payments/mpesa/stk-push';
   static const String mpesaStkQuery = '/api/payments/mpesa/stk-query';

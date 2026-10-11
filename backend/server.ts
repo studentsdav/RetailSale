@@ -229,7 +229,9 @@ if (!fs.existsSync(licensePath)) {
                 ADD COLUMN IF NOT EXISTS a4_template_config JSONB DEFAULT '{}',
                 ADD COLUMN IF NOT EXISTS a5_template_config JSONB DEFAULT '{}',
                 ADD COLUMN IF NOT EXISTS kot_template_config JSONB DEFAULT '{}',
-                ADD COLUMN IF NOT EXISTS token_template_config JSONB DEFAULT '{}';
+                ADD COLUMN IF NOT EXISTS token_template_config JSONB DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS restaurant_settlement_mode VARCHAR(30) DEFAULT 'DIRECT',
+                ADD COLUMN IF NOT EXISTS custom_settings JSONB DEFAULT '{}';
             `);
             console.log('✅ Verified/added currency, payment_modes, template configs, merchant_upi_id and subscription delivery charge columns in system_settings table');
         } catch (colErr: any) {
@@ -515,6 +517,7 @@ app.use('/api/v1/plugins', require('./routes/plugin.routes'));
 app.use('/api/notes', require('./routes/userNote.routes'));
 app.use('/api/community', require('./routes/community.routes'));
 app.use('/api/payments/mpesa', require('./routes/mpesa.routes'));
+app.use('/api/payments/gateways', require('./routes/paymentGateways.routes'));
 
 // Web SPA static file serving (Only active if public/ directory exists)
 const webBuildPath = path.join(rootDir, 'public');

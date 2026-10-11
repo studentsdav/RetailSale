@@ -326,7 +326,7 @@ export const getIssueByDate = async (req: Request, res: Response) => {
                 {
                     model: (req as any).propertyDb.models.issue_items,
                     as: 'items',
-                    attributes: ['id', 'qty', 'rate', 'amount']
+                    attributes: ['id', 'qty', 'rate', 'tax']
                 }
             ],
             order: [['id', 'DESC']]
@@ -336,7 +336,7 @@ export const getIssueByDate = async (req: Request, res: Response) => {
             const json = iss.toJSON();
             let total = 0;
             if (Array.isArray(json.items)) {
-                total = json.items.reduce((sum: number, it: any) => sum + (Number(it.amount || (it.qty * it.rate)) || 0), 0);
+                total = json.items.reduce((sum: number, it: any) => sum + ((Number(it.qty) || 0) * (Number(it.rate) || 0)), 0);
             }
             json.total_amount = total;
             return json;

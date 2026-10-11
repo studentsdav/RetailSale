@@ -35,6 +35,7 @@ import 'outlet_detail_modification_screen.dart';
 import 'outlet_hierarchy_linking_screen.dart';
 import 'receipt_template_designer_screen.dart';
 import 'tax_group_setup_screen.dart';
+import 'payment_gateways_screen.dart';
 import '../../models/inventory/tax_group_model.dart';
 import '../../controllers/public/outlet_controller.dart';
 import '../../core/auth/token_storage.dart';
@@ -1302,120 +1303,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                   _customSection(
-                    'Payment Gateway & UPI (Beta)',
-                    'Configure digital checkout APIs and direct merchant QR billing.',
+                    'Payment Gateways & Digital Wallets',
+                    'Configure UPI, Stripe, Square, Razorpay, PayPal, M-Pesa, and POS settlement modes in the unified Payment & Settlement Management console.',
                     [
-                      if (AppConfig.isLocalServer)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0284C7).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.cloud_sync_rounded, color: Color(0xFF0284C7), size: 24),
-                              const SizedBox(width: 12),
-                              const Expanded(
-                                child: Text(
-                                  'Online Payment Gateways require an Online Hosted Cloud Server or Cloud Subscription to receive bank webhooks & settle customer app transactions.',
-                                  style: TextStyle(fontSize: 12.5, color: Color(0xFF0369A1), fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF0284C7),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => const ServerConfigScreen()),
-                                  );
-                                },
-                                icon: const Icon(Icons.cloud_upload_outlined, size: 16),
-                                label: const Text('Configure Cloud URL'),
-                              ),
-                            ],
-                          ),
-                        ),
                       _settingRow(
-                        title: 'Enable Payment Gateway',
-                        description: 'Require online payments for customer app delivery orders',
-                        isLast: !s.enablePaymentGateway && s.merchantUpiId.isEmpty,
-                        control: Switch.adaptive(
-                          value: s.enablePaymentGateway,
-                          onChanged: (v) => setState(() {
-                            s.enablePaymentGateway = v;
-                            if (!v) {
-                              s.paymentGatewayProvider = 'SANDBOX';
-                            }
-                          }),
-                        ),
-                      ),
-                      if (s.enablePaymentGateway) ...[
-                        _settingRow(
-                          title: 'Payment Gateway Provider',
-                          description: 'Choose your secure processing merchant partner',
-                          control: SizedBox(
-                            width: 280,
-                            child: DropdownButtonFormField<String>(
-                              value: s.paymentGatewayProvider,
-                              decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                              items: ['SANDBOX', 'RAZORPAY', 'STRIPE', 'PAYTM']
-                                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                                  .toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => s.paymentGatewayProvider = val);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                        _settingRow(
-                          title: 'API Key / Merchant ID',
-                          description: 'Public identifier supplied by the gateway developer console',
-                          control: SizedBox(
-                            width: 280,
-                            child: TextFormField(
-                              initialValue: s.paymentGatewayApiKey,
-                              decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                              onChanged: (val) => s.paymentGatewayApiKey = val.trim(),
-                            ),
-                          ),
-                        ),
-                        _settingRow(
-                          title: 'API Secret / Salt Key',
-                          description: 'Private credential used to sign checkout requests securely',
-                          isLast: s.merchantUpiId.isEmpty,
-                          control: SizedBox(
-                            width: 280,
-                            child: TextFormField(
-                              initialValue: s.paymentGatewaySecretKey,
-                              obscureText: true,
-                              decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                              onChanged: (val) => s.paymentGatewaySecretKey = val.trim(),
-                            ),
-                          ),
-                        ),
-                      ],
-                      _settingRow(
-                        title: 'Direct Merchant UPI ID',
-                        description: 'e.g. storename@okaxis. Enables direct UPI QR generation if payment gateway is off.',
+                        title: 'Payment & Settlement Management',
+                        description: 'Configure multi-country payment gateways (India UPI/Razorpay, USA Stripe/Square, Europe PayPal, Africa M-Pesa), POS settlement modes, and payment methods',
                         isLast: true,
-                        control: SizedBox(
-                          width: 280,
-                          child: TextFormField(
-                            initialValue: s.merchantUpiId,
-                            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                            onChanged: (val) => s.merchantUpiId = val.trim(),
+                        control: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0B5CAD),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const PaymentGatewaysScreen()),
+                          ).then((_) => _loadSettingsData()),
+                          icon: const Icon(Icons.account_balance_wallet, size: 16),
+                          label: const Text('Open Payment Management'),
                         ),
                       ),
                     ],
@@ -2941,10 +2847,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   final method = _settingsPaymentMethods[index];
                   final isSystem = method['is_system'] == true;
                   final isActive = method['is_active'] == true;
+                  final isCash = method['name'].toString().toUpperCase() == 'CASH';
 
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                    title: Text(method['name'].toString()),
+                    title: Text(
+                      method['name'].toString(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: (isCash || isActive) ? null : Colors.grey.shade600,
+                      ),
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -2955,30 +2868,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               color: Colors.blue.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Text(
-                              'System',
-                              style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold),
+                            child: Text(
+                              isCash ? 'Primary' : 'System',
+                              style: const TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ),
                         const SizedBox(width: 8),
-                        Switch.adaptive(
-                          value: isActive,
-                          onChanged: isSystem
-                              ? null
-                              : (val) => _togglePaymentMethodActive(method['id'], method['name'], val),
+                        Tooltip(
+                          message: isCash ? 'Cash is primary and cannot be disabled' : (isActive ? 'Disable Method' : 'Enable Method'),
+                          child: Switch.adaptive(
+                            value: isCash ? true : isActive,
+                            onChanged: isCash
+                                ? null
+                                : (val) => _togglePaymentMethodActive(method['id'], method['name'], val),
+                          ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: isSystem
-                              ? null
-                              : () => _showAddEditPaymentMethodDialog(method: method),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          onPressed: isSystem
-                              ? null
-                              : () => _deletePaymentMethod(method['id']),
-                        ),
+                        if (!isCash) ...[
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Rename Method',
+                            onPressed: () => _showAddEditPaymentMethodDialog(method: method),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.red),
+                            tooltip: 'Delete Method',
+                            onPressed: () => _deletePaymentMethod(method['id']),
+                          ),
+                        ],
                       ],
                     ),
                   );

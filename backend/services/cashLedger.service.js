@@ -110,7 +110,7 @@ async function resolveBalanceBeforeDate({
         transaction
     });
 
-    return roundAmount(opening?.opening_balance);
+    return roundAmount(opening?.opening_balance ?? 0);
 }
 
 async function getOpeningBalanceForDate({
@@ -330,7 +330,12 @@ async function createLedgerEntry({
     // Find the very last ledger entry (by date then id) to get the current
     // running balance, then apply this entry's delta.
     const lastEntry = await db.models.cash_ledger.findOne({
-        where: { outlet_id },
+        where: {
+            outlet_id,
+            txn_date: {
+                [Op.lte]: normalizedTxnDate
+            }
+        },
         order: [['txn_date', 'DESC'], ['id', 'DESC']],
         attributes: ['balance', 'txn_date'],
         transaction
@@ -341,10 +346,14 @@ async function createLedgerEntry({
         runningBalance = roundAmount(lastEntry.balance);
     } else {
         // No prior entries at all — use the latest manual opening balance.
-        const opening = await getLatestManualOpeningBefore({
-            db,
-            outlet_id,
-            beforeDate: normalizedTxnDate,
+        const opening = await db.models.daily_opening_balances.findOne({
+            where: {
+                outlet_id,
+                balance_date: {
+                    [Op.lte]: normalizedTxnDate
+                }
+            },
+            order: [['balance_date', 'DESC'], ['id', 'DESC']],
             transaction
         });
         runningBalance = roundAmount(opening?.opening_balance ?? 0);
@@ -398,10 +407,18 @@ async function createLedgerEntry({
 async function batchCreateLedgerEntries({ db, outlet_id, entries, transaction }) {
     if (!Array.isArray(entries) || entries.length === 0) return [];
 
+    const firstDate = entries[0].txn_date ?? new Date();
+    const firstNormalizedDate = dateKey(firstDate);
+
     let _tL = Date.now();
     // 1 — Get the current running balance (ONE query)
     const lastEntry = await db.models.cash_ledger.findOne({
-        where: { outlet_id },
+        where: {
+            outlet_id,
+            txn_date: {
+                [Op.lte]: firstNormalizedDate
+            }
+        },
         order: [['txn_date', 'DESC'], ['id', 'DESC']],
         attributes: ['balance', 'txn_date'],
         transaction
@@ -414,11 +431,14 @@ async function batchCreateLedgerEntries({ db, outlet_id, entries, transaction })
         runningBalance = roundAmount(lastEntry.balance);
     } else {
         // No prior entries — look up earliest date in our batch for opening balance
-        const firstDate = entries[0].txn_date ?? new Date();
-        const opening = await getLatestManualOpeningBefore({
-            db,
-            outlet_id,
-            beforeDate: dateKey(firstDate),
+        const opening = await db.models.daily_opening_balances.findOne({
+            where: {
+                outlet_id,
+                balance_date: {
+                    [Op.lte]: firstNormalizedDate
+                }
+            },
+            order: [['balance_date', 'DESC'], ['id', 'DESC']],
             transaction
         });
         runningBalance = roundAmount(opening?.opening_balance ?? 0);
