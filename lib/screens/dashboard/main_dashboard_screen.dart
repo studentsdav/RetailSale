@@ -97,6 +97,8 @@ import '../reports/night_audit_screen.dart';
 import '../settings/workflow_automation_screen.dart';
 import '../settings/developer_ecosystem_screen.dart';
 import '../settings/plugin_marketplace_screen.dart';
+import '../settings/plugin_dev_studio_screen.dart';
+import '../reports/third_party_orders_report_screen.dart';
 import '../modify/purchase_modify.dart';
 import '../modify/receiving_modify.dart';
 import '../modify/request_modify.dart';
@@ -3414,6 +3416,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         return Icons.inventory_2_outlined;
       case 'Reports':
         return Icons.analytics_outlined;
+      case 'Developer & Integrations':
+        return Icons.integration_instructions_rounded;
       default:
         return Icons.settings_outlined;
     }
@@ -3887,10 +3891,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'onTap': () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const TableDiningScreen(
+            builder: (_) => TableDiningScreen(
               tableName: 'Table 1',
               tableId: '1',
-              outletId: '1',
+              outletId: _selectedDashboardOutletId != null ? _selectedDashboardOutletId.toString() : (user?.outletId.toString() ?? '1'),
             ),
           ),
         ),
@@ -4189,6 +4193,13 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'permission': 'DAMAGE_REPORT',
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamageReportSumScreen())),
       },
+      {
+        'category': 'Reports',
+        'icon': Icons.cloud_sync_rounded,
+        'label': '🛒 Third-Party Orders',
+        'isBeta': true,
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ThirdPartyOrdersReportScreen())),
+      },
 
       /*
       // LYNX Innovation Hub (Hidden for future release)
@@ -4224,23 +4235,36 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'isNew': true,
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WorkflowAutomationScreen())),
       },
+      */
+
+      // Developer & Integrations (Ecosystem, Marketplace, Dev Studio)
       {
-        'category': 'LYNX Innovation Hub',
+        'category': 'Developer & Integrations',
         'icon': Icons.code_rounded,
         'label': '🔌 Developer & Webhooks',
-        'subLabel': 'Section 6: Open REST APIs & Webhooks',
-        'isNew': true,
+        'subLabel': 'Developer Portal ➜ Open REST APIs, Webhooks, API Keys',
+        'isBeta': true,
+        'keywords': ['developer', 'webhooks', 'api keys', 'rest api', 'integrations'],
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeveloperEcosystemScreen())),
       },
       {
-        'category': 'LYNX Innovation Hub',
+        'category': 'Developer & Integrations',
         'icon': Icons.extension_rounded,
         'label': '🛍️ Add-on Plugin Marketplace',
-        'subLabel': 'Tally Sync, Zomato/Swiggy, Loyalty Wheel, SMS',
-        'isNew': true,
+        'subLabel': 'Plugins ➜ Payment Gateways, Flipkart Order Sync, Tally ERP',
+        'isBeta': true,
+        'keywords': ['plugins', 'marketplace', 'add-ons', 'payment gateway', 'flipkart', 'tally', 'razorpay'],
         'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PluginMarketplaceScreen())),
       },
-      */
+      {
+        'category': 'Developer & Integrations',
+        'icon': Icons.terminal_rounded,
+        'label': '🛠️ Plugin Developer Studio',
+        'subLabel': 'Dev Studio ➜ Build, sandbox test, & deploy JS/TS plugins',
+        'isBeta': true,
+        'keywords': ['plugin studio', 'developer studio', 'typescript plugin', 'javascript plugin', 'custom plugin', 'code editor'],
+        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PluginDevStudioScreen())),
+      },
 
       // System
       /*
@@ -4310,6 +4334,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
       'Finance & Expenses',
       'Stock View',
       'Reports',
+      'Developer & Integrations',
       'System',
     ];
 

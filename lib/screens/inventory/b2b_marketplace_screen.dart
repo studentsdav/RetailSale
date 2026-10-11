@@ -7,7 +7,6 @@ import '../../core/currency/currency_service.dart';
 import '../../models/inventory/marketplace_vendor_model.dart';
 import '../community/chat_conversation_screen.dart';
 import '../dashboard/customer_app_screen.dart';
-import '../settings/vendor_marketplace_settings_screen.dart';
 
 class B2BMarketplaceScreen extends StatefulWidget {
   const B2BMarketplaceScreen({super.key});
@@ -67,103 +66,245 @@ class _B2BMarketplaceScreenState extends State<B2BMarketplaceScreen> {
   }
 
   void _showCitySelectorDialog() {
+    String searchFilter = '';
+    final defaultBuyerCity = _propertyCtrl.data?.city.trim() ?? '';
+
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.location_on, color: Colors.blueAccent),
-              SizedBox(width: 8),
-              Text('Select Marketplace City'),
-            ],
-          ),
-          content: SizedBox(
-            width: 320,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _marketplaceCtrl.availableCities.length,
-              itemBuilder: (context, i) {
-                final city = _marketplaceCtrl.availableCities[i];
-                final isCurrent = city.toLowerCase() ==
-                    (_marketplaceCtrl.selectedCity ?? '').toLowerCase();
-                return ListTile(
-                  leading: Icon(
-                    isCurrent ? Icons.radio_button_checked : Icons.radio_button_off,
-                    color: isCurrent ? Colors.blueAccent : Colors.grey,
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final allCities = _marketplaceCtrl.availableCities;
+            final query = searchFilter.trim().toLowerCase();
+            final filtered = allCities.where((c) => c.toLowerCase().contains(query)).toList();
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.public_rounded, color: Colors.blueAccent, size: 24),
                   ),
-                  title: Text(city,
-                      style: TextStyle(
-                          fontWeight:
-                              isCurrent ? FontWeight.bold : FontWeight.normal)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _marketplaceCtrl.setCity(city);
-                    _marketplaceCtrl.fetchVendors(
-                      city: city,
-                      category: _selectedCategory,
-                      search: _searchQuery,
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-          ],
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Select Marketplace Region', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                        Text('Global & regional wholesale coverage', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 10),
+                    // Global Location Search Field
+                    TextField(
+                      autofocus: false,
+                      decoration: InputDecoration(
+                        hintText: 'Search city, state, or country globally...',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: searchFilter.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  setDialogState(() => searchFilter = '');
+                                },
+                              )
+                            : null,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() => searchFilter = val);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Quick Location Chips Bar
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          ActionChip(
+                            avatar: const Icon(Icons.public, size: 16, color: Colors.blueAccent),
+                            label: const Text('All Global Locations', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            backgroundColor: Colors.blue.shade50,
+                            side: BorderSide(color: Colors.blue.shade200),
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _updateLocationRealtime('All Locations (Global)');
+                            },
+                          ),
+                          if (defaultBuyerCity.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            ActionChip(
+                              avatar: const Icon(Icons.my_location, size: 16, color: Colors.green),
+                              label: Text('My Store ($defaultBuyerCity)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                              backgroundColor: Colors.green.shade50,
+                              side: BorderSide(color: Colors.green.shade200),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _updateLocationRealtime(defaultBuyerCity);
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 18),
+
+                    // Locations List
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 280),
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          // Custom location option if user typed something not in list
+                          if (searchFilter.trim().isNotEmpty &&
+                              !filtered.any((c) => c.toLowerCase() == searchFilter.trim().toLowerCase()))
+                            ListTile(
+                              leading: const Icon(Icons.add_location_alt_rounded, color: Colors.blueAccent),
+                              title: Text('Use "${searchFilter.trim()}" globally',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                              subtitle: const Text('Search distributors delivering to this location'),
+                              onTap: () {
+                                final customLoc = searchFilter.trim();
+                                Navigator.pop(ctx);
+                                _updateLocationRealtime(customLoc);
+                              },
+                            ),
+                          ...filtered.map((city) {
+                            final isCurrent = city.toLowerCase() ==
+                                (_marketplaceCtrl.selectedCity ?? '').toLowerCase();
+                            final isGlobal = city.toLowerCase().contains('global');
+                            return ListTile(
+                              dense: true,
+                              leading: Icon(
+                                isGlobal
+                                    ? Icons.public
+                                    : (isCurrent ? Icons.radio_button_checked : Icons.location_on_outlined),
+                                color: isCurrent ? Colors.blueAccent : (isGlobal ? Colors.indigo : Colors.grey),
+                                size: 20,
+                              ),
+                              title: Text(
+                                city,
+                                style: TextStyle(
+                                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                  color: isCurrent ? Colors.blue.shade900 : Colors.black87,
+                                ),
+                              ),
+                              trailing: isCurrent
+                                  ? const Icon(Icons.check_circle, color: Colors.blueAccent, size: 18)
+                                  : null,
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                _updateLocationRealtime(city);
+                              },
+                            );
+                          }),
+                          if (filtered.isEmpty && searchFilter.trim().isEmpty)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Text('No locations found', style: TextStyle(color: Colors.grey)),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
+  void _updateLocationRealtime(String newLocation) {
+    _marketplaceCtrl.setCity(newLocation);
+    _marketplaceCtrl.fetchVendors(
+      city: newLocation,
+      category: _selectedCategory,
+      search: _searchQuery,
+    );
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Row(
-          children: [
-            Icon(Icons.storefront_outlined),
-            SizedBox(width: 8),
-            Text('B2B Wholesale Marketplace'),
-          ],
-        ),
-        actions: [
-          // City Picker Button
-          InkWell(
-            onTap: _showCitySelectorDialog,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_pin, size: 16, color: Colors.white),
-                  const SizedBox(width: 4),
-                  Text(
-                    _marketplaceCtrl.selectedCity ?? 'New York',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  const Icon(Icons.arrow_drop_down, size: 18),
-                ],
-              ),
+    return AnimatedBuilder(
+      animation: _marketplaceCtrl,
+      builder: (context, _) {
+        final currentCity = _marketplaceCtrl.selectedCity ?? 'All Locations (Global)';
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Row(
+              children: [
+                Icon(Icons.storefront_outlined),
+                SizedBox(width: 8),
+                Text('B2B Wholesale Marketplace'),
+              ],
             ),
+            actions: [
+              // Real-time Global Location Picker Button
+              InkWell(
+                onTap: _showCitySelectorDialog,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.public_rounded, size: 16, color: Colors.white),
+                      const SizedBox(width: 5),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 160),
+                        child: Text(
+                          currentCity,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
           ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: AnimatedBuilder(
-        animation: _marketplaceCtrl,
-        builder: (context, _) => _buildMarketplaceExploreView(),
-      ),
+          body: _buildMarketplaceExploreView(),
+        );
+      },
     );
   }
 
@@ -197,7 +338,7 @@ class _B2BMarketplaceScreenState extends State<B2BMarketplaceScreen> {
           ),
         ),
 
-        // Search & Filter Bar
+        // Search & Filter Bar with Global Location Pill
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -205,7 +346,7 @@ class _B2BMarketplaceScreenState extends State<B2BMarketplaceScreen> {
               Expanded(
                 child: TextField(
                   decoration: InputDecoration(
-                    hintText: 'Search verified suppliers, commodities, brands...',
+                    hintText: 'Search verified distributors, products, brands...',
                     prefixIcon: const Icon(Icons.search),
                     contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                     border: OutlineInputBorder(
@@ -220,6 +361,34 @@ class _B2BMarketplaceScreenState extends State<B2BMarketplaceScreen> {
                       search: _searchQuery,
                     );
                   },
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: _showCitySelectorDialog,
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.public, size: 16, color: Colors.blueAccent),
+                      const SizedBox(width: 4),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 120),
+                        child: Text(
+                          _marketplaceCtrl.selectedCity ?? 'Global',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueAccent),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down, size: 16, color: Colors.blueAccent),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -273,7 +442,7 @@ class _B2BMarketplaceScreenState extends State<B2BMarketplaceScreen> {
                               size: 64, color: Colors.grey[400]),
                           const SizedBox(height: 12),
                           Text(
-                            'No public vendors have published their inventory in ${_marketplaceCtrl.selectedCity ?? "this region"} yet.',
+                            'No registered distributors found in "${_marketplaceCtrl.selectedCity ?? "this location"}".',
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Colors.grey),
                           ),
                           const SizedBox(height: 14),
@@ -282,19 +451,17 @@ class _B2BMarketplaceScreenState extends State<B2BMarketplaceScreen> {
                               backgroundColor: Colors.blueAccent,
                               foregroundColor: Colors.white,
                             ),
-                            icon: const Icon(Icons.storefront_rounded),
-                            label: const Text('Setup & Publish Your Store as Vendor'),
+                            icon: const Icon(Icons.public),
+                            label: const Text('View All Global Registered Distributors'),
                             onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const VendorMarketplaceSettingsScreen()),
-                              ).then((_) => _initData());
+                              _updateLocationRealtime('All Locations (Global)');
                             },
                           ),
                           const SizedBox(height: 8),
-                          TextButton(
+                          TextButton.icon(
+                            icon: const Icon(Icons.search),
+                            label: const Text('Search Another City / Country'),
                             onPressed: _showCitySelectorDialog,
-                            child: const Text('Switch City / Location'),
                           ),
                         ],
                       ),

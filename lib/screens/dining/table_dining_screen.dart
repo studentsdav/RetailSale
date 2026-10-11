@@ -176,14 +176,33 @@ class _TableDiningScreenState extends State<TableDiningScreen> with SingleTicker
     });
 
     try {
-      // 1. Check local customer session (auto-login if previously verified)
+      // 1. Check local customer session (auto-login if previously verified for THIS specific outlet)
       final prefs = await SharedPreferences.getInstance();
-      final savedCustomerStr = prefs.getString('dining_customer_profile');
+      final targetOutlet = (widget.outletId ?? '1').toString().trim();
+
+      // Clear any legacy un-scoped customer session so it doesn't leak across outlets
+      await prefs.remove('dining_customer_profile');
+      await prefs.remove('dining_auth_token');
+      await prefs.remove('dining_outlet_id');
+
+      final savedCustomerStr = prefs.getString('dining_customer_profile_$targetOutlet');
       if (savedCustomerStr != null && savedCustomerStr.isNotEmpty) {
         try {
-          _customerProfile = jsonDecode(savedCustomerStr);
-          _isLoggedIn = true;
-        } catch (_) {}
+          final profile = jsonDecode(savedCustomerStr);
+          if (profile is Map && (profile['outlet_id'] == null || profile['outlet_id'].toString() == targetOutlet)) {
+            _customerProfile = Map<String, dynamic>.from(profile);
+            _isLoggedIn = true;
+          } else {
+            _customerProfile = null;
+            _isLoggedIn = false;
+          }
+        } catch (_) {
+          _customerProfile = null;
+          _isLoggedIn = false;
+        }
+      } else {
+        _customerProfile = null;
+        _isLoggedIn = false;
       }
 
       // 2. Fetch table & catalog info from server
@@ -491,10 +510,15 @@ class _TableDiningScreenState extends State<TableDiningScreen> with SingleTicker
         restaurantName: _restaurantData?['property_name'] ?? 'Restaurant',
         outletId: widget.outletId ?? '1',
         onLoginSuccess: (profile) async {
+          final targetOutlet = (widget.outletId ?? '1').toString().trim();
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('dining_customer_profile', jsonEncode(profile));
+          final profileWithOutlet = Map<String, dynamic>.from(profile);
+          profileWithOutlet['outlet_id'] = targetOutlet;
+          await prefs.setString('dining_customer_profile_$targetOutlet', jsonEncode(profileWithOutlet));
+          // Clear legacy un-scoped key
+          await prefs.remove('dining_customer_profile');
           setState(() {
-            _customerProfile = profile;
+            _customerProfile = profileWithOutlet;
             _isLoggedIn = true;
           });
           _fetchTableDiningCatalog(isSilent: true);
@@ -512,8 +536,13 @@ class _TableDiningScreenState extends State<TableDiningScreen> with SingleTicker
   }
 
   void _logoutCustomer() async {
+    final targetOutlet = (widget.outletId ?? '1').toString().trim();
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('dining_customer_profile_$targetOutlet');
+    await prefs.remove('dining_auth_token_$targetOutlet');
     await prefs.remove('dining_customer_profile');
+    await prefs.remove('dining_auth_token');
+    await prefs.remove('dining_outlet_id');
     setState(() {
       _customerProfile = null;
       _isLoggedIn = false;
@@ -521,6 +550,7 @@ class _TableDiningScreenState extends State<TableDiningScreen> with SingleTicker
       _activeOrders.clear();
     });
     _fetchTableDiningCatalog(isSilent: true);
+    if (!mounted) return;
     _showAuthModal(context);
   }
 
@@ -4404,16 +4434,16 @@ class _CustomerAuthBottomSheetState extends State<_CustomerAuthBottomSheet> {
 
       final json = jsonDecode(res.body);
 
-      // If user is not registered in the system, redirect them to register first
+      // If user is not registered in this outlet, DO NOT send OTP; switch to Registration
       if (res.statusCode == 404 ||
           json['not_registered'] == true ||
           (json['message'] ?? '').toString().toLowerCase().contains('register first') ||
-          (json['message'] ?? '').toString().toLowerCase().contains('no account found')) {
+          (json['message'] ?? '').toString().toLowerCase().contains('no account')) {
         setState(() {
           _regEmailCtrl.text = email;
           _authMode = 'REGISTER';
           _loading = false;
-          _error = json['message'] ?? 'No account found with this email. Please register first with your name & contact details.';
+          _error = json['message'] ?? 'This email is not registered for this outlet. Please register first to continue.';
         });
         return;
       }
@@ -4427,26 +4457,20 @@ class _CustomerAuthBottomSheetState extends State<_CustomerAuthBottomSheet> {
           _successNotice = 'OTP sent to $email';
         });
       } else {
-        throw Exception(json['message'] ?? 'Failed to send OTP code');
-      }
-    } catch (err) {
-      final errStr = err.toString().replaceAll('Exception: ', '').trim();
-      if (errStr.toLowerCase().contains('register first') || errStr.toLowerCase().contains('no account')) {
         setState(() {
           _regEmailCtrl.text = email;
           _authMode = 'REGISTER';
           _loading = false;
-          _error = errStr;
+          _error = json['message'] ?? 'This email is not registered for this outlet. Please register first to continue.';
         });
-        return;
       }
-      // Offline / Demo fallback: Send mock OTP and continue
-      _activeVerificationTarget = email;
-      _startResendTimer();
+    } catch (err) {
+      final errStr = err.toString().replaceAll('Exception: ', '').trim();
       setState(() {
-        _authMode = 'OTP';
+        _regEmailCtrl.text = email;
+        _authMode = 'REGISTER';
         _loading = false;
-        _successNotice = 'OTP sent to $email (Demo Code: 1234)';
+        _error = errStr.isNotEmpty ? errStr : 'This email is not registered for this outlet. Please register first.';
       });
     }
   }
@@ -4639,12 +4663,18 @@ class _CustomerAuthBottomSheetState extends State<_CustomerAuthBottomSheet> {
 
   Future<void> _saveCustomerSession(Map<String, dynamic> customer, String? token) async {
     try {
+      final targetOutlet = (widget.outletId).toString().trim();
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('dining_customer_profile', jsonEncode(customer));
+      final customerWithOutlet = Map<String, dynamic>.from(customer);
+      customerWithOutlet['outlet_id'] = targetOutlet;
+      await prefs.setString('dining_customer_profile_$targetOutlet', jsonEncode(customerWithOutlet));
       if (token != null && token.isNotEmpty) {
-        await prefs.setString('dining_auth_token', token);
+        await prefs.setString('dining_auth_token_$targetOutlet', token);
       }
-      await prefs.setString('dining_outlet_id', widget.outletId);
+      // Also clear legacy un-scoped keys
+      await prefs.remove('dining_customer_profile');
+      await prefs.remove('dining_auth_token');
+      await prefs.remove('dining_outlet_id');
     } catch (e) {
       debugPrint('Error saving customer dining session: $e');
     }

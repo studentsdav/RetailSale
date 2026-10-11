@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../core/api/api_client.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/config/app_config.dart';
-import '../../core/settings/local_preferences.dart';
 import '../../models/common/property_info_model.dart';
 import '../../models/inventory/marketplace_vendor_model.dart';
 import '../../models/inventory/purchase_order_model.dart';
@@ -25,16 +25,24 @@ class MarketplaceController extends ChangeNotifier {
   String? get selectedCity => _selectedCity;
 
   final List<String> availableCities = [
-    'New York',
-    'Los Angeles',
-    'Chicago',
-    'Houston',
-    'Miami',
-    'Dallas',
-    'Austin',
-    'Seattle',
-    'San Francisco',
-    'Boston',
+    'All Locations (Global)',
+    'New York, USA',
+    'London, UK',
+    'Dubai, UAE',
+    'Singapore',
+    'Toronto, Canada',
+    'Sydney, Australia',
+    'Tokyo, Japan',
+    'Hong Kong',
+    'Berlin, Germany',
+    'Paris, France',
+    'Nairobi, Kenya',
+    'Johannesburg, South Africa',
+    'Mumbai, India',
+    'Delhi, India',
+    'Dehradun, India',
+    'Bangalore, India',
+    'Madurai, India',
   ];
 
   void setCity(String city) {
@@ -42,108 +50,182 @@ class MarketplaceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Load real vendors & suppliers from database / API
+  /// Load ONLY registered platform distributors (strictly excludes supplier_master and self)
   Future<void> fetchVendors({String? city, String? category, String? search}) async {
     _isLoading = true;
     notifyListeners();
 
-    final targetCity = city ?? _selectedCity ?? 'New York';
+    final propCtrl = PropertyInfoController();
+    await propCtrl.load();
+    final buyer = propCtrl.data;
+    final buyerGstin = (buyer?.gstNo ?? '').trim().toLowerCase();
+    final buyerName = (buyer?.propertyName ?? '').trim().toLowerCase();
+    final buyerLegalName = (buyer?.legalName ?? '').trim().toLowerCase();
+    final buyerOutletCode = (AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : '').trim().toLowerCase();
+
+    final targetCity = city ?? _selectedCity ?? (buyer?.city.trim().isNotEmpty == true ? buyer!.city.trim() : 'All Locations (Global)');
     _selectedCity = targetCity;
 
     final List<MarketplaceVendor> publicVendors = [];
 
-    // 1. Check if current outlet / business has enabled Public Marketplace Vendor presence
+    // STRICT SELF-CHECK: The logged-in buyer must NEVER appear as a distributor on their own purchasing screen
+    bool isSelf(String id, String code, String name, String gstin) {
+      final cleanId = id.trim().toLowerCase();
+      final cleanCode = code.trim().toLowerCase();
+      final cleanName = name.trim().toLowerCase();
+      final cleanGst = gstin.trim().toLowerCase();
+
+      if (buyerOutletCode.isNotEmpty && (cleanId == buyerOutletCode || cleanCode == buyerOutletCode)) {
+        return true;
+      }
+      if (buyerName.isNotEmpty && cleanName == buyerName) {
+        return true;
+      }
+      if (buyerLegalName.isNotEmpty && cleanName == buyerLegalName) {
+        return true;
+      }
+      if (buyerGstin.isNotEmpty && cleanGst.isNotEmpty && cleanGst == buyerGstin) {
+        return true;
+      }
+      return false;
+    }
+
+    // 1. Fetch registered distributors from backend marketplace endpoint
     try {
-      final vendorConfig = await LocalPreferences.getMarketplaceVendorConfig();
-      final isVendorEnabled = vendorConfig['is_vendor_enabled'] == true;
-
-      if (isVendorEnabled) {
-        final propCtrl = PropertyInfoController();
-        await propCtrl.load();
-        final p = propCtrl.data;
-
-        if (p != null) {
-          final outletCity = p.city.trim().isNotEmpty ? p.city.trim() : targetCity;
-          final outletCode = AppConfig.outlets.isNotEmpty ? AppConfig.outlets.first : 'OUTLET-01';
-
-          publicVendors.add(
-            MarketplaceVendor(
-              id: outletCode,
-              vendorCode: outletCode,
-              businessName: p.propertyName.isNotEmpty ? p.propertyName : p.legalName,
-              tradeName: p.legalName.isNotEmpty ? p.legalName : p.propertyName,
-              address: p.address.isNotEmpty ? p.address : 'Store Address',
-              city: outletCity,
-              state: p.state,
-              phone: p.mobile,
-              email: p.email,
-              gstin: p.gstNo,
-              isVerified: p.gstNo.trim().isNotEmpty,
-              minOrderAmount: double.tryParse(vendorConfig['min_order_value']?.toString() ?? '') ?? 1000.0,
-              deliveryEstimate: vendorConfig['delivery_sla'] ?? 'Same Day Dispatch',
-              categories: ['Wholesale Supply', 'All Products'],
-              isOpen: true,
-            ),
-          );
+      final queryParams = <String, String>{
+        'city': targetCity,
+        if (category != null && category.isNotEmpty && category != 'All') 'category': category,
+        if (search != null && search.isNotEmpty) 'search': search,
+      };
+      final queryString = Uri(queryParameters: queryParams).query;
+      final res = await ApiClient.get('/api/marketplace/vendors?$queryString');
+      if (res['success'] == true && res['data'] is List) {
+        for (final e in (res['data'] as List)) {
+          final rv = MarketplaceVendor.fromJson(e);
+          if (isSelf(rv.id, rv.vendorCode, rv.businessName, rv.gstin)) continue;
+          if (!publicVendors.any((v) =>
+              v.vendorCode.toLowerCase() == rv.vendorCode.toLowerCase() ||
+              (rv.gstin.isNotEmpty && v.gstin.toLowerCase() == rv.gstin.toLowerCase()) ||
+              v.businessName.toLowerCase() == rv.businessName.toLowerCase())) {
+            publicVendors.add(rv);
+          }
         }
       }
     } catch (e) {
-      debugPrint('Error checking local vendor public status: $e');
+      debugPrint('Marketplace API fetch note: $e');
     }
 
-    // 2. Fetch public marketplace vendors from backend marketplace directory (only when online)
-    if (!AppConfig.isLocalServer) {
-      try {
-        final queryParams = <String, String>{
-          'city': targetCity,
-        };
-        if (category != null && category.isNotEmpty && category != 'All') {
-          queryParams['category'] = category;
-        }
-        if (search != null && search.isNotEmpty) {
-          queryParams['search'] = search;
-        }
+    // 2. Load other registered platform outlets from community merchants
+    try {
+      final res = await ApiClient.get('/api/community/merchants');
+      if (res['success'] == true && res['data'] is List) {
+        for (final m in (res['data'] as List)) {
+          final id = (m['id'] ?? m['outlet_code'] ?? '').toString();
+          final code = (m['outlet_code'] ?? id).toString();
+          final name = (m['business_name'] ?? m['property_name'] ?? '').toString().trim();
+          final gst = (m['gstin'] ?? m['gst_no'] ?? '').toString().trim();
 
-        final queryString = Uri(queryParameters: queryParams).query;
-        final token = await TokenStorage.read();
-        final url = Uri.parse('${AppConfig.baseUrl}/api/marketplace/vendors?$queryString');
-        final response = await http.get(url, headers: {
-          'Content-Type': 'application/json',
-          if (token != null) 'Authorization': 'Bearer $token',
-        }).timeout(const Duration(seconds: 4));
+          if (name.isEmpty) continue;
+          if (isSelf(id, code, name, gst)) continue;
 
-        if (response.statusCode == 200 && response.body.isNotEmpty) {
-          final res = jsonDecode(response.body);
-          if (res['success'] == true && res['data'] != null && (res['data'] as List).isNotEmpty) {
-            final remoteVendors = (res['data'] as List)
-                .map((e) => MarketplaceVendor.fromJson(e))
-                .toList();
-
-            for (var rv in remoteVendors) {
-              if (!publicVendors.any((v) => v.vendorCode == rv.vendorCode || (v.gstin.isNotEmpty && v.gstin == rv.gstin))) {
-                publicVendors.add(rv);
-              }
-            }
+          if (!publicVendors.any((v) =>
+              v.vendorCode.toLowerCase() == code.toLowerCase() ||
+              (gst.isNotEmpty && v.gstin.toLowerCase() == gst.toLowerCase()) ||
+              v.businessName.toLowerCase() == name.toLowerCase())) {
+            publicVendors.add(
+              MarketplaceVendor(
+                id: id,
+                vendorCode: code,
+                businessName: name,
+                tradeName: (m['trade_name'] ?? name).toString(),
+                address: (m['address'] ?? 'Wholesale Merchant Outlet').toString(),
+                city: (m['city'] ?? 'Global').toString(),
+                state: (m['state'] ?? '').toString(),
+                phone: (m['phone'] ?? '').toString(),
+                email: (m['email'] ?? '').toString(),
+                gstin: gst,
+                isVerified: gst.isNotEmpty,
+                isB2BSupplier: true,
+                isB2CRetailer: false,
+                minOrderAmount: 1000.0,
+                deliveryEstimate: 'Same Day / Global Dispatch',
+                categories: const ['Wholesale Supply', 'Distributor', 'All Products'],
+                isOpen: true,
+                rating: 4.9,
+                totalReviews: 120,
+              ),
+            );
           }
         }
-      } catch (e) {
-        debugPrint('Remote marketplace vendors fetch note: $e');
       }
+    } catch (e) {
+      debugPrint('Error loading community merchants into marketplace: $e');
     }
 
-    // Apply search filter if provided
+    // (Note: supplier_master is strictly NOT queried, as suppliers in supplier master are not registered system distributors)
+
+    // Update dynamically available global cities
+    final Set<String> citySet = {
+      'All Locations (Global)',
+      'New York, USA',
+      'London, UK',
+      'Dubai, UAE',
+      'Singapore',
+      'Toronto, Canada',
+      'Sydney, Australia',
+      'Tokyo, Japan',
+      'Hong Kong',
+      'Berlin, Germany',
+      'Paris, France',
+      'Nairobi, Kenya',
+      'Johannesburg, South Africa',
+      'Mumbai, India',
+      'Delhi, India',
+      'Dehradun, India',
+      'Bangalore, India',
+      'Madurai, India',
+    };
+    if (buyer?.city.trim().isNotEmpty == true) {
+      citySet.add(buyer!.city.trim());
+    }
+    for (final v in publicVendors) {
+      if (v.city.trim().isNotEmpty && v.city.trim().length <= 35) {
+        citySet.add(v.city.trim());
+      }
+    }
+    availableCities.clear();
+    availableCities.addAll(citySet);
+
+    // Apply strict self-exclusion filter to ensure user never sees themselves
+    var filtered = publicVendors.where((v) => !isSelf(v.id, v.vendorCode, v.businessName, v.gstin)).toList();
+
+    // Category filter
+    if (category != null && category.isNotEmpty && category != 'All') {
+      filtered = filtered.where((v) => v.categories.any((c) => c.toLowerCase() == category.toLowerCase())).toList();
+    }
+
+    // Search filter
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim().toLowerCase();
-      _vendors = publicVendors.where((v) =>
+      filtered = filtered.where((v) =>
           v.businessName.toLowerCase().contains(q) ||
           v.tradeName.toLowerCase().contains(q) ||
           v.gstin.toLowerCase().contains(q) ||
           v.address.toLowerCase().contains(q) ||
+          v.city.toLowerCase().contains(q) ||
           v.phone.contains(q)).toList();
-    } else {
-      _vendors = publicVendors;
+    } else if (targetCity.isNotEmpty && !targetCity.toLowerCase().contains('global') && targetCity.toLowerCase() != 'all') {
+      // Prioritize vendors in the target city/location, followed by other global distributors
+      final cityMatches = filtered.where((v) =>
+          v.city.toLowerCase().contains(targetCity.toLowerCase()) ||
+          v.address.toLowerCase().contains(targetCity.toLowerCase())).toList();
+      if (cityMatches.isNotEmpty) {
+        final others = filtered.where((v) => !cityMatches.contains(v)).toList();
+        filtered = [...cityMatches, ...others];
+      }
     }
 
+    _vendors = filtered;
     _isLoading = false;
     notifyListeners();
   }

@@ -4210,6 +4210,50 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 116,
+    description: "Create plugins_installed and plugin_execution_logs tables for dynamic JS/TS plugin ecosystem",
+    up: async (db) => {
+      await db.query(`
+        BEGIN;
+        CREATE TABLE IF NOT EXISTS plugins_installed (
+          id VARCHAR(100) NOT NULL,
+          outlet_id INT NOT NULL DEFAULT 0,
+          name VARCHAR(150) NOT NULL,
+          version VARCHAR(50) DEFAULT '1.0.0',
+          category VARCHAR(100) DEFAULT 'Integration',
+          description TEXT,
+          author VARCHAR(150) DEFAULT 'Developer',
+          language VARCHAR(20) DEFAULT 'typescript',
+          icon VARCHAR(50) DEFAULT 'extension',
+          is_active BOOLEAN DEFAULT TRUE,
+          is_public BOOLEAN DEFAULT FALSE,
+          created_by_outlet_id INT DEFAULT 0,
+          config JSONB DEFAULT '{}'::jsonb,
+          code_bundle TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (id, outlet_id)
+        );
+        ALTER TABLE plugins_installed ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
+        ALTER TABLE plugins_installed ADD COLUMN IF NOT EXISTS created_by_outlet_id INT DEFAULT 0;
+
+        CREATE TABLE IF NOT EXISTS plugin_execution_logs (
+          id BIGSERIAL PRIMARY KEY,
+          plugin_id VARCHAR(100) NOT NULL,
+          outlet_id INT NOT NULL DEFAULT 0,
+          hook_name VARCHAR(100) NOT NULL,
+          status VARCHAR(30) NOT NULL,
+          execution_time_ms INT DEFAULT 0,
+          stdout_log TEXT,
+          error_message TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin ON plugin_execution_logs(plugin_id, outlet_id);
+        COMMIT;
+      `);
+    }
   }
 ];
 

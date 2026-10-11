@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
 import '../../controllers/inventory/item_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../../core/config/app_config.dart';
@@ -197,6 +198,15 @@ class _VendorMarketplaceSettingsViewState
         'list_all_items': _listAllItems,
       };
       await LocalPreferences.setMarketplaceVendorConfig(vendorConfig);
+
+      // Sync distributor status to backend
+      try {
+        await ApiClient.post('/api/marketplace/distributor-status', {
+          'is_distributor': _isVendorEnabled,
+        });
+      } catch (err) {
+        debugPrint('Distributor status backend sync note: $err');
+      }
 
       // 3. Save Item Overrides separately from Item Master
       final Map<String, dynamic> stringKeyedOverrides = {};

@@ -207,7 +207,11 @@ class ApiEndpoints {
   static const String developerApiKeys = '/api/v1/developer/apikeys';
   static const String pluginsInstalled = '/api/v1/plugins/installed';
   static const String pluginsMarketplace = '/api/v1/plugins/marketplace';
+  static const String pluginsCommunitySearch = '/api/v1/plugins/community/search';
   static const String pluginInstall = '/api/v1/plugins/install';
+  static const String pluginUninstall = '/api/v1/plugins/uninstall';
+  static const String thirdPartyOrdersReport = '/api/v1/plugins/reports/third-party-orders';
+  static const String pluginDeploy = '/api/v1/plugins/developer/deploy';
 
   // STOCK TAKING & ITEM MODIFIERS
   static const String stockTakingItems = '/api/inventory/stock-taking/items';

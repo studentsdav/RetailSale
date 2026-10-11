@@ -243,7 +243,9 @@ class _TableQrDesignerScreenState extends State<TableQrDesignerScreen> {
     final tableName = table['table_name']?.toString() ?? '';
     final base = _baseUrlCtrl.text.trim();
     final cleanBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
-    return '$cleanBase?table_id=$tableId&table_name=${Uri.encodeComponent(tableName)}';
+    final outletId = table['outlet_id']?.toString() ?? '';
+    final outletParam = outletId.isNotEmpty ? '&outlet_id=$outletId' : '';
+    return '$cleanBase?table_id=$tableId&table_name=${Uri.encodeComponent(tableName)}$outletParam';
   }
 
   dynamic _getPreviewTable() {

@@ -514,10 +514,12 @@ app.use('/api/v1/workflows', require('./routes/workflow.routes'));
 app.use('/api/v1/agent', require('./routes/autonomous_agent.routes'));
 app.use('/api/v1/developer', require('./routes/developer.routes'));
 app.use('/api/v1/plugins', require('./routes/plugin.routes'));
+app.use('/api/v1/open', require('./routes/open_api.routes'));
 app.use('/api/notes', require('./routes/userNote.routes'));
 app.use('/api/community', require('./routes/community.routes'));
 app.use('/api/payments/mpesa', require('./routes/mpesa.routes'));
 app.use('/api/payments/gateways', require('./routes/paymentGateways.routes'));
+app.use('/api/marketplace', require('./routes/marketplace.routes'));
 
 // Web SPA static file serving (Only active if public/ directory exists)
 const webBuildPath = path.join(rootDir, 'public');
