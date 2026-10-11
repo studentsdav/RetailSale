@@ -1,5 +1,4 @@
 import vm from 'vm';
-import ts from 'typescript';
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
@@ -132,8 +131,11 @@ function makeHttpRequest(
  */
 export function transpileTypeScript(tsCode: string): string {
     try {
-        const tsCompiler: any = ts;
-        if (typeof tsCompiler.transpileModule === 'function') {
+        let tsCompiler: any = null;
+        try {
+            tsCompiler = require('typescript');
+        } catch (_) {}
+        if (tsCompiler && typeof tsCompiler.transpileModule === 'function') {
             return tsCompiler.transpileModule(tsCode, {
                 compilerOptions: {
                     module: tsCompiler.ModuleKind?.CommonJS ?? 1,

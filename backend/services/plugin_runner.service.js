@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.transpileTypeScript = transpileTypeScript;
 exports.executePluginScript = executePluginScript;
 const vm_1 = __importDefault(require("vm"));
-const typescript_1 = __importDefault(require("typescript"));
 const http_1 = __importDefault(require("http"));
 const https_1 = __importDefault(require("https"));
 const url_1 = require("url");
@@ -83,8 +82,11 @@ function makeHttpRequest(method, requestUrl, body, headers = {}, redirectCount =
  */
 function transpileTypeScript(tsCode) {
     try {
-        const tsCompiler = typescript_1.default;
-        if (typeof tsCompiler.transpileModule === 'function') {
+        let tsCompiler = null;
+        try {
+            tsCompiler = require("typescript");
+        } catch (_) {}
+        if (tsCompiler && typeof tsCompiler.transpileModule === 'function') {
             return tsCompiler.transpileModule(tsCode, {
                 compilerOptions: {
                     module: tsCompiler.ModuleKind?.CommonJS ?? 1,

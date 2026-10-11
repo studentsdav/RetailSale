@@ -39,7 +39,8 @@
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.7",
     "unzipper": "^0.12.3",
-    "winston": "^3.19.0"
+    "winston": "^3.19.0",
+    "typescript": "^7.0.2"
   },
   "devDependencies": {
     "@types/archiver": "^8.0.0",
@@ -53,7 +54,6 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.23.1",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "tsx": "^4.23.15"
   }
 }
