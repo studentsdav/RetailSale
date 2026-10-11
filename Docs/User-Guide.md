@@ -47,6 +47,7 @@ Click on any guide below for comprehensive step-by-step instructions:
 | 🧩 **[Plugin Dev Studio & Marketplace](./User-Guide-Plugin-Dev-Studio-And-Marketplace.md)** | Browsing paginated marketplace plugins and building custom store automations inside the POS Dev Studio. |
 | 🛵 **[Third-Party Orders & Outlet OTP](./User-Guide-Third-Party-Orders-And-Outlet-OTP.md)** | Monitoring Zomato, Swiggy, UberEats aggregator orders, net payouts, and SMS/Email OTP verification for new branches. |
 | 🔄 **[Operations Document Modifications](./User-Guide-Operations-Document-Modification-Workflows.md)** | Editing and revising existing Purchase Orders, GRNs, Material Requests, and Stock Issues with differential ledger updates. |
+| 🛡️ **[Enterprise Disaster Recovery & Cloud Backup](./Disaster-Recovery-Documentation.md)** | Complete guide to automated AES-256 Google Drive backups, sync status tracking, and 1-click bare-metal store restoration. |
 
 ---
 

@@ -53,6 +53,7 @@ mindmap
 | **Own Server Deployment** | DevOps | Self-hosting on private VPS (Ubuntu/Debian/Windows Server) | [`Docs/Own-Server-Online-Deployment-Guide.md`](./Docs/Own-Server-Online-Deployment-Guide.md) |
 | **Google Gmail OAuth2 Setup** | Admins | Setting up OAuth2 credentials for secure OTP/bill emailing | [`Docs/Google-Gmail-OAuth2-Setup-Guide.md`](./Docs/Google-Gmail-OAuth2-Setup-Guide.md) |
 | **Settings & Config Guide** | Admins | Configuration options and multi-tenant parameters | [`Docs/Settings-Guide.md`](./Docs/Settings-Guide.md) |
+| **Disaster Recovery & Restore** | Admins / Devs | AES-256 cloud backups, sync tracker & 1-click bare-metal restore | [`Docs/Disaster-Recovery-Documentation.md`](./Docs/Disaster-Recovery-Documentation.md) |
 
 ---
 

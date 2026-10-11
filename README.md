@@ -186,6 +186,7 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 - 🖥️ **[Retailer Installation & Update Installer Guide](./Docs/Retailer-Installation-Guide.md)** & **[Windows Inno Setup Guide](./Docs/Windows-Installer-Developer-Guide.md)**
 - ☁️ **[Render Cloud Deployment Guide](./Docs/Render-Cloud-Deployment-Guide.md)**, **[Web Deployment Guide](./Docs/Web-Deployment-Guide.md)** & **[Own Server Guide](./Docs/Own-Server-Online-Deployment-Guide.md)**
 - ✉️ **[Google Gmail OAuth2 Setup Guide](./Docs/Google-Gmail-OAuth2-Setup-Guide.md)** & **[Settings Master Guide](./Docs/Settings-Guide.md)**
+- 🛡️ **[Disaster Recovery & Bare-Metal Restore Guide](./Docs/Disaster-Recovery-Documentation.md)** — AES-256 cloud backup pipeline, write-ahead sync tracker & automated restore
 - 📘 **[Complete Help File & Feature Directory](./Docs/Help-File.md)**
 
 ---

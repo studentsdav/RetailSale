@@ -151,6 +151,7 @@ For in-depth implementation details of each individual subsystem, consult the de
 | 🛵 **[Third-Party Orders & Outlet OTP Architecture](./Developer-Guide-Third-Party-Orders-And-Outlet-OTP.md)** | Delivery aggregator order normalization, commission calculation, and cryptographic outlet onboarding OTP. |
 | 🔄 **[Operations Document Modifications & Differential Ledger](./Developer-Guide-Operations-Document-Modification-Workflows.md)** | Differential stock adjustments (`delta_in`, `delta_out`), concurrency row locking, and tax group recalculation. |
 | 📡 **[Full REST API Endpoint Reference](./Endpoint-Reference.md)** | 100% complete REST API reference for all 40 backend route modules with request/response schemas. |
+| 🛡️ **[Disaster Recovery & Bare-Metal Restore Architecture](./Disaster-Recovery-Documentation.md)** | AES-256 cloud backup pipeline, write-ahead sync tracker, and 1-click bare-metal system rebuild. |
 | 🚀 **[Windows Installer & Packaging Guide](./Windows-Installer-Developer-Guide.md)** | Complete InnoSetup packaging, bundling PostgreSQL runtime, Node binary, and Flutter executables. |
 
 ---
