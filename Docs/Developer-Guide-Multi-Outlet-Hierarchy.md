@@ -1,10 +1,10 @@
-﻿# ðŸ¢ Developer Guide: Multi-Outlet & Warehouse Hierarchy Architecture
+# 🏢 Developer Guide: Multi-Outlet & Warehouse Hierarchy Architecture
 
 This technical document details the multi-tenant outlet scoping middleware, hierarchical warehouse tree data structures, branch-scoped document numbering sequences, and cross-outlet stock transfer state isolation.
 
 ---
 
-## ðŸ—ï¸ Multi-Outlet Scoping & Context Middleware
+## 🏗️ Multi-Outlet Scoping & Context Middleware
 
 The system isolates store data while enabling unified enterprise consolidation:
 
@@ -21,7 +21,7 @@ flowchart TD
 
 ---
 
-## ðŸ—„ï¸ Relational Database Schema & Models
+## 🗄️ Relational Database Schema & Models
 
 ### 1. `Outlet` (Branch Master)
 - `id` (PK, Integer)
@@ -50,7 +50,7 @@ flowchart TD
 
 ---
 
-## ðŸ”„ Cross-Outlet Stock Request & Transfer Protocols
+## 🔄 Cross-Outlet Stock Request & Transfer Protocols
 
 ```mermaid
 sequenceDiagram
@@ -75,14 +75,14 @@ sequenceDiagram
 
 ---
 
-## ðŸ“¡ REST API Endpoint Specifications
+## 📡 REST API Endpoint Specifications
 
-- `GET /api/public/outlet` â€” List registered outlets.
-- `POST /api/public/outlet` â€” Register new outlet terminal.
-- `GET /api/inventory/stock-locations` â€” List warehouse aisles and bin locations.
-- `POST /api/inventory/stock-locations` â€” Create stock storage zone.
-- `GET /api/inventory/numbering-settings` â€” Retrieve sequence formatting for outlet.
-- `POST /api/inventory/numbering-settings` â€” Update sequence rules (Prefix/Suffix/Padding).
+- `GET /api/public/outlet` — List registered outlets.
+- `POST /api/public/outlet` — Register new outlet terminal.
+- `GET /api/inventory/stock-locations` — List warehouse aisles and bin locations.
+- `POST /api/inventory/stock-locations` — Create stock storage zone.
+- `GET /api/inventory/numbering-settings` — Retrieve sequence formatting for outlet.
+- `POST /api/inventory/numbering-settings` — Update sequence rules (Prefix/Suffix/Padding).
 
 ---
 

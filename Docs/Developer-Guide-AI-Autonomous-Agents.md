@@ -1,22 +1,22 @@
-﻿# ðŸ¤– Developer Guide: AI Intelligence & Autonomous Agents
+# 🤖 Developer Guide: AI Intelligence & Autonomous Agents
 
 This technical document details the architectural design, LLM tool-calling schemas, autonomous agent scheduler, and machine learning recommendation algorithms powering **Famalth Lynx AI** and the **Autonomous Agent Subsystem**.
 
 ---
 
-## ðŸ—ï¸ AI System Architecture
+## 🏗️ AI System Architecture
 
 ```text
 AI Intelligence Subsystem
-â”œâ”€â”€ ðŸ’¬ Famalth Lynx AI Conversational Engine (`/api/ai-assist`)
-â”œâ”€â”€ ðŸ¤– Autonomous Background Agents Engine (`/api/v1/agent`)
-â”œâ”€â”€ ðŸ›’ Smart Upsell & Cross-Sell Recommender (`/api/v1/intelligence`)
-â””â”€â”€ ðŸ“Š Natural Language Analytics & Forecasting Engine
+├── 💬 Famalth Lynx AI Conversational Engine (`/api/ai-assist`)
+├── 🤖 Autonomous Background Agents Engine (`/api/v1/agent`)
+├── 🛒 Smart Upsell & Cross-Sell Recommender (`/api/v1/intelligence`)
+└── 📊 Natural Language Analytics & Forecasting Engine
 ```
 
 ---
 
-## ðŸ’¬ Famalth Lynx AI: Tool-Calling & Intent Pipeline
+## 💬 Famalth Lynx AI: Tool-Calling & Intent Pipeline
 
 The Lynx AI Assistant leverages a structured tool-calling pipeline that translates plain natural language queries into deterministic database queries and transactional actions:
 
@@ -50,7 +50,7 @@ flowchart TD
 
 ---
 
-## ðŸ¤– Autonomous Background Agents Framework
+## 🤖 Autonomous Background Agents Framework
 
 The autonomous agent subsystem (`backend/services/autonomous_agent.service.ts`) runs scheduled background workers that analyze operational data and generate actionable proposals requiring supervisor approval.
 
@@ -77,7 +77,7 @@ stateDiagram-v2
 
 ---
 
-## ðŸ›’ Smart Upsell Bar & Recommendation Engine
+## 🛒 Smart Upsell Bar & Recommendation Engine
 
 Mounted at `/api/v1/intelligence/recommendations`:
 - Implements Association Rule Mining (Apriori / FP-Growth) on historical basket receipts.
@@ -89,16 +89,16 @@ Mounted at `/api/v1/intelligence/recommendations`:
 
 ---
 
-## ðŸ“¡ REST API Endpoint Specifications
+## 📡 REST API Endpoint Specifications
 
-- `POST /api/ai-assist/chat` â€” Submit conversational prompt to Lynx AI.
-- `POST /api/ai-assist/voice-command` â€” Dispatch transcribed voice shortcut.
-- `GET /api/v1/agent/proposals` â€” Retrieve pending autonomous agent proposals.
-- `POST /api/v1/agent/proposals/:id/approve` â€” Approve and execute agent proposal.
-- `POST /api/v1/agent/proposals/:id/reject` â€” Reject proposal with feedback reason.
-- `GET /api/v1/agent/audit-logs` â€” Full audit trail of all agent actions.
-- `GET /api/v1/intelligence/recommendations` â€” Fetch live basket recommendations for current POS cart.
-- `GET /api/v1/intelligence/customer-insights/:id` â€” Retrieve RFM (Recency, Frequency, Monetary) analytics for customer.
+- `POST /api/ai-assist/chat` — Submit conversational prompt to Lynx AI.
+- `POST /api/ai-assist/voice-command` — Dispatch transcribed voice shortcut.
+- `GET /api/v1/agent/proposals` — Retrieve pending autonomous agent proposals.
+- `POST /api/v1/agent/proposals/:id/approve` — Approve and execute agent proposal.
+- `POST /api/v1/agent/proposals/:id/reject` — Reject proposal with feedback reason.
+- `GET /api/v1/agent/audit-logs` — Full audit trail of all agent actions.
+- `GET /api/v1/intelligence/recommendations` — Fetch live basket recommendations for current POS cart.
+- `GET /api/v1/intelligence/customer-insights/:id` — Retrieve RFM (Recency, Frequency, Monetary) analytics for customer.
 
 ---
 

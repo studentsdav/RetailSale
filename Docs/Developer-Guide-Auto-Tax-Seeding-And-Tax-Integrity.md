@@ -1,10 +1,10 @@
-﻿# Developer Guide: Multi-Country Tax Seeding & Tax Group Deletion Integrity
+# Developer Guide: Multi-Country Tax Seeding & Tax Group Deletion Integrity
 
 This technical guide documents the automatic multi-country tax seeding engine, international fiscal rule catalogs, relational integrity checks, and replacement workflows.
 
 ---
 
-## ðŸ“‘ Table of Contents
+## 📑 Table of Contents
 1. [Architecture & System Flow](#1-architecture--system-flow)
 2. [Multi-Country Fiscal Catalogs](#2-multi-country-fiscal-catalogs)
 3. [Auto-Seeding Engine Implementation](#3-auto-seeding-engine-implementation)

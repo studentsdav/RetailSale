@@ -19,20 +19,20 @@ In previous versions, logging in triggered synchronous blocking calls across ext
 
 ```mermaid
 flowchart TD
-    subgraph Legacy Flow ["❌ Legacy Sequential Flow (~2.5s - 4.0s)"]
-        L1[Submit Credentials] --> L2[Synchronous Cloud License Call (1.5s)]
-        L2 --> L3[Sequentially Query Permissions (200ms)]
-        L3 --> L4[Save Tokens to Disk (100ms)]
-        L4 --> L5[Blocking Onboarding Full Refresh (800ms)]
-        L5 --> L6[Resolve Screen & Render]
+    subgraph Legacy Flow ["Legacy Sequential Flow (~2.5s - 4.0s)"]
+        L1["Submit Credentials"] --> L2["Synchronous Cloud License Call (1.5s)"]
+        L2 --> L3["Sequentially Query Permissions (200ms)"]
+        L3 --> L4["Save Tokens to Disk (100ms)"]
+        L4 --> L5["Blocking Onboarding Full Refresh (800ms)"]
+        L5 --> L6["Resolve Screen & Render"]
     end
 
-    subgraph Optimized Flow ["⚡ Optimized Parallel Pipeline (< 350ms)"]
-        O1[Submit PIN / Password] --> O2[Parallel: Scoped DB Auth + Fast Cache Verification]
-        O2 --> O3[Immediate JWT Token Minting & Response]
-        O3 --> O4[Client Optimistic Navigation to Home Route]
-        O3 -.->|Async Non-Blocking Worker| O5[Background Cloud Telemetry & License Sync]
-        O3 -.->|Local Cached Flag| O6[Instant Startup Screen Resolution]
+    subgraph Optimized Flow ["Optimized Parallel Pipeline (< 350ms)"]
+        O1["Submit PIN / Password"] --> O2["Parallel: Scoped DB Auth + Fast Cache Verification"]
+        O2 --> O3["Immediate JWT Token Minting & Response"]
+        O3 --> O4["Client Optimistic Navigation to Home Route"]
+        O3 -.->|Async Non-Blocking Worker| O5["Background Cloud Telemetry & License Sync"]
+        O3 -.->|Local Cached Flag| O6["Instant Startup Screen Resolution"]
     end
 ```
 

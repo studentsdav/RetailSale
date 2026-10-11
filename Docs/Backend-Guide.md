@@ -1,10 +1,10 @@
-﻿# âš™ï¸ Complete Backend Developer Guide
+# ⚙️ Complete Backend Developer Guide
 
 This document is the **comprehensive technical manual for the Node.js / Express / TypeScript API server** located in `backend/`.
 
 ---
 
-## ðŸ—ï¸ Backend Stack & Technologies
+## 🏗️ Backend Stack & Technologies
 
 - **Runtime & Language**: Node.js `18+` / `20+ LTS`, TypeScript `5.x`, ES2022.
 - **Web Framework**: Express.js with JSON body parsers, CORS, Helmet security headers, compression.
@@ -16,7 +16,7 @@ This document is the **comprehensive technical manual for the Node.js / Express 
 
 ---
 
-## ðŸš¦ HTTP Middleware Pipeline
+## 🚦 HTTP Middleware Pipeline
 
 Every incoming HTTP request traverses an ordered middleware pipeline:
 
@@ -43,7 +43,7 @@ flowchart TD
 
 ---
 
-## ðŸ—„ï¸ Relational Database & Models Architecture
+## 🗄️ Relational Database & Models Architecture
 
 The backend database contains 45+ relational tables managed via Sequelize:
 
@@ -80,7 +80,7 @@ The backend database contains 45+ relational tables managed via Sequelize:
 
 ---
 
-## â° Background Jobs & Scheduled Workers
+## ⏰ Background Jobs & Scheduled Workers
 
 Managed in `backend/jobs/`:
 
@@ -99,45 +99,45 @@ Managed in `backend/jobs/`:
 
 ---
 
-## ðŸ“¡ Complete Mounted API Route Groups
+## 📡 Complete Mounted API Route Groups
 
 All routes are mounted under `/api` in `backend/server.ts` (or `server.js`):
 
 ```text
 /api
-â”œâ”€â”€ /auth               -> auth.routes.ts
-â”œâ”€â”€ /public             -> public.routes.ts
-â”œâ”€â”€ /inventory          -> inventory.routes.ts
-â”œâ”€â”€ /purchase-orders    -> purchase.routes.ts
-â”œâ”€â”€ /receiving          -> receiving.routes.ts
-â”œâ”€â”€ /suppliers          -> supplier.routes.ts
-â”œâ”€â”€ /sales              -> sales.routes.ts
-â”œâ”€â”€ /restaurant         -> restaurant.routes.ts
-â”œâ”€â”€ /accounting         -> accounting.routes.ts
-â”œâ”€â”€ /finance            -> finance.routes.ts
-â”œâ”€â”€ /hrms               -> hrms.routes.ts
-â”œâ”€â”€ /delivery           -> delivery.routes.ts
-â”œâ”€â”€ /reports            -> reports.routes.ts
-â”œâ”€â”€ /analytics          -> analytics.routes.ts
-â”œâ”€â”€ /lucky-draw         -> luckyDraw.routes.ts
-â”œâ”€â”€ /night-audit        -> nightAudit.routes.ts
-â”œâ”€â”€ /community          -> community.routes.ts
-â”œâ”€â”€ /ai-assist          -> ai_assist.routes.ts
-â”œâ”€â”€ /v1/agent           -> autonomous_agent.routes.ts
-â”œâ”€â”€ /v1/intelligence    -> intelligence.routes.ts
-â”œâ”€â”€ /v1/plugins         -> plugin.routes.ts
-â”œâ”€â”€ /v1/workflows       -> workflow.routes.ts
-â”œâ”€â”€ /v1/developer       -> developer.routes.ts
-â”œâ”€â”€ /whatsapp           -> whatsapp.routes.ts
-â”œâ”€â”€ /whatsapp-webhook   -> whatsappWebhook.routes.ts
-â”œâ”€â”€ /mpesa              -> mpesa.routes.ts
-â”œâ”€â”€ /user-notes         -> userNote.routes.ts
-â”œâ”€â”€ /tax-groups         -> taxGroup.routes.ts
-â”œâ”€â”€ /system             -> systemTime.routes.ts
-â”œâ”€â”€ /users              -> user.routes.ts
-â”œâ”€â”€ /audit              -> audit.routes.ts
-â”œâ”€â”€ /operations         -> operations.routes.ts
-â””â”€â”€ /notifications      -> notification.routes.ts
+├── /auth               -> auth.routes.ts
+├── /public             -> public.routes.ts
+├── /inventory          -> inventory.routes.ts
+├── /purchase-orders    -> purchase.routes.ts
+├── /receiving          -> receiving.routes.ts
+├── /suppliers          -> supplier.routes.ts
+├── /sales              -> sales.routes.ts
+├── /restaurant         -> restaurant.routes.ts
+├── /accounting         -> accounting.routes.ts
+├── /finance            -> finance.routes.ts
+├── /hrms               -> hrms.routes.ts
+├── /delivery           -> delivery.routes.ts
+├── /reports            -> reports.routes.ts
+├── /analytics          -> analytics.routes.ts
+├── /lucky-draw         -> luckyDraw.routes.ts
+├── /night-audit        -> nightAudit.routes.ts
+├── /community          -> community.routes.ts
+├── /ai-assist          -> ai_assist.routes.ts
+├── /v1/agent           -> autonomous_agent.routes.ts
+├── /v1/intelligence    -> intelligence.routes.ts
+├── /v1/plugins         -> plugin.routes.ts
+├── /v1/workflows       -> workflow.routes.ts
+├── /v1/developer       -> developer.routes.ts
+├── /whatsapp           -> whatsapp.routes.ts
+├── /whatsapp-webhook   -> whatsappWebhook.routes.ts
+├── /mpesa              -> mpesa.routes.ts
+├── /user-notes         -> userNote.routes.ts
+├── /tax-groups         -> taxGroup.routes.ts
+├── /system             -> systemTime.routes.ts
+├── /users              -> user.routes.ts
+├── /audit              -> audit.routes.ts
+├── /operations         -> operations.routes.ts
+└── /notifications      -> notification.routes.ts
 ```
 
 ---

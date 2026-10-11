@@ -1,10 +1,10 @@
-﻿# ðŸ“Š Developer Guide: Reports, Analytics & Business Intelligence Engine
+# 📊 Developer Guide: Reports, Analytics & Business Intelligence Engine
 
 This technical document details the SQL aggregation queries, indexing architectures, read-replica offloading, vector PDF rendering pipelines, and background cache warming workers governing the Reports and Analytics subsystem.
 
 ---
 
-## ðŸ—ï¸ Analytics Architecture & Data Flow
+## 🏗️ Analytics Architecture & Data Flow
 
 ```mermaid
 flowchart TD
@@ -20,7 +20,7 @@ flowchart TD
 
 ---
 
-## ðŸ—„ï¸ Core SQL Aggregations & Query Performance
+## 🗄️ Core SQL Aggregations & Query Performance
 
 All reports use parameterized date ranges (`start_date`, `end_date`), outlet scoping (`outlet_code`), and composite database indexes:
 
@@ -60,27 +60,27 @@ ORDER BY s.quantity ASC;
 
 ---
 
-## â° Background Analytics Refresh Worker (`analyticsRefreshJob.ts`)
+## ⏰ Background Analytics Refresh Worker (`analyticsRefreshJob.ts`)
 
 - **Trigger**: Hourly via Node-Cron.
 - **Function**: Pre-computes heavy weekly and monthly sales summaries, brand margin distributions, and customer RFM analytics into `analytics_cache` tables to guarantee instant dashboard load times on POS startup.
 
 ---
 
-## ðŸ“¡ REST API Endpoint Specifications
+## 📡 REST API Endpoint Specifications
 
 Mounted under `/api/reports` and `/api/analytics`:
 
-- `GET /api/reports/sales` â€” Detailed sales summary with tax and discount splits.
-- `GET /api/reports/stock-balance` â€” Real-time inventory balance and stock valuation.
-- `GET /api/reports/stock-ledger` â€” Item-level chronological transaction ledger.
-- `GET /api/reports/payment-analysis` â€” Revenue distribution by payment mode.
-- `GET /api/reports/credit-report` â€” Customer credit aging and outstanding balances.
-- `GET /api/reports/cashier-handover` â€” Shift handover cash drawer reconciliation.
-- `GET /api/reports/night-audit` â€” Night audit history and discrepancy logs.
-- `GET /api/reports/brand-analysis` â€” Brand-wise revenue and margin share.
-- `GET /api/reports/commission-report` â€” Staff sales commissions and payouts.
-- `GET /api/analytics/dashboard-summary` â€” Real-time executive KPIs (Sales, Revenue, Average Order Value).
+- `GET /api/reports/sales` — Detailed sales summary with tax and discount splits.
+- `GET /api/reports/stock-balance` — Real-time inventory balance and stock valuation.
+- `GET /api/reports/stock-ledger` — Item-level chronological transaction ledger.
+- `GET /api/reports/payment-analysis` — Revenue distribution by payment mode.
+- `GET /api/reports/credit-report` — Customer credit aging and outstanding balances.
+- `GET /api/reports/cashier-handover` — Shift handover cash drawer reconciliation.
+- `GET /api/reports/night-audit` — Night audit history and discrepancy logs.
+- `GET /api/reports/brand-analysis` — Brand-wise revenue and margin share.
+- `GET /api/reports/commission-report` — Staff sales commissions and payouts.
+- `GET /api/analytics/dashboard-summary` — Real-time executive KPIs (Sales, Revenue, Average Order Value).
 
 ---
 

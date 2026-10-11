@@ -1,23 +1,23 @@
-﻿# ðŸ›’ Developer Guide: POS, Inventory & Manufacturing Engine
+# 🛒 Developer Guide: POS, Inventory & Manufacturing Engine
 
 This technical document details the transactional mechanics, stock ledger calculation algorithms, multi-level Bill of Materials (BOM) assembly processing, custom barcode rendering engine, and multi-outlet stock transfer state machine.
 
 ---
 
-## ðŸ—ï¸ Core Subsystems & Architecture
+## 🏗️ Core Subsystems & Architecture
 
 ```text
 Inventory Subsystems
-â”œâ”€â”€ âš¡ Enterprise POS Transaction Engine (Atomicity & Concurrency)
-â”œâ”€â”€ ðŸ“¦ Stock Ledger & Valuation Engine (FIFO / Weighted Average)
-â”œâ”€â”€ ðŸ­ Manufacturing & Bill of Materials (BOM) Assembly Engine
-â”œâ”€â”€ ðŸ·ï¸ Custom Barcode & QR Code Rendering Pipeline
-â””â”€â”€ ðŸšš Multi-Outlet Stock Transfer & Verification State Machine
+├── ⚡ Enterprise POS Transaction Engine (Atomicity & Concurrency)
+├── 📦 Stock Ledger & Valuation Engine (FIFO / Weighted Average)
+├── 🏭 Manufacturing & Bill of Materials (BOM) Assembly Engine
+├── 🏷️ Custom Barcode & QR Code Rendering Pipeline
+└── 🚚 Multi-Outlet Stock Transfer & Verification State Machine
 ```
 
 ---
 
-## âš¡ POS Transaction Lifecycle & ACID Guarantees
+## ⚡ POS Transaction Lifecycle & ACID Guarantees
 
 Every sale checkout executed in `SalesController.createSale` runs inside an isolated PostgreSQL transaction with row-level locks on stock rows:
 
@@ -45,7 +45,7 @@ sequenceDiagram
 
 ---
 
-## ðŸ­ Manufacturing & Bill of Materials (BOM) Engine
+## 🏭 Manufacturing & Bill of Materials (BOM) Engine
 
 The BOM subsystem enables conversion of multiple raw component stocks into single finished sellable units.
 
@@ -66,7 +66,7 @@ When `AssemblyController.produceBatch` is called:
 
 ---
 
-## ðŸ·ï¸ Custom Barcode & QR Rendering Pipeline
+## 🏷️ Custom Barcode & QR Rendering Pipeline
 
 Barcode generation is handled on the client using the vector layout engine:
 - **Code128 / EAN-13 / UPC-A**: Rendered into high-resolution 1D raster buffers.
@@ -77,7 +77,7 @@ Barcode generation is handled on the client using the vector layout engine:
 
 ---
 
-## ðŸšš Multi-Outlet Stock Transfer State Machine
+## 🚚 Multi-Outlet Stock Transfer State Machine
 
 ```mermaid
 stateDiagram-v2
@@ -94,19 +94,19 @@ stateDiagram-v2
 
 ---
 
-## ðŸ“¡ REST API Endpoint Specifications
+## 📡 REST API Endpoint Specifications
 
 Mounted under `/api/inventory`, `/api/sales`, `/api/receiving`, `/api/purchase-orders`:
 
-- `POST /api/sales` â€” Atomically commit POS sale transaction.
-- `GET /api/sales/:id` â€” Retrieve sale details with tax splits and payment records.
-- `POST /api/inventory/assembly/produce` â€” Execute BOM assembly batch.
-- `POST /api/inventory/transfers/request` â€” Create multi-branch stock request.
-- `POST /api/inventory/transfers/dispatch` â€” Dispatch stock transfer (locks goods in transit).
-- `POST /api/inventory/transfers/receive` â€” Accept stock transfer at destination outlet.
-- `POST /api/purchase-orders` â€” Create purchase order to vendor.
-- `POST /api/receiving` â€” Commit Goods Receiving Note (GRN) against vendor PO.
-- `POST /api/inventory/damages` â€” Record damaged inventory write-off.
+- `POST /api/sales` — Atomically commit POS sale transaction.
+- `GET /api/sales/:id` — Retrieve sale details with tax splits and payment records.
+- `POST /api/inventory/assembly/produce` — Execute BOM assembly batch.
+- `POST /api/inventory/transfers/request` — Create multi-branch stock request.
+- `POST /api/inventory/transfers/dispatch` — Dispatch stock transfer (locks goods in transit).
+- `POST /api/inventory/transfers/receive` — Accept stock transfer at destination outlet.
+- `POST /api/purchase-orders` — Create purchase order to vendor.
+- `POST /api/receiving` — Commit Goods Receiving Note (GRN) against vendor PO.
+- `POST /api/inventory/damages` — Record damaged inventory write-off.
 
 ---
 

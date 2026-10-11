@@ -1,10 +1,10 @@
-﻿# Developer Guide: A5 Invoice Format & Multi-Format Template Designer
+# Developer Guide: A5 Invoice Format & Multi-Format Template Designer
 
 This technical guide documents the design, dimension calculations, PDF rendering pipelines, and template configuration models for **A5 Invoice Printing** alongside Thermal 80mm, Thermal 58mm, and A4 formats.
 
 ---
 
-## ðŸ“‘ Table of Contents
+## 📑 Table of Contents
 1. [Architecture & Document Rendering Pipeline](#1-architecture--document-rendering-pipeline)
 2. [Supported Paper Formats & Geometry](#2-supported-paper-formats--geometry)
 3. [Database Configuration Model (`system_settings`)](#3-database-configuration-model-system_settings)
@@ -18,16 +18,16 @@ This technical guide documents the design, dimension calculations, PDF rendering
 
 ```mermaid
 flowchart TD
-    A[Checkout / Reprint Invoice] --> B[Fetch Outlet Print Settings & Template Configs]
-    B --> C{Selected Print Format}
-    C -->|THERMAL_80MM| D[Render Roll 80mm ESC/POS or PDF Slip]
-    C -->|THERMAL_58MM| E[Render Roll 58mm ESC/POS or PDF Slip]
-    C -->|A4| F[Render Full Page A4 PDF (210 x 297 mm)]
-    C -->|A5| G[Render Half Page A5 PDF (148 x 210 mm)]
+    A["Checkout / Reprint Invoice"] --> B["Fetch Outlet Print Settings & Template Configs"]
+    B --> C{"Selected Print Format"}
+    C -->|THERMAL_80MM| D["Render Roll 80mm ESC/POS or PDF Slip"]
+    C -->|THERMAL_58MM| E["Render Roll 58mm ESC/POS or PDF Slip"]
+    C -->|A4| F["Render Full Page A4 PDF (210 x 297 mm)"]
+    C -->|A5| G["Render Half Page A5 PDF (148 x 210 mm)"]
     
-    G --> H[Apply A5 Template Configuration: Margins, Headers, Tax Grid, Footers]
-    H --> I[Generate Byte Stream via pdf/pdf.dart & pdf/widgets.dart]
-    I --> J[PdfPreviewDialog Preview & Native Windows/Android Spooler Output]
+    G --> H["Apply A5 Template Configuration: Margins, Headers, Tax Grid, Footers"]
+    H --> I["Generate Byte Stream via pdf/pdf.dart & pdf/widgets.dart"]
+    I --> J["PdfPreviewDialog Preview & Native Windows/Android Spooler Output"]
 ```
 
 ---
