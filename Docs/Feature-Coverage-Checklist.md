@@ -150,4 +150,38 @@ This matrix provides a 100% verified audit of all UI screens, Backend route modu
 
 ---
 
-*Last Verified: October 2026 | Total Project UI and Backend Feature Coverage: 100% Complete*
+### 13. Omnichannel Payment Gateways & Virtual Simulator
+| UI Screen / Feature | Backend Route | Non-Technical User Guide | Technical Developer Guide | Audit Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Payment Gateways Config** (`payment_gateways_screen.dart`) | `/api/payments/gateways/config` | [Payment Gateways Guide](./User-Guide-Payment-Gateways-And-Virtual-Simulator.md) | [Payment Gateways Dev Guide](./Developer-Guide-Payment-Gateways-And-Virtual-Simulator.md) | 🟢 100% Covered |
+| **Virtual Payment Simulator** (`virtual_payment_simulator_dialog.dart`) | Simulated hooks & POS callback | [Simulator Guide](./User-Guide-Payment-Gateways-And-Virtual-Simulator.md#3-using-the-virtual-payment-simulator-in-pos-billing) | [Simulator Dev Architecture](./Developer-Guide-Payment-Gateways-And-Virtual-Simulator.md#4-client-side-simulator-state-machine-flutter) | 🟢 100% Covered |
+
+---
+
+### 14. In-App Plugin Dev Studio & Sandboxed Marketplace
+| UI Screen / Feature | Backend Route | Non-Technical User Guide | Technical Developer Guide | Audit Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Plugin Dev Studio** (`plugin_dev_studio_screen.dart`) | `/api/v1/plugins/developer` | [Plugin Studio Guide](./User-Guide-Plugin-Dev-Studio-And-Marketplace.md) | [Plugin Studio Dev Architecture](./Developer-Guide-Plugin-Dev-Studio-And-Sandbox.md) | 🟢 100% Covered |
+| **Paginated Marketplace** (`plugin_marketplace_screen.dart`) | `/api/v1/plugins/marketplace` | [Marketplace User Guide](./User-Guide-Plugin-Dev-Studio-And-Marketplace.md#2-browsing--installing-plugins-in-the-marketplace) | [Plugin Studio Dev Architecture](./Developer-Guide-Plugin-Dev-Studio-And-Sandbox.md#5-developer-studio-rest-endpoints) | 🟢 100% Covered |
+
+---
+
+### 15. Aggregator Orders & Outlet Onboarding OTP
+| UI Screen / Feature | Backend Route | Non-Technical User Guide | Technical Developer Guide | Audit Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Third-Party Orders Report** (`third_party_orders_report_screen.dart`) | `/api/v1/plugins/reports/third-party-orders` | [Third-Party Orders Guide](./User-Guide-Third-Party-Orders-And-Outlet-OTP.md) | [Third-Party Orders Dev Architecture](./Developer-Guide-Third-Party-Orders-And-Outlet-OTP.md) | 🟢 100% Covered |
+| **Outlet SMS/Email OTP** (`create_outlet_wizard`) | `/api/public/outlet/send-otp` | [Outlet Onboarding Guide](./User-Guide-Third-Party-Orders-And-Outlet-OTP.md#4-outlet-registration--phoneemail-otp-verification) | [Outlet OTP Architecture](./Developer-Guide-Third-Party-Orders-And-Outlet-OTP.md#2-outlet-onboarding-otp-state-machine) | 🟢 100% Covered |
+
+---
+
+### 16. Operations Document Modification Workflows
+| UI Screen / Feature | Backend Route | Non-Technical User Guide | Technical Developer Guide | Audit Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Purchase Modify** (`purchase_modify.dart`) | `PUT /api/purchase-orders/:id` | [Operations Modification Guide](./User-Guide-Operations-Document-Modification-Workflows.md) | [Differential Ledger Dev Guide](./Developer-Guide-Operations-Document-Modification-Workflows.md) | 🟢 100% Covered |
+| **Receiving (GRN) Modify** (`receiving_modify.dart`) | `PUT /api/receiving/:id` | [Operations Modification Guide](./User-Guide-Operations-Document-Modification-Workflows.md#3-modifying-a-goods-receiving-note--grn-receiving_modifydart) | [Differential Ledger Dev Guide](./Developer-Guide-Operations-Document-Modification-Workflows.md#3-the-differential-stock-ledger-adjustment-algorithm) | 🟢 100% Covered |
+| **Store Request Modify** (`request_modify.dart`) | `PUT /api/inventory/request/:id` | [Operations Modification Guide](./User-Guide-Operations-Document-Modification-Workflows.md#4-modifying-a-material-requisition-request_modifydart) | [Differential Ledger Dev Guide](./Developer-Guide-Operations-Document-Modification-Workflows.md) | 🟢 100% Covered |
+| **Stock Out Modify** (`stock_out_modify.dart`) | `PUT /api/inventory/issue/:id` | [Operations Modification Guide](./User-Guide-Operations-Document-Modification-Workflows.md#5-modifying-a-stock-out--issue-note-stock_out_modifydart) | [Differential Ledger Dev Guide](./Developer-Guide-Operations-Document-Modification-Workflows.md) | 🟢 100% Covered |
+
+---
+
+*Last Verified: October 2026 | Total Project UI and Backend Feature Coverage: 100% Complete across all 16 Modules*

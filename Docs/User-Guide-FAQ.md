@@ -15,6 +15,10 @@ Welcome to the **Store Operator & Cashier FAQ**. This guide provides simple, ste
 8. [Staff, Attendance & Shifts](#8-staff-attendance--shifts)
 9. [Offline Mode & Internet Disconnection](#9-offline-mode--internet-disconnection)
 10. [Forgot Passwords & Login Troubleshooting](#10-forgot-passwords--login-troubleshooting)
+11. [Payment Gateways & Virtual Payment Simulator](#11-payment-gateways--virtual-payment-simulator)
+12. [Plugins, Add-ons & Dev Studio](#12-plugins-add-ons--dev-studio)
+13. [Third-Party Delivery Orders & Outlet OTP](#13-third-party-delivery-orders--outlet-otp)
+14. [Modifying Approved Purchase Orders & GRNs](#14-modifying-approved-purchase-orders--grns)
 
 ---
 
@@ -186,6 +190,50 @@ Welcome to the **Store Operator & Cashier FAQ**. This guide provides simple, ste
 2. Enter the registered store **Owner Mobile Number** or **Email**.
 3. Enter the 6-digit OTP received via SMS/Email.
 4. Create a new Admin password and confirm.
+
+---
+
+## 11. Payment Gateways & Virtual Payment Simulator
+
+### Q1: Can I test POS card payments without connecting a real physical card swipe machine?
+- **Yes!** Use the **Virtual Payment Simulator** dialog during checkout.
+- Select Card or UPI and tap **Simulate Digital Pay**.
+- You can test customer card tap/insert, view simulated authorization codes and RRNs, or test card decline errors without real bank charges.
+
+### Q2: How do I enable UPI Dynamic QR code printing on customer receipts?
+1. Open **Settings** $\rightarrow$ **Payment Gateways**.
+2. Under the **UPI** tab, enter your store's **UPI VPA / ID** and **Payee Legal Name**.
+3. Toggle **Print Dynamic QR on Invoices** ON.
+4. Every printed receipt and checkout screen will display the payment QR code with the exact bill amount.
+
+---
+
+## 12. Plugins, Add-ons & Dev Studio
+
+### Q1: What is the difference between installing a marketplace plugin and building one in Dev Studio?
+- **Marketplace Plugins**: Pre-built, tested integrations (e.g. WhatsApp notifications, Zomato order sync) that you can install in 1 click.
+- **Plugin Dev Studio**: An in-app coding environment where software engineers can write custom TypeScript/JavaScript automations and test them in a sandbox console.
+
+---
+
+## 13. Third-Party Delivery Orders & Outlet OTP
+
+### Q1: Where can I see how much money Zomato or Swiggy owes my store?
+1. Go to **Reports** $\rightarrow$ **Third-Party Orders Report**.
+2. Filter by platform (`Zomato`, `Swiggy`, `UberEats`).
+3. View **Gross Revenue**, deducted **Commission Amount**, and **Net Receivable Payout**.
+
+### Q2: Why did I receive an OTP when creating a new outlet?
+- The system uses cryptographic phone/email OTP verification to prevent unauthorized branches from being provisioned on your server.
+- Once verified, the store credentials (username, password, web link) are automatically emailed to the branch manager.
+
+---
+
+## 14. Modifying Approved Purchase Orders & GRNs
+
+### Q1: Can I edit a Purchase Order or Goods Receiving Note (GRN) after saving?
+- **Yes.** Go to **Operations** $\rightarrow$ **Purchase Orders** (or **Goods Receiving**) and click **Edit / Modify**.
+- The system automatically calculates deltas (differences in quantity) and updates the Stock Ledger and Accounts Payable without corrupting your audit records.
 
 ---
 

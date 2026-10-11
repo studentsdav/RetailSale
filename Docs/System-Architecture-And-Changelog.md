@@ -326,8 +326,52 @@ graph TD
 | `docs/User-Guide-Stock-Taking-Modifiers-And-GRN-Verification.md` | User guide for physical stock audits, extra cheese modifiers, and manual GRN checking |
 | `docs/Developer-Guide-Auto-Tax-Seeding-And-Tax-Integrity.md` | Multi-Country Tax Seeding and Relational Item Integrity |
 | `docs/User-Guide-Auto-Tax-Seeding-And-Tax-Integrity.md` | User guide for international taxes and safe tax replacement |
-| `docs/Developer-Guide-A5-Invoice-And-Template-Designer.md` | A5 Invoice rendering pipeline and template JSON schema |
-| `docs/User-Guide-A5-Invoice-And-Template-Designer.md` | User guide for A5 half-page printing and template setup |
 | `docs/Developer-Guide-Dynamic-Console-Routing.md` | Multi-channel order routing architecture & dispatching |
 | `docs/User-Guide-Dynamic-Console-Routing.md` | User guide for order flows across Captain, Retailer, and Rider consoles |
+| `docs/Developer-Guide-Payment-Gateways-And-Virtual-Simulator.md` | Multi-gateway backend architecture and Virtual Payment Simulator state machine |
+| `docs/User-Guide-Payment-Gateways-And-Virtual-Simulator.md` | Step-by-step user guide for configuring gateways and simulating digital checkout |
+| `docs/Developer-Guide-Plugin-Dev-Studio-And-Sandbox.md` | In-app Plugin Dev Studio, safe TypeScript runner, and lifecycle hooks |
+| `docs/User-Guide-Plugin-Dev-Studio-And-Marketplace.md` | User guide for browsing marketplace plugins and coding custom store automations |
+| `docs/Developer-Guide-Third-Party-Orders-And-Outlet-OTP.md` | Aggregator order ingestion architecture, commission engine, and outlet onboarding OTP |
+| `docs/User-Guide-Third-Party-Orders-And-Outlet-OTP.md` | User guide for viewing third-party aggregator analytics and outlet OTP verification |
+| `docs/Developer-Guide-Operations-Document-Modification-Workflows.md` | Differential stock ledger algorithm, concurrency locks, and document revision tracking |
+| `docs/User-Guide-Operations-Document-Modification-Workflows.md` | User guide for safely editing existing POs, GRNs, requisitions, and stock issues |
+
+---
+
+### 22. 💳 Omnichannel Payment Gateways & Virtual Payment Simulator (Oct 2026)
+* **Omnichannel Gateway Hub (`payment_gateways_screen.dart`)**:
+  * Unified configuration for Razorpay, Stripe, Square POS, PayPal, M-Pesa (Kenya), and UPI QR payments.
+  * Secret key masking (`********`), test/sandbox vs. live environment switches, and direct vs. hold settlement modes.
+* **Interactive Virtual Payment Simulator (`virtual_payment_simulator_dialog.dart`)**:
+  * In-app terminal dialog simulating digital transactions during POS checkout.
+  * Simulates dynamic UPI QR scanning, card tap/chip insertion with mock approval codes/RRNs, and M-Pesa STK push polling.
+
+---
+
+### 23. 🧩 In-App Plugin Dev Studio & Sandboxed Marketplace (Oct 2026)
+* **Plugin Dev Studio (`plugin_dev_studio_screen.dart`)**:
+  * Integrated in-app IDE with TypeScript/JavaScript support, manifest builder, and instant syntax validation.
+  * Sandbox test console with execution timer, console log capture, and mock payload execution.
+* **Safe Cloud Plugin Runner (`plugin_runner.service.ts`)**:
+  * Production TypeScript dependency configuration ensuring zero-crash deployments on Render/cloud platforms.
+  * Sandboxed execution of lifecycle hooks (`onInit`, `onPaymentCreate`, `onSaleComplete`, `onKotCreated`, `onInventoryDeduct`).
+
+---
+
+### 24. 🛵 Third-Party Orders Report & Outlet Onboarding OTP (Oct 2026)
+* **Third-Party Delivery Analytics (`third_party_orders_report_screen.dart`)**:
+  * Unified report tracking orders from Zomato, Swiggy, UberEats, and B2B distributor marketplaces.
+  * Real-time calculation of gross revenue, platform commission deductions, and net expected bank payout.
+* **Cryptographic Outlet Onboarding OTP (`/api/public/outlet`)**:
+  * 6-digit SMS and email verification before branch creation to prevent unauthorized store provisioning.
+  * Automated welcome email dispatch with initial admin login credentials and branch web POS URL.
+
+---
+
+### 25. 🔄 Operations Document Modification Workflows (Oct 2026)
+* **Differential Document Revisions**:
+  * Dedicated high-speed screens for modifying existing Purchase Orders (`purchase_modify.dart`), Goods Receiving (`receiving_modify.dart`), Store Requests (`request_modify.dart`), and Stock Out notes (`stock_out_modify.dart`).
+  * Automated differential inventory posting (`delta_in`, `delta_out`) without deleting audit history or corrupting stock ledgers.
+
 

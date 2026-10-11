@@ -146,7 +146,11 @@ For in-depth implementation details of each individual subsystem, consult the de
 | 📱 **[M-Pesa Mobile Money Integration Architecture](./Developer-Guide-Mpesa-Mobile-Money.md)** | Safaricom Daraja STK push lifecycle, OAuth token caching, and webhook callback processing. |
 | 🏢 **[Multi-Outlet Hierarchy & Scoping Architecture](./Developer-Guide-Multi-Outlet-Hierarchy.md)** | Multi-tenant database routing, outlet scoping middleware, warehouse tree data models, and sequence numbering. |
 | 📊 **[Reports, Analytics & BI Engine Architecture](./Developer-Guide-Reports-And-Analytics.md)** | SQL aggregations, Redis dashboard cache warming, read-replica queries, and vector PDF rendering. |
-| 📡 **[Full REST API Endpoint Reference](./Endpoint-Reference.md)** | 100% complete REST API reference for all 33 backend route modules with request/response schemas. |
+| 💳 **[Payment Gateways & Virtual Simulator](./Developer-Guide-Payment-Gateways-And-Virtual-Simulator.md)** | Multi-gateway credential store, secret masking, and Flutter Virtual Payment Simulator state machine. |
+| 🧩 **[Plugin Dev Studio & Sandbox Architecture](./Developer-Guide-Plugin-Dev-Studio-And-Sandbox.md)** | In-app IDE, safe TypeScript runner, sandbox lifecycle hooks, and marketplace publishing. |
+| 🛵 **[Third-Party Orders & Outlet OTP Architecture](./Developer-Guide-Third-Party-Orders-And-Outlet-OTP.md)** | Delivery aggregator order normalization, commission calculation, and cryptographic outlet onboarding OTP. |
+| 🔄 **[Operations Document Modifications & Differential Ledger](./Developer-Guide-Operations-Document-Modification-Workflows.md)** | Differential stock adjustments (`delta_in`, `delta_out`), concurrency row locking, and tax group recalculation. |
+| 📡 **[Full REST API Endpoint Reference](./Endpoint-Reference.md)** | 100% complete REST API reference for all 40 backend route modules with request/response schemas. |
 | 🚀 **[Windows Installer & Packaging Guide](./Windows-Installer-Developer-Guide.md)** | Complete InnoSetup packaging, bundling PostgreSQL runtime, Node binary, and Flutter executables. |
 
 ---

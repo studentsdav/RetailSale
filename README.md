@@ -142,6 +142,10 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 - 📱 **[M-Pesa & Mobile Money Integration](./Docs/User-Guide-Mpesa-Mobile-Money.md)** — Safaricom Daraja STK push configuration & instant checkout reconciliation
 - 🏢 **[Multi-Outlet & Warehouse Hierarchy](./Docs/User-Guide-Multi-Outlet-And-Warehouse-Hierarchy.md)** — Central warehouse distribution, branch linking & shelf location bins
 - 📊 **[Reports & Business Intelligence Suite](./Docs/User-Guide-Reports-And-Business-Intelligence.md)** — Generating and exporting 26+ financial, stock, and sales analytics
+- 💳 **[Payment Gateways & Virtual Simulator](./Docs/User-Guide-Payment-Gateways-And-Virtual-Simulator.md)** — Configuring Razorpay, Stripe, Square, PayPal, M-Pesa, UPI QR & POS simulation
+- 🧩 **[Plugin Dev Studio & Marketplace](./Docs/User-Guide-Plugin-Dev-Studio-And-Marketplace.md)** — Browsing marketplace plugins and authoring custom store automations
+- 🛵 **[Third-Party Orders & Outlet OTP](./Docs/User-Guide-Third-Party-Orders-And-Outlet-OTP.md)** — Tracking food aggregator orders, commissions, and outlet phone/email OTP verification
+- 🔄 **[Operations Document Modifications](./Docs/User-Guide-Operations-Document-Modification-Workflows.md)** — Safely editing existing POs, GRNs, requisitions, and stock issues
 - ❓ **[Complete Store Operations FAQ](./Docs/User-Guide-FAQ.md)** — Frequently asked cashier and manager troubleshooting questions
 - 📖 **[Master User Guide & Workflow Index](./Docs/User-Guide.md)** — Universal operational documentation hub
 
@@ -150,7 +154,11 @@ Deploy the web application and backend seamlessly on [Render.com](https://render
 ### 🛠️ Developer & Technical Architecture Guides
 - 📋 **[Master Feature & Documentation Coverage Matrix](./Docs/Feature-Coverage-Checklist.md)** — 100% verified UI & backend feature audit
 - 📜 **[System Architecture Upgrades & Changelog (Sept–Oct 2026)](./Docs/System-Architecture-And-Changelog.md)** — Architectural evolution timeline & core invariants
-- 📡 **[Master REST API Endpoint Reference](./Docs/Endpoint-Reference.md)** — Comprehensive specification of all 38 backend route modules
+- 📡 **[Master REST API Endpoint Reference](./Docs/Endpoint-Reference.md)** — Comprehensive specification of all 40 backend route modules
+- 💳 **[Payment Gateways & Virtual Simulator Architecture](./Docs/Developer-Guide-Payment-Gateways-And-Virtual-Simulator.md)** — Multi-gateway credential store, secret masking & Flutter simulator
+- 🧩 **[Plugin Dev Studio & Sandbox Architecture](./Docs/Developer-Guide-Plugin-Dev-Studio-And-Sandbox.md)** — In-app IDE, safe TypeScript runner, sandbox lifecycle hooks & marketplace publishing
+- 🛵 **[Third-Party Orders & Outlet OTP Architecture](./Docs/Developer-Guide-Third-Party-Orders-And-Outlet-OTP.md)** — Delivery aggregator order normalization, commissions & OTP onboarding
+- 🔄 **[Operations Document Modifications & Differential Ledger](./Docs/Developer-Guide-Operations-Document-Modification-Workflows.md)** — Differential stock adjustments, row locking & tax group recalculation
 - ⚡ **[Fast Login, PIN Authentication & Preloading Architecture](./Docs/Developer-Guide-Fast-Login-And-Preloading.md)** — Benchmark speedups & parallel cache warming
 - 👤 **[Staff PIN Security & Dynamic Dropdown Architecture](./Docs/Developer-Guide-Staff-PIN-And-Quick-Login.md)** — Multi-user collision resolution & JWT scoping
 - 🍽️ **[Captain Console & Floor Management Architecture](./Docs/Developer-Guide-Captain-Console-Table-Management.md)** — Multi-client split sessions, waiter binding & Excel parser

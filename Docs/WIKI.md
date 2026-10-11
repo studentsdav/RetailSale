@@ -94,6 +94,13 @@ Step-by-step illustrated workflows written for store operators, cashiers, restau
 - 🚀 **[1-Click Cloud Migration User Guide](./User-Guide-1Click-Cloud-Migration.md)**: 2-way offline-to-online and online-to-offline store cloning.
 - ☁️ **[Cloud Features & Server Config User Guide](./User-Guide-Cloud-Features-And-Server-Config.md)**: Configuring VPS and verifying cloud licenses.
 - 🛡️ **[Security & Disaster Recovery User Guide](./User-Guide-Security-And-Data-Protection.md)**: Master PIN recovery and database backups.
+- 📱 **[M-Pesa & Mobile Money Integration User Guide](./User-Guide-Mpesa-Mobile-Money.md)**: Safaricom Daraja STK push configuration and cashier mobile money checkout.
+- 🏢 **[Multi-Outlet & Warehouse Hierarchy User Guide](./User-Guide-Multi-Outlet-And-Warehouse-Hierarchy.md)**: Multi-branch store linking, central warehouse distribution, and storage locations.
+- 📊 **[Reports & Business Intelligence User Guide](./User-Guide-Reports-And-Business-Intelligence.md)**: 26+ comprehensive financial, inventory, tax, and sales performance reports.
+- 💳 **[Payment Gateways & Virtual Simulator User Guide](./User-Guide-Payment-Gateways-And-Virtual-Simulator.md)**: Configuring Razorpay, Stripe, Square, PayPal, M-Pesa, UPI QR & POS simulation.
+- 🧩 **[Plugin Dev Studio & Marketplace User Guide](./User-Guide-Plugin-Dev-Studio-And-Marketplace.md)**: Browsing marketplace plugins and authoring custom store automations in Dev Studio.
+- 🛵 **[Third-Party Orders & Outlet OTP User Guide](./User-Guide-Third-Party-Orders-And-Outlet-OTP.md)**: Tracking food delivery aggregators, commission deductions, and SMS/Email OTP onboarding.
+- 🔄 **[Operations Document Modifications User Guide](./User-Guide-Operations-Document-Modification-Workflows.md)**: Safely editing existing POs, GRNs, requisitions, and stock issues.
 - ❓ **[Complete Store Operations FAQ](./User-Guide-FAQ.md)**: Universal troubleshooting manual.
 
 ---
@@ -153,6 +160,13 @@ sequenceDiagram
 - 🌐 **[Auto-Tax Seeding & Tax Integrity Engine](./Developer-Guide-Auto-Tax-Seeding-And-Tax-Integrity.md)**: Country-specific seeders and relational foreign key replacement guards.
 - 🔀 **[Dynamic Workstation Console Routing Architecture](./Developer-Guide-Dynamic-Console-Routing.md)**: Multi-workstation message routing and event dispatching.
 - 🛡️ **[Developer Security, Anti-DDoS, Rate Limiting & Load Balancer Guide](./Developer-Security-Cache-LoadBalancer-Guide.md)**: Redis sliding-window limiters, token buckets, and cryptographic storage.
+- 📱 **[M-Pesa Mobile Money Integration Architecture](./Developer-Guide-Mpesa-Mobile-Money.md)**: Safaricom Daraja STK push lifecycle, OAuth token caching, and webhook processing.
+- 🏢 **[Multi-Outlet Hierarchy & Scoping Architecture](./Developer-Guide-Multi-Outlet-Hierarchy.md)**: Multi-tenant database routing, warehouse tree hierarchy, and numbering settings.
+- 📊 **[Reports, Analytics & BI Engine Architecture](./Developer-Guide-Reports-And-Analytics.md)**: SQL aggregations, Redis cache warming, and vector PDF rendering.
+- 💳 **[Payment Gateways & Virtual Simulator Architecture](./Developer-Guide-Payment-Gateways-And-Virtual-Simulator.md)**: Multi-gateway credential store, secret masking & Flutter simulator.
+- 🧩 **[Plugin Dev Studio & Sandbox Architecture](./Developer-Guide-Plugin-Dev-Studio-And-Sandbox.md)**: In-app IDE, safe TypeScript runner, sandbox lifecycle hooks & marketplace publishing.
+- 🛵 **[Third-Party Orders & Outlet OTP Architecture](./Developer-Guide-Third-Party-Orders-And-Outlet-OTP.md)**: Delivery aggregator order normalization, commissions & OTP onboarding.
+- 🔄 **[Operations Document Modifications & Differential Ledger](./Developer-Guide-Operations-Document-Modification-Workflows.md)**: Differential stock adjustments, row locking & tax group recalculation.
 - 🚀 **[1-Click Relational Store Migration Architecture](./One-Click-Cloud-Migration-Guide.md)**: In-memory relational ID translation engine and sequence re-alignment.
 - 🛍️ **[B2B Wholesale Marketplace & Community Chat Architecture](./B2B-Marketplace-And-Community-Guide.md)**: WebSocket chat protocols, vendor discovery, and direct PO translation.
 - 🤖 **[Lynx AI, Sticky Notes & Currency Engine Architecture](./Lynx-AI-StickyNotes-Currency-Tax-Guide.md)**: Natural language parser, draggable sticky notes model, and multi-currency exchange matrix.

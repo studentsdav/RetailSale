@@ -420,4 +420,37 @@ Idempotency-Key: <UUID> (Optional for safe retries)
 
 ---
 
-*Last Updated: October 2026 | Covers 100% of all 33 Express Route Modules & Payment Gateways*
+## 37. Multi-Gateway Payment Configuration (`/api/payments/gateways`)
+
+- `GET /api/payments/gateways/config` — Retrieve omnichannel payment configuration (Razorpay, Stripe, Square, PayPal, M-Pesa, UPI) with masked credentials.
+- `POST /api/payments/gateways/config` — Save and encrypt multi-gateway API credentials and settlement modes (Admin only).
+
+---
+
+## 38. Plugin Developer Studio & Sandbox Engine (`/api/v1/plugins`)
+
+- `POST /api/v1/plugins/developer/test-hook` — Execute in-sandbox test hook (`onInit`, `onPaymentCreate`, `onSaleComplete`, `onKotCreated`) with live benchmark timer and console logs.
+- `POST /api/v1/plugins/developer/deploy` — Compile TypeScript/JavaScript plugin manifest and publish to outlet or global marketplace.
+- `GET /api/v1/plugins/reports/third-party-orders` — Comprehensive audit report for third-party food aggregators (Zomato, Swiggy, UberEats) and B2B marketplace orders with commission breakdowns.
+- `GET /api/v1/plugins/marketplace` — Paginated marketplace listings with category filters and verified developer badges.
+
+---
+
+## 39. Public Outlet Onboarding & OTP Verification (`/api/public/outlet`)
+
+- `POST /api/public/outlet/send-otp` — Request 6-digit SMS and email verification code before branch provisioning.
+- `POST /api/public/outlet/verify-otp` — Cryptographically verify OTP and obtain authorization token for branch registration.
+- `POST /api/public/outlet` — Provision branch database schema and trigger automated welcome email with admin credentials.
+
+---
+
+## 40. Operations Document Modification & Differential Revisions
+
+- `PUT /api/purchase-orders/:id` — Modify approved or draft Purchase Order with recalculation of tax groups and line item revisions.
+- `PUT /api/receiving/:id` — Amend Goods Receiving Note (GRN) with differential stock ledger adjustments (`delta_in`, `delta_out`) and accounts payable sync.
+- `PUT /api/inventory/request/:id` — Update internal departmental material requisition quantities and priority.
+- `PUT /api/inventory/issue/:id` — Revise stock issue/dispatch quantities with automated inventory restoration or deduction.
+
+---
+
+*Last Updated: October 2026 | Covers 100% of all 40 Express Route Modules & Developer Subsystems*

@@ -97,6 +97,10 @@ Step-by-step illustrated workflows written for store operators, cashiers, restau
 - 📱 **[M-Pesa & Mobile Money Integration User Guide](./Docs/User-Guide-Mpesa-Mobile-Money.md)**: Safaricom Daraja STK push configuration and cashier mobile money checkout.
 - 🏢 **[Multi-Outlet & Warehouse Hierarchy User Guide](./Docs/User-Guide-Multi-Outlet-And-Warehouse-Hierarchy.md)**: Multi-branch store linking, central warehouse distribution, and storage locations.
 - 📊 **[Reports & Business Intelligence User Guide](./Docs/User-Guide-Reports-And-Business-Intelligence.md)**: 26+ comprehensive financial, inventory, tax, and sales performance reports.
+- 💳 **[Payment Gateways & Virtual Simulator User Guide](./Docs/User-Guide-Payment-Gateways-And-Virtual-Simulator.md)**: Configuring Razorpay, Stripe, Square, PayPal, M-Pesa, UPI QR & POS simulation.
+- 🧩 **[Plugin Dev Studio & Marketplace User Guide](./Docs/User-Guide-Plugin-Dev-Studio-And-Marketplace.md)**: Browsing marketplace plugins and authoring custom store automations in Dev Studio.
+- 🛵 **[Third-Party Orders & Outlet OTP User Guide](./Docs/User-Guide-Third-Party-Orders-And-Outlet-OTP.md)**: Tracking food delivery aggregators, commission deductions, and SMS/Email OTP onboarding.
+- 🔄 **[Operations Document Modifications User Guide](./Docs/User-Guide-Operations-Document-Modification-Workflows.md)**: Safely editing existing POs, GRNs, requisitions, and stock issues.
 - ❓ **[Complete Store Operations FAQ](./Docs/User-Guide-FAQ.md)**: Universal troubleshooting manual.
 
 ---
@@ -159,6 +163,10 @@ sequenceDiagram
 - 📱 **[M-Pesa Mobile Money Integration Architecture](./Docs/Developer-Guide-Mpesa-Mobile-Money.md)**: Safaricom Daraja STK push lifecycle, OAuth token caching, and webhook processing.
 - 🏢 **[Multi-Outlet Hierarchy & Scoping Architecture](./Docs/Developer-Guide-Multi-Outlet-Hierarchy.md)**: Multi-tenant database routing, warehouse tree hierarchy, and numbering settings.
 - 📊 **[Reports, Analytics & BI Engine Architecture](./Docs/Developer-Guide-Reports-And-Analytics.md)**: SQL aggregations, Redis cache warming, and vector PDF rendering.
+- 💳 **[Payment Gateways & Virtual Simulator Architecture](./Docs/Developer-Guide-Payment-Gateways-And-Virtual-Simulator.md)**: Multi-gateway credential store, secret masking & Flutter simulator.
+- 🧩 **[Plugin Dev Studio & Sandbox Architecture](./Docs/Developer-Guide-Plugin-Dev-Studio-And-Sandbox.md)**: In-app IDE, safe TypeScript runner, sandbox lifecycle hooks & marketplace publishing.
+- 🛵 **[Third-Party Orders & Outlet OTP Architecture](./Docs/Developer-Guide-Third-Party-Orders-And-Outlet-OTP.md)**: Delivery aggregator order normalization, commissions & OTP onboarding.
+- 🔄 **[Operations Document Modifications & Differential Ledger](./Docs/Developer-Guide-Operations-Document-Modification-Workflows.md)**: Differential stock adjustments, row locking & tax group recalculation.
 - 🚀 **[1-Click Relational Store Migration Architecture](./Docs/One-Click-Cloud-Migration-Guide.md)**: In-memory relational ID translation engine and sequence re-alignment.
 - 🛍️ **[B2B Wholesale Marketplace & Community Chat Architecture](./Docs/B2B-Marketplace-And-Community-Guide.md)**: WebSocket chat protocols, vendor discovery, and direct PO translation.
 - 🤖 **[Lynx AI, Sticky Notes & Currency Engine Architecture](./Docs/Lynx-AI-StickyNotes-Currency-Tax-Guide.md)**: Natural language parser, draggable sticky notes model, and multi-currency exchange matrix.

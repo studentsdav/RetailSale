@@ -43,6 +43,10 @@ Click on any guide below for comprehensive step-by-step instructions:
 | 📱 **[M-Pesa & Mobile Money Integration](./User-Guide-Mpesa-Mobile-Money.md)** | Safaricom Daraja STK push configuration, Till/Paybill cashless counter billing, and instant payment reconciliation. |
 | 🏢 **[Multi-Outlet & Warehouse Hierarchy](./User-Guide-Multi-Outlet-And-Warehouse-Hierarchy.md)** | Central distribution warehouse setup, multi-branch hierarchy linking, aisle/rack/bin stock locations, and setup wizard. |
 | 📊 **[Reports & Business Intelligence Suite](./User-Guide-Reports-And-Business-Intelligence.md)** | Generating and analyzing 26+ reports across sales, cashiers, stock valuation, brand performance, commissions, and taxes. |
+| 💳 **[Payment Gateways & Virtual Simulator](./User-Guide-Payment-Gateways-And-Virtual-Simulator.md)** | Configuring Razorpay, Stripe, Square, PayPal, M-Pesa, UPI QR, and using the Virtual Payment Simulator in POS checkout. |
+| 🧩 **[Plugin Dev Studio & Marketplace](./User-Guide-Plugin-Dev-Studio-And-Marketplace.md)** | Browsing paginated marketplace plugins and building custom store automations inside the POS Dev Studio. |
+| 🛵 **[Third-Party Orders & Outlet OTP](./User-Guide-Third-Party-Orders-And-Outlet-OTP.md)** | Monitoring Zomato, Swiggy, UberEats aggregator orders, net payouts, and SMS/Email OTP verification for new branches. |
+| 🔄 **[Operations Document Modifications](./User-Guide-Operations-Document-Modification-Workflows.md)** | Editing and revising existing Purchase Orders, GRNs, Material Requests, and Stock Issues with differential ledger updates. |
 
 ---
 
