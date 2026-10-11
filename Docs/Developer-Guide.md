@@ -152,6 +152,8 @@ For in-depth implementation details of each individual subsystem, consult the de
 | 🔄 **[Operations Document Modifications & Differential Ledger](./Developer-Guide-Operations-Document-Modification-Workflows.md)** | Differential stock adjustments (`delta_in`, `delta_out`), concurrency row locking, and tax group recalculation. |
 | 📡 **[Full REST API Endpoint Reference](./Endpoint-Reference.md)** | 100% complete REST API reference for all 40 backend route modules with request/response schemas. |
 | 🛡️ **[Disaster Recovery & Bare-Metal Restore Architecture](./Disaster-Recovery-Documentation.md)** | AES-256 cloud backup pipeline, write-ahead sync tracker, and 1-click bare-metal system rebuild. |
+| 🪟 **[Node.js Backend Windows EXE Compilation Guide](./Windows-EXE-Packaging-And-Deployment-Guide.md)** | Step-by-step compilation using `pkg`, obfuscation, native module handling (`bcryptjs`), and launcher scripts. |
+| 🐘 **[PostgreSQL Complete Removal & Clean Reinstall Guide](./PostgreSQL-Complete-Removal-Guide.md)** | Complete Windows service removal, registry cleanup, data directory deletion, and Inno Setup automation. |
 | 🚀 **[Windows Installer & Packaging Guide](./Windows-Installer-Developer-Guide.md)** | Complete InnoSetup packaging, bundling PostgreSQL runtime, Node binary, and Flutter executables. |
 
 ---

@@ -54,6 +54,8 @@ mindmap
 | **Google Gmail OAuth2 Setup** | Admins | Setting up OAuth2 credentials for secure OTP/bill emailing | [Google-Gmail-OAuth2-Setup-Guide.md](./Google-Gmail-OAuth2-Setup-Guide.md) |
 | **Settings & Config Guide** | Admins | Configuration options and multi-tenant parameters | [Settings-Guide.md](./Settings-Guide.md) |
 | **Disaster Recovery & Restore** | Admins / Devs | AES-256 cloud backups, sync tracker & 1-click bare-metal restore | [Disaster-Recovery-Documentation.md](./Disaster-Recovery-Documentation.md) |
+| **Windows EXE Backend Packaging** | DevOps / Devs | Node.js pkg binary compilation, obfuscation & standalone bundle | [Windows-EXE-Packaging-And-Deployment-Guide.md](./Windows-EXE-Packaging-And-Deployment-Guide.md) |
+| **PostgreSQL Removal & Clean Reinstall** | SysAdmins / Support | Total PostgreSQL purge, registry wipe, and clean reinstallation | [PostgreSQL-Complete-Removal-Guide.md](./PostgreSQL-Complete-Removal-Guide.md) |
 
 ---
 
