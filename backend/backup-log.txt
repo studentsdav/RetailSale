@@ -26856,3 +26856,113 @@ TypeError: argument handler must be a function
 2026-10-14T17:30:17.660Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-10-14T17:30:17.668Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
 2026-10-14T17:30:17.687Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.677Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.760Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.782Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.801Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.819Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.834Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.847Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.862Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.880Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.900Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:38.926Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.298Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.379Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.392Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.405Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.421Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.436Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.451Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.463Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.477Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.493Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:19:54.509Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.852Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.879Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.888Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.895Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.906Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.917Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.926Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.937Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.943Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.952Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:14.957Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.492Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.518Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.523Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.529Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.535Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.541Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.546Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.550Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.555Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.560Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:20:23.566Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:00.175Z [INFO] Hourly backup job started.
+2026-10-14T18:30:00.315Z [INFO] Hourly backup job started.
+2026-10-14T18:30:00.438Z [INFO] Hourly backup job started.
+2026-10-14T18:30:00.539Z [INFO] Hourly backup job started.
+2026-10-14T18:30:00.639Z [INFO] Hourly backup job started.
+2026-10-14T18:30:00.741Z [INFO] Hourly backup job started.
+2026-10-14T18:30:00.856Z [INFO] Hourly backup job started.
+2026-10-14T18:30:00.976Z [INFO] Hourly backup job started.
+2026-10-14T18:30:01.187Z [INFO] Hourly backup job started.
+2026-10-14T18:30:01.312Z [INFO] Hourly backup job started.
+2026-10-14T18:30:01.453Z [INFO] Hourly backup job started.
+2026-10-14T18:30:01.888Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:01.889Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:01.905Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:01.908Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:01.970Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:01.971Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:01.976Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:01.978Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:01.988Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:01.989Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:02.006Z [INFO] Cloud Sync enabled for outlet [OUTLET202605102056]. Initiating upload.
+2026-10-14T18:30:02.092Z [INFO] Cloud Sync disabled for outlet [OUTLET202609302221]. Bypassing upload.
+2026-10-14T18:30:02.095Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.159Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:02.160Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:02.187Z [INFO] Cloud Sync disabled for outlet [OUTLET202606071947]. Bypassing upload.
+2026-10-14T18:30:02.190Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.234Z [INFO] Cloud Sync disabled for outlet [OUTLET202609031129]. Bypassing upload.
+2026-10-14T18:30:02.239Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.260Z [INFO] Cloud Sync disabled for outlet [OUTLET202609051334]. Bypassing upload.
+2026-10-14T18:30:02.262Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.344Z [INFO] Cloud Sync disabled for outlet [OUTLET202609012318]. Bypassing upload.
+2026-10-14T18:30:02.346Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.431Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:02.432Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:02.546Z [INFO] Cloud Sync disabled for outlet [OUTLET202608311030]. Bypassing upload.
+2026-10-14T18:30:02.549Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.570Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:02.574Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:02.616Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:02.618Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:02.628Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:02.629Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:02.659Z [INFO] Cloud Sync disabled for outlet [OUTLET202609302217]. Bypassing upload.
+2026-10-14T18:30:02.662Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.694Z [INFO] Cloud Sync disabled for outlet [OUTLET202609302238]. Bypassing upload.
+2026-10-14T18:30:02.697Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.722Z [INFO] Cloud Sync disabled for outlet [OUTLET202609302244]. Bypassing upload.
+2026-10-14T18:30:02.724Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:02.754Z [INFO] Backup created. File size: 0.34 MB
+2026-10-14T18:30:02.755Z [INFO] Verifying backup integrity before local retention and upload.
+2026-10-14T18:30:02.826Z [INFO] Cloud Sync enabled for outlet [OUTLET202604212159]. Initiating upload.
+2026-10-14T18:30:09.388Z [INFO] Cloud upload sequence completed successfully.
+2026-10-14T18:30:09.392Z [INFO] Hourly backup job execution finished.
+2026-10-14T18:30:14.407Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.467Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.482Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.494Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.513Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.526Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.539Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.559Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.571Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.585Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *
+2026-10-14T18:30:14.602Z [INFO] Backup scheduler initialized. Running cron: 0 * * * *

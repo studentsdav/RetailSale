@@ -1925,15 +1925,20 @@ async function computeItemCycleProgress({
     };
 
     let customerWhere = "";
-    if (whereCustomer?.customer_phone) {
-        customerWhere = "AND sh.customer_phone = :customer_phone";
-        params.customer_phone = whereCustomer.customer_phone;
-    } else if (whereCustomer?.customer_gstin) {
+    if (identity?.customer_phone) {
+        const phone = String(identity.customer_phone).replace(/\D/g, '').trim();
+        const last10 = phone.length > 10 ? phone.slice(-10) : phone;
+        customerWhere = "AND sh.customer_phone IN (:phone_last10, :phone_91, :phone_plus91, :phone_0)";
+        params.phone_last10 = last10;
+        params.phone_91 = `91${last10}`;
+        params.phone_plus91 = `+91${last10}`;
+        params.phone_0 = `0${last10}`;
+    } else if (identity?.customer_gstin) {
         customerWhere = "AND sh.customer_gstin = :customer_gstin";
-        params.customer_gstin = whereCustomer.customer_gstin;
-    } else if (whereCustomer?.customer_name) {
+        params.customer_gstin = identity.customer_gstin;
+    } else if (identity?.customer_name) {
         customerWhere = "AND sh.customer_name = :customer_name";
-        params.customer_name = whereCustomer.customer_name;
+        params.customer_name = identity.customer_name;
     }
 
     const [rows] = await req.propertyDb.query(
@@ -2032,7 +2037,8 @@ async function hasSchemeGrantedToday({
     billDate
 }) {
     const day = formatDateLocalYmd(dateOnly(billDate || new Date()));
-    if (!day) return false;
+    const phone = String(identity?.customer_phone || '').replace(/\D/g, '').trim();
+    const last10 = phone.length > 10 ? phone.slice(-10) : phone;
     const [rows] = await req.propertyDb.query(
         `
 SELECT 1
@@ -2047,7 +2053,7 @@ WHERE sh.outlet_id = :outlet_id
   AND si.is_scheme_free = TRUE
   AND si.applied_scheme_id = :scheme_id
   AND (
-    (:customer_phone <> '' AND sh.customer_phone = :customer_phone)
+    (:phone_last10 <> '' AND sh.customer_phone IN (:phone_last10, :phone_91, :phone_plus91, :phone_0))
     OR (:customer_gstin <> '' AND sh.customer_gstin = :customer_gstin)
     OR (:customer_name <> '' AND sh.customer_name = :customer_name)
   )
@@ -2059,9 +2065,12 @@ LIMIT 1
                 sale_day: day,
                 item_id: itemId,
                 scheme_id: schemeId,
-                customer_phone: identity.customer_phone || '',
-                customer_gstin: identity.customer_gstin || '',
-                customer_name: identity.customer_name || ''
+                phone_last10: last10,
+                phone_91: last10 ? `91${last10}` : '',
+                phone_plus91: last10 ? `+91${last10}` : '',
+                phone_0: last10 ? `0${last10}` : '',
+                customer_gstin: identity?.customer_gstin || '',
+                customer_name: identity?.customer_name || ''
             }
         }
     );
